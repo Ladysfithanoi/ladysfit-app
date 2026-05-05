@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Stop-Process *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Read(//tmp/**)",
+      "Bash(node node_modules/ts-node/dist/bin.js -e \"require\\('./prisma/seed-exercises'\\)\")",
+      "Bash(curl -s http://localhost:3000/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl *)",
+      "Bash(npx prisma *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "PowerShell(Get-Process *)",
+      "Bash(npx ts-node *)",
+      "Bash(grep -E \"^tsx$\")",
+      "Bash(npx tsx *)",
+      "PowerShell(npm run *)",
+      "PowerShell(Out-Null *)"
+    ]
+  }
+}

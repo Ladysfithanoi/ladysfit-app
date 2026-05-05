@@ -1,0 +1,754 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+
+  users           User[]
+  clients         Client[]
+  consultations   Consultation[]
+  fmAssignments   FMBranchAssignment[]
+  complaints      Complaint[]
+  salesLeads      SalesLead[]
+  monthlyTargets  MonthlyTarget[]
+
+  @@map("branches")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String    @unique
+  emailVerified   DateTime?
+  image           String?
+  password        String?
+  role            Role      @default(FREE)
+  branchId        String?
+  freeUpgradedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  branch                Branch?              @relation(fields: [branchId], references: [id])
+  accounts              Account[]
+  sessions              Session[]
+  clients               Client[]
+  consultations         Consultation[]
+  managedBranches       FMBranchAssignment[]
+  workoutPrograms       WorkoutProgram[]
+  workoutLogs           WorkoutLog[]
+  examAttempts          ExamAttempt[]
+  upgradeNotifications  UpgradeNotification[]
+  mealPlans             MealPlan[]
+  ptAlerts              PerformanceAlert[] @relation("PTPerformanceAlerts")
+  assignedComplaints    Complaint[]        @relation("FMComplaints")
+  assignedLeads         SalesLead[]        @relation("AssignedPTLeads")
+  createdLeads          SalesLead[]        @relation("CreatedLeads")
+  monthlyTargets        MonthlyTarget[]    @relation("PTMonthlyTargets")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Client {
+  id               String       @id @default(cuid())
+  clientCode       String?      @unique
+  fullName         String
+  phone            String
+  email            String?      @unique
+  password         String?
+  passwordSetAt    DateTime?
+  dateOfBirth      DateTime?
+  initialWeight    Float
+  currentWeight    Float
+  targetWeight     Float
+  height           Float
+  initialWaist     Float?
+  initialHip       Float?
+  healthConditions String?      @db.Text
+  injuries         String?      @db.Text
+  targetDate       DateTime?
+  goalNote         String?      @db.Text
+  assignedPTId     String
+  branchId         String
+  status           ClientStatus @default(ACTIVE)
+  hasTransformed   Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  assignedPT    User           @relation(fields: [assignedPTId], references: [id])
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  weightLogs          WeightLog[]
+  activityLogs        ActivityLog[]
+  consultations       Consultation[]
+  packageEnrollments  PackageEnrollment[]
+  workoutPrograms     WorkoutProgram[]
+  workoutLogs         WorkoutLog[]
+  mealPlans             MealPlan[]
+  foodScanLogs          FoodScanLog[]
+  performanceAlerts     PerformanceAlert[]
+  workoutNotifications  WorkoutNotification[]
+  complaints            Complaint[]
+
+  @@map("clients")
+}
+
+model Consultation {
+  id                String             @id @default(cuid())
+  status            ConsultationStatus @default(DRAFT)
+  currentStep       Int                @default(1)
+  createdById       String
+  branchId          String
+  convertedClientId String?
+  workoutDesignJson String?            @db.Text
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  createdBy       User                    @relation(fields: [createdById], references: [id])
+  branch          Branch                  @relation(fields: [branchId], references: [id])
+  convertedClient Client?                 @relation(fields: [convertedClientId], references: [id])
+  info            ConsultationInfo?
+  assessment      ConsultationAssessment?
+  packages        ConsultationPackage[]
+  workoutPrograms WorkoutProgram[]
+  mealPlans       MealPlan[]
+
+  @@map("consultations")
+}
+
+model ConsultationInfo {
+  id             String   @id @default(cuid())
+  consultationId String   @unique
+  fullName       String   @default("")
+  phone          String   @default("")
+  address        String?
+  dateOfBirth    DateTime?
+  email          String?
+  consultDate    DateTime @default(now())
+  knowLDFVia     String?
+  familyStatus   String?
+  height         Float    @default(0)
+  currentWeight  Float    @default(0)
+  targetWeight   Float    @default(0)
+  timeToAchieve  String?
+  previousAttempts String?
+  currentFeeling String?
+  whyNow         String?
+  familySupport  String?
+  motivationLevel Int?
+  barriers       String?
+  exerciseExperience String?
+  currentDiet    String?
+  mealsPerDay    Int?
+  typicalMeals   String?
+  snacking       String?
+  diningOut      String?
+  foodPreferences String?
+  foodAllergies  String?
+  workoutsPerWeek Int?
+  availableTime  String?
+  healthConditions String?
+  injuries       String?
+  stressLevel    Int?
+  sleepQuality   String?
+  goalDescription String?
+  desiredPackage String?
+  budget         String?
+  whoPaysBill    String?
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@map("consultation_info")
+}
+
+model ConsultationAssessment {
+  id                  String  @id @default(cuid())
+  consultationId      String  @unique
+  waist               Float?
+  hip                 Float?
+  bmi                 Float?
+  bmiCategory         String?
+  idealWeight         String?
+  whr                 Float?
+  whrCategory         String?
+  recommendedPackages String? @db.Text
+  notes               String? @db.Text
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@map("consultation_assessments")
+}
+
+model ConsultationPackage {
+  id             String  @id @default(cuid())
+  consultationId String
+  packageName    String
+  packageStage   String
+  sessions       Int
+  durationDays   Int
+  price          Float
+  discountedPrice Float?
+  order          Int
+  isConfirmed    Boolean @default(false)
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@map("consultation_packages")
+}
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  clientId      String
+  date          DateTime @db.Date
+  steps         Int?
+  minutesActive Int?
+  minutesGym    Int?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, date])
+  @@map("activity_logs")
+}
+
+model WeightLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      DateTime
+  weight    Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("weight_logs")
+}
+
+enum Role {
+  ADMIN
+  FM
+  CEO_FITPARTNER
+  FREE
+  RESTRICTED
+}
+
+model FMBranchAssignment {
+  id         String   @id @default(cuid())
+  userId     String
+  branchId   String
+  assignedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@map("fm_branch_assignments")
+}
+
+enum ClientStatus {
+  ACTIVE
+  PAUSED
+  RESERVED
+}
+
+enum ComplaintStatus {
+  PENDING
+  PROCESSING
+  RESOLVED
+}
+
+model Complaint {
+  id           String          @id @default(cuid())
+  clientId     String
+  branchId     String
+  assignedFMId String?
+  category     String
+  content      String          @db.Text
+  status       ComplaintStatus @default(PENDING)
+  fmNote       String?         @db.Text
+  isReadByFM   Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  client     Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  branch     Branch  @relation(fields: [branchId], references: [id])
+  assignedFM User?   @relation("FMComplaints", fields: [assignedFMId], references: [id])
+
+  @@map("complaints")
+}
+
+model PackageEnrollment {
+  id           String                  @id @default(cuid())
+  clientId     String
+  contractCode String?
+  packageName  String
+  packageStage String
+  sessions     Int
+  sessionsUsed Int                     @default(0)
+  startDate    DateTime?
+  endDate      DateTime?
+  durationDays Int
+  price        Float
+  status       PackageEnrollmentStatus @default(ACTIVE)
+  notes        String?                 @db.Text
+  createdAt    DateTime                @default(now())
+
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workoutPrograms WorkoutProgram[]
+
+  @@map("package_enrollments")
+}
+
+enum PackageEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  EXPIRED
+}
+
+enum ConsultationStatus {
+  DRAFT
+  COMPLETED
+}
+
+enum WorkoutProgramStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model WorkoutExercise {
+  id       String @id @default(cuid())
+  phase    String
+  type     String
+  movement String
+  name     String
+
+  @@index([phase, type, movement])
+  @@map("workout_exercises")
+}
+
+model WorkoutMovementTemplate {
+  id          String   @id @default(cuid())
+  phaseKey    String
+  sessionType String
+  movement    String
+  createdAt   DateTime @default(now())
+
+  @@unique([phaseKey, sessionType, movement])
+  @@map("workout_movement_templates")
+}
+
+model WorkoutProgram {
+  id                  String               @id @default(cuid())
+  clientId            String?
+  consultationId      String?
+  packageEnrollmentId String?
+  phase               String
+  workoutType         String?
+  sessionsPerWeek     Int
+  currentWeek         Int                  @default(1)
+  notes               String?              @db.Text
+  status              WorkoutProgramStatus @default(ACTIVE)
+  createdById         String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  client            Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  consultation      Consultation?      @relation(fields: [consultationId], references: [id], onDelete: SetNull)
+  packageEnrollment PackageEnrollment? @relation(fields: [packageEnrollmentId], references: [id])
+  createdBy         User               @relation(fields: [createdById], references: [id])
+  sessions          WorkoutSession[]
+  weeks             WorkoutWeek[]
+  workoutLogs       WorkoutLog[]
+
+  @@map("workout_programs")
+}
+
+model WorkoutWeek {
+  id         String   @id @default(cuid())
+  programId  String
+  weekNumber Int
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  program     WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  sessions    WorkoutSession[]
+  workoutLogs WorkoutLog[]
+
+  @@map("workout_weeks")
+}
+
+model WorkoutSession {
+  id          String  @id @default(cuid())
+  programId   String
+  weekId      String?
+  sessionName String
+  order       Int
+
+  program     WorkoutProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  week        WorkoutWeek?      @relation(fields: [weekId], references: [id], onDelete: SetNull)
+  movements   WorkoutMovement[]
+  workoutLogs WorkoutLog[]
+
+  @@map("workout_sessions")
+}
+
+model ExamQuestion {
+  id        String   @id @default(cuid())
+  question  String   @db.Text
+  optionA   String
+  optionB   String
+  optionC   String
+  optionD   String
+  correct   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("exam_questions")
+}
+
+model ExamConfig {
+  id           String   @id @default(cuid())
+  numQuestions Int      @default(10)
+  passingScore Int      @default(80)
+  updatedAt    DateTime @updatedAt
+
+  @@map("exam_config")
+}
+
+model ExamAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  score     Int
+  total     Int
+  passed    Boolean
+  answers   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("exam_attempts")
+}
+
+model UpgradeNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  userName  String
+  passed    Boolean
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("upgrade_notifications")
+}
+
+model WorkoutMovement {
+  id               String @id @default(cuid())
+  sessionId        String
+  movementCode     String
+  movementName     String
+  selectedExercise String
+  sets             Int
+  reps             String
+  order            Int
+
+  session WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  setLogs WorkoutSetLog[]
+
+  @@map("workout_movements")
+}
+
+model WorkoutLog {
+  id          String   @id @default(cuid())
+  clientId    String
+  programId   String
+  weekId      String
+  sessionId   String
+  sessionDate DateTime @default(now())
+  notes       String?  @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  program   WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  week      WorkoutWeek    @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy    User                  @relation(fields: [createdById], references: [id])
+  setLogs      WorkoutSetLog[]
+  notification WorkoutNotification?
+
+  @@map("workout_logs")
+}
+
+// ── Nutrition ─────────────────────────────────────────────────────────────
+
+enum MealPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model MealPlan {
+  id             String         @id @default(cuid())
+  clientId       String?
+  consultationId String?
+  tdee           Float
+  der            Float
+  protein        Float
+  fat            Float
+  carbs          Float
+  mealsPerDay    Int
+  likes          String?        @db.Text
+  dislikes       String?        @db.Text
+  status         MealPlanStatus @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  consultation Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  days         MealPlanDay[]
+
+  @@map("meal_plans")
+}
+
+model MealPlanDay {
+  id            String   @id @default(cuid())
+  mealPlanId    String
+  dayLabel      String
+  meals         String   @db.Text
+  totalCalories Float
+  totalProtein  Float
+  totalFat      Float
+  totalCarbs    Float
+  createdAt     DateTime @default(now())
+
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+
+  @@map("meal_plan_days")
+}
+
+model FoodScanLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  scanDate  DateTime @default(now())
+  foodName  String
+  quantity  String
+  calories  Float
+  protein   Float
+  fat       Float
+  carbs     Float
+  imageUrl  String?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("food_scan_logs")
+}
+
+// ── Workout Notifications ─────────────────────────────────────────────────
+
+model WorkoutNotification {
+  id               String   @id @default(cuid())
+  clientId         String
+  workoutLogId     String   @unique
+  message          String   @db.Text
+  nextSessionName  String?
+  nextSessionPhase String?
+  isRead           Boolean  @default(false)
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workoutLog WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+
+  @@map("workout_notifications")
+}
+
+// ── Performance Alerts ────────────────────────────────────────────────────
+
+enum AlertType {
+  SLOW_PROGRESS
+  NO_WEIGH_IN
+}
+
+model PerformanceAlert {
+  id            String    @id @default(cuid())
+  clientId      String
+  ptId          String
+  alertType     AlertType
+  weekStart     DateTime
+  expectedRate  Float?
+  actualRate    Float?
+  weeksAnalyzed Int?
+  note          String?   @db.Text
+  isRead        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pt     User   @relation("PTPerformanceAlerts", fields: [ptId], references: [id])
+
+  @@map("performance_alerts")
+}
+
+model WorkoutSetLog {
+  id            String  @id @default(cuid())
+  workoutLogId  String
+  movementId    String?
+  movementName  String
+  exerciseName  String
+  set1Load      Float?
+  set1Reps      Int?
+  set2Load      Float?
+  set2Reps      Int?
+  set3Load      Float?
+  set3Reps      Int?
+  set4Load      Float?
+  set4Reps      Int?
+  set5Load      Float?
+  set5Reps      Int?
+  set6Load      Float?
+  set6Reps      Int?
+  exerciseNotes String? @db.Text
+
+  workoutLog WorkoutLog       @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  movement   WorkoutMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@map("workout_set_logs")
+}
+
+// ── Setup Doanh số ────────────────────────────────────────────────────────
+
+enum LeadStatus {
+  TAKECARE
+  FAIL
+  DE
+  PIF
+  PB
+}
+
+model SalesLead {
+  id                String     @id @default(cuid())
+  branchId          String
+  assignedPTId      String
+  createdById       String
+  customerName      String
+  yearOfBirth       Int?
+  phone             String?
+  source            String?
+  notes             String?    @db.Text
+  forecast          String?
+  status            LeadStatus @default(TAKECARE)
+  packageRegistered String?
+  actualRevenue       Float?
+  remainingPayment    Float?
+  fitpartnerRevenue   Float?
+  signDate            DateTime?
+  remark              String?
+  month             Int
+  year              Int
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  branch     Branch @relation(fields: [branchId], references: [id])
+  assignedPT User   @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
+  createdBy  User   @relation("CreatedLeads", fields: [createdById], references: [id])
+
+  @@map("sales_leads")
+}
+
+model MonthlyTarget {
+  id                 String   @id @default(cuid())
+  branchId           String
+  userId             String
+  month              Int
+  year               Int
+  revenueTarget             Float    @default(0)
+  fitpartnerRevenueTarget   Float    @default(0)
+  fitTarget                 Int      @default(0)
+  cooperationTarget         Int      @default(0)
+  transformTarget           Int      @default(0)
+  googleReviewTarget        Int      @default(0)
+  cvTarget                  Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  user          User           @relation("PTMonthlyTargets", fields: [userId], references: [id])
+  weeklyActuals WeeklyActual[]
+
+  @@unique([branchId, userId, month, year])
+  @@map("monthly_targets")
+}
+
+model WeeklyActual {
+  id                  String   @id @default(cuid())
+  monthlyTargetId     String
+  weekNumber          Int
+  weekStart           DateTime
+  weekEnd             DateTime
+  revenueActual              Float    @default(0)
+  fitpartnerRevenueActual    Float    @default(0)
+  fitActual                  Int      @default(0)
+  cooperationActual          Int      @default(0)
+  transformActual            Int      @default(0)
+  googleReviewActual         Int      @default(0)
+  cvActual                   Int      @default(0)
+  weeklyTaskNotes     String?  @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  monthlyTarget MonthlyTarget @relation(fields: [monthlyTargetId], references: [id], onDelete: Cascade)
+
+  @@unique([monthlyTargetId, weekNumber])
+  @@map("weekly_actuals")
+}

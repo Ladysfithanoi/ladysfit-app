@@ -1,0 +1,508 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  SalesLead, LeadStatus, LEAD_STATUS_LABEL, LEAD_STATUS_STYLE, SOURCES, PTUser,
+} from "./types";
+
+type Props = {
+  branchId: string;
+  branchName: string;
+  month: number;
+  year: number;
+  currentUserId: string;
+  currentUserRole: string;
+  isReadOnly: boolean;
+  isPT: boolean;
+  isFM: boolean;
+  isCEO: boolean;
+  ptList: PTUser[];
+  selectedPTId: string;
+};
+
+const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
+const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
+
+
+export function LeadsTab({ branchId, branchName, month, year, currentUserId, isPT, ptList, selectedPTId }: Props) {
+  const isFitpartner = branchName.toLowerCase().includes("fitpartner");
+  const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<SalesLead | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [collapsedPTs, setCollapsedPTs] = useState<Set<string>>(new Set());
+
+  // Form state
+  const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
+
+  const fetchLeads = useCallback(async () => {
+    if (!branchId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/setup/leads?branchId=${branchId}&month=${month}&year=${year}`);
+      if (res.ok) setLeads(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, [branchId, month, year]);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  function openAdd() {
+    setEditing(null);
+    setForm({ status: "TAKECARE", assignedPTId: isPT ? currentUserId : undefined });
+    setError("");
+    setFormOpen(true);
+  }
+
+  function openEdit(lead: SalesLead) {
+    setEditing(lead);
+    setForm({
+      ...lead,
+      signDateStr: lead.signDate ? lead.signDate.split("T")[0] : "",
+    });
+    setError("");
+    setFormOpen(true);
+  }
+
+  function closeForm() { setFormOpen(false); setEditing(null); setError(""); }
+
+  async function handleSave() {
+    if (!form.customerName?.trim()) { setError("Tên khách hàng không được để trống"); return; }
+    if (!form.assignedPTId) { setError("Vui lòng chọn PT phụ trách"); return; }
+    setSaving(true);
+    setError("");
+    const body = {
+      branchId,
+      month,
+      year,
+      ...form,
+      signDate: form.signDateStr || null,
+    };
+    try {
+      const url = editing ? `/api/setup/leads/${editing.id}` : "/api/setup/leads";
+      const res = await fetch(url, {
+        method: editing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Lỗi");
+      closeForm();
+      fetchLeads();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Xóa lead này?")) return;
+    await fetch(`/api/setup/leads/${id}`, { method: "DELETE" });
+    fetchLeads();
+  }
+
+  function togglePT(ptId: string) {
+    setCollapsedPTs((prev) => {
+      const next = new Set(prev);
+      if (next.has(ptId)) next.delete(ptId);
+      else next.add(ptId);
+      return next;
+    });
+  }
+
+  // Group leads by PT
+  const grouped = leads.reduce<Record<string, SalesLead[]>>((acc, l) => {
+    if (!acc[l.assignedPTId]) acc[l.assignedPTId] = [];
+    acc[l.assignedPTId].push(l);
+    return acc;
+  }, {});
+
+  // Apply PT filter (FM/CEO/ADMIN only; PT always sees only their own)
+  const visibleGrouped = selectedPTId
+    ? Object.fromEntries(Object.entries(grouped).filter(([ptId]) => ptId === selectedPTId))
+    : grouped;
+
+  // Summary cards reflect the filtered view
+  const visibleLeads = selectedPTId ? (grouped[selectedPTId] ?? []) : leads;
+  const branchTotal = {
+    revenue: visibleLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0),
+    fitpartnerRevenue: visibleLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0),
+    registered: visibleLeads.filter((l) => REGISTERED_STATUSES.includes(l.status)).length,
+    takecare: visibleLeads.filter((l) => l.status === "TAKECARE").length,
+    total: visibleLeads.length,
+  };
+
+  // Only PT can add/edit/delete leads; FM/CEO/ADMIN are read-only
+  const canMutate = isPT;
+
+  return (
+    <div>
+      {/* Branch summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Tổng doanh thu", value: `${branchTotal.revenue.toFixed(1)} tr`, color: "text-emerald-600" },
+          ...(isFitpartner ? [{ label: "Doanh thu Fitpartner", value: `${branchTotal.fitpartnerRevenue.toFixed(1)} tr`, color: "text-purple-600" }] : []),
+          { label: "KH đăng ký", value: branchTotal.registered, color: "text-blue-600" },
+          { label: "Đang chăm sóc", value: branchTotal.takecare, color: "text-yellow-600" },
+          { label: "Tổng lead", value: branchTotal.total, color: "text-gray-700" },
+        ].map((s) => (
+          <div key={s.label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+            <p className={cn("text-2xl font-black", s.color)}>{s.value}</p>
+            <p className="text-xs font-semibold text-gray-400 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Thêm Lead — PT only */}
+      {canMutate && (
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            <Plus className="w-4 h-4" /> Thêm Lead
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>
+      ) : Object.keys(visibleGrouped).length === 0 ? (
+        <div className="py-12 text-center text-sm text-gray-300">
+          {selectedPTId ? "PT này chưa có lead tháng này" : "Chưa có lead nào tháng này"}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(visibleGrouped).map(([ptId, ptLeads]) => {
+            const pt = ptLeads[0].assignedPT;
+            const collapsed = collapsedPTs.has(ptId);
+            const ptRevenue = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
+            const ptRegistered = ptLeads.filter((l) => REGISTERED_STATUSES.includes(l.status)).length;
+
+            return (
+              <div key={ptId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* PT header */}
+                <button
+                  onClick={() => togglePT(ptId)}
+                  className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-black text-[#f15b5c]">
+                        {(pt.name ?? pt.email)[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="text-sm font-extrabold text-gray-800">
+                      PT {pt.name ?? pt.email}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {ptLeads.length} lead · {ptRevenue.toFixed(1)} tr · {ptRegistered} đăng ký
+                    </span>
+                  </div>
+                  {collapsed ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronUp className="w-4 h-4 text-gray-400" />}
+                </button>
+
+                {!collapsed && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {[
+                            "STT", "Khách hàng", "NĂM SINH", "SĐT", "Nguồn",
+                            "Chăm sóc", "Dự báo", "Tình trạng", "Gói tập",
+                            "DT (tr)", "Còn thiếu",
+                            ...(isFitpartner ? ["DT Fitpartner (tr)"] : []),
+                            "Ngày ký", "Ghi chú",
+                            ...(canMutate ? [""] : []),
+                          ].map((h, i) => (
+                            <th key={i} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ptLeads.map((l, idx) => (
+                          <tr key={l.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
+                            <td className="px-3 py-2.5 text-gray-400">{idx + 1}</td>
+                            <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{l.customerName}</td>
+                            <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
+                            <td className="px-3 py-2.5 text-gray-500 max-w-[140px]">
+                              <p className="truncate" title={l.notes ?? ""}>{l.notes ?? "—"}</p>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.forecast ?? "—"}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              <span className={cn("px-2 py-0.5 rounded-full font-bold", LEAD_STATUS_STYLE[l.status])}>
+                                {LEAD_STATUS_LABEL[l.status]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.packageRegistered ?? "—"}</td>
+                            <td className="px-3 py-2.5 font-semibold text-emerald-600 whitespace-nowrap">
+                              {l.actualRevenue != null ? l.actualRevenue.toFixed(1) : "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-orange-500 whitespace-nowrap">
+                              {l.remainingPayment != null ? l.remainingPayment.toFixed(1) : "—"}
+                            </td>
+                            {isFitpartner && (
+                              <td className="px-3 py-2.5 font-semibold text-purple-600 whitespace-nowrap">
+                                {l.fitpartnerRevenue != null ? l.fitpartnerRevenue.toFixed(1) : "—"}
+                              </td>
+                            )}
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                              {l.signDate ? new Date(l.signDate).toLocaleDateString("vi-VN") : "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-400 max-w-[120px]">
+                              <p className="truncate" title={l.remark ?? ""}>{l.remark ?? "—"}</p>
+                            </td>
+                            {canMutate && (
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                {l.assignedPTId === currentUserId && (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => handleDelete(l.id)} className="text-gray-400 hover:text-red-500">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-50/80 font-bold">
+                          <td colSpan={9} className="px-3 py-2 text-xs text-gray-500">
+                            Tổng: {ptLeads.length} lead · {ptRegistered} đăng ký
+                          </td>
+                          <td className="px-3 py-2 text-xs text-emerald-600">{ptRevenue.toFixed(1)}</td>
+                          {isFitpartner ? (
+                            <>
+                              <td />
+                              <td className="px-3 py-2 text-xs text-purple-600">
+                                {ptLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0).toFixed(1)}
+                              </td>
+                            </>
+                          ) : (
+                            <td />
+                          )}
+                          <td colSpan={canMutate ? 3 : 2} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Status legend */}
+      <div className="mt-6 bg-gray-50 rounded-2xl p-4">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Chú giải</p>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_OPTIONS.map((s) => (
+            <span key={s} className={cn("px-2.5 py-1 rounded-full text-xs font-bold", LEAD_STATUS_STYLE[s])}>
+              {s} = {LEAD_STATUS_LABEL[s]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Lead form slide-over */}
+      {formOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/25 z-40" onClick={closeForm} />
+          <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-bold">{editing ? "Sửa Lead" : "Thêm Lead mới"}</h2>
+              <button onClick={closeForm}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <FormRow label="Khách hàng *">
+                <input
+                  value={form.customerName ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
+                  className={inputCls}
+                  placeholder="Nguyễn Thị B"
+                />
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Năm sinh">
+                  <input
+                    type="number"
+                    value={form.yearOfBirth ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, yearOfBirth: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    className={inputCls}
+                    placeholder="1995"
+                  />
+                </FormRow>
+                <FormRow label="Số điện thoại">
+                  <input
+                    value={form.phone ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    className={inputCls}
+                    placeholder="0901234567"
+                  />
+                </FormRow>
+              </div>
+              {isPT ? (
+                <FormRow label="PT phụ trách">
+                  <input
+                    value={ptList.find((p) => p.id === currentUserId)?.name ?? "Bạn"}
+                    readOnly
+                    className={`${inputCls} bg-gray-100 text-gray-500 cursor-not-allowed`}
+                  />
+                </FormRow>
+              ) : (
+                <FormRow label="PT phụ trách *">
+                  <select
+                    value={form.assignedPTId ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, assignedPTId: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value="">— Chọn PT —</option>
+                    {ptList.map((pt) => (
+                      <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
+                    ))}
+                  </select>
+                </FormRow>
+              )}
+              <FormRow label="Phân nguồn">
+                <select
+                  value={form.source ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="">— Chọn nguồn —</option>
+                  {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </FormRow>
+              <FormRow label="Quá trình chăm sóc">
+                <textarea
+                  value={form.notes ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={3}
+                  className={`${inputCls} resize-none py-3`}
+                  placeholder="Ngày tháng: nội dung..."
+                />
+              </FormRow>
+              <FormRow label="Dự báo gói tập">
+                <input
+                  value={form.forecast ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, forecast: e.target.value }))}
+                  className={inputCls}
+                  placeholder="Gói 3 tháng..."
+                />
+              </FormRow>
+              <FormRow label="Tình trạng *">
+                <select
+                  value={form.status ?? "TAKECARE"}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as LeadStatus }))}
+                  className={inputCls}
+                >
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+              </FormRow>
+              <FormRow label="Gói tập đăng ký">
+                <input
+                  value={form.packageRegistered ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, packageRegistered: e.target.value }))}
+                  className={inputCls}
+                />
+              </FormRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FormRow label="Doanh thu (triệu)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.actualRevenue ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, actualRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    className={inputCls}
+                    placeholder="10.5"
+                  />
+                </FormRow>
+                <FormRow label="Còn thiếu (triệu)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.remainingPayment ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    className={inputCls}
+                    placeholder="2.0"
+                  />
+                </FormRow>
+              </div>
+              {isFitpartner && (
+                <FormRow label="Doanh thu Fitpartner (triệu)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.fitpartnerRevenue ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    className={inputCls}
+                    placeholder="5.0"
+                  />
+                </FormRow>
+              )}
+              <FormRow label="Ngày ký">
+                <input
+                  type="date"
+                  value={(form as { signDateStr?: string }).signDateStr ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, signDateStr: e.target.value }))}
+                  className={inputCls}
+                />
+              </FormRow>
+              <FormRow label="Ghi chú">
+                <textarea
+                  value={form.remark ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))}
+                  rows={2}
+                  className={`${inputCls} resize-none py-3`}
+                />
+              </FormRow>
+              {error && <p className="text-sm text-red-500 font-semibold">{error}</p>}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Thêm mới"}
+              </button>
+              <button
+                onClick={closeForm}
+                className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const inputCls = "w-full h-11 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-semibold text-gray-700">{label}</label>
+      {children}
+    </div>
+  );
+}
