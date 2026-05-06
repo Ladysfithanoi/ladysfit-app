@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["sharp", "exceljs"],
+  experimental: {
+    serverComponentsExternalPackages: ["sharp", "exceljs"],
+  },
 };
 
 export default nextConfig;

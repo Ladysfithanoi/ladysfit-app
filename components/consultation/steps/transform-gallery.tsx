@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type TransformPhoto = {
   id:            string;

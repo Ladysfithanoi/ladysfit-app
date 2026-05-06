@@ -130,7 +130,7 @@ function MeasurementsChart({ logs }: { logs: MeasurementLog[] }) {
   function toggle(key: string) {
     setActive((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) { next.delete(key); } else { next.add(key); }
       return next;
     });
   }
