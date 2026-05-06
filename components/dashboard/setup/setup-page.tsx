@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { LeadsTab } from "./leads-tab";
 import { TargetsTab } from "./targets-tab";
+import { WeeklyReportTab } from "./weekly-report-tab";
 import { ReportTab } from "./report-tab";
-import { PTUser } from "./types";
+import { MonthlyStatsTab } from "./monthly-stats-tab";
+import { PTUser, SOURCES, LEAD_STATUS_LABEL, LeadStatus } from "./types";
 
 type Branch = { id: string; name: string };
 
@@ -13,6 +15,7 @@ type Props = {
   branches: Branch[];
   currentUserId: string;
   currentUserRole: string;
+  userName: string;
   isReadOnly: boolean;
   ptBranchId: string | null;
   managedBranchIds: string[];
@@ -21,20 +24,24 @@ type Props = {
 const TABS = [
   { key: "leads", label: "Bảng Setup" },
   { key: "targets", label: "Mục tiêu & KPI" },
+  { key: "weeklyReport", label: "Báo cáo tuần" },
   { key: "report", label: "Báo cáo tháng" },
+  { key: "stats", label: "Thống kê tháng" },
 ] as const;
 
-type TabKey = "leads" | "targets" | "report";
+type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "stats";
 
 const now = new Date();
 
-export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly, ptBranchId }: Props) {
+export function SetupPage({ branches, currentUserId, currentUserRole, userName, isReadOnly, ptBranchId }: Props) {
   const [tab, setTab] = useState<TabKey>("leads");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [branchId, setBranchId] = useState(ptBranchId ?? branches[0]?.id ?? "");
   const [ptList, setPtList] = useState<PTUser[]>([]);
   const [selectedPTId, setSelectedPTId] = useState("");
+  const [selectedSource, setSelectedSource] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
 
   const isPT = currentUserRole === "FREE" || currentUserRole === "RESTRICTED";
   const isFM = currentUserRole === "FM";
@@ -55,9 +62,11 @@ export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly
       .catch(() => {});
   }, [branchId, isPT]);
 
-  // Reset PT filter when branch/month/year changes
+  // Reset lead filters when branch/month/year changes
   useEffect(() => {
     setSelectedPTId("");
+    setSelectedSource("");
+    setSelectedStatus("");
   }, [branchId, month, year]);
 
   const selectCls = "h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
@@ -85,6 +94,24 @@ export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly
               <option value="">Tất cả PT</option>
               {ptList.map((pt) => (
                 <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
+              ))}
+            </select>
+          )}
+          {/* Source filter — Tab 1 only */}
+          {tab === "leads" && (
+            <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className={selectCls}>
+              <option value="">Tất cả nguồn</option>
+              {SOURCES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          )}
+          {/* Status filter — Tab 1 only */}
+          {tab === "leads" && (
+            <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className={selectCls}>
+              <option value="">Tất cả tình trạng</option>
+              {(["TAKECARE", "FAIL", "DE", "PIF", "PB"] as LeadStatus[]).map((s) => (
+                <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
               ))}
             </select>
           )}
@@ -132,6 +159,8 @@ export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly
           isCEO={isCEO}
           ptList={ptList}
           selectedPTId={selectedPTId}
+          selectedSource={selectedSource}
+          selectedStatus={selectedStatus}
         />
       )}
       {tab === "targets" && (
@@ -145,6 +174,18 @@ export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly
           isReadOnly={isReadOnly}
           isPT={isPT}
           isFM={isFM}
+          ptList={ptList}
+        />
+      )}
+      {tab === "weeklyReport" && (
+        <WeeklyReportTab
+          branchId={branchId}
+          branchName={branchName}
+          month={month}
+          year={year}
+          currentUserRole={currentUserRole}
+          userName={userName}
+          isReadOnly={isReadOnly}
         />
       )}
       {tab === "report" && (
@@ -155,6 +196,14 @@ export function SetupPage({ branches, currentUserId, currentUserRole, isReadOnly
           year={year}
           currentUserRole={currentUserRole}
           isPT={isPT}
+        />
+      )}
+      {tab === "stats" && (
+        <MonthlyStatsTab
+          branchId={branchId}
+          branchName={branchName}
+          month={month}
+          year={year}
         />
       )}
     </div>

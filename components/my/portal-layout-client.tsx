@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Home, Scale, Dumbbell, Salad, LogOut } from "lucide-react";
+import { Home, Scale, Dumbbell, Salad, Ruler, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutNotificationPopup } from "./workout-notification-popup";
 
 const NAV = [
-  { href: "/my",           label: "Tổng quan",  Icon: Home },
-  { href: "/my/weight",    label: "Cân nặng",   Icon: Scale },
-  { href: "/my/activity",  label: "Tập luyện",  Icon: Dumbbell },
-  { href: "/my/nutrition", label: "Dinh dưỡng", Icon: Salad },
+  { href: "/my",              label: "Tổng quan",  Icon: Home  },
+  { href: "/my/weight",       label: "Cân nặng",   Icon: Scale },
+  { href: "/my/activity",     label: "Tập luyện",  Icon: Dumbbell },
+  { href: "/my/measurements", label: "Số đo",      Icon: Ruler },
+  { href: "/my/nutrition",    label: "Dinh dưỡng", Icon: Salad },
 ] as const;
 
 export function PortalLayoutClient({

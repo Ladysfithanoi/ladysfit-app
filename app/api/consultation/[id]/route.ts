@@ -124,6 +124,73 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       create: { consultationId: params.id, ...info },
       update: info,
     });
+
+    // Auto-create or link SalesLead for this consultation.
+    // IMPORTANT: use `createdById` / `branchId` from the request body (the values
+    // the wizard just sent) rather than `c.createdById` / `c.branchId` (stale,
+    // fetched before the update above). When an FM fills Step 1, the body contains
+    // the *selected PT's* ID in `createdById` — c.createdById is still the FM.
+    const assignedPTId = (createdById as string | undefined) || c.createdById;
+    const effectiveBranchId = (branchId as string | undefined) || c.branchId;
+
+    const infoData = info as {
+      fullName?: string;
+      phone?: string;
+      dateOfBirth?: string | null;
+      knowLDFVia?: string | null;
+    };
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const customerName = infoData.fullName?.trim() || "—";
+    const phone = infoData.phone?.trim() || null;
+    const yearOfBirth = infoData.dateOfBirth ? new Date(infoData.dateOfBirth).getFullYear() : null;
+    const source = infoData.knowLDFVia?.trim() || null;
+
+    const linkedLead = await prisma.salesLead.findUnique({ where: { consultationId: params.id } });
+
+    if (linkedLead) {
+      // Update basic info (and correct a previously wrong assignedPTId) on re-save
+      await prisma.salesLead.update({
+        where: { id: linkedLead.id },
+        data: {
+          assignedPTId,
+          branchId: effectiveBranchId,
+          customerName,
+          ...(yearOfBirth != null ? { yearOfBirth } : {}),
+          ...(phone != null ? { phone } : {}),
+          ...(source != null ? { source } : {}),
+        },
+      });
+    } else {
+      // Check for a manually-created lead with the same phone this month (avoid duplicate)
+      const existingByPhone = phone
+        ? await prisma.salesLead.findFirst({
+            where: { phone, assignedPTId, branchId: effectiveBranchId, month: currentMonth, year: currentYear, consultationId: null },
+          })
+        : null;
+
+      if (existingByPhone) {
+        await prisma.salesLead.update({ where: { id: existingByPhone.id }, data: { consultationId: params.id } });
+      } else {
+        await prisma.salesLead.create({
+          data: {
+            branchId: effectiveBranchId,
+            assignedPTId,
+            createdById: session.user.id,
+            customerName,
+            yearOfBirth,
+            phone,
+            source,
+            notes: `[Từ tư vấn ${now.toLocaleDateString("vi-VN")}]`,
+            status: "TAKECARE",
+            month: currentMonth,
+            year: currentYear,
+            consultationId: params.id,
+          },
+        });
+      }
+    }
   }
 
   // Upsert assessment (step 2)

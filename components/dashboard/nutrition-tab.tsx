@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Salad, Archive, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NutritionDesigner, type MealPlanRow, type MealItem } from "./nutrition-designer";
+import { fmtDate } from "@/lib/format-date";
 
 // ── MacroBadge ─────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ export function NutritionTab({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-extrabold text-gray-800">Chế độ ăn hiện tại</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Cập nhật lần cuối {new Date(activePlan.createdAt).toLocaleDateString("vi-VN")}</p>
+          <p className="text-xs text-gray-400 mt-0.5">Cập nhật lần cuối {fmtDate(activePlan.createdAt)}</p>
         </div>
         <div className="flex gap-2">
           <button

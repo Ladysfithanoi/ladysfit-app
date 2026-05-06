@@ -8,6 +8,7 @@ import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { BodyFatCard } from "./body-fat-card";
+import { TransformGallery } from "./transform-gallery";
 
 type SelectedPkg = {
   packageName: string;
@@ -389,9 +390,12 @@ export function Step5Sales({
         )}
       </div>
 
-      {/* Section 2: Body fat visualisation */}
+      {/* Section 2: Body fat + Transform Gallery */}
       <div className="border-t border-gray-50">
-        <BodyFatCard info={info} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
+          <BodyFatCard info={info} />
+          <TransformGallery />
+        </div>
       </div>
 
       {/* Section 3: Phase progress table */}

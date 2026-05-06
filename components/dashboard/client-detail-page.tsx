@@ -19,6 +19,7 @@ import { NutritionTab } from "@/components/dashboard/nutrition-tab";
 import type { MealPlanRow } from "@/components/dashboard/nutrition-designer";
 import { StepsBarChart, MinutesBarChart, type ActivityChartPoint } from "@/components/dashboard/activity-log-charts";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { BodyMeasurementsSection } from "@/components/dashboard/body-measurements-section";
 import { PACKAGES } from "@/lib/packages";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,8 @@ type PackageEnrollment = {
   startDate: string | null;
   endDate: string | null;
   durationDays: number;
+  reservedDays: number;
+  extensionDays: number;
   price: number;
   status: "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED";
   notes: string | null;
@@ -156,6 +159,41 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function getAvailablePackages(
+  currentWeight: number,
+  height: number,
+  existingPackages: PackageEnrollment[]
+): { names: string[]; note: string; noteOk: boolean } {
+  const hasL1orL2 = existingPackages.some((p) => p.packageName === "L1" || p.packageName === "L2");
+  const hasAny = existingPackages.length > 0;
+
+  const weightDiff = currentWeight - (height - 100);
+  const eligibleL2 = weightDiff > 6;
+  const eligibleL1 = weightDiff > 3 && weightDiff <= 6;
+
+  let names: string[] = ["L3", "L4", "L5"];
+  if (hasAny) names.push("Loyalfit");
+
+  let note: string;
+  let noteOk = false;
+
+  if (hasL1orL2) {
+    note = "ℹ️ Đã sử dụng gói Giai đoạn 1";
+  } else if (eligibleL2) {
+    names = ["L2", ...names];
+    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 6 kg)`;
+    noteOk = true;
+  } else if (eligibleL1) {
+    names = ["L1", ...names];
+    note = `✓ Đủ điều kiện L1 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 3 kg)`;
+    noteOk = true;
+  } else {
+    note = `ℹ️ Không đủ điều kiện L1/L2, bắt đầu từ Giai đoạn 2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≤ 3 kg)`;
+  }
+
+  return { names, note, noteOk };
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest pt-2 pb-1 border-b border-gray-100">
@@ -224,8 +262,13 @@ export function ClientDetailPage({
   const [savingStartDateId, setSavingStartDateId] = useState<string | null>(null);
   const [pkgSessionsInputs, setPkgSessionsInputs] = useState<Record<string, string>>({});
   const [savingSessionsId, setSavingSessionsId] = useState<string | null>(null);
+  const [pkgReservedInputs, setPkgReservedInputs] = useState<Record<string, string>>({});
+  const [pkgExtensionInputs, setPkgExtensionInputs] = useState<Record<string, string>>({});
+  const [savingReservedExtId, setSavingReservedExtId] = useState<string | null>(null);
   const [addPkgContractCode, setAddPkgContractCode] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const canEditSessions = userRole === "ADMIN" || userRole === "FM";
 
   // Food scan logs (loaded client-side for detail view)
   const [foodLogs, setFoodLogs] = useState<FoodScanLogItem[]>([]);
@@ -475,6 +518,39 @@ export function ClientDetailPage({
     }
   }
 
+  async function handleSaveReservedExt(pkgId: string) {
+    const pkg = packages.find((p) => p.id === pkgId);
+    if (!pkg) return;
+    const reserved = parseInt(pkgReservedInputs[pkgId] ?? String(pkg.reservedDays), 10);
+    const extension = parseInt(pkgExtensionInputs[pkgId] ?? String(pkg.extensionDays), 10);
+    if (isNaN(reserved) || isNaN(extension) || reserved < 0 || extension < 0) return;
+    setSavingReservedExtId(pkgId);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/packages/${pkgId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservedDays: reserved, extensionDays: extension }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setPackages((prev) =>
+        prev.map((p) =>
+          p.id === pkgId
+            ? { ...p, reservedDays: updated.reservedDays, extensionDays: updated.extensionDays, endDate: updated.endDate }
+            : p
+        )
+      );
+      setPkgReservedInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
+      setPkgExtensionInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
+      setToastMsg("Đã lưu bảo lưu/gia hạn ✓");
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch {
+      // silent
+    } finally {
+      setSavingReservedExtId(null);
+    }
+  }
+
   async function handleAddPackage() {
     if (!addPkgName) return;
     const def = PACKAGES[addPkgName];
@@ -509,6 +585,8 @@ export function ClientDetailPage({
         status: created.status,
         notes: created.notes ?? null,
         contractCode: created.contractCode ?? null,
+        reservedDays: created.reservedDays ?? 0,
+        extensionDays: created.extensionDays ?? 0,
         createdAt: created.createdAt,
       }]);
       setAddPkgName("");
@@ -927,7 +1005,19 @@ export function ClientDetailPage({
                         {pkg.startDate ? (
                           <>
                             <div>Ngày BĐ: <span className="text-gray-600">{formatDate(pkg.startDate)}</span></div>
-                            {pkg.endDate && <div>Ngày KT: <span className="text-gray-600">{formatDate(pkg.endDate)}</span></div>}
+                            {pkg.endDate && (
+                              <div>
+                                Ngày KT: <span className="text-gray-600">{formatDate(pkg.endDate)}</span>
+                                {(pkg.reservedDays > 0 || pkg.extensionDays > 0) && (
+                                  <span className="ml-1 text-[10px] text-purple-500">
+                                    (bao gồm {[
+                                      pkg.reservedDays > 0 && `${pkg.reservedDays}ng BL`,
+                                      pkg.extensionDays > 0 && `${pkg.extensionDays}ng GH`,
+                                    ].filter(Boolean).join(" + ")})
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </>
                         ) : (
                           <span className="italic">Chưa bắt đầu</span>
@@ -1144,7 +1234,7 @@ export function ClientDetailPage({
                               if (isToday) return;
                               setExpandedFoodDays((prev) => {
                                 const next = new Set(prev);
-                                next.has(dateKey) ? next.delete(dateKey) : next.add(dateKey);
+                                if (next.has(dateKey)) { next.delete(dateKey); } else { next.add(dateKey); }
                                 return next;
                               });
                             }}
@@ -1318,7 +1408,21 @@ export function ClientDetailPage({
                             )}
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-600">
-                            {pkg.endDate ? formatDate(pkg.endDate) : <span className="italic text-gray-400">—</span>}
+                            {pkg.endDate ? (
+                              <>
+                                {formatDate(pkg.endDate)}
+                                {(pkg.reservedDays > 0 || pkg.extensionDays > 0) && (
+                                  <p className="text-[10px] text-purple-500 mt-0.5">
+                                    {[
+                                      pkg.reservedDays > 0 && `${pkg.reservedDays}ng BL`,
+                                      pkg.extensionDays > 0 && `${pkg.extensionDays}ng GH`,
+                                    ].filter(Boolean).join(" + ")}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <span className="italic text-gray-400">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap", PKG_STATUS_STYLE[pkg.status])}>
@@ -1444,6 +1548,9 @@ export function ClientDetailPage({
               </div>
             )}
           </div>
+
+          {/* ── Body Measurements ── */}
+          <BodyMeasurementsSection clientId={client.id} canDelete={canEditSessions} />
 
           {/* ── Activity section ── */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -1812,26 +1919,91 @@ export function ClientDetailPage({
                   <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {formatPrice(pkg.price)}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
-                    <div className="flex items-center gap-1 flex-1">
-                      <input
-                        type="number"
-                        min={0}
-                        max={pkg.sessions}
-                        placeholder={String(pkg.sessionsUsed)}
-                        value={pkgSessionsInputs[pkg.id] ?? pkg.sessionsUsed}
-                        onChange={(e) => setPkgSessionsInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
-                        className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                      />
-                      <button
-                        onClick={() => handleSaveSessionsUsed(pkg.id)}
-                        disabled={savingSessionsId === pkg.id}
-                        className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50 whitespace-nowrap"
-                        style={{ backgroundColor: "#f15b5c" }}
-                      >
-                        {savingSessionsId === pkg.id ? "..." : "Lưu"}
-                      </button>
-                    </div>
+                    {canEditSessions ? (
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={pkg.sessions}
+                          placeholder={String(pkg.sessionsUsed)}
+                          value={pkgSessionsInputs[pkg.id] ?? pkg.sessionsUsed}
+                          onChange={(e) => setPkgSessionsInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                          className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                        />
+                        <button
+                          onClick={() => handleSaveSessionsUsed(pkg.id)}
+                          disabled={savingSessionsId === pkg.id}
+                          className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50 whitespace-nowrap"
+                          style={{ backgroundColor: "#f15b5c" }}
+                        >
+                          {savingSessionsId === pkg.id ? "..." : "Lưu"}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-700">
+                        {pkg.sessionsUsed}/{pkg.sessions} buổi
+                      </span>
+                    )}
                   </div>
+                  {!canEditSessions && (
+                    <p className="text-[10px] text-gray-400 italic">
+                      * Chỉ Admin và FM có thể chỉnh sửa số buổi đã tập
+                    </p>
+                  )}
+
+                  {/* Số ngày bảo lưu / gia hạn */}
+                  {canEditSessions ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-16 flex-shrink-0">Bảo lưu (ngày):</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={pkgReservedInputs[pkg.id] ?? pkg.reservedDays}
+                          onChange={(e) => setPkgReservedInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                          className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-16 flex-shrink-0">Gia hạn (ngày):</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={pkgExtensionInputs[pkg.id] ?? pkg.extensionDays}
+                          onChange={(e) => setPkgExtensionInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                          className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                        />
+                        <button
+                          onClick={() => handleSaveReservedExt(pkg.id)}
+                          disabled={savingReservedExtId === pkg.id}
+                          className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50 whitespace-nowrap"
+                          style={{ backgroundColor: "#f15b5c" }}
+                        >
+                          {savingReservedExtId === pkg.id ? "..." : "Lưu"}
+                        </button>
+                      </div>
+                      {/* Calculated end date preview */}
+                      {pkg.startDate && (() => {
+                        const r = parseInt(pkgReservedInputs[pkg.id] ?? String(pkg.reservedDays), 10) || 0;
+                        const x = parseInt(pkgExtensionInputs[pkg.id] ?? String(pkg.extensionDays), 10) || 0;
+                        const d = new Date(pkg.startDate);
+                        d.setDate(d.getDate() + pkg.durationDays + r + x);
+                        return (
+                          <p className="text-[10px] text-gray-400">
+                            Ngày KT: {isoToDmy(pkg.startDate)} + {pkg.durationDays}n + {r}BL + {x}GH
+                            {" = "}<span className="font-semibold text-gray-600">{formatDate(d.toISOString())}</span>
+                          </p>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-500">
+                      <span>Bảo lưu: <strong>{pkg.reservedDays}</strong> ngày</span>
+                      <span className="mx-2">·</span>
+                      <span>Gia hạn: <strong>{pkg.extensionDays}</strong> ngày</span>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Ngày BĐ:</span>
                     <div className="flex items-center gap-1 flex-1">
@@ -1884,18 +2056,31 @@ export function ClientDetailPage({
           )}
           <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-semibold text-gray-500">Thêm gói tập</p>
-            <select
-              value={addPkgName}
-              onChange={(e) => setAddPkgName(e.target.value)}
-              className={selectCls}
-            >
-              <option value="">Chọn gói tập...</option>
-              {Object.values(PACKAGES).map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.name} — {p.stageLabel} ({p.sessions} buổi, {formatPrice(p.discountedPrice ?? p.price)})
-                </option>
-              ))}
-            </select>
+            {(() => {
+              const { names, note, noteOk } = getAvailablePackages(client.currentWeight, client.height, packages);
+              return (
+                <>
+                  <p className={cn("text-[11px] font-semibold px-3 py-2 rounded-lg", noteOk ? "text-green-700 bg-green-50" : "text-gray-500 bg-gray-50")}>
+                    {note}
+                  </p>
+                  <select
+                    value={addPkgName}
+                    onChange={(e) => setAddPkgName(e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="">Chọn gói tập...</option>
+                    {names.map((name) => {
+                      const p = PACKAGES[name];
+                      return p ? (
+                        <option key={p.name} value={p.name}>
+                          {p.name} — {p.stageLabel} ({p.sessions} buổi, {formatPrice(p.discountedPrice ?? p.price)})
+                        </option>
+                      ) : null;
+                    })}
+                  </select>
+                </>
+              );
+            })()}
             {addPkgName && PACKAGES[addPkgName] && (
               <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-1">
                 <p><span className="font-bold">Số buổi:</span> {PACKAGES[addPkgName].sessions}</p>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileText, Plus, Trash2, Edit2, Check, X, Settings, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fmtDateTime } from "@/lib/format-date";
 
 type Question = {
   id: string;
@@ -442,7 +443,7 @@ export function ExamAdminPage({
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <span className="text-xs text-gray-400 font-medium">
-                            {date.toLocaleDateString("vi-VN")} {date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                            {fmtDateTime(date)}
                           </span>
                         </td>
                       </tr>

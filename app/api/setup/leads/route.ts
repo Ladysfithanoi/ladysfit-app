@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
+import { syncLeadToTransaction } from "@/lib/sync-finance";
 
 const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "FREE", "RESTRICTED"];
 
@@ -91,6 +93,11 @@ export async function POST(req: Request) {
       createdBy: { select: { id: true, name: true } },
     },
   });
+
+  if (["PIF", "DE", "PB"].includes(lead.status) && lead.signDate) {
+    await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, lead.month, lead.year);
+  }
+  await syncLeadToTransaction(lead);
 
   return NextResponse.json(lead, { status: 201 });
 }

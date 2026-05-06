@@ -11,7 +11,7 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { startDate, sessionsUsed, status, notes, contractCode } = body;
+  const { startDate, sessionsUsed, status, notes, contractCode, reservedDays, extensionDays } = body;
 
   const existing = await prisma.packageEnrollment.findUnique({
     where: { id: params.packageId },
@@ -22,23 +22,34 @@ export async function PUT(
 
   const data: Record<string, unknown> = {};
 
-  if (startDate !== undefined) {
-    if (startDate) {
-      const start = new Date(startDate);
-      const end = new Date(startDate);
-      end.setDate(end.getDate() + existing.durationDays);
-      data.startDate = start;
-      data.endDate = end;
-    } else {
-      data.startDate = null;
-      data.endDate = null;
-    }
-  }
-
   if (sessionsUsed !== undefined) data.sessionsUsed = Number(sessionsUsed);
   if (status !== undefined) data.status = status;
   if (notes !== undefined) data.notes = notes || null;
   if (contractCode !== undefined) data.contractCode = contractCode || null;
+
+  // Resolve the effective values for endDate recalculation
+  const effectiveReserved = reservedDays !== undefined ? Number(reservedDays) : existing.reservedDays;
+  const effectiveExtension = extensionDays !== undefined ? Number(extensionDays) : existing.extensionDays;
+
+  if (reservedDays !== undefined) data.reservedDays = effectiveReserved;
+  if (extensionDays !== undefined) data.extensionDays = effectiveExtension;
+
+  // Recalculate endDate whenever startDate, reservedDays, or extensionDays changes
+  if (startDate !== undefined || reservedDays !== undefined || extensionDays !== undefined) {
+    const effectiveStart = startDate !== undefined
+      ? (startDate ? new Date(startDate) : null)
+      : existing.startDate;
+
+    if (startDate !== undefined) data.startDate = effectiveStart;
+
+    if (effectiveStart) {
+      const end = new Date(effectiveStart);
+      end.setDate(end.getDate() + existing.durationDays + effectiveReserved + effectiveExtension);
+      data.endDate = end;
+    } else {
+      data.endDate = null;
+    }
+  }
 
   const updated = await prisma.packageEnrollment.update({
     where: { id: params.packageId },

@@ -40,6 +40,7 @@ export default async function Setup() {
       branches={visibleBranches}
       currentUserId={session.user.id}
       currentUserRole={role}
+      userName={session.user.name ?? session.user.email ?? "FM"}
       isReadOnly={isReadOnly}
       ptBranchId={ptBranchId}
       managedBranchIds={managedBranchIds}

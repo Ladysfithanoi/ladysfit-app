@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Role } from "@prisma/client";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -18,6 +19,35 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   if (!client) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
   return NextResponse.json(client);
+}
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const role = session.user.role as Role;
+  if (role !== "ADMIN" && role !== "FM") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const client = await prisma.client.findUnique({
+    where: { id: params.id },
+    select: { id: true, branchId: true, fullName: true },
+  });
+  if (!client) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
+
+  if (role === "FM") {
+    const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
+    if (!managedBranchIds.includes(client.branchId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.client.delete({ where: { id: params.id } });
+  });
+
+  return NextResponse.json({ success: true });
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {

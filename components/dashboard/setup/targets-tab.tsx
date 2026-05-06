@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { MonthlyTarget } from "./types";
+import { MonthlyTarget, PTUser } from "./types";
 
 type Props = {
   branchId: string;
@@ -14,6 +14,7 @@ type Props = {
   isReadOnly: boolean;
   isPT: boolean;
   isFM: boolean;
+  ptList: PTUser[];
 };
 
 const BASE_KPI_KEYS = [
@@ -51,7 +52,7 @@ function computeWeekDates(year: number, month: number, weekNumber: number) {
   return { weekStart, weekEnd };
 }
 
-export function TargetsTab({ branchId, branchName, month, year, currentUserId, currentUserRole, isReadOnly, isPT, isFM }: Props) {
+export function TargetsTab({ branchId, branchName, month, year, currentUserId, isReadOnly, isPT, ptList }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_KEYS = getKpiKeys(isFitpartner);
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
@@ -65,14 +66,6 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const [weeklyEdit, setWeeklyEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
   const [weeklyForm, setWeeklyForm] = useState<Record<string, number | string>>({});
   const [saving, setSaving] = useState(false);
-
-  // Notes-only edit (FM + CEO)
-  const [notesEdit, setNotesEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
-  const [notesText, setNotesText] = useState("");
-  const [notesSaving, setNotesSaving] = useState(false);
-
-  const isCEO = currentUserRole === "CEO_FITPARTNER";
-  const canWriteNotes = isFM || isCEO;
 
   const fetchTargets = useCallback(async () => {
     if (!branchId) return;
@@ -156,72 +149,6 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
     fetchTargets();
   }
 
-  function openNotesEdit(targetId: string, weekNumber: number) {
-    const t = targets.find((t) => t.id === targetId);
-    const wa = t?.weeklyActuals.find((w) => w.weekNumber === weekNumber);
-    setNotesText(wa?.weeklyTaskNotes ?? "");
-    setNotesEdit({ targetId, weekNumber });
-  }
-
-  async function saveNotesOnly() {
-    if (!notesEdit) return;
-    setNotesSaving(true);
-    const { weekStart, weekEnd } = computeWeekDates(year, month, notesEdit.weekNumber);
-    await fetch("/api/setup/weekly-notes", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        monthlyTargetId: notesEdit.targetId,
-        weekNumber: notesEdit.weekNumber,
-        weekStart: weekStart.toISOString(),
-        weekEnd: weekEnd.toISOString(),
-        weeklyTaskNotes: notesText.trim() || null,
-      }),
-    });
-    setNotesSaving(false);
-    setNotesEdit(null);
-    fetchTargets();
-  }
-
-  const notesModal = notesEdit && (
-    <>
-      <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setNotesEdit(null)} />
-      <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-bold text-base">
-            Công việc phát sinh - Tuần {notesEdit.weekNumber}
-          </h2>
-          <button onClick={() => setNotesEdit(null)}><span className="text-gray-400 text-lg">×</span></button>
-        </div>
-        <div className="flex-1 p-6">
-          <label className="text-sm font-semibold text-gray-700">
-            Việc chưa hoàn thành - Nguyên nhân và Giải pháp
-          </label>
-          <textarea
-            value={notesText}
-            onChange={(e) => setNotesText(e.target.value)}
-            rows={10}
-            placeholder={"VD: 1. Kênh cá nhân PT chưa ra được lead...\n2. OUTDOOR chưa có lead..."}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-gray-50 mt-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-          />
-        </div>
-        <div className="px-6 py-4 border-t flex gap-3">
-          <button
-            onClick={saveNotesOnly}
-            disabled={notesSaving}
-            className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            {notesSaving ? "Đang lưu..." : "Lưu"}
-          </button>
-          <button onClick={() => setNotesEdit(null)} className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold">
-            Hủy
-          </button>
-        </div>
-      </div>
-    </>
-  );
-
   const weeklyModal = weeklyEdit && (
     <>
       <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setWeeklyEdit(null)} />
@@ -243,17 +170,6 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               />
             </div>
           ))}
-          {canWriteNotes && (
-            <div>
-              <label className="text-xs font-semibold text-gray-600">Công việc phát sinh / Setup tuần sau</label>
-              <textarea
-                value={weeklyForm.weeklyTaskNotes as string ?? ""}
-                onChange={(e) => setWeeklyForm((f) => ({ ...f, weeklyTaskNotes: e.target.value }))}
-                rows={3}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-gray-50 mt-1 resize-none"
-              />
-            </div>
-          )}
         </div>
         <div className="px-6 py-4 border-t flex gap-3">
           <button onClick={saveWeekly} disabled={saving} className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60" style={{ backgroundColor: "#f15b5c" }}>
@@ -291,12 +207,12 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-100">
+                  <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                     <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
                     <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
                     {WEEKS.map((w) => (
                       <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                        T{w} Đạt
+                        W{w} ĐẠT
                         <button onClick={() => openWeeklyEdit(myTarget.id, w)} className="ml-1 text-[#f15b5c] opacity-60 hover:opacity-100">✎</button>
                       </th>
                     ))}
@@ -314,7 +230,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     const monthActual = weekActuals.reduce((s, v) => s + v, 0);
                     const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                     return (
-                      <tr key={k.key} className="border-b border-gray-50 last:border-0">
+                      <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
                         <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap">{k.label}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
                         {weekActuals.map((v, i) => (
@@ -378,14 +294,16 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         )}
 
         {weeklyModal}
-        {notesModal}
       </div>
     );
   }
 
   // ─── FM / CEO / ADMIN VIEW ───
-  if (targets.length === 0) {
-    return <div className="py-12 text-center text-sm text-gray-300">Chưa có PT nào đặt mục tiêu tháng này</div>;
+  // Merge ptList with targets so all PTs are shown even without targets
+  const allPTs = ptList.length > 0 ? ptList : targets.map((t) => t.user);
+
+  if (allPTs.length === 0) {
+    return <div className="py-12 text-center text-sm text-gray-300">Chưa có PT nào trong cơ sở này</div>;
   }
 
   return (
@@ -398,7 +316,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-100">
+              <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                 <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">PT</th>
                 {KPI_KEYS.map((k) => (
                   <Fragment key={k.key}>
@@ -410,29 +328,37 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               </tr>
             </thead>
             <tbody>
-              {targets.map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/40">
-                  <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">
-                    {t.user.name ?? t.user.email}
-                  </td>
-                  {KPI_KEYS.map((k) => {
-                    const mt = t[k.targetKey as keyof MonthlyTarget] as number;
-                    const at = t.weeklyActuals.reduce((s, w) => s + ((w[k.actualKey as keyof typeof w] as number) ?? 0), 0);
-                    const pct = mt > 0 ? Math.round((at / mt) * 100) : 0;
-                    return (
-                      <Fragment key={k.key}>
-                        <td className="px-2 py-2.5 text-center text-gray-500">{k.isFloat ? mt.toFixed(1) : mt}</td>
-                        <td className="px-2 py-2.5 text-center font-semibold text-gray-800">{k.isFloat ? at.toFixed(1) : at}</td>
-                        <td className="px-2 py-2.5 text-center">
-                          <span className={cn("px-1.5 py-0.5 rounded-full text-xs font-bold", pctColor(pct))}>{pct}%</span>
-                        </td>
-                      </Fragment>
-                    );
-                  })}
-                </tr>
-              ))}
+              {allPTs.map((pt) => {
+                const t = targets.find((tgt) => tgt.userId === pt.id) ?? null;
+                return (
+                  <tr key={pt.id} className="border-b border-gray-100 hover:bg-gray-50/40 divide-x divide-gray-100 even:bg-[#fafafa]">
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <span className="font-semibold text-gray-800">{pt.name ?? pt.email}</span>
+                      {!t && (
+                        <span className="ml-2 text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                          Chưa đặt
+                        </span>
+                      )}
+                    </td>
+                    {KPI_KEYS.map((k) => {
+                      const mt = t ? (t[k.targetKey as keyof MonthlyTarget] as number) : 0;
+                      const at = t ? t.weeklyActuals.reduce((s, w) => s + ((w[k.actualKey as keyof typeof w] as number) ?? 0), 0) : 0;
+                      const pct = mt > 0 ? Math.round((at / mt) * 100) : 0;
+                      return (
+                        <Fragment key={k.key}>
+                          <td className="px-2 py-2.5 text-center text-gray-500">{t ? (k.isFloat ? mt.toFixed(1) : mt) : "—"}</td>
+                          <td className="px-2 py-2.5 text-center font-semibold text-gray-800">{t ? (k.isFloat ? at.toFixed(1) : at) : "—"}</td>
+                          <td className="px-2 py-2.5 text-center">
+                            {t ? <span className={cn("px-1.5 py-0.5 rounded-full text-xs font-bold", pctColor(pct))}>{pct}%</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                        </Fragment>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
               {/* Total row */}
-              <tr className="bg-gray-50 border-t-2 border-gray-100">
+              <tr className="bg-gray-50 border-t-2 border-gray-200 divide-x divide-gray-200">
                 <td className="px-4 py-2.5 font-extrabold text-gray-900">Tổng</td>
                 {KPI_KEYS.map((k) => {
                   const totalMT = targets.reduce((s, t) => s + ((t[k.targetKey as keyof MonthlyTarget] as number) ?? 0), 0);
@@ -455,21 +381,39 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         </div>
       </div>
 
-      {/* Per-PT weekly breakdown (always shown; ✎ only for FM/CEO) */}
-      {targets.map((t) => (
+      {/* Per-PT weekly breakdown */}
+      {allPTs.map((pt) => {
+        const t = targets.find((tgt) => tgt.userId === pt.id) ?? null;
+        const ptName = pt.name ?? pt.email;
+
+        if (!t) {
+          return (
+            <div key={pt.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
+                <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Chưa đặt mục tiêu</span>
+              </div>
+              <div className="py-6 text-center text-sm text-gray-300">
+                PT chưa đặt mục tiêu cho tháng {month}/{year}
+              </div>
+            </div>
+          );
+        }
+
+        return (
         <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
-            <p className="text-sm font-extrabold text-gray-800">{t.user.name ?? t.user.email}</p>
+            <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                   <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
                   <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
                   {WEEKS.map((w) => (
                     <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                      T{w} Đạt
+                      W{w} ĐẠT
                       {!isReadOnly && (
                         <button
                           onClick={() => openWeeklyEdit(t.id, w)}
@@ -492,7 +436,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   const monthActual = weekActuals.reduce((s, v) => s + v, 0);
                   const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                   return (
-                    <tr key={k.key} className="border-b border-gray-50 last:border-0">
+                    <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
                       <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap">{k.label}</td>
                       <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
                       {weekActuals.map((v, i) => (
@@ -510,44 +454,13 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   );
                 })}
               </tbody>
-              <tfoot>
-                <tr className="border-t border-gray-100 bg-gray-50/50">
-                  <td className="px-4 py-1.5 text-xs font-semibold text-gray-400 whitespace-nowrap">Ghi chú tuần</td>
-                  <td />
-                  {WEEKS.map((w) => {
-                    const wa = t.weeklyActuals.find((a) => a.weekNumber === w);
-                    const note = wa?.weeklyTaskNotes;
-                    return (
-                      <td key={w} className="px-3 py-1.5 text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          {note && (
-                            <p className="text-[10px] text-gray-500 leading-tight max-w-[70px] truncate" title={note}>
-                              {note}
-                            </p>
-                          )}
-                          {canWriteNotes && (
-                            <button
-                              onClick={() => openNotesEdit(t.id, w)}
-                              className="text-[10px] text-[#f15b5c] opacity-70 hover:opacity-100 whitespace-nowrap"
-                            >
-                              {note ? "✎ Sửa" : "+ Ghi chú"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                  <td />
-                  <td />
-                </tr>
-              </tfoot>
             </table>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {weeklyModal}
-      {notesModal}
     </div>
   );
 }

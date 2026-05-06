@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { SettingsPageClient } from "@/components/dashboard/settings-page-client";
+import { SettingsWithTabs } from "@/components/dashboard/settings-with-tabs";
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   });
 
   return (
-    <SettingsPageClient
+    <SettingsWithTabs
       initialBranches={branches}
     />
   );

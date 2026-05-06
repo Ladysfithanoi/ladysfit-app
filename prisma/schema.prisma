@@ -21,6 +21,11 @@ model Branch {
   complaints      Complaint[]
   salesLeads      SalesLead[]
   monthlyTargets  MonthlyTarget[]
+  weeklyReports        WeeklyReport[]
+  monthlyBranchReports MonthlyBranchReport[]
+  salaryConfigs        SalaryConfig[]
+  salaryRecords        SalaryRecord[]
+  transactions         Transaction[]
 
   @@map("branches")
 }
@@ -54,6 +59,16 @@ model User {
   assignedLeads         SalesLead[]        @relation("AssignedPTLeads")
   createdLeads          SalesLead[]        @relation("CreatedLeads")
   monthlyTargets        MonthlyTarget[]    @relation("PTMonthlyTargets")
+  weeklyReports         WeeklyReport[]        @relation("FMWeeklyReports")
+  monthlyBranchReports  MonthlyBranchReport[] @relation("FMMonthlyReports")
+  dailyChecklists       DailyChecklist[]      @relation("UserDailyChecklists")
+  weeklyMonthlyReports  WeeklyMonthlyReport[] @relation("UserWeeklyMonthlyReports")
+  salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
+  salaryRecords         SalaryRecord[]        @relation("UserSalaryRecords")
+  transactions          Transaction[]         @relation("TransactionCreator")
+  checklistNotifications  ChecklistNotification[]
+  measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
+  measurementNotifications MeasurementNotification[]   @relation("PTMeasurementNotifs")
 
   @@map("users")
 }
@@ -136,7 +151,9 @@ model Client {
   foodScanLogs          FoodScanLog[]
   performanceAlerts     PerformanceAlert[]
   workoutNotifications  WorkoutNotification[]
-  complaints            Complaint[]
+  complaints                   Complaint[]
+  bodyMeasurementLogs          BodyMeasurementLog[]
+  measurementNotifications     MeasurementNotification[]
 
   @@map("clients")
 }
@@ -160,6 +177,7 @@ model Consultation {
   packages        ConsultationPackage[]
   workoutPrograms WorkoutProgram[]
   mealPlans       MealPlan[]
+  salesLead       SalesLead?
 
   @@map("consultations")
 }
@@ -333,14 +351,16 @@ model PackageEnrollment {
   packageName  String
   packageStage String
   sessions     Int
-  sessionsUsed Int                     @default(0)
-  startDate    DateTime?
-  endDate      DateTime?
-  durationDays Int
-  price        Float
-  status       PackageEnrollmentStatus @default(ACTIVE)
-  notes        String?                 @db.Text
-  createdAt    DateTime                @default(now())
+  sessionsUsed   Int                     @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  durationDays   Int
+  reservedDays   Int                     @default(0)
+  extensionDays  Int                     @default(0)
+  price          Float
+  status         PackageEnrollmentStatus @default(ACTIVE)
+  notes          String?                 @db.Text
+  createdAt      DateTime                @default(now())
 
   client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   workoutPrograms WorkoutProgram[]
@@ -696,12 +716,14 @@ model SalesLead {
   remark              String?
   month             Int
   year              Int
+  consultationId    String?    @unique
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  branch     Branch @relation(fields: [branchId], references: [id])
-  assignedPT User   @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
-  createdBy  User   @relation("CreatedLeads", fields: [createdById], references: [id])
+  branch       Branch        @relation(fields: [branchId], references: [id])
+  assignedPT   User          @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
+  createdBy    User          @relation("CreatedLeads", fields: [createdById], references: [id])
+  consultation Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
 
   @@map("sales_leads")
 }
@@ -751,4 +773,276 @@ model WeeklyActual {
 
   @@unique([monthlyTargetId, weekNumber])
   @@map("weekly_actuals")
+}
+
+model WeeklyReport {
+  id             String   @id @default(cuid())
+  branchId       String
+  month          Int
+  year           Int
+  weekNumber     Int
+  importantTasks String?  @db.Text
+  arisingTasks   String?  @db.Text
+  incompleteWork String?  @db.Text
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  branch    Branch @relation(fields: [branchId], references: [id])
+  createdBy User   @relation("FMWeeklyReports", fields: [createdById], references: [id])
+
+  @@unique([branchId, month, year, weekNumber])
+  @@map("weekly_reports")
+}
+
+model MonthlyBranchReport {
+  id             String   @id @default(cuid())
+  branchId       String
+  month          Int
+  year           Int
+  incompleteWork String?  @db.Text
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  branch    Branch @relation(fields: [branchId], references: [id])
+  createdBy User   @relation("FMMonthlyReports", fields: [createdById], references: [id])
+
+  @@unique([branchId, month, year])
+  @@map("monthly_branch_reports")
+}
+
+// ── Check-list Nhân sự ────────────────────────────────────────────────────
+
+enum ReportType {
+  WEEKLY
+  MONTHLY
+}
+
+model DailyChecklist {
+  id               String   @id @default(cuid())
+  userId           String
+  reportDate       DateTime
+  position         String   @default("")
+  targetNote       String?
+  totalTarget      Float?
+  dailyResults     String?  @db.Text
+  dailyCompleted   String?  @db.Text
+  dailyIncomplete  String?  @db.Text
+  dailyNextPlan    String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user  User            @relation("UserDailyChecklists", fields: [userId], references: [id])
+  items ChecklistItem[]
+
+  @@map("daily_checklists")
+}
+
+model ChecklistItem {
+  id          String   @id @default(cuid())
+  checklistId String
+  order       Int
+  time        String?
+  task        String
+  kpi         String?
+  status      Boolean  @default(false)
+  hasEvent    Boolean  @default(false)
+  note        String?
+  createdAt   DateTime @default(now())
+
+  checklist DailyChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_items")
+}
+
+// ── Checklist Notifications ───────────────────────────────────────────────
+
+enum ChecklistNotifType {
+  REMINDER
+  DAILY_REPORT
+}
+
+model ChecklistNotification {
+  id        String             @id @default(cuid())
+  userId    String
+  type      ChecklistNotifType
+  message   String             @db.Text
+  isRead    Boolean            @default(false)
+  date      DateTime
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_notifications")
+}
+
+model WeeklyMonthlyReport {
+  id             String     @id @default(cuid())
+  userId         String
+  reportType     ReportType
+  month          Int
+  year           Int
+  weekNumber     Int?
+  importantTasks String     @db.Text @default("[]")
+  results        String?    @db.Text
+  completed      String?    @db.Text
+  incomplete     String?    @db.Text
+  nextPlan       String?    @db.Text
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user User @relation("UserWeeklyMonthlyReports", fields: [userId], references: [id])
+
+  @@map("weekly_monthly_reports")
+}
+
+// ── Quỹ lương ─────────────────────────────────────────────────────────────
+
+enum SalaryStatus {
+  PENDING
+  CONFIRMED
+  PAID
+}
+
+model SalaryConfig {
+  id                 String    @id @default(cuid())
+  userId             String
+  branchId           String
+  baseSalary         Float     @default(0)
+  commissionTiers    String    @db.Text @default("[]")
+  seniorityYears     Int       @default(0)
+  startDate          DateTime?
+  lunchAllowance     Float     @default(2600000)
+  phoneAllowance     Float     @default(900000)
+  transportAllowance Float     @default(500000)
+  effectiveFrom      DateTime
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user   User   @relation("UserSalaryConfigs", fields: [userId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@map("salary_configs")
+}
+
+model SalaryRecord {
+  id                  String       @id @default(cuid())
+  userId              String
+  branchId            String
+  month               Int
+  year                Int
+  baseSalary          Float        @default(0)
+  totalRevenue        Float        @default(0)
+  commissionRate      Float        @default(0)
+  commissionAmount    Float        @default(0)
+  seniorityBonus      Float        @default(0)
+  showsL1L2Loyal      Int          @default(0)
+  showsL3L4L5         Int          @default(0)
+  showPay             Float        @default(0)
+  goalBonus           Float        @default(0)
+  clientsAchievedGoal Int          @default(0)
+  googleBonus         Float        @default(0)
+  googleReviews       Int          @default(0)
+  renewBonus          Float        @default(0)
+  renewContracts      Int          @default(0)
+  fixedAllowances     Float        @default(0)
+  bhxh                Float        @default(0)
+  totalSalary         Float        @default(0)
+  advancePaid         Float        @default(0)
+  remainingPayment    Float        @default(0)
+  notes               String?      @db.Text
+  sessionImages       String?      @db.Text
+  status              SalaryStatus @default(PENDING)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  user   User   @relation("UserSalaryRecords", fields: [userId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, month, year])
+  @@map("salary_records")
+}
+
+// ── Transform Gallery ────────────────────────────────────────────────────
+
+model TransformPhoto {
+  id             String   @id @default(cuid())
+  weightBefore   Float
+  weightAfter    Float
+  durationMonths Int
+  imageUrl       String
+  isActive       Boolean  @default(true)
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@map("transform_photos")
+}
+
+// ── Thông báo số đo ──────────────────────────────────────────────────────
+
+model MeasurementNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation("PTMeasurementNotifs", fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("measurement_notifications")
+}
+
+// ── Số đo cơ thể ──────────────────────────────────────────────────────────
+
+model BodyMeasurementLog {
+  id             String    @id @default(cuid())
+  clientId       String
+  measuredById   String?
+  measuredDate   DateTime  @db.Date
+  waist          Float?
+  belly          Float?
+  armSize        Float?
+  armFromElbow   Float?
+  thighSize      Float?
+  thighFromKnee  Float?
+  calfSize       Float?
+  calfFromKnee   Float?
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  measuredBy User?  @relation("MeasuredByUser", fields: [measuredById], references: [id], onDelete: SetNull)
+
+  @@map("body_measurement_logs")
+}
+
+// ── Thu Chi ───────────────────────────────────────────────────────────────
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model Transaction {
+  id              String          @id @default(cuid())
+  branchId        String
+  type            TransactionType
+  category        String
+  amount          Float
+  description     String?
+  transactionDate DateTime
+  referenceId     String?
+  receiptImages   String?         @db.Text
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  branch    Branch @relation(fields: [branchId], references: [id])
+  createdBy User   @relation("TransactionCreator", fields: [createdById], references: [id])
+
+  @@index([branchId, transactionDate])
+  @@map("transactions")
 }

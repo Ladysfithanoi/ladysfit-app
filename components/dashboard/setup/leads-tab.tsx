@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import {
   SalesLead, LeadStatus, LEAD_STATUS_LABEL, LEAD_STATUS_STYLE, SOURCES, PTUser,
 } from "./types";
+import { AlertDialog } from "@/components/ui/alert-dialog";
+import { fmtDate } from "@/lib/format-date";
 
 type Props = {
   branchId: string;
@@ -20,13 +22,15 @@ type Props = {
   isCEO: boolean;
   ptList: PTUser[];
   selectedPTId: string;
+  selectedSource: string;
+  selectedStatus: string;
 };
 
 const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
 
-export function LeadsTab({ branchId, branchName, month, year, currentUserId, isPT, ptList, selectedPTId }: Props) {
+export function LeadsTab({ branchId, branchName, month, year, currentUserId, isPT, isFM, ptList, selectedPTId, selectedSource, selectedStatus }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +39,12 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [collapsedPTs, setCollapsedPTs] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [successToast, setSuccessToast] = useState("");
+  const [carryOverDialogOpen, setCarryOverDialogOpen] = useState(false);
+  const [carrying, setCarrying] = useState(false);
 
   // Form state
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
@@ -100,10 +110,46 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Xóa lead này?")) return;
-    await fetch(`/api/setup/leads/${id}`, { method: "DELETE" });
-    fetchLeads();
+  function handleDelete(id: string, name: string) {
+    setPendingDelete({ id, name });
+    setDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/setup/leads/${pendingDelete.id}`, { method: "DELETE" });
+      if (res.ok) {
+        const deletedName = pendingDelete.name;
+        setLeads((prev) => prev.filter((l) => l.id !== pendingDelete.id));
+        setDeleteDialogOpen(false);
+        setPendingDelete(null);
+        setSuccessToast(`Đã xóa lead "${deletedName}" thành công`);
+        setTimeout(() => setSuccessToast(""), 3000);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleCarryOver() {
+    setCarrying(true);
+    try {
+      const res = await fetch("/api/setup/carry-over", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId, month, year }),
+      });
+      if (res.ok) {
+        const { carried, nextMonth, nextYear } = await res.json() as { carried: number; skipped: number; nextMonth: number; nextYear: number };
+        setCarryOverDialogOpen(false);
+        setSuccessToast(`Đã chuyển ${carried} lead sang tháng ${nextMonth}/${nextYear}`);
+        setTimeout(() => setSuccessToast(""), 4000);
+      }
+    } finally {
+      setCarrying(false);
+    }
   }
 
   function togglePT(ptId: string) {
@@ -122,13 +168,23 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
     return acc;
   }, {});
 
-  // Apply PT filter (FM/CEO/ADMIN only; PT always sees only their own)
-  const visibleGrouped = selectedPTId
-    ? Object.fromEntries(Object.entries(grouped).filter(([ptId]) => ptId === selectedPTId))
-    : grouped;
+  // Apply PT + source + status filters; drop PT groups with 0 matching leads
+  const visibleGrouped: Record<string, SalesLead[]> = Object.fromEntries(
+    Object.entries(grouped)
+      .filter(([ptId]) => !selectedPTId || ptId === selectedPTId)
+      .map(([ptId, ptLeads]) => [
+        ptId,
+        ptLeads.filter(
+          (l) =>
+            (!selectedSource || l.source === selectedSource) &&
+            (!selectedStatus || l.status === selectedStatus)
+        ),
+      ])
+      .filter(([, ptLeads]) => (ptLeads as SalesLead[]).length > 0)
+  );
 
-  // Summary cards reflect the filtered view
-  const visibleLeads = selectedPTId ? (grouped[selectedPTId] ?? []) : leads;
+  // Summary cards reflect all active filters
+  const visibleLeads = Object.values(visibleGrouped).flat();
   const branchTotal = {
     revenue: visibleLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0),
     fitpartnerRevenue: visibleLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0),
@@ -137,8 +193,11 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
     total: visibleLeads.length,
   };
 
-  // Only PT can add/edit/delete leads; FM/CEO/ADMIN are read-only
-  const canMutate = isPT;
+  const canMutate = isPT || isFM;
+
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const carryableLeads = leads.filter((l) => l.status === "TAKECARE" || l.status === "DE");
 
   return (
     <div>
@@ -158,16 +217,26 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
         ))}
       </div>
 
-      {/* Thêm Lead — PT only */}
-      {canMutate && (
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            <Plus className="w-4 h-4" /> Thêm Lead
-          </button>
+      {/* Action bar */}
+      {(isPT || isFM) && (
+        <div className="flex justify-end gap-3 mb-4">
+          {isFM && carryableLeads.length > 0 && (
+            <button
+              onClick={() => setCarryOverDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
+            >
+              📤 Đẩy sang tháng sau
+            </button>
+          )}
+          {isPT && (
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Plus className="w-4 h-4" /> Thêm Lead
+            </button>
+          )}
         </div>
       )}
 
@@ -175,7 +244,9 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
         <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>
       ) : Object.keys(visibleGrouped).length === 0 ? (
         <div className="py-12 text-center text-sm text-gray-300">
-          {selectedPTId ? "PT này chưa có lead tháng này" : "Chưa có lead nào tháng này"}
+          {selectedPTId || selectedSource || selectedStatus
+            ? "Không có lead nào khớp với bộ lọc đã chọn"
+            : "Chưa có lead nào tháng này"}
         </div>
       ) : (
         <div className="space-y-6">
@@ -212,7 +283,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-gray-100">
+                        <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                           {[
                             "STT", "Khách hàng", "NĂM SINH", "SĐT", "Nguồn",
                             "Chăm sóc", "Dự báo", "Tình trạng", "Gói tập",
@@ -221,15 +292,42 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
                             "Ngày ký", "Ghi chú",
                             ...(canMutate ? [""] : []),
                           ].map((h, i) => (
-                            <th key={i} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                            <th
+                              key={i}
+                              className={cn(
+                                "px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
+                                i === 0 && "sticky left-0 z-10 bg-[#f5f5f5]",
+                                i === 1 && "sticky left-10 z-10 bg-[#f5f5f5]",
+                              )}
+                            >
+                              {h}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {ptLeads.map((l, idx) => (
-                          <tr key={l.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
-                            <td className="px-3 py-2.5 text-gray-400">{idx + 1}</td>
-                            <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{l.customerName}</td>
+                          <tr key={l.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 even:bg-[#fafafa] divide-x divide-gray-100">
+                            <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-inherit">{idx + 1}</td>
+                            <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-inherit">
+                              <span>{l.customerName}</span>
+                              {l.notes?.includes("[Chuyển từ tháng") && (
+                                <span className="ml-1.5 text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                  🔄 Chuyển tháng
+                                </span>
+                              )}
+                              {l.consultationId && (
+                                <a
+                                  href={`/dashboard/consultation/${l.consultationId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-1.5 text-[10px] font-semibold text-blue-500 hover:text-blue-700 whitespace-nowrap"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  📋 Tư vấn
+                                </a>
+                              )}
+                            </td>
                             <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
@@ -255,19 +353,19 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
                               </td>
                             )}
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
-                              {l.signDate ? new Date(l.signDate).toLocaleDateString("vi-VN") : "—"}
+                              {l.signDate ? fmtDate(l.signDate) : "—"}
                             </td>
                             <td className="px-3 py-2.5 text-gray-400 max-w-[120px]">
                               <p className="truncate" title={l.remark ?? ""}>{l.remark ?? "—"}</p>
                             </td>
                             {canMutate && (
                               <td className="px-3 py-2.5 whitespace-nowrap">
-                                {l.assignedPTId === currentUserId && (
+                                {(isFM || l.assignedPTId === currentUserId) && (
                                   <div className="flex gap-2">
                                     <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
-                                    <button onClick={() => handleDelete(l.id)} className="text-gray-400 hover:text-red-500">
+                                    <button onClick={() => handleDelete(l.id, l.customerName)} className="text-gray-400 hover:text-red-500">
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
@@ -316,6 +414,38 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
           ))}
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={deleteDialogOpen}
+        onClose={() => { if (!deleting) { setDeleteDialogOpen(false); setPendingDelete(null); } }}
+        title="Xóa lead khách hàng"
+        description={`Bạn có chắc muốn xóa lead "${pendingDelete?.name}"?\nHành động này không thể hoàn tác.`}
+        confirmLabel="Xóa"
+        cancelLabel="Hủy"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        loading={deleting}
+      />
+
+      {/* Carry-over confirmation dialog */}
+      <AlertDialog
+        open={carryOverDialogOpen}
+        onClose={() => { if (!carrying) setCarryOverDialogOpen(false); }}
+        title={`Đẩy lead sang tháng ${nextMonth}/${nextYear}`}
+        description={`Chuyển tất cả lead đang chăm sóc và đặt cọc sang tháng ${nextMonth}/${nextYear}?\nSẽ có ${carryableLeads.length} lead được chuyển (đã có ở tháng sau sẽ bỏ qua).`}
+        confirmLabel="Đẩy sang tháng sau"
+        cancelLabel="Hủy"
+        onConfirm={handleCarryOver}
+        loading={carrying}
+      />
+
+      {/* Success toast */}
+      {successToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
+          {successToast}
+        </div>
+      )}
 
       {/* Lead form slide-over */}
       {formOpen && (

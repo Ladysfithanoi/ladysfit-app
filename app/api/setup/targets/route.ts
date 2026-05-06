@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json(targets);
+  const enriched = await enrichTargetsWithDynamicActuals(targets, month, year);
+  return NextResponse.json(enriched);
 }
 
 export async function PUT(req: Request) {

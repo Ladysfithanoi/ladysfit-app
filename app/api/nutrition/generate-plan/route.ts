@@ -24,28 +24,54 @@ async function callGeminiWithRetry(
 }
 
 export async function POST(req: Request) {
-  console.log("🔴 GENERATE PLAN API HIT");
   const session = await getServerSession(authOptions);
-  console.log("🔴 Session:", session ? `user=${session.user?.id}` : "null");
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { der, protein, fat, carbs, mealsPerDay, likes, dislikes } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const { der, protein, fat, carbs, mealsPerDay, likes, dislikes } = body as Record<string, unknown>;
 
   if (!der || !protein || !fat || !carbs || !mealsPerDay) {
     return NextResponse.json({ error: "Thiếu thông tin dinh dưỡng" }, { status: 400 });
   }
 
+  const derNum      = Number(der);
+  const proteinNum  = Number(protein);
+  const fatNum      = Number(fat);
+  const carbsNum    = Number(carbs);
+  const mealsNum    = Number(mealsPerDay);
+
+  if (derNum <= 0 || proteinNum < 0 || fatNum < 0 || carbsNum < 0) {
+    return NextResponse.json({ error: "Giá trị dinh dưỡng không hợp lệ" }, { status: 400 });
+  }
+  if (!Number.isInteger(mealsNum) || mealsNum < 1 || mealsNum > 6) {
+    return NextResponse.json({ error: "Số bữa không hợp lệ (1-6)" }, { status: 400 });
+  }
+  if (typeof likes === "string" && likes.length > 500) {
+    return NextResponse.json({ error: "Thông tin quá dài" }, { status: 400 });
+  }
+  if (typeof dislikes === "string" && dislikes.length > 500) {
+    return NextResponse.json({ error: "Thông tin quá dài" }, { status: 400 });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
 
-  const prompt = `Tạo thực đơn ${mealsPerDay} bữa cho 1 ngày theo yêu cầu:
-- Calories mục tiêu: ${Math.round(der)} kcal
-- Protein: ${Math.round(protein)}g | Fat: ${Math.round(fat)}g | Carbs: ${Math.round(carbs)}g
-- Thích: ${likes || "không có yêu cầu"}
-- Không ăn: ${dislikes || "không có"}
+  const likesStr    = typeof likes    === "string" ? likes.trim()    : "";
+  const dislikesStr = typeof dislikes === "string" ? dislikes.trim() : "";
 
-Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsPerDay} bữa, tổng macro sai số ≤10%.
+  const prompt = `Tạo thực đơn ${mealsNum} bữa cho 1 ngày theo yêu cầu:
+- Calories mục tiêu: ${Math.round(derNum)} kcal
+- Protein: ${Math.round(proteinNum)}g | Fat: ${Math.round(fatNum)}g | Carbs: ${Math.round(carbsNum)}g
+- Thích: ${likesStr    || "không có yêu cầu"}
+- Không ăn: ${dislikesStr || "không có"}
+
+Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
 
 TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không thêm text nào khác:
 [

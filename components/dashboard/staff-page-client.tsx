@@ -374,7 +374,8 @@ export function StaffPageClient({
             </p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {(canManage
@@ -476,6 +477,7 @@ export function StaffPageClient({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

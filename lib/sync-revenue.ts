@@ -1,0 +1,82 @@
+import { prisma } from "@/lib/prisma";
+
+function computeWeekDates(year: number, month: number, weekNumber: number) {
+  const d = new Date(year, month - 1, 1);
+  const dow = d.getDay() || 7;
+  const firstMon = new Date(d);
+  firstMon.setDate(d.getDate() - dow + 1);
+  const weekStart = new Date(firstMon);
+  weekStart.setDate(firstMon.getDate() + (weekNumber - 1) * 7);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  return { weekStart, weekEnd };
+}
+
+function getWeekNumber(signDate: Date, year: number, month: number): number | null {
+  for (let w = 1; w <= 5; w++) {
+    const { weekStart, weekEnd } = computeWeekDates(year, month, w);
+    if (signDate >= weekStart && signDate <= weekEnd) return w;
+  }
+  return null;
+}
+
+export async function syncLeadRevenueToWeeklyActuals(
+  ptId: string,
+  branchId: string,
+  month: number,
+  year: number
+): Promise<void> {
+  const target = await prisma.monthlyTarget.findUnique({
+    where: { branchId_userId_month_year: { branchId, userId: ptId, month, year } },
+    select: { id: true, weeklyActuals: { select: { id: true, weekNumber: true } } },
+  });
+
+  if (!target) return;
+
+  const leads = await prisma.salesLead.findMany({
+    where: {
+      assignedPTId: ptId,
+      branchId,
+      month,
+      year,
+      status: { in: ["PIF", "DE", "PB"] },
+      signDate: { not: null },
+    },
+    select: { signDate: true, actualRevenue: true, fitpartnerRevenue: true },
+  });
+
+  const weekRevenue: Record<number, { revenue: number; fitpartner: number }> = {};
+  for (const lead of leads) {
+    if (!lead.signDate) continue;
+    const w = getWeekNumber(new Date(lead.signDate), year, month);
+    if (!w) continue;
+    if (!weekRevenue[w]) weekRevenue[w] = { revenue: 0, fitpartner: 0 };
+    weekRevenue[w].revenue += lead.actualRevenue ?? 0;
+    weekRevenue[w].fitpartner += lead.fitpartnerRevenue ?? 0;
+  }
+
+  await Promise.all(
+    [1, 2, 3, 4, 5].map(async (w) => {
+      const { weekStart, weekEnd } = computeWeekDates(year, month, w);
+      const rev = weekRevenue[w]?.revenue ?? 0;
+      const fp = weekRevenue[w]?.fitpartner ?? 0;
+      await prisma.weeklyActual.upsert({
+        where: { monthlyTargetId_weekNumber: { monthlyTargetId: target.id, weekNumber: w } },
+        update: { revenueActual: rev, fitpartnerRevenueActual: fp },
+        create: {
+          monthlyTargetId: target.id,
+          weekNumber: w,
+          weekStart,
+          weekEnd,
+          revenueActual: rev,
+          fitpartnerRevenueActual: fp,
+          fitActual: 0,
+          cooperationActual: 0,
+          transformActual: 0,
+          googleReviewActual: 0,
+          cvActual: 0,
+        },
+      });
+    })
+  );
+}

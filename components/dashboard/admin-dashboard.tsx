@@ -95,9 +95,9 @@ export function AdminDashboard({
   ];
 
   return (
-    <div>
+    <div className="space-y-5">
       {/* Greeting */}
-      <div className="mb-6">
+      <div>
         <h1 className="text-2xl font-extrabold text-gray-900">
           {greeting}, {userName} 👋
         </h1>
@@ -107,7 +107,7 @@ export function AdminDashboard({
       </div>
 
       {/* 4 stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(({ title, value, Icon, iconBg, iconColor, badge, label }) => (
           <div
             key={title}
@@ -128,7 +128,7 @@ export function AdminDashboard({
       </div>
 
       {/* Branch performance */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-5 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
           <Building2 className="w-4 h-4 text-[#f15b5c]" />
           <h2 className="text-base font-extrabold text-gray-900">Hiệu quả theo cơ sở</h2>

@@ -17,7 +17,7 @@ export const LEAD_STATUS_STYLE: Record<LeadStatus, string> = {
 };
 
 export const SOURCES = [
-  "Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Khác",
+  "Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Khác",
 ];
 
 export type PTUser = {
@@ -31,6 +31,7 @@ export type SalesLead = {
   id: string;
   branchId: string;
   assignedPTId: string;
+  consultationId: string | null;
   customerName: string;
   yearOfBirth: number | null;
   phone: string | null;

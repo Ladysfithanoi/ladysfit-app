@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+// ~5 MB base64 ceiling (base64 is ~4/3 the raw size, so 5 MB raw ≈ 6.7 MB base64)
+const MAX_BASE64_LENGTH = 7_000_000;
 
 async function callGeminiWithRetry(
   url: string,
@@ -23,14 +29,29 @@ async function callGeminiWithRetry(
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { base64Image, mimeType } = body;
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  console.log("Image size:", base64Image?.length);
-  console.log("MIME type:", mimeType);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
-  if (!base64Image || !mimeType) {
+  const { base64Image, mimeType } = body as Record<string, unknown>;
+
+  if (!base64Image || typeof base64Image !== "string") {
     return NextResponse.json({ error: "Missing image data" }, { status: 400 });
+  }
+  if (!mimeType || typeof mimeType !== "string") {
+    return NextResponse.json({ error: "Missing MIME type" }, { status: 400 });
+  }
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    return NextResponse.json({ error: "Unsupported image type" }, { status: 400 });
+  }
+  if (base64Image.length > MAX_BASE64_LENGTH) {
+    return NextResponse.json({ error: "Image too large (max 5 MB)" }, { status: 400 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -55,7 +76,6 @@ Không thêm bất kỳ text nào khác.`;
       temperature: 0.1,
     },
   };
-  console.log("Sending payload keys:", Object.keys(payload));
 
   const geminiRes = await callGeminiWithRetry(`${GEMINI_URL}?key=${apiKey}`, payload);
 
@@ -68,10 +88,7 @@ Không thêm bất kỳ text nào khác.`;
   }
 
   const data = await geminiRes.json();
-  console.log("SCAN FULL RESPONSE:", JSON.stringify(data).slice(0, 500));
   const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  console.log("SCAN RAW:", JSON.stringify(rawText));
-  console.log("SCAN LENGTH:", rawText?.length);
 
   const text = (rawText || "").replace(/```json/gi, "").replace(/```/g, "").trim();
 
@@ -79,12 +96,12 @@ Không thêm bất kỳ text nào khác.`;
   try {
     const parsed = JSON.parse(text);
     return NextResponse.json({
-      name: parsed.name || "Không xác định",
-      qty: parsed.qty || "",
+      name:     parsed.name     || "Không xác định",
+      qty:      parsed.qty      || "",
       calories: Number(parsed.calories || 0),
-      protein: Number(parsed.protein || 0),
-      fat: Number(parsed.fat || 0),
-      carbs: Number(parsed.carbs || 0),
+      protein:  Number(parsed.protein  || 0),
+      fat:      Number(parsed.fat      || 0),
+      carbs:    Number(parsed.carbs    || 0),
     });
   } catch {
     // fall through to brace extraction
@@ -97,12 +114,12 @@ Không thêm bất kỳ text nào khác.`;
     try {
       const parsed = JSON.parse(closed);
       return NextResponse.json({
-        name: parsed.name || "Không xác định",
-        qty: parsed.qty || "",
+        name:     parsed.name     || "Không xác định",
+        qty:      parsed.qty      || "",
         calories: Number(parsed.calories || 0),
-        protein: Number(parsed.protein || 0),
-        fat: Number(parsed.fat || 0),
-        carbs: Number(parsed.carbs || 0),
+        protein:  Number(parsed.protein  || 0),
+        fat:      Number(parsed.fat      || 0),
+        carbs:    Number(parsed.carbs    || 0),
       });
     } catch {
       // fall through to regex
@@ -119,8 +136,8 @@ Không thêm bất kỳ text nào khác.`;
 
   if (nameMatch || calMatch) {
     return NextResponse.json({
-      name:     nameMatch?.[1] || "Món ăn",
-      qty:      qtyMatch?.[1]  || "",
+      name:     nameMatch?.[1]  || "Món ăn",
+      qty:      qtyMatch?.[1]   || "",
       calories: Number(calMatch?.[1]  || 0),
       protein:  Number(proMatch?.[1]  || 0),
       fat:      Number(fatMatch?.[1]  || 0),

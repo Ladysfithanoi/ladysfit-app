@@ -32,30 +32,15 @@ function pctColor(pct: number) {
   return "text-red-500 font-bold";
 }
 
-function computeWeekDates(year: number, month: number, weekNumber: number) {
-  const d = new Date(year, month - 1, 1);
-  const dow = d.getDay() || 7;
-  const firstMon = new Date(d);
-  firstMon.setDate(d.getDate() - dow + 1);
-  const weekStart = new Date(firstMon);
-  weekStart.setDate(firstMon.getDate() + (weekNumber - 1) * 7);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  return { weekStart, weekEnd };
-}
-
 export function ReportTab({ branchId, branchName, month, year, currentUserRole, isPT }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_ROWS = isFitpartner ? [BASE_KPI_ROWS[0], FITPARTNER_KPI_ROW, ...BASE_KPI_ROWS.slice(1)] : BASE_KPI_ROWS;
+  const canEdit = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER";
+
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Notes editing state (FM/CEO only)
-  const [notesEdit, setNotesEdit] = useState<{ weekNumber: number } | null>(null);
-  const [notesText, setNotesText] = useState("");
-  const [notesSaving, setNotesSaving] = useState(false);
-
-  const canEditNotes = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER";
+  const [incompleteWork, setIncompleteWork] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchReport = useCallback(async () => {
     if (!branchId) return;
@@ -64,8 +49,15 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
       const url = isPT
         ? `/api/setup/targets?branchId=${branchId}&month=${month}&year=${year}`
         : `/api/setup/report?branchId=${branchId}&month=${month}&year=${year}`;
-      const res = await fetch(url);
-      if (res.ok) setTargets(await res.json());
+      const [targetsRes, reportRes] = await Promise.all([
+        fetch(url),
+        isPT ? Promise.resolve(null) : fetch(`/api/setup/monthly-report?branchId=${branchId}&month=${month}&year=${year}`),
+      ]);
+      if (targetsRes.ok) setTargets(await targetsRes.json());
+      if (reportRes?.ok) {
+        const r = await reportRes.json();
+        setIncompleteWork(r?.incompleteWork ?? "");
+      }
     } finally {
       setLoading(false);
     }
@@ -73,42 +65,17 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
-  function openNotesEdit(weekNumber: number) {
-    // Use existing notes from first weeklyActual found for this week (deduplicated)
-    const allNotes = targets
-      .flatMap((t) => t.weeklyActuals.filter((a) => a.weekNumber === weekNumber))
-      .map((a) => a.weeklyTaskNotes)
-      .filter(Boolean) as string[];
-    const uniqueNotes = Array.from(new Set(allNotes));
-    setNotesText(uniqueNotes.join("\n\n"));
-    setNotesEdit({ weekNumber });
-  }
-
-  async function saveNotes() {
-    if (!notesEdit || !targets.length) return;
-    setNotesSaving(true);
-    const w = notesEdit.weekNumber;
-    const { weekStart, weekEnd } = computeWeekDates(year, month, w);
-
-    // Update notes for ALL targets for this week (branch-level note)
-    await Promise.all(
-      targets.map((t) =>
-        fetch("/api/setup/weekly-notes", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            monthlyTargetId: t.id,
-            weekNumber: w,
-            weekStart: weekStart.toISOString(),
-            weekEnd: weekEnd.toISOString(),
-            weeklyTaskNotes: notesText.trim() || null,
-          }),
-        })
-      )
-    );
-    setNotesSaving(false);
-    setNotesEdit(null);
-    fetchReport();
+  async function saveReport() {
+    setSaving(true);
+    try {
+      await fetch("/api/setup/monthly-report", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId, month, year, incompleteWork: incompleteWork.trim() || null }),
+      });
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) return <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>;
@@ -128,6 +95,9 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
     return { ...row, monthTarget, weekActuals, monthActual, pct };
   });
 
+  const th = "border border-gray-200 px-3 py-2.5 font-bold text-gray-500 uppercase text-xs whitespace-nowrap";
+  const td = "border border-gray-200 px-3 py-2.5 text-xs";
+
   return (
     <div className="space-y-5">
       {/* Branch aggregate table */}
@@ -135,48 +105,48 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Báo cáo tổng hợp tháng {month}/{year}</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+        <div className="overflow-x-auto p-1">
+          <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase w-8">STT</th>
-                <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase">Công việc</th>
+              <tr className="bg-[#f5f5f5]">
+                <th className={cn(th, "text-left w-8")}>STT</th>
+                <th className={cn(th, "text-left")}>Công việc</th>
                 {WEEKS.map((w) => (
-                  <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">T{w} MT</th>
+                  <th key={w} className={cn(th, "text-center")}>W{w} MT</th>
                 ))}
                 {WEEKS.map((w) => (
-                  <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">T{w} ĐẠT</th>
+                  <th key={w} className={cn(th, "text-center")}>W{w} ĐẠT</th>
                 ))}
-                <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">Tháng MT</th>
-                <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">Tháng ĐẠT</th>
-                <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">%</th>
+                <th className={cn(th, "text-center")}>Tháng MT</th>
+                <th className={cn(th, "text-center")}>Tháng ĐẠT</th>
+                <th className={cn(th, "text-center")}>%</th>
               </tr>
             </thead>
             <tbody>
               {aggregate.map((row, idx) => {
                 const weeklyTarget = row.monthTarget > 0 ? row.monthTarget / 5 : 0;
                 return (
-                  <tr key={row.label} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40">
-                    <td className="px-4 py-2.5 text-gray-400">{idx + 1}</td>
-                    <td className="px-4 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{row.label}</td>
+                  <tr key={row.label} className="even:bg-[#fafafa]">
+                    <td className={cn(td, "text-center text-gray-400")}>{idx + 1}</td>
+                    <td className={cn(td, "font-semibold text-gray-700")}>{row.label}</td>
                     {WEEKS.map((_, i) => (
-                      <td key={i} className="px-3 py-2.5 text-center text-gray-400">
+                      <td key={i} className={cn(td, "text-center text-gray-400")}>
                         {row.isFloat ? weeklyTarget.toFixed(1) : Math.round(weeklyTarget)}
                       </td>
                     ))}
                     {row.weekActuals.map((v, i) => (
-                      <td key={i} className="px-3 py-2.5 text-center text-gray-700">
+                      <td key={i} className={cn(td, "text-center text-gray-700")}>
                         {row.isFloat ? v.toFixed(1) : v}
                       </td>
                     ))}
-                    <td className="px-3 py-2.5 text-center text-gray-500">
+                    <td className={cn(td, "text-center text-gray-500")}>
                       {row.isFloat ? row.monthTarget.toFixed(1) : row.monthTarget}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-bold text-gray-800">
+                    <td className={cn(td, "text-center font-bold text-gray-800")}>
                       {row.isFloat ? row.monthActual.toFixed(1) : row.monthActual}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span className={cn("text-xs", pctColor(row.pct))}>{row.pct}%</span>
+                    <td className={cn(td, "text-center")}>
+                      <span className={pctColor(row.pct)}>{row.pct}%</span>
                     </td>
                   </tr>
                 );
@@ -186,87 +156,46 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
         </div>
       </div>
 
-      {/* Weekly task notes — visible to all roles; edit only for FM/CEO */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
-          <p className="text-sm font-extrabold text-gray-800">Việc phát sinh theo tuần</p>
-        </div>
-        <div className="p-5 space-y-4">
-          {WEEKS.map((w) => {
-            const allNotes = targets
-              .flatMap((t) => t.weeklyActuals.filter((a) => a.weekNumber === w))
-              .map((a) => a.weeklyTaskNotes)
-              .filter(Boolean) as string[];
-            const uniqueNotes = Array.from(new Set(allNotes));
-            return (
-              <div key={w}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-xs font-bold text-gray-500">Tuần {w}</p>
-                  {canEditNotes && (
-                    <button
-                      onClick={() => openNotesEdit(w)}
-                      className="text-xs font-semibold text-[#f15b5c] hover:opacity-80"
-                    >
-                      ✏️ Cập nhật
-                    </button>
-                  )}
-                </div>
-                {uniqueNotes.length > 0 ? (
-                  <div className="space-y-1">
-                    {uniqueNotes.map((note, i) => (
-                      <p key={i} className="text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap">
-                        {note}
-                      </p>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-300 italic">Chưa có ghi chú</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Notes edit modal */}
-      {notesEdit && (
-        <>
-          <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setNotesEdit(null)} />
-          <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-base">Công việc phát sinh - Tuần {notesEdit.weekNumber}</h2>
-              <button onClick={() => setNotesEdit(null)}><span className="text-gray-400 text-lg">×</span></button>
-            </div>
-            <div className="flex-1 p-6">
-              <label className="text-sm font-semibold text-gray-700">
-                Việc chưa hoàn thành - Nguyên nhân và Giải pháp
-              </label>
-              <textarea
-                value={notesText}
-                onChange={(e) => setNotesText(e.target.value)}
-                rows={10}
-                placeholder={"VD: 1. Kênh cá nhân PT chưa ra được lead...\n2. OUTDOOR chưa có lead..."}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-gray-50 mt-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-              />
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3">
-              <button
-                onClick={saveNotes}
-                disabled={notesSaving}
-                className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
-                style={{ backgroundColor: "#f15b5c" }}
-              >
-                {notesSaving ? "Đang lưu..." : "Lưu"}
-              </button>
-              <button
-                onClick={() => setNotesEdit(null)}
-                className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold"
-              >
-                Hủy
-              </button>
-            </div>
+      {/* Monthly incomplete work section — FM/CEO/ADMIN only */}
+      {!isPT && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div
+            className="px-5 py-3 text-sm font-extrabold text-white uppercase text-center"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            II/ VIỆC CHƯA HOÀN THÀNH - NGUYÊN NHÂN VÀ GIẢI PHÁP
           </div>
-        </>
+          <p className="text-xs text-gray-400 text-center px-5 py-2 bg-gray-50 border-b border-gray-100">
+            (Giải pháp phải thật cụ thể: Thời gian, KPIs có thể đo lường và kiểm soát được)
+          </p>
+          <div className="p-5 space-y-4">
+            {canEdit ? (
+              <textarea
+                value={incompleteWork}
+                onChange={(e) => setIncompleteWork(e.target.value)}
+                rows={6}
+                placeholder="Nhập nội dung việc chưa hoàn thành, nguyên nhân và giải pháp..."
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+              />
+            ) : (
+              <div className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[100px] whitespace-pre-wrap bg-gray-50">
+                {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+              </div>
+            )}
+            {canEdit && (
+              <div className="flex justify-end">
+                <button
+                  onClick={saveReport}
+                  disabled={saving}
+                  className="px-6 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60 shadow-sm"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  {saving ? "Đang lưu..." : "Lưu báo cáo tháng"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

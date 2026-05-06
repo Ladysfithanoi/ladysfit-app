@@ -53,6 +53,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     data: { status: "COMPLETED", convertedClientId: client.id },
   });
 
+  // Append completion note to linked SalesLead
+  const linkedLead = await prisma.salesLead.findUnique({ where: { consultationId: params.id } });
+  if (linkedLead) {
+    const dateStr = new Date().toLocaleDateString("vi-VN");
+    const suffix = `\nĐã hoàn thành tư vấn - ${dateStr}`;
+    await prisma.salesLead.update({
+      where: { id: linkedLead.id },
+      data: { notes: linkedLead.notes ? linkedLead.notes + suffix : suffix.trim() },
+    });
+  }
+
   if (c.packages.length > 0) {
     const year = new Date().getFullYear();
     const yearStart = new Date(`${year}-01-01`);

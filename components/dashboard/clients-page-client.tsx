@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Search, ChevronRight, X } from "lucide-react";
+import { Search, ChevronRight, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type Branch = { id: string; name: string };
 type PT = { id: string; name: string | null; branchId: string | null };
@@ -32,6 +33,7 @@ type ClientRow = {
   packageNames: string[];
   foodLogToday: boolean;
   foodLogStale: boolean;
+  selfMeasuredThisWeek: boolean;
 };
 
 const STATUS_STYLE = {
@@ -99,6 +101,7 @@ export function ClientsPageClient({
   currentUserBranchId?: string | null;
   managedBranchIds?: string[];
 }) {
+  const [clients, setClients] = useState<ClientRow[]>(initialClients);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"ALL" | "ACTIVE" | "PAUSED" | "RESERVED">("ALL");
   const [ptFilter, setPtFilter] = useState("");
@@ -106,8 +109,37 @@ export function ClientsPageClient({
   const [pkgFilter, setPkgFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 3000);
+  }
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/clients/${deleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setClients(prev => prev.filter(c => c.id !== deleteTarget.id));
+      showToast(`Đã xóa hồ sơ ${deleteTarget.fullName}`);
+      setDeleteTarget(null);
+    } catch {
+      showToast("Xóa thất bại. Vui lòng thử lại.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const isPrivileged = isAdmin || isFM;
+  const canDelete = isAdmin || isFM;
   const hasFilters = !!(search || ptFilter || branchFilter || pkgFilter || dateFrom || dateTo);
 
   // Branches shown in filter dropdown: all for ADMIN, managed-only for FM
@@ -138,7 +170,7 @@ export function ClientsPageClient({
   }, [staffList, isPrivileged, currentUserBranchId]);
 
   const filtered = useMemo(() => {
-    return initialClients.filter((c) => {
+    return clients.filter((c) => {
       // Status tab
       if (activeTab !== "ALL" && c.status !== activeTab) return false;
 
@@ -183,7 +215,7 @@ export function ClientsPageClient({
 
       return true;
     });
-  }, [initialClients, activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
+  }, [clients, activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
 
   return (
     <>
@@ -191,7 +223,7 @@ export function ClientsPageClient({
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900">Khách hàng</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{initialClients.length} khách hàng</p>
+          <p className="text-sm text-gray-400 mt-0.5">{clients.length} khách hàng</p>
         </div>
       </div>
 
@@ -368,6 +400,9 @@ export function ClientsPageClient({
                             {!c.foodLogToday && c.foodLogStale && (
                               <span title="Chưa ghi nhật ký ăn uống 3+ ngày" className="text-xs leading-none">⚠️</span>
                             )}
+                            {c.selfMeasuredThisWeek && (
+                              <span title="Khách tự cập nhật số đo tuần này" className="text-xs leading-none">📏</span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -417,12 +452,23 @@ export function ClientsPageClient({
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <Link
-                        href={`/dashboard/clients/${c.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
-                      >
-                        Xem <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/dashboard/clients/${c.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
+                        >
+                          Xem <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteTarget(c)}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Xóa khách hàng"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -431,6 +477,26 @@ export function ClientsPageClient({
           </div>
         )}
       </div>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="Xóa khách hàng"
+        description={deleteTarget
+          ? `Bạn có chắc muốn xóa hồ sơ của ${deleteTarget.fullName}?\n\nTất cả dữ liệu liên quan sẽ bị xóa bao gồm:\n- Lịch sử cân nặng\n- Lịch sử buổi tập\n- Chương trình tập\n- Chế độ ăn\n- Lộ trình đăng ký\n\nHành động này không thể hoàn tác.`
+          : ""}
+        confirmLabel="Xóa"
+        cancelLabel="Hủy"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleDelete}
+      />
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
+          {toast}
+        </div>
+      )}
     </>
   );
 }

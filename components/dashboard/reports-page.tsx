@@ -242,7 +242,8 @@ export function ReportsPage({ userRole }: { userRole: string }) {
             <p className="text-xs text-gray-300 font-semibold">Chưa có dữ liệu</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[500px] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 {["PT", "KH đang hoạt động", "Buổi tập (30 ngày)", "Cảnh báo chưa đọc"].map((h) => (
@@ -272,6 +273,7 @@ export function ReportsPage({ userRole }: { userRole: string }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -287,7 +289,8 @@ export function ReportsPage({ userRole }: { userRole: string }) {
             <p className="text-xs text-gray-300 font-semibold">Chưa có cảnh báo</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
                 {["Khách hàng", "Loại", "Chi tiết", "Tuần", "PT phụ trách", "Trạng thái"].map((h) => (
@@ -341,6 +344,7 @@ export function ReportsPage({ userRole }: { userRole: string }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

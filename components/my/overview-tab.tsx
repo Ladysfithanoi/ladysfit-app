@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Star, TrendingDown, Plus, Flag } from "lucide-react";
+import Link from "next/link";
+import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 
 const COMPLAINT_CATEGORIES = [
@@ -14,6 +15,15 @@ const COMPLAINT_CATEGORIES = [
   "Khác",
 ];
 
+type LatestMeasurement = {
+  measuredDate: string;
+  waist:     number | null;
+  belly:     number | null;
+  armSize:   number | null;
+  thighSize: number | null;
+  calfSize:  number | null;
+};
+
 type Props = {
   clientName: string;
   initialWeight: number;
@@ -21,6 +31,7 @@ type Props = {
   targetWeight: number;
   todaySteps: number | null;
   todayGymMinutes: number | null;
+  latestMeasurement?: LatestMeasurement | null;
 };
 
 function motivation(pct: number) {
@@ -37,6 +48,7 @@ export function OverviewTab({
   targetWeight,
   todaySteps,
   todayGymMinutes,
+  latestMeasurement,
 }: Props) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -189,6 +201,38 @@ export function OverviewTab({
           </div>
         </div>
       </div>
+
+      {/* Latest measurement card */}
+      {latestMeasurement && (
+        <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Ruler className="w-4 h-4 text-purple-400" />
+              <p className="text-sm font-extrabold text-gray-700">Số đo gần nhất</p>
+            </div>
+            <Link href="/my/measurements" className="text-xs font-bold text-[#f15b5c]">
+              Xem tất cả
+            </Link>
+          </div>
+          <p className="text-[10px] text-gray-400 font-semibold mb-3">
+            {new Date(latestMeasurement.measuredDate).toLocaleDateString("vi-VN")}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Eo", value: latestMeasurement.waist },
+              { label: "Bụng", value: latestMeasurement.belly },
+              { label: "Bắp tay", value: latestMeasurement.armSize },
+              { label: "Bắp đùi", value: latestMeasurement.thighSize },
+              { label: "Bắp chân", value: latestMeasurement.calfSize },
+            ].filter((m) => m.value != null).map((m) => (
+              <div key={m.label} className="bg-purple-50 rounded-xl p-2.5 text-center">
+                <p className="text-sm font-extrabold text-purple-700">{m.value} cm</p>
+                <p className="text-[10px] font-bold text-purple-400">{m.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Complaint button */}
       <button

@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
-  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning,
+  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChecklistReportModal } from "@/components/dashboard/checklist-notif-modal";
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -98,7 +99,16 @@ type ComplaintItem = {
   client: { id: string; fullName: string; phone: string };
 };
 
-export function Navbar() {
+type ChecklistNotif = {
+  id:        string;
+  type:      "REMINDER" | "DAILY_REPORT";
+  message:   string;
+  isRead:    boolean;
+  date:      string;
+  createdAt: string;
+};
+
+export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const isFM = session?.user?.role === "FM";
@@ -129,6 +139,21 @@ export function Navbar() {
   const [complaintUnread, setComplaintUnread] = useState(0);
   const [complaintLoaded, setComplaintLoaded] = useState(false);
 
+  // Checklist notification bell (PT + FM)
+  const [checklistBellOpen, setChecklistBellOpen]     = useState(false);
+  const checklistBellRef                              = useRef<HTMLDivElement>(null);
+  const [checklistNotifs, setChecklistNotifs]         = useState<ChecklistNotif[]>([]);
+  const [checklistUnread, setChecklistUnread]         = useState(0);
+  const [checklistLoaded, setChecklistLoaded]         = useState(false);
+  const [reportModalDate, setReportModalDate]         = useState<string | null>(null);
+
+  // Measurement notification bell (PT only)
+  const [measBellOpen,   setMeasBellOpen]   = useState(false);
+  const measBellRef                         = useRef<HTMLDivElement>(null);
+  const [measNotifs,     setMeasNotifs]     = useState<{ id: string; message: string; isRead: boolean; createdAt: string; client: { id: string; fullName: string } }[]>([]);
+  const [measUnread,     setMeasUnread]     = useState(0);
+  const [measLoaded,     setMeasLoaded]     = useState(false);
+
   // Info slide-over
   const [infoOpen, setInfoOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -158,10 +183,18 @@ export function Navbar() {
       if (complaintBellRef.current && !complaintBellRef.current.contains(e.target as Node)) {
         setComplaintBellOpen(false);
       }
+      if (checklistBellRef.current && !checklistBellRef.current.contains(e.target as Node)) {
+        setChecklistBellOpen(false);
+      }
+      if (measBellRef.current && !measBellRef.current.contains(e.target as Node)) {
+        setMeasBellOpen(false);
+      }
     }
-    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen) document.addEventListener("mousedown", handleClick);
+    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen || checklistBellOpen || measBellOpen) {
+      document.addEventListener("mousedown", handleClick);
+    }
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen]);
+  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen, checklistBellOpen, measBellOpen]);
 
   // Poll unread count for admin
   useEffect(() => {
@@ -239,6 +272,95 @@ export function Navbar() {
     const interval = setInterval(fetchComplaintUnread, 30000);
     return () => clearInterval(interval);
   }, [isFM]);
+
+  // Poll checklist notification unread count (PT + FM)
+  useEffect(() => {
+    if (!isPT && !isFM) return;
+    async function fetchChecklistUnread() {
+      try {
+        const res = await fetch("/api/notifications/checklist");
+        if (res.ok) {
+          const data = await res.json();
+          setChecklistUnread(data.unreadCount ?? 0);
+        }
+      } catch { /* ignore */ }
+    }
+    fetchChecklistUnread();
+    const interval = setInterval(fetchChecklistUnread, 60000);
+    return () => clearInterval(interval);
+  }, [isPT, isFM]);
+
+  // Poll measurement notification unread (PT only)
+  useEffect(() => {
+    if (!isPT) return;
+    async function fetchMeasUnread() {
+      try {
+        const res = await fetch("/api/notifications/measurement");
+        if (res.ok) {
+          const data = await res.json();
+          setMeasUnread(data.unreadCount ?? 0);
+        }
+      } catch { /* ignore */ }
+    }
+    fetchMeasUnread();
+    const interval = setInterval(fetchMeasUnread, 60000);
+    return () => clearInterval(interval);
+  }, [isPT]);
+
+  async function openMeasBell() {
+    setMeasBellOpen((v) => !v);
+    if (!measLoaded) {
+      try {
+        const res = await fetch("/api/notifications/measurement");
+        if (res.ok) {
+          const data = await res.json();
+          setMeasNotifs(data.notifications ?? []);
+          setMeasUnread(data.unreadCount ?? 0);
+          setMeasLoaded(true);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  async function markMeasRead() {
+    await fetch("/api/notifications/measurement", { method: "PATCH" });
+    setMeasNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setMeasUnread(0);
+  }
+
+  async function openChecklistBell() {
+    setChecklistBellOpen((v) => !v);
+    if (!checklistLoaded) {
+      try {
+        const res = await fetch("/api/notifications/checklist");
+        if (res.ok) {
+          const data = await res.json();
+          setChecklistNotifs(data.notifications ?? []);
+          setChecklistUnread(data.unreadCount ?? 0);
+          setChecklistLoaded(true);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  async function markChecklistRead() {
+    await fetch("/api/notifications/checklist", { method: "PATCH" });
+    setChecklistNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setChecklistUnread(0);
+  }
+
+  function openReportModal(notif: ChecklistNotif) {
+    setChecklistBellOpen(false);
+    // Mark this notification as read
+    fetch("/api/notifications/checklist", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [notif.id] }),
+    });
+    setChecklistNotifs((prev) => prev.map((n) => n.id === notif.id ? { ...n, isRead: true } : n));
+    setChecklistUnread((c) => Math.max(0, c - (notif.isRead ? 0 : 1)));
+    setReportModalDate(notif.date);
+  }
 
   async function openComplaintBell() {
     setComplaintBellOpen((v) => !v);
@@ -361,8 +483,19 @@ export function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-60 right-0 h-16 bg-white border-b border-gray-100 z-20 flex items-center justify-between px-6">
-        <div />
+      <header className="fixed top-0 left-0 lg:left-60 right-0 h-16 bg-white border-b border-gray-100 z-30 flex items-center justify-between px-4 md:px-6">
+        {/* Mobile: hamburger + logo */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <button
+            onClick={onMenuClick}
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <span className="text-lg font-extrabold text-[#f15b5c] tracking-tight">Ladysfit</span>
+        </div>
+        {/* Desktop spacer (logo is in sidebar) */}
+        <div className="hidden lg:block" />
 
         <div className="flex items-center gap-3">
         {/* Notification bell — ADMIN only */}
@@ -381,7 +514,7 @@ export function Navbar() {
             </button>
 
             {bellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Thông báo thi</p>
                   {unreadCount > 0 && (
@@ -452,7 +585,7 @@ export function Navbar() {
             </button>
 
             {perfBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Cảnh báo tiến độ</p>
                   {perfAlerts.length > 0 && (
@@ -524,7 +657,7 @@ export function Navbar() {
             </button>
 
             {complaintBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Khiếu nại</p>
                   <a
@@ -571,6 +704,194 @@ export function Navbar() {
           </div>
         )}
 
+        {/* Measurement notification bell — PT only */}
+        {isPT && (
+          <div ref={measBellRef} className="relative">
+            <button
+              onClick={openMeasBell}
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Thông báo số đo"
+            >
+              <Ruler className="w-5 h-5" />
+              {measUnread > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                  {measUnread > 9 ? "9+" : measUnread}
+                </span>
+              )}
+            </button>
+
+            {measBellOpen && (
+              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-bold text-gray-900">Số đo từ khách hàng</p>
+                  {measUnread > 0 && (
+                    <button onClick={markMeasRead} className="text-xs font-semibold text-[#f15b5c] hover:opacity-80">
+                      Đánh dấu đã đọc
+                    </button>
+                  )}
+                </div>
+                {measNotifs.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <Ruler className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs text-gray-300 font-semibold">Không có thông báo</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                    {measNotifs.map((n) => (
+                      <a
+                        key={n.id}
+                        href={`/dashboard/clients/${n.client.id}`}
+                        onClick={() => {
+                          setMeasBellOpen(false);
+                          if (!n.isRead) {
+                            fetch("/api/notifications/measurement", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ ids: [n.id] }),
+                            });
+                            setMeasNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                            setMeasUnread((c) => Math.max(0, c - 1));
+                          }
+                        }}
+                        className={cn(
+                          "flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors",
+                          !n.isRead && "bg-purple-50/50"
+                        )}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
+                          <Ruler className="w-3.5 h-3.5 text-purple-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-xs truncate", !n.isRead ? "font-bold text-gray-800" : "font-semibold text-gray-500")}>
+                            {n.message}
+                          </p>
+                          <p className="text-[10px] text-purple-400 mt-0.5 font-semibold">Nhấn để xem chi tiết →</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {new Date(n.createdAt).toLocaleString("vi-VN", {
+                              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0" />}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Checklist notification bell — PT (REMINDER) + FM (DAILY_REPORT) */}
+        {(isPT || isFM) && (
+          <div ref={checklistBellRef} className="relative">
+            <button
+              onClick={openChecklistBell}
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Thông báo check-list"
+            >
+              <ClipboardList className="w-5 h-5" />
+              {checklistUnread > 0 && (
+                <span className={cn(
+                  "absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-[10px] font-extrabold flex items-center justify-center",
+                  isPT ? "bg-orange-500" : "bg-blue-500"
+                )}>
+                  {checklistUnread > 9 ? "9+" : checklistUnread}
+                </span>
+              )}
+            </button>
+
+            {checklistBellOpen && (
+              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-bold text-gray-900">Thông báo Check-list</p>
+                  {checklistUnread > 0 && (
+                    <button
+                      onClick={markChecklistRead}
+                      className="text-xs font-semibold text-[#f15b5c] hover:opacity-80"
+                    >
+                      Đánh dấu đã đọc
+                    </button>
+                  )}
+                </div>
+
+                {checklistNotifs.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <ClipboardList className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs text-gray-300 font-semibold">Không có thông báo</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                    {checklistNotifs.map((n) => (
+                      <div
+                        key={n.id}
+                        className={cn(
+                          "flex items-start gap-3 px-4 py-3 transition-colors",
+                          !n.isRead && (n.type === "REMINDER" ? "bg-orange-50/60" : "bg-blue-50/40"),
+                          n.type === "DAILY_REPORT" && "cursor-pointer hover:bg-blue-50/60"
+                        )}
+                        onClick={() => n.type === "DAILY_REPORT" ? openReportModal(n) : undefined}
+                      >
+                        <div className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs",
+                          n.type === "REMINDER"     ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
+                        )}>
+                          {n.type === "REMINDER" ? "⏰" : "📋"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {n.type === "REMINDER" ? (
+                            <a
+                              href="/dashboard/checklist"
+                              onClick={() => {
+                                setChecklistBellOpen(false);
+                                if (!n.isRead) {
+                                  fetch("/api/notifications/checklist", {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ ids: [n.id] }),
+                                  });
+                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                                  setChecklistUnread((c) => Math.max(0, c - 1));
+                                }
+                              }}
+                            >
+                              <p className={cn("text-xs", !n.isRead ? "font-bold text-orange-700" : "font-semibold text-gray-500")}>
+                                Chưa điền Check-list hôm nay
+                              </p>
+                              <p className="text-[10px] text-orange-400 mt-0.5 font-semibold">Nhấn để điền ngay →</p>
+                            </a>
+                          ) : (
+                            <>
+                              <p className={cn("text-xs", !n.isRead ? "font-bold text-blue-700" : "font-semibold text-gray-500")}>
+                                {(() => {
+                                  const d = new Date(n.date);
+                                  return `Báo cáo ngày ${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+                                })()}
+                              </p>
+                              <p className="text-[10px] text-blue-400 mt-0.5 font-semibold">Nhấn để xem chi tiết →</p>
+                            </>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {new Date(n.createdAt).toLocaleString("vi-VN", {
+                              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        {!n.isRead && (
+                          <div className={cn(
+                            "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+                            n.type === "REMINDER" ? "bg-orange-500" : "bg-blue-500"
+                          )} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* User dropdown trigger */}
         <div ref={dropdownRef} className="relative">
           <button
@@ -580,7 +901,7 @@ export function Navbar() {
             <div className="w-8 h-8 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
               <span className="text-sm font-extrabold text-[#f15b5c]">{initials}</span>
             </div>
-            <div className="text-left">
+            <div className="text-left hidden sm:block">
               <p className="text-sm font-semibold text-gray-800 leading-none">
                 {session?.user?.name ?? "Admin"}
               </p>
@@ -706,6 +1027,14 @@ export function Navbar() {
           )}
         </div>
       </div>
+
+      {/* ── FM Checklist Report Modal ── */}
+      {reportModalDate && (
+        <ChecklistReportModal
+          date={reportModalDate}
+          onClose={() => setReportModalDate(null)}
+        />
+      )}
 
       {/* ── Đổi mật khẩu slide-over ── */}
       <div

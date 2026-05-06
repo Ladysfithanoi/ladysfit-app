@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
-  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp,
+  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -23,6 +23,7 @@ const forAdminFMCEO = (r: Role) => isAdmin(r) || isFM(r) || isCEO(r);
 const forAdminFM    = (r: Role) => isAdmin(r) || isFM(r);
 const forAdminOnly  = (r: Role) => isAdmin(r);
 const forNotCEO     = (r: Role) => !isCEO(r);
+const forFMandPT    = (r: Role) => isFM(r) || r === "FREE" || r === "RESTRICTED";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 
@@ -41,9 +42,22 @@ const NAV_SECTIONS: NavSection[] = [
   {
     header: "DỮ LIỆU PHÒNG TẬP",
     items: [
-      { href: "/dashboard/consultation", icon: ClipboardList,    label: "Tư vấn",             show: forNotCEO },
-      { href: "/dashboard/clients",      icon: Users,            label: "Khách hàng",         show: forNotCEO },
-      { href: "/dashboard/staff",        icon: UserCircle,       label: "Nhân sự",            show: forNotCEO },
+      { href: "/dashboard/consultation", icon: ClipboardList, label: "Tư vấn",     show: forNotCEO },
+      { href: "/dashboard/clients",      icon: Users,         label: "Khách hàng", show: forNotCEO },
+      { href: "/dashboard/staff",        icon: UserCircle,    label: "Nhân sự",    show: forNotCEO },
+    ],
+  },
+  {
+    header: "DỮ LIỆU NHÂN SỰ",
+    items: [
+      { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
+      { href: "/dashboard/salary",    icon: Wallet,      label: "Quỹ lương",          show: forFMandPT },
+    ],
+  },
+  {
+    header: "TÀI CHÍNH",
+    items: [
+      { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi", show: forAdminFMCEO },
     ],
   },
   {
@@ -64,18 +78,39 @@ const NAV_SECTIONS: NavSection[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function Sidebar() {
+export function Sidebar({
+  isOpen,
+  onClose,
+}: {
+  isOpen?: boolean;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = session?.user?.role;
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 z-30 flex flex-col">
+    <aside
+      className={cn(
+        "fixed left-0 top-0 h-full w-60 bg-white border-r border-gray-100 z-50 flex flex-col",
+        "transition-transform duration-300 ease-in-out",
+        // Mobile: controlled by isOpen; desktop: always visible
+        isOpen ? "translate-x-0" : "-translate-x-full",
+        "lg:translate-x-0",
+      )}
+    >
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-gray-100 flex-shrink-0">
-        <span className="text-2xl font-extrabold text-[#f15b5c] tracking-tight">
+        <span className="text-2xl font-extrabold text-[#f15b5c] tracking-tight flex-1">
           Ladysfit
         </span>
+        {/* Close button — mobile only */}
+        <button
+          onClick={onClose}
+          className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Navigation */}
@@ -101,6 +136,7 @@ export function Sidebar() {
                       <Link
                         key={href}
                         href={href}
+                        onClick={onClose}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150",
                           isActive

@@ -50,23 +50,47 @@ export function AlertDialog({
         <h2 className="text-base font-extrabold text-gray-900 mb-2">{title}</h2>
         <p className="text-sm text-gray-500 mb-6 leading-relaxed whitespace-pre-line">{description}</p>
         <div className="flex gap-3">
-          <Button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 h-10 rounded-xl text-white font-semibold"
-            style={{ backgroundColor: variant === "danger" ? "#ef4444" : "#f15b5c" }}
-          >
-            {loading ? "Đang xử lý..." : confirmLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={loading}
-            className="h-10 rounded-xl px-5"
-          >
-            {cancelLabel}
-          </Button>
+          {variant === "danger" ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 h-10 rounded-xl px-5"
+              >
+                {cancelLabel}
+              </Button>
+              <Button
+                onClick={onConfirm}
+                disabled={loading}
+                className="flex-1 h-10 rounded-xl text-white font-semibold"
+                style={{ backgroundColor: "#ef4444" }}
+              >
+                {loading ? "Đang xử lý..." : confirmLabel}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                onClick={onConfirm}
+                disabled={loading}
+                className="flex-1 h-10 rounded-xl text-white font-semibold"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {loading ? "Đang xử lý..." : confirmLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={loading}
+                className="h-10 rounded-xl px-5"
+              >
+                {cancelLabel}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -123,6 +123,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
     startDate: p.startDate?.toISOString() ?? null,
     endDate: p.endDate?.toISOString() ?? null,
     durationDays: p.durationDays,
+    reservedDays: p.reservedDays,
+    extensionDays: p.extensionDays,
     price: p.price,
     status: p.status as "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED",
     notes: p.notes,

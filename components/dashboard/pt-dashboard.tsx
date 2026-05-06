@@ -94,7 +94,7 @@ export function PTDashboard({
       {(role === "RESTRICTED" || role === "FREE") && <UpgradeCard />}
 
       {/* 3 stat cards */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         {cards.map(({ title, value, Icon, iconBg, iconColor, badge, label }) => (
           <div
             key={title}

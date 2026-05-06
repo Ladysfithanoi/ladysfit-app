@@ -51,17 +51,33 @@ export default async function ClientsPage() {
   todayStart.setHours(0, 0, 0, 0);
   const threeDaysAgo = new Date(todayStart);
   threeDaysAgo.setDate(todayStart.getDate() - 3);
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(todayStart.getDate() - 7);
 
-  const latestScans = await prisma.foodScanLog.groupBy({
-    by: ["clientId"],
-    _max: { scanDate: true },
-    where: { clientId: { in: clients.map((c) => c.id) } },
-  });
+  const clientIds = clients.map((c) => c.id);
+
+  const [latestScans, selfMeasurements] = await Promise.all([
+    prisma.foodScanLog.groupBy({
+      by: ["clientId"],
+      _max: { scanDate: true },
+      where: { clientId: { in: clientIds } },
+    }),
+    prisma.bodyMeasurementLog.findMany({
+      where: {
+        clientId:    { in: clientIds },
+        measuredById: null,
+        measuredDate: { gte: weekStart },
+      },
+      select: { clientId: true },
+    }),
+  ]);
+
   const scanMap = new Map(latestScans.map((s) => [s.clientId, s._max.scanDate]));
+  const selfMeasuredSet = new Set(selfMeasurements.map((m) => m.clientId));
 
   const serialized = clients.map((c) => {
-    const activePkg = c.packageEnrollments.find((p) => p.status === "ACTIVE");
-    const latestScan = scanMap.get(c.id) ?? null;
+    const activePkg   = c.packageEnrollments.find((p) => p.status === "ACTIVE");
+    const latestScan  = scanMap.get(c.id) ?? null;
     return {
       id: c.id,
       fullName: c.fullName,
@@ -84,8 +100,9 @@ export default async function ClientsPage() {
           }
         : null,
       packageNames: Array.from(new Set(c.packageEnrollments.map((p) => p.packageName))),
-      foodLogToday: latestScan != null && latestScan >= todayStart,
-      foodLogStale: latestScan == null || latestScan < threeDaysAgo,
+      foodLogToday:       latestScan != null && latestScan >= todayStart,
+      foodLogStale:       latestScan == null || latestScan < threeDaysAgo,
+      selfMeasuredThisWeek: selfMeasuredSet.has(c.id),
     };
   });
 

@@ -56,8 +56,9 @@ export async function GET(req: Request) {
     entry.clients.add(log.clientId);
   }
 
-  const result = Array.from(ptMap.values())
-    .map((e) => ({
+  const result = Array.from(ptMap.entries())
+    .map(([ptId, e]) => ({
+      ptId,
       ptName: e.ptName,
       branchName: e.branchName,
       sessionCount: e.sessionCount,
