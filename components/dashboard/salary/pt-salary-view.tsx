@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
   baseSalary:           number;
@@ -25,6 +26,7 @@ type SalaryRecord = {
 type Props = {
   currentUserId:   string;
   currentUserName: string;
+  currentUserRole?: string;
 };
 
 const STATUS_LABELS = { PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán" };
@@ -52,7 +54,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-export function PtSalaryView({ currentUserName }: Props) {
+export function PtSalaryView({ currentUserId, currentUserName }: Props) {
   const now = new Date();
   const [month, setMonth]   = useState(now.getMonth() + 1);
   const [year, setYear]     = useState(now.getFullYear());
@@ -183,6 +185,15 @@ export function PtSalaryView({ currentUserName }: Props) {
               </div>
             )}
           </div>
+
+          {/* Session detail table */}
+          <SessionDetailTable
+            ptId={currentUserId}
+            ptName={currentUserName}
+            month={month}
+            year={year}
+            canEdit
+          />
 
           {/* Commission tier reference */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

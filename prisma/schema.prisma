@@ -69,6 +69,7 @@ model User {
   checklistNotifications  ChecklistNotification[]
   measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
   measurementNotifications MeasurementNotification[]   @relation("PTMeasurementNotifs")
+  ptSessionPhotos         SessionPhoto[]               @relation("PTSessionPhotos")
 
   @@map("users")
 }
@@ -154,6 +155,7 @@ model Client {
   complaints                   Complaint[]
   bodyMeasurementLogs          BodyMeasurementLog[]
   measurementNotifications     MeasurementNotification[]
+  sessionPhotos                SessionPhoto[]              @relation("ClientSessionPhotos")
 
   @@map("clients")
 }
@@ -364,6 +366,7 @@ model PackageEnrollment {
 
   client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   workoutPrograms WorkoutProgram[]
+  sessionPhotos   SessionPhoto[]
 
   @@map("package_enrollments")
 }
@@ -1045,4 +1048,26 @@ model Transaction {
 
   @@index([branchId, transactionDate])
   @@map("transactions")
+}
+
+// ── Session Photos (per-PT per-enrollment per-month) ──────────────────────────
+
+model SessionPhoto {
+  id                  String   @id @default(cuid())
+  ptId                String
+  clientId            String
+  packageEnrollmentId String
+  month               Int
+  year                Int
+  checkinImages       String?  @db.Text
+  transformImages     String?  @db.Text
+  hasTransformed      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  pt                User              @relation("PTSessionPhotos", fields: [ptId], references: [id], onDelete: Cascade)
+  client            Client            @relation("ClientSessionPhotos", fields: [clientId], references: [id], onDelete: Cascade)
+  packageEnrollment PackageEnrollment @relation(fields: [packageEnrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([ptId, packageEnrollmentId, month, year])
+  @@map("session_photos")
 }

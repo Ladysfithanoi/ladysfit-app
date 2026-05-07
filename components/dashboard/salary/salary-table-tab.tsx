@@ -5,6 +5,7 @@ import { RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
+import { SessionDetailTable } from "./session-detail-table";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,16 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   // Session image modal
   const [imgModal, setImgModal] = useState<ImgModalState | null>(null);
+
+  // Expanded detail rows (by record id)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  function toggleDetail(id: string) {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const fetchRecords = useCallback(async () => {
     if (!selectedBranchId) return;
@@ -399,7 +410,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Thâm niên","Doanh số","% HH","Tiền HH","Buổi dạy","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động"].map(h => (
+                      {["Nhân viên","Lương CB","Thâm niên","Doanh số","% HH","Tiền HH","Buổi dạy","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -410,7 +421,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
                           <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary)}</td>
-                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.seniorityBonus)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {r.seniorityBonus > 0 ? (
+                              <span className="inline-flex flex-col gap-0.5">
+                                <span className="font-semibold text-gray-700">{Math.round(r.seniorityBonus / 6_000_000)} năm</span>
+                                <span className="text-[10px] text-gray-400">{vnd(r.seniorityBonus)}</span>
+                              </span>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.totalRevenue)}</td>
                           <td className="px-3 py-2.5 text-gray-600">{r.commissionRate}%</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.commissionAmount)}</td>
@@ -433,10 +451,37 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <ActionCell r={r} editingId={editingId}
                             onEdit={() => editingId === r.id ? setEditingId(null) : (setEditingId(r.id), setEditAdvance(String(r.advancePaid)), setEditNotes(r.notes ?? ""))}
                             onStatus={handleStatusChange} />
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <button
+                              onClick={() => toggleDetail(r.id)}
+                              className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-colors",
+                                expandedIds.has(r.id)
+                                  ? "bg-[#f15b5c]/10 text-[#f15b5c]"
+                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              )}
+                            >
+                              {expandedIds.has(r.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              Chi tiết
+                            </button>
+                          </td>
                         </tr>
                         {editingId === r.id && (
-                          <EditRow colSpan={14} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
+                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
                             onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
+                        )}
+                        {expandedIds.has(r.id) && (
+                          <tr>
+                            <td colSpan={15} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
+                              <SessionDetailTable
+                                ptId={r.user.id}
+                                ptName={r.user.name ?? r.user.email}
+                                month={month}
+                                year={year}
+                                canEdit
+                              />
+                            </td>
+                          </tr>
                         )}
                       </React.Fragment>
                     ))}
@@ -460,7 +505,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Vai trò","Lương cứng","Doanh số","% HH","Hoa hồng","Buổi dạy","Tiền dạy","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động"].map(h => (
+                      {["Nhân viên","Vai trò","Lương cứng","Doanh số","% HH","Hoa hồng","Buổi dạy","Tiền dạy","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -493,10 +538,37 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <ActionCell r={r} editingId={editingId}
                             onEdit={() => editingId === r.id ? setEditingId(null) : (setEditingId(r.id), setEditAdvance(String(r.advancePaid)), setEditNotes(r.notes ?? ""))}
                             onStatus={handleStatusChange} />
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <button
+                              onClick={() => toggleDetail(r.id)}
+                              className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-colors",
+                                expandedIds.has(r.id)
+                                  ? "bg-[#f15b5c]/10 text-[#f15b5c]"
+                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              )}
+                            >
+                              {expandedIds.has(r.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              Chi tiết
+                            </button>
+                          </td>
                         </tr>
                         {editingId === r.id && (
-                          <EditRow colSpan={14} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
+                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
                             onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
+                        )}
+                        {expandedIds.has(r.id) && (
+                          <tr>
+                            <td colSpan={15} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
+                              <SessionDetailTable
+                                ptId={r.user.id}
+                                ptName={r.user.name ?? r.user.email}
+                                month={month}
+                                year={year}
+                                canEdit
+                              />
+                            </td>
+                          </tr>
                         )}
                       </React.Fragment>
                     ))}
@@ -527,7 +599,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
                         <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{fmRecord.user.name ?? fmRecord.user.email}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.baseSalary + fmRecord.fixedAllowances)}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.seniorityBonus)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {fmRecord.seniorityBonus > 0 ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span className="font-semibold text-gray-700">{Math.round(fmRecord.seniorityBonus / 9_000_000)} năm</span>
+                              <span className="text-[10px] text-gray-400">{vnd(fmRecord.seniorityBonus)}</span>
+                            </span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.totalRevenue)}</td>
                         <td className="px-3 py-2.5 text-gray-600">{fmRecord.commissionRate}%</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.commissionAmount)}</td>
