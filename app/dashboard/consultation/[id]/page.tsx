@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ConsultationWizard } from "@/components/consultation/consultation-wizard";
 
+export const dynamic = "force-dynamic";
+
 export default async function ConsultationDetailPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
