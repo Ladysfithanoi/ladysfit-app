@@ -186,15 +186,6 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
             )}
           </div>
 
-          {/* Session detail table */}
-          <SessionDetailTable
-            ptId={currentUserId}
-            ptName={currentUserName}
-            month={month}
-            year={year}
-            canEdit
-          />
-
           {/* Commission tier reference */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b border-gray-100">
@@ -239,6 +230,15 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
           </div>
         </>
       )}
+
+      {/* Session detail table — always visible, independent of salary record */}
+      <SessionDetailTable
+        ptId={currentUserId}
+        ptName={currentUserName}
+        month={month}
+        year={year}
+        canEdit
+      />
     </div>
   );
 }
