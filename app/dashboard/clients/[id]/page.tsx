@@ -36,16 +36,17 @@ export default async function ClientPage({ params }: { params: { id: string } })
           branch: { select: { id: true, name: true } },
           weightLogs: { orderBy: { date: "asc" } },
         },
-      }),
-      prisma.branch.findMany({ orderBy: { name: "asc" } }),
+      }).catch((e) => { console.error("client query failed:", e); return null; }),
+      prisma.branch.findMany({ orderBy: { name: "asc" } })
+        .catch((e) => { console.error("branches query failed:", e); return []; }),
       prisma.user.findMany({
         select: { id: true, name: true, email: true },
         orderBy: { name: "asc" },
-      }),
+      }).catch((e) => { console.error("staff query failed:", e); return []; }),
       prisma.packageEnrollment.findMany({
         where: { clientId: params.id },
         orderBy: { createdAt: "asc" },
-      }),
+      }).catch((e) => { console.error("enrollments query failed:", e); return []; }),
       prisma.workoutProgram.findMany({
         where: { clientId: params.id },
         include: {
@@ -59,7 +60,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
           },
         },
         orderBy: { createdAt: "desc" },
-      }),
+      }).catch((e) => { console.error("programs query failed:", e); return []; }),
       prisma.workoutLog.findMany({
         where: { clientId: params.id },
         include: {
@@ -67,17 +68,17 @@ export default async function ClientPage({ params }: { params: { id: string } })
           createdBy: { select: { id: true, name: true } },
         },
         orderBy: { sessionDate: "desc" },
-      }),
+      }).catch((e) => { console.error("workoutLogs query failed:", e); return []; }),
       prisma.mealPlan.findMany({
         where: { clientId: params.id },
         include: { days: { orderBy: { createdAt: "asc" } } },
         orderBy: { createdAt: "desc" },
-      }),
+      }).catch((e) => { console.error("mealPlans query failed:", e); return []; }),
       prisma.activityLog.findMany({
         where: { clientId: params.id },
         orderBy: { date: "desc" },
-        take: 60,
-      }),
+        take: 30,
+      }).catch((e) => { console.error("activityLogs query failed:", e); return []; }),
     ]);
     console.log("Data fetched OK. client found:", !!client);
   } catch (error) {
