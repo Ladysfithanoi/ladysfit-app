@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Check, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
@@ -516,13 +517,13 @@ export function Step5Sales({
         )}
         {isReadOnly && (
           consultation.convertedClientId ? (
-            <button
-              onClick={() => router.push(`/dashboard/clients/${consultation.convertedClientId}`)}
-              className="h-10 px-5 rounded-xl text-white text-sm font-bold"
+            <Link
+              href={`/dashboard/clients/${consultation.convertedClientId}`}
+              className="h-10 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center"
               style={{ backgroundColor: "#f15b5c" }}
             >
               Xem hồ sơ khách hàng
-            </button>
+            </Link>
           ) : (
             <span className="text-xs text-gray-400 italic">Chưa có hồ sơ khách hàng</span>
           )
