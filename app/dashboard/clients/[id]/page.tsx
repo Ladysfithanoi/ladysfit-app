@@ -7,8 +7,14 @@ import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 export const dynamic = "force-dynamic";
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
+  console.log("CLIENT PAGE LOADED, id:", params.id);
+  console.log("DATABASE_URL exists:", !!process.env.DATABASE_URL);
+  console.log("NEXTAUTH_SECRET exists:", !!process.env.NEXTAUTH_SECRET);
+
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+
+  console.log("Session user:", session.user.id, "role:", session.user.role);
 
   const weekInclude = {
     orderBy: { weekNumber: "asc" as const },
@@ -20,57 +26,64 @@ export default async function ClientPage({ params }: { params: { id: string } })
     },
   };
 
-  const [client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs] = await Promise.all([
-    prisma.client.findUnique({
-      where: { id: params.id },
-      include: {
-        assignedPT: { select: { id: true, name: true, email: true } },
-        branch: { select: { id: true, name: true } },
-        weightLogs: { orderBy: { date: "asc" } },
-      },
-    }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
-    prisma.user.findMany({
-      select: { id: true, name: true, email: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.packageEnrollment.findMany({
-      where: { clientId: params.id },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.workoutProgram.findMany({
-      where: { clientId: params.id },
-      include: {
-        createdBy: { select: { id: true, name: true, email: true } },
-        packageEnrollment: { select: { id: true, packageName: true } },
-        weeks: weekInclude,
-        sessions: {
-          where: { weekId: null },
-          orderBy: { order: "asc" },
-          include: { movements: { orderBy: { order: "asc" } } },
+  let client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs;
+  try {
+    [client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs] = await Promise.all([
+      prisma.client.findUnique({
+        where: { id: params.id },
+        include: {
+          assignedPT: { select: { id: true, name: true, email: true } },
+          branch: { select: { id: true, name: true } },
+          weightLogs: { orderBy: { date: "asc" } },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.workoutLog.findMany({
-      where: { clientId: params.id },
-      include: {
-        setLogs: { orderBy: { id: "asc" } },
-        createdBy: { select: { id: true, name: true } },
-      },
-      orderBy: { sessionDate: "desc" },
-    }),
-    prisma.mealPlan.findMany({
-      where: { clientId: params.id },
-      include: { days: { orderBy: { createdAt: "asc" } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.activityLog.findMany({
-      where: { clientId: params.id },
-      orderBy: { date: "desc" },
-      take: 60,
-    }),
-  ]);
+      }),
+      prisma.branch.findMany({ orderBy: { name: "asc" } }),
+      prisma.user.findMany({
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.packageEnrollment.findMany({
+        where: { clientId: params.id },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.workoutProgram.findMany({
+        where: { clientId: params.id },
+        include: {
+          createdBy: { select: { id: true, name: true, email: true } },
+          packageEnrollment: { select: { id: true, packageName: true } },
+          weeks: weekInclude,
+          sessions: {
+            where: { weekId: null },
+            orderBy: { order: "asc" },
+            include: { movements: { orderBy: { order: "asc" } } },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.workoutLog.findMany({
+        where: { clientId: params.id },
+        include: {
+          setLogs: { orderBy: { id: "asc" } },
+          createdBy: { select: { id: true, name: true } },
+        },
+        orderBy: { sessionDate: "desc" },
+      }),
+      prisma.mealPlan.findMany({
+        where: { clientId: params.id },
+        include: { days: { orderBy: { createdAt: "asc" } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.activityLog.findMany({
+        where: { clientId: params.id },
+        orderBy: { date: "desc" },
+        take: 60,
+      }),
+    ]);
+    console.log("Data fetched OK. client found:", !!client);
+  } catch (error) {
+    console.error("CLIENT PAGE ERROR fetching data:", error);
+    throw error;
+  }
 
   if (!client) notFound();
 
