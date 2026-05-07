@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
   if (enrollments.length === 0) return NextResponse.json({ rows: [] });
 
-  const clientIds = [...new Set(enrollments.map(e => e.clientId))];
+  const clientIds = Array.from(new Set(enrollments.map(e => e.clientId)));
   const startDate = new Date(year, month - 1, 1);
   const endDate   = new Date(year, month, 1);
 
