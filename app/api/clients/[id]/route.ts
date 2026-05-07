@@ -5,20 +5,25 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const client = await prisma.client.findUnique({
-    where: { id: params.id },
-    include: {
-      assignedPT: { select: { id: true, name: true, email: true } },
-      branch: { select: { id: true, name: true } },
-      weightLogs: { orderBy: { date: "asc" } },
-    },
-  });
+    const client = await prisma.client.findUnique({
+      where: { id: params.id },
+      include: {
+        assignedPT: { select: { id: true, name: true, email: true } },
+        branch: { select: { id: true, name: true } },
+        weightLogs: { orderBy: { date: "asc" } },
+      },
+    });
 
-  if (!client) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
-  return NextResponse.json(client);
+    if (!client) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
+    return NextResponse.json(client);
+  } catch (err) {
+    console.error("[GET /api/clients/[id]]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 
+export const dynamic = "force-dynamic";
+
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
@@ -211,15 +213,19 @@ export default async function ClientPage({ params }: { params: { id: string } })
         dislikes: p.dislikes,
         status: p.status as "ACTIVE" | "ARCHIVED",
         createdAt: p.createdAt.toISOString(),
-        days: p.days.map((d) => ({
-          id: d.id,
-          dayLabel: d.dayLabel,
-          meals: JSON.parse(d.meals),
-          totalCalories: d.totalCalories,
-          totalProtein: d.totalProtein,
-          totalFat: d.totalFat,
-          totalCarbs: d.totalCarbs,
-        })),
+        days: p.days.map((d) => {
+          let meals = [];
+          try { meals = JSON.parse(d.meals); } catch { meals = []; }
+          return {
+            id: d.id,
+            dayLabel: d.dayLabel,
+            meals,
+            totalCalories: d.totalCalories,
+            totalProtein: d.totalProtein,
+            totalFat: d.totalFat,
+            totalCarbs: d.totalCarbs,
+          };
+        }),
       }))}
       activityLogs={activityLogs.map((l) => ({
         id: l.id,
