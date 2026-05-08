@@ -22,7 +22,7 @@ const FM_TIERS = [
 function ptRate(revenue: number)  { return PT_TIERS.find(t => revenue >= t.min)!.rate; }
 function fmRate(revenue: number)  { return FM_TIERS.find(t => revenue >= t.min)!.rate; }
 
-// ── GET — fetch records for FM ─────────────────────────────────────────────
+// ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -47,7 +47,70 @@ export async function GET(req: Request) {
     orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
   });
 
-  return NextResponse.json(records);
+  if (records.length === 0) return NextResponse.json(records);
+
+  // Fresh branch revenue (VND) per branchId — used for FM commission
+  const uniqueBranchIds = Array.from(new Set(records.map(r => r.branchId)));
+  const branchRevenueMap: Record<string, number> = {};
+  await Promise.all(uniqueBranchIds.map(async (bid) => {
+    const agg = await prisma.salesLead.aggregate({
+      where: { branchId: bid, month, year, status: { in: ["PIF", "DE", "PB"] } },
+      _sum: { actualRevenue: true },
+    });
+    branchRevenueMap[bid] = Number(agg._sum.actualRevenue ?? 0) * 1_000_000;
+  }));
+
+  // Fresh individual revenue (VND) per user — used for PT/ADMIN commission
+  const ptAdminRecords = records.filter(r => r.user.role !== "FM");
+  const ptRevenueMap: Record<string, number> = {};
+  await Promise.all(ptAdminRecords.map(async (r) => {
+    const agg = await prisma.salesLead.aggregate({
+      where: { assignedPTId: r.userId, month, year, status: { in: ["PIF", "DE", "PB"] } },
+      _sum: { actualRevenue: true },
+    });
+    ptRevenueMap[r.userId] = Number(agg._sum.actualRevenue ?? 0) * 1_000_000;
+  }));
+
+  // Recalculate and patch each record where revenue-derived values changed
+  const updated = await Promise.all(records.map(async (r) => {
+    const role = r.user.role;
+
+    const totalRevenue = role === "FM"
+      ? (branchRevenueMap[r.branchId] ?? 0)
+      : (ptRevenueMap[r.userId] ?? 0);
+
+    const rate           = role === "FM" ? fmRate(totalRevenue) : ptRate(totalRevenue);
+    const commissionRate   = rate * 100;
+    const commissionAmount = totalRevenue * rate;
+
+    let totalSalary: number;
+    if (role === "FM") {
+      totalSalary = r.baseSalary + r.fixedAllowances + r.seniorityBonus +
+                    commissionAmount + r.showPay + r.googleBonus + r.renewBonus;
+    } else if (role === "ADMIN") {
+      totalSalary = commissionAmount + r.showPay;
+    } else {
+      totalSalary = r.baseSalary + r.seniorityBonus + commissionAmount + r.showPay + r.goalBonus;
+    }
+
+    const remainingPayment = totalSalary - r.advancePaid;
+
+    const changed =
+      Math.abs(r.totalRevenue    - totalRevenue)     > 0.01 ||
+      Math.abs(r.commissionRate  - commissionRate)   > 0.001 ||
+      Math.abs(r.commissionAmount - commissionAmount) > 0.01 ||
+      Math.abs(r.totalSalary     - totalSalary)      > 0.01;
+
+    if (!changed) return r;
+
+    return prisma.salaryRecord.update({
+      where: { id: r.id },
+      data:  { totalRevenue, commissionRate, commissionAmount, totalSalary, remainingPayment },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    });
+  }));
+
+  return NextResponse.json(updated);
 }
 
 // ── POST — generate salary records ────────────────────────────────────────
@@ -79,7 +142,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Total branch revenue (used for FM commission)
+  // Total branch revenue in VND (actualRevenue stored in triệu → × 1,000,000)
   const branchAgg = await prisma.salesLead.aggregate({
     where: {
       branchId: body.branchId,
@@ -89,7 +152,7 @@ export async function POST(req: Request) {
     },
     _sum: { actualRevenue: true },
   });
-  const totalBranchRevenue = Number(branchAgg._sum.actualRevenue ?? 0);
+  const totalBranchRevenue = Number(branchAgg._sum.actualRevenue ?? 0) * 1_000_000;
 
   let created = 0;
   let skipped = 0;
@@ -108,7 +171,6 @@ export async function POST(req: Request) {
     let recordData;
 
     if (entry.userRole === "ADMIN") {
-      // Admin: teaching pay + PT-tier commission, no base salary
       const adminAgg = await prisma.salesLead.aggregate({
         where: {
           assignedPTId: entry.userId,
@@ -117,11 +179,12 @@ export async function POST(req: Request) {
         },
         _sum: { actualRevenue: true },
       });
-      const totalRevenue    = Number(adminAgg._sum.actualRevenue ?? 0);
-      const rate            = ptRate(totalRevenue);
+      // actualRevenue stored in triệu → × 1,000,000 for VND
+      const totalRevenue     = Number(adminAgg._sum.actualRevenue ?? 0) * 1_000_000;
+      const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay         = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
-      const totalSalary     = commissionAmount + showPay;
+      const showPay          = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
+      const totalSalary      = commissionAmount + showPay;
 
       recordData = {
         userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
@@ -143,9 +206,9 @@ export async function POST(req: Request) {
       const transportAllowance = config?.transportAllowance ?? 500_000;
       const seniorityYears     = config?.seniorityYears     ?? 0;
 
-      const fixedAllowances = lunchAllowance + phoneAllowance + transportAllowance;
-      const seniorityBonus  = Math.min(seniorityYears, 4) * 9_000_000;
-      const rate            = fmRate(totalBranchRevenue);
+      const fixedAllowances  = lunchAllowance + phoneAllowance + transportAllowance;
+      const seniorityBonus   = Math.min(seniorityYears, 4) * 9_000_000;
+      const rate             = fmRate(totalBranchRevenue);
       const commissionAmount = totalBranchRevenue * rate;
 
       const totalShows = Math.min(entry.showsL1L2Loyal + entry.showsL3L4L5, 60);
@@ -181,16 +244,17 @@ export async function POST(req: Request) {
         },
         _sum: { actualRevenue: true },
       });
-      const totalRevenue   = Number(ptAgg._sum.actualRevenue ?? 0);
+      // actualRevenue stored in triệu → × 1,000,000 for VND
+      const totalRevenue   = Number(ptAgg._sum.actualRevenue ?? 0) * 1_000_000;
       const baseSalary     = config?.baseSalary     ?? 5_310_000;
       const seniorityYears = config?.seniorityYears ?? 0;
 
-      const seniorityBonus  = Math.min(seniorityYears, 4) * 6_000_000;
-      const rate            = ptRate(totalRevenue);
+      const seniorityBonus   = Math.min(seniorityYears, 4) * 6_000_000;
+      const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay         = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
-      const goalBonus       = entry.clientsAchievedGoal * 100_000;
-      const totalSalary     = baseSalary + seniorityBonus + commissionAmount + showPay + goalBonus;
+      const showPay          = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
+      const goalBonus        = entry.clientsAchievedGoal * 100_000;
+      const totalSalary      = baseSalary + seniorityBonus + commissionAmount + showPay + goalBonus;
 
       recordData = {
         userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
