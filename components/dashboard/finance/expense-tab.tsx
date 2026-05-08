@@ -300,6 +300,15 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-500">Ngày giao dịch</label>
+                <DateMaskInput
+                  value={form.transactionDateStr}
+                  onChange={v => setForm(f => ({ ...f, transactionDateStr: v }))}
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-500">Danh mục</label>
                 <select
                   value={form.category}
@@ -333,15 +342,6 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
                 {form.amount && (
                   <p className="text-[10px] text-gray-400">{vnd(parseFloat(form.amount) || 0)}</p>
                 )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500">Ngày giao dịch</label>
-                <DateMaskInput
-                  value={form.transactionDateStr}
-                  onChange={v => setForm(f => ({ ...f, transactionDateStr: v }))}
-                  className={inputCls}
-                />
               </div>
 
               <div className="space-y-1">
