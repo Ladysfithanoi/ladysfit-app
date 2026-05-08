@@ -21,6 +21,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     description?: string;
     transactionDate?: string;
     receiptImages?: string;
+    invoiceImages?: string;
   };
 
   const updated = await prisma.transaction.update({
@@ -30,7 +31,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       amount:          body.amount          ?? tx.amount,
       description:     body.description     ?? tx.description,
       transactionDate: body.transactionDate ? new Date(body.transactionDate) : tx.transactionDate,
-      receiptImages:   "receiptImages" in body ? (body.receiptImages ?? null) : tx.receiptImages,
+      receiptImages:   "receiptImages"  in body ? (body.receiptImages  ?? null) : tx.receiptImages,
+      invoiceImages:   "invoiceImages"  in body ? (body.invoiceImages  ?? null) : tx.invoiceImages,
     },
     include: { createdBy: { select: { id: true, name: true } } },
   });

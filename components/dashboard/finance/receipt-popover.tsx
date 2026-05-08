@@ -9,6 +9,8 @@ type Props = {
   canEdit:       boolean;
   onClose:       () => void;
   onSaved:       (images: string[]) => void;
+  saveUrl?:      string;
+  title?:        string;
 };
 
 function toBase64(file: File): Promise<string> {
@@ -35,7 +37,7 @@ function downloadImage(src: string, idx: number) {
   }
 }
 
-export function ReceiptPopover({ transactionId, initialImages, canEdit, onClose, onSaved }: Props) {
+export function ReceiptPopover({ transactionId, initialImages, canEdit, onClose, onSaved, saveUrl, title = "Chứng từ giao dịch" }: Props) {
   const [images, setImages]         = useState<string[]>(initialImages);
   const [saving, setSaving]         = useState(false);
   const [toast, setToast]           = useState("");
@@ -70,7 +72,8 @@ export function ReceiptPopover({ transactionId, initialImages, canEdit, onClose,
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch(`/api/finance/transactions/${transactionId}/receipts`, {
+      const url = saveUrl ?? `/api/finance/transactions/${transactionId}/receipts`;
+      const res = await fetch(url, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ images }),
@@ -99,7 +102,7 @@ export function ReceiptPopover({ transactionId, initialImages, canEdit, onClose,
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <p className="text-sm font-extrabold text-gray-800">Chứng từ giao dịch</p>
+            <p className="text-sm font-extrabold text-gray-800">{title}</p>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <X className="w-4 h-4" />
             </button>

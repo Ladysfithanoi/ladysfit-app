@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ChangeEvent } from "react";
 import { Plus, Trash2, Edit2, Save, X, Camera, Download, Lock } from "lucide-react";
 import { fmtDate } from "@/lib/format-date";
 import { DateMaskInput, todayDMY, dmyToISO, isoToDMY } from "./date-mask-input";
@@ -14,6 +14,7 @@ type Transaction = {
   transactionDate: string;
   referenceId:     string | null;
   receiptImages:   string | null;
+  invoiceImages:   string | null;
   createdBy:       { id: string; name: string | null };
 };
 
@@ -26,36 +27,35 @@ type Props = {
   onMutate:      () => void;
 };
 
-const EXPENSE_CATEGORIES = [
-  "Quỹ lương",
-  "Tiền thuê mặt bằng",
-  "Điện nước",
-  "Thiết bị & dụng cụ",
-  "Marketing",
-  "Chi phí khác",
-];
-
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
 const inputCls = "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/30 w-full";
 
+function toBase64(file: File): Promise<string> {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Props) {
   const [rows, setRows]           = useState<Transaction[]>([]);
   const [loading, setLoading]     = useState(false);
-  const [filterCat, setFilterCat] = useState("");
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState<string | null>(null);
   const [toast, setToast]         = useState("");
   const [receiptTxId, setReceiptTxId] = useState<string | null>(null);
-  const [exporting,   setExporting]   = useState(false);
+  const [invoiceTxId, setInvoiceTxId] = useState<string | null>(null);
+  const [exporting, setExporting]     = useState(false);
 
   const [form, setForm] = useState({
-    category:           EXPENSE_CATEGORIES[0],
-    customCategory:     "",
     amount:             "",
     description:        "",
     transactionDateStr: todayDMY(),
   });
+
+  const [formInvoiceImages, setFormInvoiceImages] = useState<string[]>([]);
 
   const fetchRows = useCallback(async () => {
     if (!branchId) return;
@@ -70,9 +70,7 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
 
   useEffect(() => { fetchRows(); }, [fetchRows]);
 
-  const filtered   = filterCat ? rows.filter(r => r.category === filterCat) : rows;
-  const categories = Array.from(new Set(rows.map(r => r.category)));
-  const total      = rows.reduce((s, r) => s + r.amount, 0);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -81,40 +79,46 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
 
   function openAdd() {
     setEditId(null);
-    setForm({
-      category:           EXPENSE_CATEGORIES[0],
-      customCategory:     "",
-      amount:             "",
-      description:        "",
-      transactionDateStr: todayDMY(),
-    });
+    setForm({ amount: "", description: "", transactionDateStr: todayDMY() });
+    setFormInvoiceImages([]);
     setShowForm(true);
   }
 
   function openEdit(tx: Transaction) {
     setEditId(tx.id);
     setForm({
-      category:           EXPENSE_CATEGORIES.includes(tx.category) ? tx.category : "__custom__",
-      customCategory:     EXPENSE_CATEGORIES.includes(tx.category) ? "" : tx.category,
       amount:             String(tx.amount),
       description:        tx.description ?? "",
       transactionDateStr: isoToDMY(tx.transactionDate),
     });
+    setFormInvoiceImages(tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : []);
     setShowForm(true);
   }
 
-  async function handleSave() {
-    const cat = form.category === "__custom__" ? form.customCategory.trim() : form.category;
-    const iso = dmyToISO(form.transactionDateStr);
-    if (!cat || !form.amount || !iso) return;
+  async function handleInvoiceFiles(e: ChangeEvent<HTMLInputElement>) {
+    const files  = Array.from(e.target.files ?? []);
+    const MAX_MB = 5 * 1024 * 1024;
+    for (const f of files) {
+      if (f.size > MAX_MB) { showToast(`"${f.name}" vượt quá 5MB`); return; }
+    }
+    if (formInvoiceImages.length + files.length > 5) { showToast("Tối đa 5 ảnh"); return; }
+    const bases = await Promise.all(files.map(toBase64));
+    setFormInvoiceImages(prev => [...prev, ...bases]);
+    e.target.value = "";
+  }
 
-    const body = {
+  async function handleSave() {
+    const iso = dmyToISO(form.transactionDateStr);
+    if (!form.amount || !iso) return;
+
+    const body: Record<string, unknown> = {
       branchId,
       type:            "EXPENSE",
-      category:        cat,
+      category:        "Chi phí",
       amount:          parseFloat(form.amount),
       description:     form.description || undefined,
       transactionDate: iso,
+      invoiceImages:   formInvoiceImages.length > 0 ? JSON.stringify(formInvoiceImages) : undefined,
     };
 
     const res = editId
@@ -170,17 +174,6 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-gray-500">Lọc:</label>
-          <select
-            value={filterCat}
-            onChange={e => setFilterCat(e.target.value)}
-            className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none"
-          >
-            <option value="">Tất cả</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -208,7 +201,7 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                {["Ngày", "Danh mục", "Mô tả", "Số tiền", "Chứng từ", ""].map(h => (
+                {["Ngày", "Mô tả", "Số tiền", "Chứng từ", "Hóa đơn", ""].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide border-r border-gray-200 last:border-r-0">
                     {h}
                   </th>
@@ -218,30 +211,27 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Đang tải...</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400 italic">Không có khoản chi nào</td></tr>
               ) : (
-                filtered.map(tx => {
-                  const images: string[] = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+                rows.map(tx => {
+                  const recImgs: string[] = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+                  const invImgs: string[] = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
                   return (
                     <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50/50 divide-x divide-gray-100">
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtDate(tx.transactionDate)}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-600">
-                          {tx.category}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{tx.description ?? "—"}</td>
                       <td className="px-4 py-3 font-bold text-red-500 whitespace-nowrap">-{vnd(tx.amount)}</td>
+
                       {/* Chứng từ */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {images.length > 0 ? (
+                        {recImgs.length > 0 ? (
                           <button
                             onClick={() => setReceiptTxId(tx.id)}
                             className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors"
                           >
                             <Camera className="w-3.5 h-3.5" />
-                            <span className="text-xs font-semibold">{images.length} ảnh</span>
+                            <span className="text-xs font-semibold">{recImgs.length} ảnh</span>
                           </button>
                         ) : !isReadOnly ? (
                           <button
@@ -254,6 +244,28 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
                           <span className="text-gray-300 text-xs">—</span>
                         )}
                       </td>
+
+                      {/* Hóa đơn */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {invImgs.length > 0 ? (
+                          <button
+                            onClick={() => setInvoiceTxId(tx.id)}
+                            className="flex items-center gap-1 text-orange-500 hover:text-orange-600 transition-colors"
+                          >
+                            <span className="text-xs font-semibold">🧾 {invImgs.length} ảnh</span>
+                          </button>
+                        ) : !isReadOnly ? (
+                          <button
+                            onClick={() => setInvoiceTxId(tx.id)}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            📎 Thêm ảnh
+                          </button>
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-3">
                         {tx.referenceId ? (
                           <span title="Tự động tạo từ bảng lương" className="text-gray-300 flex items-center">
@@ -309,27 +321,6 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500">Danh mục</label>
-                <select
-                  value={form.category}
-                  onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  className={inputCls}
-                >
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  <option value="__custom__">+ Thêm danh mục mới</option>
-                </select>
-                {form.category === "__custom__" && (
-                  <input
-                    type="text"
-                    placeholder="Nhập tên danh mục mới"
-                    value={form.customCategory}
-                    onChange={e => setForm(f => ({ ...f, customCategory: e.target.value }))}
-                    className={inputCls + " mt-2"}
-                  />
-                )}
-              </div>
-
-              <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-500">Số tiền (VND)</label>
                 <input
                   type="number"
@@ -353,6 +344,44 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
                   className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400/30 w-full resize-none"
                 />
               </div>
+
+              {/* Hóa đơn upload */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-500">Hóa đơn</label>
+                {formInvoiceImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {formInvoiceImages.map((src, i) => (
+                      <div key={i} className="relative w-16 h-16">
+                        <img
+                          src={src}
+                          alt=""
+                          className="w-full h-full object-cover rounded-xl border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormInvoiceImages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-sm"
+                        >
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                    {formInvoiceImages.length < 5 && (
+                      <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-red-400 hover:bg-red-50 transition-colors">
+                        <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleInvoiceFiles} />
+                        <Camera className="w-4 h-4 text-gray-300" />
+                      </label>
+                    )}
+                  </div>
+                )}
+                {formInvoiceImages.length === 0 && (
+                  <label className="flex flex-col items-center justify-center gap-2 h-20 w-full rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleInvoiceFiles} />
+                    <Camera className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-400">Tải ảnh lên · tối đa 5 ảnh</span>
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100">
@@ -369,7 +398,7 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
         </div>
       )}
 
-      {/* Receipt popover */}
+      {/* Chứng từ popover */}
       {receiptTxId && (() => {
         const tx     = rows.find(r => r.id === receiptTxId);
         const images = tx?.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
@@ -386,6 +415,30 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
                   : r
               ));
               setReceiptTxId(null);
+            }}
+          />
+        );
+      })()}
+
+      {/* Hóa đơn popover */}
+      {invoiceTxId && (() => {
+        const tx     = rows.find(r => r.id === invoiceTxId);
+        const images = tx?.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
+        return (
+          <ReceiptPopover
+            transactionId={invoiceTxId}
+            initialImages={images}
+            canEdit={!isReadOnly}
+            title="Hóa đơn"
+            saveUrl={`/api/finance/transactions/${invoiceTxId}/invoices`}
+            onClose={() => setInvoiceTxId(null)}
+            onSaved={newImages => {
+              setRows(prev => prev.map(r =>
+                r.id === invoiceTxId
+                  ? { ...r, invoiceImages: newImages.length > 0 ? JSON.stringify(newImages) : null }
+                  : r
+              ));
+              setInvoiceTxId(null);
             }}
           />
         );

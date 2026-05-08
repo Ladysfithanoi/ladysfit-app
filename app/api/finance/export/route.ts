@@ -19,6 +19,7 @@ type TxRow = {
   transactionDate: Date;
   referenceId:     string | null;
   receiptImages:   string | null;
+  invoiceImages:   string | null;
   createdBy:       { name: string | null };
 };
 
@@ -114,8 +115,9 @@ async function buildReceiptsSheet(
 
   // ── Subtitle ──────────────────────────────────────────────────────────────
   const txsWithImgs = transactions.filter(tx => {
-    const imgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
-    return imgs.length > 0;
+    const rImgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+    const iImgs = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
+    return rImgs.length > 0 || iImgs.length > 0;
   });
   ws.mergeCells(cur, 1, cur, 5);
   const sc     = ws.getCell(cur, 1);
@@ -130,17 +132,18 @@ async function buildReceiptsSheet(
 
   // ── Per-transaction sections ──────────────────────────────────────────────
   for (let tIdx = 0; tIdx < transactions.length; tIdx++) {
-    const tx     = transactions[tIdx];
-    const images = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
-    if (images.length === 0) continue;
+    const tx      = transactions[tIdx];
+    const recImgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+    const invImgs = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
+    if (recImgs.length === 0 && invImgs.length === 0) continue;
 
-    targetRows.set(tx.id, cur); // record row BEFORE writing this section
+    targetRows.set(tx.id, cur);
 
     // Section header (red banner)
     ws.mergeCells(cur, 1, cur, 5);
-    const hc       = ws.getCell(cur, 1);
+    const hc        = ws.getCell(cur, 1);
     const shortDesc = (tx.description?.split(" | ")[0] ?? "").slice(0, 50);
-    hc.value       = [
+    hc.value        = [
       `STT ${tIdx + 1}`,
       fmtDate(tx.transactionDate),
       tx.category,
@@ -153,44 +156,87 @@ async function buildReceiptsSheet(
     ws.getRow(cur).height = 24;
     cur++;
 
-    for (let j = 0; j < images.length; j++) {
-      // Image label
-      ws.mergeCells(cur, 1, cur, 5);
-      const lc     = ws.getCell(cur, 1);
-      lc.value     = `Ảnh ${j + 1} / ${images.length}`;
-      lc.font      = { bold: true, size: 10, color: { argb: "FF444444" } };
-      lc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
-      lc.alignment = { vertical: "middle" };
-      ws.getRow(cur).height = 18;
-      cur++;
+    const showSubHeaders = recImgs.length > 0 && invImgs.length > 0;
 
-      const img = await processImage(images[j]);
-      if (img) {
-        const imgId = wb.addImage({ base64: img.b64, extension: "jpeg" });
-
-        // 1 ExcelJS row ≈ 15pt = 15 × (96/72) ≈ 20 px on screen
-        const rowsNeeded = Math.ceil(img.h / 20) + 1;
-        for (let r = 0; r < rowsNeeded; r++) ws.getRow(cur + r).height = 15;
-
-        ws.addImage(imgId, {
-          tl:     { col: 0, row: cur - 1 }, // 0-indexed
-          ext:    { width: img.w, height: img.h },
-          editAs: "oneCell",
-        });
-
-        cur += rowsNeeded;
-      } else {
-        const ec   = ws.getCell(cur, 1);
-        ec.value   = "  [Không thể hiển thị ảnh]";
-        ec.font    = { italic: true, color: { argb: "FFCC3300" }, size: 10 };
+    // ── receipt images ────────────────────────────────────────────────────────
+    if (recImgs.length > 0) {
+      if (showSubHeaders) {
+        ws.mergeCells(cur, 1, cur, 5);
+        const sh     = ws.getCell(cur, 1);
+        sh.value     = "📎 Chứng từ";
+        sh.font      = { bold: true, size: 10, color: { argb: "FF444444" } };
+        sh.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+        sh.alignment = { vertical: "middle" };
         ws.getRow(cur).height = 18;
         cur++;
       }
-
-      cur += 2; // 2 empty rows after each image
+      for (let j = 0; j < recImgs.length; j++) {
+        ws.mergeCells(cur, 1, cur, 5);
+        const lc = ws.getCell(cur, 1);
+        lc.value = `Ảnh ${j + 1} / ${recImgs.length}`;
+        lc.font  = { bold: true, size: 10, color: { argb: "FF444444" } };
+        lc.fill  = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+        lc.alignment = { vertical: "middle" };
+        ws.getRow(cur).height = 18;
+        cur++;
+        const rImg = await processImage(recImgs[j]);
+        if (rImg) {
+          const imgId      = wb.addImage({ base64: rImg.b64, extension: "jpeg" });
+          const rowsNeeded = Math.ceil(rImg.h / 20) + 1;
+          for (let r = 0; r < rowsNeeded; r++) ws.getRow(cur + r).height = 15;
+          ws.addImage(imgId, { tl: { col: 0, row: cur - 1 }, ext: { width: rImg.w, height: rImg.h }, editAs: "oneCell" });
+          cur += rowsNeeded;
+        } else {
+          const ec = ws.getCell(cur, 1);
+          ec.value = "  [Không thể hiển thị ảnh]";
+          ec.font  = { italic: true, color: { argb: "FFCC3300" }, size: 10 };
+          ws.getRow(cur).height = 18;
+          cur++;
+        }
+        cur += 2;
+      }
     }
 
-    cur += 3; // 3 empty rows between transactions
+    // ── invoice images ────────────────────────────────────────────────────────
+    if (invImgs.length > 0) {
+      if (showSubHeaders) {
+        ws.mergeCells(cur, 1, cur, 5);
+        const sh     = ws.getCell(cur, 1);
+        sh.value     = "🧾 Hóa đơn";
+        sh.font      = { bold: true, size: 10, color: { argb: "FF444444" } };
+        sh.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } };
+        sh.alignment = { vertical: "middle" };
+        ws.getRow(cur).height = 18;
+        cur++;
+      }
+      for (let j = 0; j < invImgs.length; j++) {
+        ws.mergeCells(cur, 1, cur, 5);
+        const lc = ws.getCell(cur, 1);
+        lc.value = `Ảnh ${j + 1} / ${invImgs.length}`;
+        lc.font  = { bold: true, size: 10, color: { argb: "FF444444" } };
+        lc.fill  = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+        lc.alignment = { vertical: "middle" };
+        ws.getRow(cur).height = 18;
+        cur++;
+        const iImg = await processImage(invImgs[j]);
+        if (iImg) {
+          const imgId      = wb.addImage({ base64: iImg.b64, extension: "jpeg" });
+          const rowsNeeded = Math.ceil(iImg.h / 20) + 1;
+          for (let r = 0; r < rowsNeeded; r++) ws.getRow(cur + r).height = 15;
+          ws.addImage(imgId, { tl: { col: 0, row: cur - 1 }, ext: { width: iImg.w, height: iImg.h }, editAs: "oneCell" });
+          cur += rowsNeeded;
+        } else {
+          const ec = ws.getCell(cur, 1);
+          ec.value = "  [Không thể hiển thị ảnh]";
+          ec.font  = { italic: true, color: { argb: "FFCC3300" }, size: 10 };
+          ws.getRow(cur).height = 18;
+          cur++;
+        }
+        cur += 2;
+      }
+    }
+
+    cur += 3;
   }
 
   return targetRows;
@@ -244,8 +290,9 @@ export async function POST(req: Request) {
 
     // Build Sheet 2 first to collect target rows for hyperlinks
     const hasAnyImages = transactions.some(tx => {
-      const imgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
-      return imgs.length > 0;
+      const rImgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+      const iImgs = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
+      return rImgs.length > 0 || iImgs.length > 0;
     });
 
     let targetRows = new Map<string, number>();
@@ -336,8 +383,8 @@ export async function POST(req: Request) {
       tRow.commit();
 
     } else {
-      const HEADERS = ["STT","Ngày GD","Danh mục","Mô tả","Số tiền (VND)","Chứng từ"];
-      const WIDTHS  = [5, 13, 20, 36, 18, 18];
+      const HEADERS = ["STT","Ngày GD","Mô tả","Số tiền (VND)","Chứng từ","Hóa đơn"];
+      const WIDTHS  = [5, 13, 40, 18, 18, 18];
 
       HEADERS.forEach((h, i) => {
         const c = ws.getCell(HDR, i + 1);
@@ -347,40 +394,51 @@ export async function POST(req: Request) {
       });
       ws.getRow(HDR).height = 30;
 
-      const DATA_START       = HDR + 1;
-      const RECEIPT_COL_1IDX = 6;
+      const DATA_START        = HDR + 1;
+      const RECEIPT_COL_1IDX  = 5;
+      const INVOICE_COL_1IDX  = 6;
 
       for (let idx = 0; idx < transactions.length; idx++) {
-        const tx     = transactions[idx];
-        const row    = ws.getRow(DATA_START + idx);
-        const even   = idx % 2 === 1;
-        const images = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+        const tx      = transactions[idx];
+        const row     = ws.getRow(DATA_START + idx);
+        const even    = idx % 2 === 1;
+        const recImgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+        const invImgs = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
 
         const vals: ExcelJS.CellValue[] = [
           idx + 1,
           new Date(tx.transactionDate),
-          tx.category,
           tx.description ?? "",
           tx.amount,
           "", // receipt — set below
+          "", // invoice — set below
         ];
         vals.forEach((v, i) => { const c = row.getCell(i+1); c.value = v; styleData(c, even); });
 
         row.getCell(2).numFmt  = "dd/mm/yyyy";
-        const amt              = row.getCell(5);
+        const amt              = row.getCell(4);
         amt.numFmt             = '#,##0"đ"';
         amt.font               = { bold: true, color: { argb: "FFDC2626" } };
         amt.alignment          = { horizontal: "right", vertical: "middle" };
         row.height             = 22;
 
         const rc = row.getCell(RECEIPT_COL_1IDX);
-        if (images.length > 0 && targetRows.has(tx.id)) {
-          rc.value = { text: `📎 Xem ${images.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
+        if (recImgs.length > 0 && targetRows.has(tx.id)) {
+          rc.value = { text: `📎 Xem ${recImgs.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
           rc.font  = { color: { argb: "FF0563C1" }, underline: true };
         } else {
-          rc.value = images.length > 0 ? `${images.length} ảnh` : "—";
+          rc.value = recImgs.length > 0 ? `${recImgs.length} ảnh` : "—";
         }
         styleData(rc, even);
+
+        const ic = row.getCell(INVOICE_COL_1IDX);
+        if (invImgs.length > 0 && targetRows.has(tx.id)) {
+          ic.value = { text: `🧾 Xem ${invImgs.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
+          ic.font  = { color: { argb: "FF0563C1" }, underline: true };
+        } else {
+          ic.value = invImgs.length > 0 ? `${invImgs.length} ảnh` : "—";
+        }
+        styleData(ic, even);
 
         row.commit();
       }
@@ -390,10 +448,10 @@ export async function POST(req: Request) {
       const tot  = transactions.reduce((s, tx) => s + tx.amount, 0);
       for (let c = 1; c <= 6; c++) styleTotal(tRow.getCell(c));
       tRow.getCell(1).value     = "TỔNG CỘNG";
-      tRow.getCell(5).value     = tot;
-      tRow.getCell(5).numFmt    = '#,##0"đ"';
-      tRow.getCell(5).font      = { bold: true, color: { argb: "FFDC2626" }, size: 12 };
-      tRow.getCell(5).alignment = { horizontal: "right", vertical: "middle" };
+      tRow.getCell(4).value     = tot;
+      tRow.getCell(4).numFmt    = '#,##0"đ"';
+      tRow.getCell(4).font      = { bold: true, color: { argb: "FFDC2626" }, size: 12 };
+      tRow.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
       tRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
       tRow.height = 26;
       tRow.commit();

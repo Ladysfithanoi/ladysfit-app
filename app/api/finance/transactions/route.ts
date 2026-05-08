@@ -79,11 +79,12 @@ export async function POST(req: Request) {
   const body = await req.json() as {
     branchId: string;
     type: "INCOME" | "EXPENSE";
-    category: string;
+    category?: string;
     amount: number;
     description?: string;
     transactionDate: string;
     receiptImages?: string;
+    invoiceImages?: string;
   };
 
   if (!managed.includes(body.branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -92,11 +93,12 @@ export async function POST(req: Request) {
     data: {
       branchId:        body.branchId,
       type:            body.type,
-      category:        body.category,
+      category:        body.category ?? "Chi phí",
       amount:          body.amount,
       description:     body.description ?? null,
       transactionDate: new Date(body.transactionDate),
       receiptImages:   body.receiptImages ?? null,
+      invoiceImages:   body.invoiceImages ?? null,
       createdById:     session.user.id,
     },
     include: { createdBy: { select: { id: true, name: true } } },
