@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Edit2, Lock, Save, X, Camera, Download } from "lucide-react";
+import { Plus, Trash2, Edit2, Lock, Save, X, Camera, Download, Upload } from "lucide-react";
 import { fmtDate } from "@/lib/format-date";
 import { DateMaskInput, todayDMY, dmyToISO, isoToDMY } from "./date-mask-input";
 import { ReceiptPopover } from "./receipt-popover";
+import { ImportModal } from "./import-modal";
 
 type Transaction = {
   id:              string;
@@ -56,7 +57,8 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
   const [toast, setToast]         = useState("");
   const [receiptTxId, setReceiptTxId] = useState<string | null>(null);
 
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting]   = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const [form, setForm] = useState({
     category:           INCOME_CATEGORIES[0],
@@ -200,13 +202,23 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
             {exporting ? "Đang xuất..." : "Xuất Excel"}
           </button>
           {!isReadOnly && (
-            <button
-              onClick={openAdd}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold"
-              style={{ backgroundColor: "#10b981" }}
-            >
-              <Plus className="w-4 h-4" /> Thêm khoản thu
-            </button>
+            <>
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors"
+                style={{ borderColor: "#f15b5c", color: "#f15b5c" }}
+              >
+                <Upload className="w-4 h-4" />
+                Nhập từ Excel
+              </button>
+              <button
+                onClick={openAdd}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold"
+                style={{ backgroundColor: "#10b981" }}
+              >
+                <Plus className="w-4 h-4" /> Thêm khoản thu
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -412,6 +424,15 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
           />
         );
       })()}
+
+      {showImport && (
+        <ImportModal
+          type="income"
+          branchId={branchId}
+          onClose={() => setShowImport(false)}
+          onImported={() => { fetchRows(); onMutate(); setShowImport(false); }}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
