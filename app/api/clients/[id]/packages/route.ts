@@ -42,9 +42,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     contractCode: providedCode, contractType, startWeight, startWeightConfirmed,
   } = body;
 
-  // KOC packages have price = 0 which is falsy, so only require price for non-KOC
+  // KOC and KOL packages have price = 0 which is falsy, so only require price for NORMAL
   const isKOC = contractType === "KOC" || packageName === "KOC";
-  if (!packageName || !sessions || !durationDays || (!isKOC && !price)) {
+  const isKOL = contractType === "KOL";
+  if (!packageName || !sessions || !durationDays || (!isKOC && !isKOL && !price)) {
     return NextResponse.json({ error: "Thiếu thông tin gói tập" }, { status: 400 });
   }
 

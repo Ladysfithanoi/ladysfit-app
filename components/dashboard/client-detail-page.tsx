@@ -271,6 +271,7 @@ export function ClientDetailPage({
   const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL">("NORMAL");
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
+  const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
@@ -558,10 +559,13 @@ export function ClientDetailPage({
 
   async function handleAddPackage() {
     if (!addPkgName) return;
-    const def = PACKAGES[addPkgName];
-    if (!def) return;
     const isKOCPkg = addPkgName === "KOC";
-    const resolvedContractType = isKOCPkg ? "KOC" : addPkgContractType;
+    const isKOLPkg = addPkgName === "KOL";
+    // For KOL, the dropdown value is "KOL" but the actual package is addKolSponsoredPkg
+    const pkgKey = isKOLPkg ? addKolSponsoredPkg : addPkgName;
+    const def = PACKAGES[pkgKey];
+    if (!def) return;
+    const resolvedContractType = isKOCPkg ? "KOC" : isKOLPkg ? "KOL" : addPkgContractType;
     setAddPkgLoading(true);
     setAddPkgError("");
     try {
@@ -573,7 +577,7 @@ export function ClientDetailPage({
           packageStage: def.stageLabel,
           sessions: def.sessions,
           durationDays: def.durationDays,
-          price: def.discountedPrice ?? def.price,
+          price: (isKOCPkg || isKOLPkg) ? 0 : (def.discountedPrice ?? def.price),
           contractCode: addPkgContractCode || undefined,
           contractType: resolvedContractType,
           startWeight: resolvedContractType === "KOC" ? parseFloat(addPkgStartWeight) || undefined : undefined,
@@ -605,6 +609,7 @@ export function ClientDetailPage({
       setAddPkgContractType("NORMAL");
       setAddPkgStartWeight("");
       setAddPkgFMConfirmed(false);
+      setAddKolSponsoredPkg("");
     } catch (err) {
       setAddPkgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -1070,7 +1075,10 @@ export function ClientDetailPage({
                           {PKG_STATUS_LABEL[pkg.status]}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 mb-2">{pkg.packageStage}</p>
+                      {isKOL
+                        ? <p className="text-[11px] text-blue-600 mb-2">Được tài trợ · 60,000đ/buổi</p>
+                        : <p className="text-xs text-gray-400 mb-2">{pkg.packageStage}</p>
+                      }
                       <div className="flex items-center gap-2 mb-2">
                         <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
@@ -1437,7 +1445,7 @@ export function ClientDetailPage({
                               )}
                             </div>
                             <p className="text-xs text-gray-400 mt-0.5">
-                              {(pkg.contractType === "KOC" || pkg.packageName === "KOC") ? "Miễn phí" : formatPrice(pkg.price)}
+                              {(pkg.contractType === "KOC" || pkg.packageName === "KOC" || pkg.contractType === "KOL") ? "Miễn phí" : formatPrice(pkg.price)}
                             </p>
                           </td>
                           <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
@@ -2005,7 +2013,7 @@ export function ClientDetailPage({
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {(pkg.contractType === "KOC" || pkg.packageName === "KOC") ? "Miễn phí" : formatPrice(pkg.price)}</p>
+                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {(pkg.contractType === "KOC" || pkg.packageName === "KOC" || pkg.contractType === "KOL") ? "Miễn phí" : formatPrice(pkg.price)}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
                     {canEditSessions ? (
@@ -2158,7 +2166,9 @@ export function ClientDetailPage({
                       const v = e.target.value;
                       setAddPkgName(v);
                       if (v === "KOC") setAddPkgContractType("KOC");
-                      else if (addPkgContractType === "KOC") setAddPkgContractType("NORMAL");
+                      else if (v === "KOL") setAddPkgContractType("KOL");
+                      else setAddPkgContractType("NORMAL");
+                      if (v !== "KOL") setAddKolSponsoredPkg("");
                     }}
                     className={selectCls}
                   >
@@ -2173,13 +2183,14 @@ export function ClientDetailPage({
                         </option>
                       ) : null;
                     })}
+                    <option value="KOL">KOL — Hợp đồng KOL (Được tài trợ · 60,000đ/buổi)</option>
                   </select>
                 </>
               );
             })()}
 
-            {/* Package info preview for non-KOC */}
-            {addPkgName && addPkgName !== "KOC" && PACKAGES[addPkgName] && (
+            {/* Package info preview for NORMAL packages */}
+            {addPkgName && addPkgName !== "KOC" && addPkgName !== "KOL" && PACKAGES[addPkgName] && (
               <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-1">
                 <p><span className="font-bold">Số buổi:</span> {PACKAGES[addPkgName].sessions}</p>
                 <p><span className="font-bold">Thời hạn:</span> {PACKAGES[addPkgName].durationDays} ngày</p>
@@ -2187,32 +2198,37 @@ export function ClientDetailPage({
               </div>
             )}
 
-            {/* Contract type selector for non-KOC packages */}
-            {addPkgName && addPkgName !== "KOC" && (
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-gray-600">Loại hợp đồng</Label>
-                <div className="flex gap-2">
-                  {(["NORMAL", "KOL"] as const).map(ct => (
-                    <button
-                      key={ct}
-                      type="button"
-                      onClick={() => setAddPkgContractType(ct)}
-                      className={cn(
-                        "flex-1 h-9 rounded-xl text-xs font-bold border transition-all",
-                        addPkgContractType === ct
-                          ? ct === "KOL" ? "bg-blue-100 border-blue-400 text-blue-700"
-                            : "bg-gray-200 border-gray-400 text-gray-700"
-                          : "border-gray-200 text-gray-400 hover:border-gray-300"
-                      )}
-                    >
-                      {ct === "NORMAL" ? "Thường" : "KOL"}
-                    </button>
-                  ))}
+            {/* KOL-specific form */}
+            {addPkgName === "KOL" && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-blue-700">Hợp đồng KOL</span>
+                  <span className="text-[10px] text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full">Được tài trợ · 60,000đ/buổi</span>
                 </div>
-                {addPkgContractType === "KOL" && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mt-1">
-                    <p className="text-xs font-bold text-blue-700 mb-0.5">Hoa hồng KOL</p>
-                    <p className="text-[11px] text-blue-600">60,000đ/buổi — không yêu cầu điều kiện cân nặng</p>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-blue-700">Gói tập được tài trợ:</Label>
+                  <select
+                    value={addKolSponsoredPkg}
+                    onChange={(e) => setAddKolSponsoredPkg(e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="">Chọn gói tập được tài trợ...</option>
+                    {["L1","L2","L3","L4","L5","Loyalfit"].map(name => {
+                      const p = PACKAGES[name];
+                      return p ? (
+                        <option key={name} value={name}>
+                          {name} — {p.stageLabel} ({p.sessions} buổi, {p.durationDays} ngày)
+                        </option>
+                      ) : null;
+                    })}
+                  </select>
+                </div>
+                {addKolSponsoredPkg && PACKAGES[addKolSponsoredPkg] && (
+                  <div className="bg-blue-100/50 rounded-lg px-3 py-2.5 text-xs text-blue-700 space-y-1">
+                    <p><span className="font-bold">Số buổi:</span> {PACKAGES[addKolSponsoredPkg].sessions}</p>
+                    <p><span className="font-bold">Thời hạn:</span> {PACKAGES[addKolSponsoredPkg].durationDays} ngày</p>
+                    <p><span className="font-bold">Phí:</span> 0đ <span className="italic text-blue-500">(Được tài trợ)</span></p>
+                    <p><span className="font-bold">Hoa hồng PT:</span> 60,000đ/buổi (flat rate)</p>
                   </div>
                 )}
               </div>
@@ -2341,7 +2357,7 @@ export function ClientDetailPage({
             {addPkgError && <p className="text-sm text-[#f15b5c]">{addPkgError}</p>}
             <Button
               type="button"
-              disabled={!addPkgName || addPkgLoading || (addPkgName === "KOC" && !addPkgStartWeight)}
+              disabled={!addPkgName || addPkgLoading || (addPkgName === "KOC" && !addPkgStartWeight) || (addPkgName === "KOL" && !addKolSponsoredPkg)}
               onClick={handleAddPackage}
               className="w-full h-10 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
               style={{ backgroundColor: "#f15b5c" }}
