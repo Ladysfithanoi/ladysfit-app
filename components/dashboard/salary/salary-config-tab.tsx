@@ -89,7 +89,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
   const [configs, setConfigs] = useState<Record<string, Config>>({});
   const [toast, setToast] = useState("");
 
-  const branchPTs = staffList.filter(s => s.branchId === selectedBranchId && s.id !== currentFMId);
+  const branchPTs = staffList.filter(s => s.branchId === selectedBranchId && s.id !== currentFMId && s.role !== "ADMIN");
 
   useEffect(() => {
     async function loadOne(userId: string, isFM: boolean) {
@@ -117,7 +117,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
 
     loadOne(currentFMId, true);
     staffList
-      .filter(s => s.branchId === selectedBranchId && s.id !== currentFMId)
+      .filter(s => s.branchId === selectedBranchId && s.id !== currentFMId && s.role !== "ADMIN")
       .forEach(s => loadOne(s.id, false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBranchId]);
@@ -259,7 +259,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       {/* ── PT config cards ── */}
       {branchPTs.length === 0 ? (
         <div className="py-10 text-center text-sm text-gray-400 italic">
-          Không có nhân sự PT trong chi nhánh này
+          Không có nhân sự PT/RESTRICTED trong chi nhánh này
         </div>
       ) : (
         branchPTs.map(staff => {
