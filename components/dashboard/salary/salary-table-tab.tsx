@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, X, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
@@ -100,6 +100,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [sessionCounts, setSessionCounts]     = useState<SessionCounts>({});
   const [overrideIds, setOverrideIds]         = useState<Set<string>>(new Set());
   const [fetchingCounts, setFetchingCounts]   = useState(false);
+
+  // Export state
+  const [exporting, setExporting] = useState(false);
 
   // Session image modal
   const [imgModal, setImgModal] = useState<ImgModalState | null>(null);
@@ -244,6 +247,33 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     } finally { setSaving(false); }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/salary/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId: selectedBranchId, month, year }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        showToast("Lỗi xuất Excel: " + (err.error ?? `HTTP ${res.status}`));
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename\*=UTF-8''(.+)/);
+      a.href = url;
+      a.download = match ? decodeURIComponent(match[1]) : `bang-luong-thang-${month}-${year}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
@@ -370,12 +400,21 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </select>
             </div>
           ))}
-          <button onClick={openGenModal} disabled={!selectedBranchId}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60 ml-auto"
-            style={{ backgroundColor: "#f15b5c" }}>
-            <RefreshCw className="w-4 h-4" />
-            Tạo bảng lương tháng
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            {records.length > 0 && (
+              <button onClick={handleExport} disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-60 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                <Download className="w-4 h-4" />
+                {exporting ? "Đang xuất..." : "Xuất Excel"}
+              </button>
+            )}
+            <button onClick={openGenModal} disabled={!selectedBranchId}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+              style={{ backgroundColor: "#f15b5c" }}>
+              <RefreshCw className="w-4 h-4" />
+              Tạo bảng lương tháng
+            </button>
+          </div>
         </div>
       </div>
 
