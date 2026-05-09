@@ -44,16 +44,16 @@ export default async function ClientPage({ params }: { params: { id: string } })
         orderBy: { name: "asc" },
       }).catch((e) => { console.error("staff query failed:", e); return []; }),
       prisma.$queryRawUnsafe<{
-        id: string; client_id: string; contract_code: string | null;
-        package_name: string; package_stage: string; sessions: bigint; sessions_used: bigint;
-        start_date: Date | null; end_date: Date | null; duration_days: bigint;
-        reserved_days: bigint; extension_days: bigint; price: number;
-        contract_type: string; status: string; notes: string | null; created_at: Date;
+        id: string; clientId: string; contractCode: string | null;
+        packageName: string; packageStage: string; sessions: bigint; sessionsUsed: bigint;
+        startDate: Date | null; endDate: Date | null; durationDays: bigint;
+        reservedDays: bigint; extensionDays: bigint; price: number;
+        contractType: string; status: string; notes: string | null; createdAt: Date;
       }[]>(
-        `SELECT id, client_id, contract_code, package_name, package_stage, sessions, sessions_used,
-                start_date, end_date, duration_days, reserved_days, extension_days, price,
-                contract_type, status, notes, created_at
-         FROM package_enrollments WHERE client_id = $1 ORDER BY created_at ASC`,
+        `SELECT id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
+                "startDate", "endDate", "durationDays", "reservedDays", "extensionDays", price,
+                "contractType", status, notes, "createdAt"
+         FROM package_enrollments WHERE "clientId" = $1 ORDER BY "createdAt" ASC`,
         params.id
       ).catch((e) => { console.error("enrollments query failed:", e); return []; }),
       prisma.workoutProgram.findMany({
@@ -140,29 +140,29 @@ export default async function ClientPage({ params }: { params: { id: string } })
   };
 
   type EnrollmentRaw = {
-    id: string; client_id: string; contract_code: string | null;
-    package_name: string; package_stage: string; sessions: bigint; sessions_used: bigint;
-    start_date: Date | null; end_date: Date | null; duration_days: bigint;
-    reserved_days: bigint; extension_days: bigint; price: number;
-    contract_type: string; status: string; notes: string | null; created_at: Date;
+    id: string; clientId: string; contractCode: string | null;
+    packageName: string; packageStage: string; sessions: bigint; sessionsUsed: bigint;
+    startDate: Date | null; endDate: Date | null; durationDays: bigint;
+    reservedDays: bigint; extensionDays: bigint; price: number;
+    contractType: string; status: string; notes: string | null; createdAt: Date;
   };
   const serializedPackages = (enrollments as EnrollmentRaw[]).map((p) => ({
     id: p.id,
-    packageName: p.package_name,
-    packageStage: p.package_stage,
+    packageName: p.packageName,
+    packageStage: p.packageStage,
     sessions: Number(p.sessions),
-    sessionsUsed: Number(p.sessions_used),
-    startDate: p.start_date?.toISOString() ?? null,
-    endDate: p.end_date?.toISOString() ?? null,
-    durationDays: Number(p.duration_days),
-    reservedDays: Number(p.reserved_days),
-    extensionDays: Number(p.extension_days),
+    sessionsUsed: Number(p.sessionsUsed),
+    startDate: p.startDate?.toISOString() ?? null,
+    endDate: p.endDate?.toISOString() ?? null,
+    durationDays: Number(p.durationDays),
+    reservedDays: Number(p.reservedDays),
+    extensionDays: Number(p.extensionDays),
     price: Number(p.price),
     status: p.status as "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED",
     notes: p.notes,
-    contractCode: p.contract_code ?? null,
-    createdAt: p.created_at.toISOString(),
-    contractType: (p.contract_type ?? "NORMAL") as "NORMAL" | "KOC" | "KOL",
+    contractCode: p.contractCode ?? null,
+    createdAt: p.createdAt.toISOString(),
+    contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL",
   }));
 
   const serializedPrograms = programs.map((p) => ({

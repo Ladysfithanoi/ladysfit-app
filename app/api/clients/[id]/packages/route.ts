@@ -8,27 +8,27 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const rows = await prisma.$queryRawUnsafe<{
-    id: string; client_id: string; contract_code: string | null;
-    package_name: string; package_stage: string; sessions: number; sessions_used: number;
-    start_date: string | null; end_date: string | null; duration_days: number;
-    reserved_days: number; extension_days: number; price: number;
-    contract_type: string; status: string; notes: string | null; created_at: string;
+    id: string; clientId: string; contractCode: string | null;
+    packageName: string; packageStage: string; sessions: number; sessionsUsed: number;
+    startDate: string | null; endDate: string | null; durationDays: number;
+    reservedDays: number; extensionDays: number; price: number;
+    contractType: string; status: string; notes: string | null; createdAt: string;
   }[]>(
-    `SELECT id, client_id, contract_code, package_name, package_stage, sessions, sessions_used,
-            start_date, end_date, duration_days, reserved_days, extension_days, price,
-            contract_type, status, notes, created_at
-     FROM package_enrollments WHERE client_id = $1 ORDER BY created_at ASC`,
+    `SELECT id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
+            "startDate", "endDate", "durationDays", "reservedDays", "extensionDays", price,
+            "contractType", status, notes, "createdAt"
+     FROM package_enrollments WHERE "clientId" = $1 ORDER BY "createdAt" ASC`,
     params.id
   );
 
   return NextResponse.json(rows.map(r => ({
-    id: r.id, clientId: r.client_id, contractCode: r.contract_code,
-    packageName: r.package_name, packageStage: r.package_stage,
-    sessions: Number(r.sessions), sessionsUsed: Number(r.sessions_used),
-    startDate: r.start_date, endDate: r.end_date, durationDays: Number(r.duration_days),
-    reservedDays: Number(r.reserved_days), extensionDays: Number(r.extension_days),
-    price: Number(r.price), contractType: r.contract_type,
-    status: r.status, notes: r.notes, createdAt: r.created_at,
+    id: r.id, clientId: r.clientId, contractCode: r.contractCode,
+    packageName: r.packageName, packageStage: r.packageStage,
+    sessions: Number(r.sessions), sessionsUsed: Number(r.sessionsUsed),
+    startDate: r.startDate, endDate: r.endDate, durationDays: Number(r.durationDays),
+    reservedDays: Number(r.reservedDays), extensionDays: Number(r.extensionDays),
+    price: Number(r.price), contractType: r.contractType,
+    status: r.status, notes: r.notes, createdAt: r.createdAt,
   })));
 }
 
@@ -69,10 +69,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const pkgId = await prisma.$queryRawUnsafe<{ id: string }[]>(
     `
     INSERT INTO package_enrollments
-      (id, client_id, contract_code, package_name, package_stage, sessions, sessions_used,
-       duration_days, reserved_days, extension_days, price, contract_type, status, notes, created_at)
+      (id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
+       "durationDays", "reservedDays", "extensionDays", price, "contractType", status, notes, "createdAt")
     VALUES
-      (gen_random_uuid()::text, $1, $2, $3, $4, $5, 0, $6, 0, 0, $7, $8::\"ContractType\", 'ACTIVE', $9, NOW())
+      (gen_random_uuid()::text, $1, $2, $3, $4, $5, 0, $6, 0, 0, $7, $8::"ContractType", 'ACTIVE', $9, NOW())
     RETURNING id
     `,
     params.id, contractCode, packageName, packageStage ?? "", sessions,
@@ -94,8 +94,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await prisma.$executeRawUnsafe(
       `
       INSERT INTO koc_contracts
-        (id, enrollment_id, client_id, pt_id, start_weight, start_weight_confirmed,
-         contract_date, end_date, status, total_sessions, created_at, updated_at)
+        (id, "enrollmentId", "clientId", "ptId", "startWeight", "startWeightConfirmed",
+         "contractDate", "endDate", status, "totalSessions", "createdAt", "updatedAt")
       VALUES
         (gen_random_uuid()::text, $1, $2, $3, $4, $5, NOW(), $6, 'ACTIVE', 0, NOW(), NOW())
       `,

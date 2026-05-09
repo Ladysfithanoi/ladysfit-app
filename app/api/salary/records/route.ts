@@ -18,18 +18,18 @@ function calculateKOCCommission(startWeight: number, endWeight: number | null, s
 
 async function fetchKOCKOLCommission(ptId: string): Promise<{ kocCommission: number; kolCommission: number; kocContracts: number; kolSessions: number }> {
   const kocRows = await prisma.$queryRawUnsafe<{
-    start_weight: number;
-    end_weight: number | null;
-    end_weight_confirmed: boolean;
-    total_sessions: number;
-    contract_type: string;
+    startWeight: number;
+    endWeight: number | null;
+    endWeightConfirmed: boolean;
+    totalSessions: number;
+    contractType: string;
   }[]>(
     `
-    SELECT k.start_weight, k.end_weight, k.end_weight_confirmed, k.total_sessions,
-           pe.contract_type
+    SELECT k."startWeight", k."endWeight", k."endWeightConfirmed", k."totalSessions",
+           pe."contractType"
     FROM koc_contracts k
-    JOIN package_enrollments pe ON pe.id = k.enrollment_id
-    WHERE k.pt_id = $1 AND k.status = 'COMPLETED' AND pe.status = 'ACTIVE'
+    JOIN package_enrollments pe ON pe.id = k."enrollmentId"
+    WHERE k."ptId" = $1 AND k.status = 'COMPLETED' AND pe.status = 'ACTIVE'
     `,
     ptId
   );
@@ -37,19 +37,19 @@ async function fetchKOCKOLCommission(ptId: string): Promise<{ kocCommission: num
   let kocCommission = 0;
   let kocContracts = 0;
   for (const row of kocRows) {
-    if (row.contract_type === "KOC" && row.end_weight_confirmed) {
-      kocCommission += calculateKOCCommission(Number(row.start_weight), row.end_weight != null ? Number(row.end_weight) : null, Number(row.total_sessions));
+    if (row.contractType === "KOC" && row.endWeightConfirmed) {
+      kocCommission += calculateKOCCommission(Number(row.startWeight), row.endWeight != null ? Number(row.endWeight) : null, Number(row.totalSessions));
       kocContracts++;
     }
   }
 
-  // KOL: count sessions for active KOL packages this month (we use total_sessions on the KOC contract for KOL too)
+  // KOL: sum sessions_used for active KOL packages assigned to this PT
   const kolRows = await prisma.$queryRawUnsafe<{ total_sessions: number }[]>(
     `
-    SELECT COALESCE(SUM(pe.sessions_used), 0)::int AS total_sessions
+    SELECT COALESCE(SUM(pe."sessionsUsed"), 0)::int AS total_sessions
     FROM package_enrollments pe
-    JOIN clients c ON c.id = pe.client_id
-    WHERE c.assigned_pt_id = $1 AND pe.contract_type = 'KOL' AND pe.status = 'ACTIVE'
+    JOIN clients c ON c.id = pe."clientId"
+    WHERE c."assignedPTId" = $1 AND pe."contractType" = 'KOL' AND pe.status = 'ACTIVE'
     `,
     ptId
   );
