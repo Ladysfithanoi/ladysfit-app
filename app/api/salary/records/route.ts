@@ -168,70 +168,23 @@ export async function GET(req: Request) {
 
     if (!changed) return { ...r, kocCommission: rWithKOC.kocCommission ?? 0, kolCommission: rWithKOC.kolCommission ?? 0 };
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE salary_records
-       SET total_revenue=$1, commission_rate=$2, commission_amount=$3,
-           total_salary=$4, remaining_payment=$5,
-           koc_commission=$6, kol_commission=$7,
-           updated_at=NOW()
-       WHERE id=$8`,
-      totalRevenue, commissionRate, commissionAmount, totalSalary, remainingPayment,
-      kocCommission, kolCommission, r.id
-    );
-    const refreshed = await prisma.salaryRecord.findUnique({
+    const refreshed = await prisma.salaryRecord.update({
       where: { id: r.id },
+      data: {
+        totalRevenue,
+        commissionRate,
+        commissionAmount,
+        kocCommission: kocCommission as unknown as never,
+        kolCommission: kolCommission as unknown as never,
+        totalSalary,
+        remainingPayment,
+      },
       include: { user: { select: { id: true, name: true, email: true, role: true } } },
     });
-    return { ...refreshed!, kocCommission, kolCommission };
+    return { ...refreshed, kocCommission, kolCommission };
   }));
 
   return NextResponse.json(updated);
-}
-
-// ── Raw-SQL insert for salary_records (bypasses stale Prisma client) ──────
-
-type InsertData = {
-  userId: string; branchId: string; month: number; year: number;
-  baseSalary: number; totalRevenue: number; commissionRate: number; commissionAmount: number;
-  seniorityBonus: number; fixedAllowances: number;
-  showsL1L2Loyal: number; showsL3L4L5: number; showPay: number;
-  goalBonus: number; clientsAchievedGoal: number;
-  googleBonus: number; googleReviews: number; renewBonus: number; renewContracts: number;
-  bhxh: number; kocCommission: number; kolCommission: number;
-  totalSalary: number; advancePaid: number; remainingPayment: number;
-};
-
-async function insertSalaryRecord(data: InsertData): Promise<void> {
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO salary_records
-       (id, user_id, branch_id, month, year,
-        base_salary, total_revenue, commission_rate, commission_amount,
-        seniority_bonus, fixed_allowances,
-        shows_l1_l2_loyal, shows_l3_l4_l5, show_pay,
-        goal_bonus, clients_achieved_goal,
-        google_bonus, google_reviews, renew_bonus, renew_contracts,
-        bhxh, koc_commission, kol_commission,
-        total_salary, advance_paid, remaining_payment,
-        status, created_at, updated_at)
-     VALUES
-       (gen_random_uuid()::text, $1, $2, $3, $4,
-        $5, $6, $7, $8,
-        $9, $10,
-        $11, $12, $13,
-        $14, $15,
-        $16, $17, $18, $19,
-        $20, $21, $22,
-        $23, $24, $25,
-        'PENDING'::"SalaryStatus", NOW(), NOW())`,
-    data.userId, data.branchId, data.month, data.year,
-    data.baseSalary, data.totalRevenue, data.commissionRate, data.commissionAmount,
-    data.seniorityBonus, data.fixedAllowances,
-    data.showsL1L2Loyal, data.showsL3L4L5, data.showPay,
-    data.goalBonus, data.clientsAchievedGoal,
-    data.googleBonus, data.googleReviews, data.renewBonus, data.renewContracts,
-    data.bhxh, data.kocCommission, data.kolCommission,
-    data.totalSalary, data.advancePaid, data.remainingPayment
-  );
 }
 
 // ── POST — generate salary records ────────────────────────────────────────
@@ -305,15 +258,17 @@ export async function POST(req: Request) {
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
 
-      await insertSalaryRecord({
-        userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
-        baseSalary: 0, totalRevenue, commissionRate: rate * 100, commissionAmount,
-        seniorityBonus: 0, fixedAllowances: 0,
-        showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
-        goalBonus: 0, clientsAchievedGoal: 0,
-        googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
-        bhxh: 0, kocCommission, kolCommission,
-        totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+      await prisma.salaryRecord.create({
+        data: {
+          userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
+          baseSalary: 0, totalRevenue, commissionRate: rate * 100, commissionAmount,
+          seniorityBonus: 0, fixedAllowances: 0,
+          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
+          goalBonus: 0, clientsAchievedGoal: 0,
+          googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
+          bhxh: 0, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+        },
       });
     } else if (entry.userRole === "FM") {
       const baseSalary         = config?.baseSalary         ?? 5_500_000;
@@ -337,16 +292,18 @@ export async function POST(req: Request) {
       const totalSalary = baseSalary + fixedAllowances + seniorityBonus +
                           commissionAmount + showPay + googleBonus + renewBonus;
 
-      await insertSalaryRecord({
-        userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
-        baseSalary, totalRevenue: totalBranchRevenue, commissionRate: rate * 100, commissionAmount,
-        seniorityBonus, fixedAllowances,
-        showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showPay,
-        goalBonus: 0, clientsAchievedGoal: 0,
-        googleBonus, googleReviews: entry.googleReviews,
-        renewBonus, renewContracts: entry.renewContracts,
-        bhxh: baseSalary, kocCommission: 0, kolCommission: 0,
-        totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+      await prisma.salaryRecord.create({
+        data: {
+          userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
+          baseSalary, totalRevenue: totalBranchRevenue, commissionRate: rate * 100, commissionAmount,
+          seniorityBonus, fixedAllowances,
+          showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showPay,
+          goalBonus: 0, clientsAchievedGoal: 0,
+          googleBonus, googleReviews: entry.googleReviews,
+          renewBonus, renewContracts: entry.renewContracts,
+          bhxh: baseSalary, kocCommission: 0 as unknown as never, kolCommission: 0 as unknown as never,
+          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+        },
       });
     } else {
       // PT
@@ -370,15 +327,17 @@ export async function POST(req: Request) {
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
       const totalSalary      = baseSalary + seniorityBonus + commissionAmount + showPay + goalBonus + kocCommission + kolCommission;
 
-      await insertSalaryRecord({
-        userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
-        baseSalary, totalRevenue, commissionRate: rate * 100, commissionAmount,
-        seniorityBonus, fixedAllowances: 0,
-        showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
-        goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,
-        googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
-        bhxh: 4_960_000, kocCommission, kolCommission,
-        totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+      await prisma.salaryRecord.create({
+        data: {
+          userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
+          baseSalary, totalRevenue, commissionRate: rate * 100, commissionAmount,
+          seniorityBonus, fixedAllowances: 0,
+          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
+          goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,
+          googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
+          bhxh: 4_960_000, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+        },
       });
     }
 
