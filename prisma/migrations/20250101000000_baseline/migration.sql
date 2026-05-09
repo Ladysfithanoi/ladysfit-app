@@ -1,0 +1,3 @@
+-- Baseline migration: existing schema was set up via prisma db push.
+-- This file is intentionally empty — it establishes the migration baseline
+-- so that prisma migrate deploy can track subsequent changes.
