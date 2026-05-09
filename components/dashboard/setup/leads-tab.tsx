@@ -15,6 +15,7 @@ type Props = {
   month: number;
   year: number;
   currentUserId: string;
+  currentUserName: string;
   currentUserRole: string;
   isReadOnly: boolean;
   isPT: boolean;
@@ -30,7 +31,7 @@ const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
 
-export function LeadsTab({ branchId, branchName, month, year, currentUserId, isPT, isFM, ptList, selectedPTId, selectedSource, selectedStatus }: Props) {
+export function LeadsTab({ branchId, branchName, month, year, currentUserId, currentUserName, isPT, isFM, ptList, selectedPTId, selectedSource, selectedStatus }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
 
   function openAdd() {
     setEditing(null);
-    setForm({ status: "TAKECARE", assignedPTId: isPT ? currentUserId : undefined });
+    setForm({ status: "TAKECARE", assignedPTId: (isPT || isFM) ? currentUserId : undefined });
     setError("");
     setFormOpen(true);
   }
@@ -228,7 +229,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
               📤 Đẩy sang tháng sau
             </button>
           )}
-          {isPT && (
+          {(isPT || isFM) && (
             <button
               onClick={openAdd}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
@@ -270,7 +271,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
                       </span>
                     </div>
                     <span className="text-sm font-extrabold text-gray-800">
-                      PT {pt.name ?? pt.email}
+                      {ptId === currentUserId && isFM ? "FM" : "PT"} {pt.name ?? pt.email}
                     </span>
                     <span className="text-xs text-gray-400">
                       {ptLeads.length} lead · {ptRevenue.toFixed(1)} tr · {ptRegistered} đăng ký
@@ -491,6 +492,19 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, isP
                     readOnly
                     className={`${inputCls} bg-gray-100 text-gray-500 cursor-not-allowed`}
                   />
+                </FormRow>
+              ) : isFM ? (
+                <FormRow label="PT phụ trách *">
+                  <select
+                    value={form.assignedPTId ?? currentUserId}
+                    onChange={(e) => setForm((f) => ({ ...f, assignedPTId: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value={currentUserId}>{currentUserName} (FM)</option>
+                    {ptList.map((pt) => (
+                      <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
+                    ))}
+                  </select>
                 </FormRow>
               ) : (
                 <FormRow label="PT phụ trách *">
