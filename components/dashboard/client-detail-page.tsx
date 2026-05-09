@@ -39,6 +39,7 @@ type PackageEnrollment = {
   reservedDays: number;
   extensionDays: number;
   price: number;
+  contractType: "NORMAL" | "KOC" | "KOL";
   status: "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED";
   notes: string | null;
   contractCode: string | null;
@@ -173,6 +174,7 @@ function getAvailablePackages(
 
   let names: string[] = ["L3", "L4", "L5"];
   if (hasAny) names.push("Loyalfit");
+  names.push("KOC");
 
   let note: string;
   let noteOk = false;
@@ -268,6 +270,7 @@ export function ClientDetailPage({
   const [addPkgContractCode, setAddPkgContractCode] = useState("");
   const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL">("NORMAL");
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
+  const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
@@ -557,6 +560,8 @@ export function ClientDetailPage({
     if (!addPkgName) return;
     const def = PACKAGES[addPkgName];
     if (!def) return;
+    const isKOCPkg = addPkgName === "KOC";
+    const resolvedContractType = isKOCPkg ? "KOC" : addPkgContractType;
     setAddPkgLoading(true);
     setAddPkgError("");
     try {
@@ -570,8 +575,9 @@ export function ClientDetailPage({
           durationDays: def.durationDays,
           price: def.discountedPrice ?? def.price,
           contractCode: addPkgContractCode || undefined,
-          contractType: addPkgContractType,
-          startWeight: addPkgContractType === "KOC" ? parseFloat(addPkgStartWeight) || undefined : undefined,
+          contractType: resolvedContractType,
+          startWeight: resolvedContractType === "KOC" ? parseFloat(addPkgStartWeight) || undefined : undefined,
+          startWeightConfirmed: resolvedContractType === "KOC" ? addPkgFMConfirmed : undefined,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
@@ -586,6 +592,7 @@ export function ClientDetailPage({
         endDate: created.endDate ?? null,
         durationDays: created.durationDays,
         price: created.price,
+        contractType: (created.contractType ?? resolvedContractType) as "NORMAL" | "KOC" | "KOL",
         status: created.status,
         notes: created.notes ?? null,
         contractCode: created.contractCode ?? null,
@@ -597,6 +604,7 @@ export function ClientDetailPage({
       setAddPkgContractCode("");
       setAddPkgContractType("NORMAL");
       setAddPkgStartWeight("");
+      setAddPkgFMConfirmed(false);
     } catch (err) {
       setAddPkgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -979,6 +987,63 @@ export function ClientDetailPage({
               <div className="flex flex-wrap gap-3">
                 {packages.map((pkg) => {
                   const pct = Math.round((pkg.sessionsUsed / pkg.sessions) * 100);
+                  const isKOC = pkg.contractType === "KOC" || pkg.packageName === "KOC";
+                  const isKOL = pkg.contractType === "KOL";
+
+                  // Days remaining for KOC
+                  const daysLeft = pkg.endDate
+                    ? Math.max(0, Math.ceil((new Date(pkg.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                    : null;
+
+                  if (isKOC) {
+                    return (
+                      <div key={pkg.id} className="flex-1 min-w-[220px] border border-amber-200 rounded-xl p-4 bg-amber-50/40">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-extrabold text-amber-800">KOC</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-700">Lộ trình tặng</span>
+                          </div>
+                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[pkg.status])}>
+                            {PKG_STATUS_LABEL[pkg.status]}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-600 mb-2">60 buổi / 60 ngày · Miễn phí</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="flex-1 h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">
+                            {pkg.sessionsUsed}/{pkg.sessions} buổi
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-amber-700 space-y-0.5 mt-1">
+                          {pkg.startDate ? (
+                            <>
+                              <div>Ngày BĐ: <span className="font-semibold">{formatDate(pkg.startDate)}</span></div>
+                              {pkg.endDate && (
+                                <div>Ngày KT: <span className="font-semibold">{formatDate(pkg.endDate)}</span>
+                                  {daysLeft != null && daysLeft > 0 && (
+                                    <span className="ml-1 text-[10px] text-amber-500">({daysLeft} ngày nữa)</span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="italic text-amber-500">Chưa bắt đầu</span>
+                          )}
+                          {pkg.status === "ACTIVE" && (
+                            <div className="mt-1 text-[10px] font-semibold text-amber-600 italic">
+                              {pkg.sessionsUsed < pkg.sessions ? "Chờ xác nhận kết quả" : "Đã hoàn thành buổi dạy"}
+                            </div>
+                          )}
+                        </div>
+                        {pkg.contractCode && (
+                          <p className="text-[10px] text-amber-500 mt-1">HĐ: {pkg.contractCode}</p>
+                        )}
+                      </div>
+                    );
+                  }
+
                   const barColor =
                     pct >= 100 ? "bg-green-500" :
                     pct > 80   ? "bg-orange-400" :
@@ -990,9 +1055,17 @@ export function ClientDetailPage({
                     pct >= 50  ? "text-blue-600" :
                                  "text-gray-600";
                   return (
-                    <div key={pkg.id} className="flex-1 min-w-[220px] border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                    <div key={pkg.id} className={cn(
+                      "flex-1 min-w-[220px] border rounded-xl p-4 bg-gray-50/50",
+                      isKOL ? "border-blue-200 bg-blue-50/20" : "border-gray-100"
+                    )}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
+                          {isKOL && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">KOL</span>
+                          )}
+                        </div>
                         <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[pkg.status])}>
                           {PKG_STATUS_LABEL[pkg.status]}
                         </span>
@@ -1354,8 +1427,18 @@ export function ClientDetailPage({
                       return (
                         <tr key={pkg.id} className="border-b border-gray-50 last:border-0">
                           <td className="px-4 py-3">
-                            <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
-                            <p className="text-xs text-gray-400 mt-0.5">{formatPrice(pkg.price)}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
+                              {(pkg.contractType === "KOC" || pkg.packageName === "KOC") && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">KOC</span>
+                              )}
+                              {pkg.contractType === "KOL" && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">KOL</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {(pkg.contractType === "KOC" || pkg.packageName === "KOC") ? "Miễn phí" : formatPrice(pkg.price)}
+                            </p>
                           </td>
                           <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                             {pkg.contractCode ?? "—"}
@@ -1922,7 +2005,7 @@ export function ClientDetailPage({
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {formatPrice(pkg.price)}</p>
+                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {(pkg.contractType === "KOC" || pkg.packageName === "KOC") ? "Miễn phí" : formatPrice(pkg.price)}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
                     {canEditSessions ? (
@@ -2071,7 +2154,12 @@ export function ClientDetailPage({
                   </p>
                   <select
                     value={addPkgName}
-                    onChange={(e) => setAddPkgName(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAddPkgName(v);
+                      if (v === "KOC") setAddPkgContractType("KOC");
+                      else if (addPkgContractType === "KOC") setAddPkgContractType("NORMAL");
+                    }}
                     className={selectCls}
                   >
                     <option value="">Chọn gói tập...</option>
@@ -2079,7 +2167,9 @@ export function ClientDetailPage({
                       const p = PACKAGES[name];
                       return p ? (
                         <option key={p.name} value={p.name}>
-                          {p.name} — {p.stageLabel} ({p.sessions} buổi, {formatPrice(p.discountedPrice ?? p.price)})
+                          {p.name === "KOC"
+                            ? "KOC — Lộ trình tặng (60 buổi / 60 ngày)"
+                            : `${p.name} — ${p.stageLabel} (${p.sessions} buổi, ${formatPrice(p.discountedPrice ?? p.price)})`}
                         </option>
                       ) : null;
                     })}
@@ -2087,57 +2177,102 @@ export function ClientDetailPage({
                 </>
               );
             })()}
-            {addPkgName && PACKAGES[addPkgName] && (
+
+            {/* Package info preview for non-KOC */}
+            {addPkgName && addPkgName !== "KOC" && PACKAGES[addPkgName] && (
               <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-1">
                 <p><span className="font-bold">Số buổi:</span> {PACKAGES[addPkgName].sessions}</p>
                 <p><span className="font-bold">Thời hạn:</span> {PACKAGES[addPkgName].durationDays} ngày</p>
                 <p><span className="font-bold">Giá:</span> {formatPrice(PACKAGES[addPkgName].discountedPrice ?? PACKAGES[addPkgName].price)}</p>
               </div>
             )}
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-gray-600">Loại hợp đồng</Label>
-              <div className="flex gap-2">
-                {(["NORMAL", "KOC", "KOL"] as const).map(ct => (
-                  <button
-                    key={ct}
-                    type="button"
-                    onClick={() => setAddPkgContractType(ct)}
-                    className={cn(
-                      "flex-1 h-9 rounded-xl text-xs font-bold border transition-all",
-                      addPkgContractType === ct
-                        ? ct === "KOC" ? "bg-amber-100 border-amber-400 text-amber-700"
-                          : ct === "KOL" ? "bg-blue-100 border-blue-400 text-blue-700"
-                          : "bg-gray-200 border-gray-400 text-gray-700"
-                        : "border-gray-200 text-gray-400 hover:border-gray-300"
-                    )}
-                  >
-                    {ct}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            {addPkgContractType === "KOC" && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-                <p className="text-xs font-bold text-amber-700">Điều kiện KOC</p>
-                <div className="grid grid-cols-2 gap-1 text-[11px]">
-                  <span className={cn("font-semibold", client.currentWeight >= 70 ? "text-green-600" : "text-red-500")}>
-                    {client.currentWeight >= 70 ? "✓" : "✗"} Cân nặng ≥ 70kg ({client.currentWeight}kg)
-                  </span>
-                  <span className={cn("font-semibold", client.height < 160 ? "text-green-600" : "text-red-500")}>
-                    {client.height < 160 ? "✓" : "✗"} Chiều cao &lt; 160cm ({client.height}cm)
-                  </span>
-                  {client.dateOfBirth && (() => {
-                    const age = new Date().getFullYear() - new Date(client.dateOfBirth).getFullYear();
-                    return (
-                      <span className={cn("font-semibold", age >= 25 && age <= 45 ? "text-green-600" : "text-red-500")}>
-                        {age >= 25 && age <= 45 ? "✓" : "✗"} Tuổi 25–45 ({age} tuổi)
-                      </span>
-                    );
-                  })()}
+            {/* Contract type selector for non-KOC packages */}
+            {addPkgName && addPkgName !== "KOC" && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-gray-600">Loại hợp đồng</Label>
+                <div className="flex gap-2">
+                  {(["NORMAL", "KOL"] as const).map(ct => (
+                    <button
+                      key={ct}
+                      type="button"
+                      onClick={() => setAddPkgContractType(ct)}
+                      className={cn(
+                        "flex-1 h-9 rounded-xl text-xs font-bold border transition-all",
+                        addPkgContractType === ct
+                          ? ct === "KOL" ? "bg-blue-100 border-blue-400 text-blue-700"
+                            : "bg-gray-200 border-gray-400 text-gray-700"
+                          : "border-gray-200 text-gray-400 hover:border-gray-300"
+                      )}
+                    >
+                      {ct === "NORMAL" ? "Thường" : "KOL"}
+                    </button>
+                  ))}
                 </div>
-                <div className="space-y-1 pt-1">
-                  <Label className="text-xs font-semibold text-gray-600">Cân nặng buổi đầu (kg)</Label>
+                {addPkgContractType === "KOL" && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mt-1">
+                    <p className="text-xs font-bold text-blue-700 mb-0.5">Hoa hồng KOL</p>
+                    <p className="text-[11px] text-blue-600">60,000đ/buổi — không yêu cầu điều kiện cân nặng</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* KOC-specific form */}
+            {addPkgName === "KOC" && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-amber-700">Hợp đồng KOC</span>
+                  <span className="text-[10px] text-amber-500 bg-amber-100 px-2 py-0.5 rounded-full">60 buổi · 60 ngày · Miễn phí</span>
+                </div>
+
+                {/* Eligibility check */}
+                <div className="space-y-1">
+                  <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">Kiểm tra điều kiện KOC</p>
+                  <div className="space-y-1">
+                    {(() => {
+                      const weightOk = client.currentWeight >= 70;
+                      const heightOk = client.height < 160;
+                      const age = client.dateOfBirth
+                        ? new Date().getFullYear() - new Date(client.dateOfBirth).getFullYear()
+                        : null;
+                      const ageOk = age != null ? age >= 25 && age <= 45 : null;
+                      const allOk = weightOk && heightOk && (ageOk ?? true);
+                      return (
+                        <>
+                          <div className={cn("flex items-center gap-2 text-[11px] font-semibold px-2 py-1 rounded-lg",
+                            weightOk ? "text-green-700 bg-green-50" : "text-red-600 bg-red-50")}>
+                            {weightOk ? "✓" : "✗"} Cân nặng ≥ 70kg
+                            <span className="font-normal ml-auto">{client.currentWeight}kg</span>
+                          </div>
+                          <div className={cn("flex items-center gap-2 text-[11px] font-semibold px-2 py-1 rounded-lg",
+                            heightOk ? "text-green-700 bg-green-50" : "text-red-600 bg-red-50")}>
+                            {heightOk ? "✓" : "✗"} Chiều cao &lt; 160cm
+                            <span className="font-normal ml-auto">{client.height}cm</span>
+                          </div>
+                          {age != null && (
+                            <div className={cn("flex items-center gap-2 text-[11px] font-semibold px-2 py-1 rounded-lg",
+                              ageOk ? "text-green-700 bg-green-50" : "text-red-600 bg-red-50")}>
+                              {ageOk ? "✓" : "✗"} Tuổi 25–45
+                              <span className="font-normal ml-auto">{age} tuổi</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 text-[11px] font-semibold px-2 py-1 rounded-lg text-green-700 bg-green-50">
+                            ✓ Giới tính: Nữ
+                          </div>
+                          <div className={cn("mt-1 px-3 py-2 rounded-lg text-[11px] font-bold text-center",
+                            allOk ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                            {allOk ? "✓ Đủ điều kiện KOC" : "✗ Không đủ điều kiện KOC"}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Start weight input */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-gray-700">Cân nặng buổi đầu (kg) *</Label>
                   <input
                     type="number"
                     step="0.1"
@@ -2145,25 +2280,51 @@ export function ClientDetailPage({
                     placeholder="VD: 78.5"
                     value={addPkgStartWeight}
                     onChange={(e) => setAddPkgStartWeight(e.target.value)}
-                    className="w-full h-9 rounded-xl border border-amber-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    className="w-full h-9 rounded-xl border border-amber-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   />
-                  <p className="text-[10px] text-amber-600">FM sẽ xác nhận cân nặng này trước khi tính hoa hồng</p>
                 </div>
+
+                {/* FM confirmation toggle */}
+                <button
+                  type="button"
+                  onClick={() => setAddPkgFMConfirmed(v => !v)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-all",
+                    addPkgFMConfirmed
+                      ? "bg-green-100 border-green-400 text-green-700"
+                      : "bg-white border-gray-200 text-gray-500 hover:border-amber-300"
+                  )}
+                >
+                  <span className={cn("w-4 h-4 rounded flex items-center justify-center text-white text-[10px] flex-shrink-0",
+                    addPkgFMConfirmed ? "bg-green-500" : "bg-gray-300")}>
+                    {addPkgFMConfirmed ? "✓" : ""}
+                  </span>
+                  FM đã xác nhận cân nặng đầu
+                </button>
+
+                {/* Commission preview */}
                 {addPkgStartWeight && (
-                  <div className="text-[11px] text-amber-700 space-y-0.5">
-                    <p className="font-semibold">Hoa hồng ước tính (nếu giảm được):</p>
-                    <p>• Giảm 3–4.9kg: 20,000đ/buổi × 60 = 1,200,000đ</p>
-                    <p>• Giảm 5–7.9kg: 25,000đ/buổi × 60 = 1,500,000đ</p>
-                    <p>• Giảm 8–9.9kg: 35,000đ/buổi × 60 = 2,100,000đ</p>
+                  <div className="border border-amber-200 rounded-xl p-3 space-y-1">
+                    <p className="text-[11px] font-bold text-amber-700">Hoa hồng PT ước tính (60 buổi):</p>
+                    <div className="grid grid-cols-3 gap-1 text-[10px] text-amber-600">
+                      <div className="bg-amber-50 rounded-lg p-2 text-center">
+                        <p>Giảm 3–4.9kg</p>
+                        <p className="font-bold text-amber-700">1,200,000đ</p>
+                        <p className="text-[9px]">20k/buổi</p>
+                      </div>
+                      <div className="bg-amber-50 rounded-lg p-2 text-center">
+                        <p>Giảm 5–7.9kg</p>
+                        <p className="font-bold text-amber-700">1,500,000đ</p>
+                        <p className="text-[9px]">25k/buổi</p>
+                      </div>
+                      <div className="bg-amber-50 rounded-lg p-2 text-center">
+                        <p>Giảm 8–9.9kg</p>
+                        <p className="font-bold text-amber-700">2,100,000đ</p>
+                        <p className="text-[9px]">35k/buổi</p>
+                      </div>
+                    </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {addPkgContractType === "KOL" && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                <p className="text-xs font-bold text-blue-700 mb-1">Hoa hồng KOL</p>
-                <p className="text-[11px] text-blue-600">60,000đ/buổi — tính theo tổng buổi đã dạy (không giới hạn điều kiện)</p>
               </div>
             )}
 
@@ -2180,7 +2341,7 @@ export function ClientDetailPage({
             {addPkgError && <p className="text-sm text-[#f15b5c]">{addPkgError}</p>}
             <Button
               type="button"
-              disabled={!addPkgName || addPkgLoading || (addPkgContractType === "KOC" && !addPkgStartWeight)}
+              disabled={!addPkgName || addPkgLoading || (addPkgName === "KOC" && !addPkgStartWeight)}
               onClick={handleAddPackage}
               className="w-full h-10 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
               style={{ backgroundColor: "#f15b5c" }}

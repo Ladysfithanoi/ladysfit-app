@@ -82,6 +82,17 @@ export const PACKAGES: Record<string, PackageDef> = {
     conditions: "Chỉ dành cho khách hàng đã từng mua sản phẩm tại LDF.",
     canBuyMultiple: true,
   },
+  KOC: {
+    name: "KOC",
+    stage: "1",
+    stageLabel: "Lộ trình tặng - Hợp đồng KOC",
+    sessions: 60,
+    durationDays: 60,
+    price: 0,
+    commitment: "Cam kết giảm 3–9.9kg trong 60 buổi / 60 ngày",
+    conditions: "Nữ, tuổi 25–45, cân nặng ≥ 70kg, chiều cao < 160cm. FM xác nhận cân đầu & cuối.",
+    canBuyMultiple: false,
+  },
 };
 
 export function formatPrice(n: number) {
