@@ -101,7 +101,7 @@ type ComplaintItem = {
 
 type ChecklistNotif = {
   id:        string;
-  type:      "REMINDER" | "DAILY_REPORT";
+  type:      "REMINDER" | "DAILY_REPORT" | "LEAD_REMINDER";
   message:   string;
   isRead:    boolean;
   date:      string;
@@ -827,16 +827,20 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         key={n.id}
                         className={cn(
                           "flex items-start gap-3 px-4 py-3 transition-colors",
-                          !n.isRead && (n.type === "REMINDER" ? "bg-orange-50/60" : "bg-blue-50/40"),
+                          !n.isRead && (
+                            n.type === "REMINDER"      ? "bg-orange-50/60" :
+                            n.type === "LEAD_REMINDER" ? "bg-amber-50/60"  : "bg-blue-50/40"
+                          ),
                           n.type === "DAILY_REPORT" && "cursor-pointer hover:bg-blue-50/60"
                         )}
                         onClick={() => n.type === "DAILY_REPORT" ? openReportModal(n) : undefined}
                       >
                         <div className={cn(
                           "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs",
-                          n.type === "REMINDER"     ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
+                          n.type === "REMINDER"      ? "bg-orange-100 text-orange-600" :
+                          n.type === "LEAD_REMINDER" ? "bg-amber-100 text-amber-600"  : "bg-blue-100 text-blue-600"
                         )}>
-                          {n.type === "REMINDER" ? "⏰" : "📋"}
+                          {n.type === "REMINDER" ? "⏰" : n.type === "LEAD_REMINDER" ? "⚠️" : "📋"}
                         </div>
                         <div className="flex-1 min-w-0">
                           {n.type === "REMINDER" ? (
@@ -860,6 +864,27 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                               </p>
                               <p className="text-[10px] text-orange-400 mt-0.5 font-semibold">Nhấn để điền ngay →</p>
                             </a>
+                          ) : n.type === "LEAD_REMINDER" ? (
+                            <a
+                              href="/dashboard/setup"
+                              onClick={() => {
+                                setChecklistBellOpen(false);
+                                if (!n.isRead) {
+                                  fetch("/api/notifications/checklist", {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ ids: [n.id] }),
+                                  });
+                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                                  setChecklistUnread((c) => Math.max(0, c - 1));
+                                }
+                              }}
+                            >
+                              <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-amber-700" : "font-semibold text-gray-500")}>
+                                {n.message}
+                              </p>
+                              <p className="text-[10px] text-amber-500 mt-0.5 font-semibold">Nhấn để cập nhật ngay →</p>
+                            </a>
                           ) : (
                             <>
                               <p className={cn("text-xs", !n.isRead ? "font-bold text-blue-700" : "font-semibold text-gray-500")}>
@@ -880,7 +905,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         {!n.isRead && (
                           <div className={cn(
                             "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
-                            n.type === "REMINDER" ? "bg-orange-500" : "bg-blue-500"
+                            n.type === "REMINDER"      ? "bg-orange-500" :
+                            n.type === "LEAD_REMINDER" ? "bg-amber-500"  : "bg-blue-500"
                           )} />
                         )}
                       </div>

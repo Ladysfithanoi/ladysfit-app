@@ -55,6 +55,25 @@ function parseNoteEntries(raw: string): NoteEntry[] {
     });
 }
 
+function getLastNoteDate(notes: string): Date | null {
+  const lines = notes.split("\n").reverse();
+  for (const line of lines) {
+    const m = /^-?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(line.trim());
+    if (m) {
+      const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+
+function needsReminder(notes: string | null | undefined): boolean {
+  if (!notes?.trim()) return true;
+  const last = getLastNoteDate(notes);
+  if (!last) return true;
+  return (Date.now() - last.getTime()) > 3 * 24 * 60 * 60 * 1000;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function LeadsTab({
@@ -78,6 +97,9 @@ export function LeadsTab({
   const [carryOverDialogOpen, setCarryOverDialogOpen] = useState(false);
   const [carrying, setCarrying]             = useState(false);
   const [careNotesLead, setCareNotesLead]   = useState<SalesLead | null>(null);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen]     = useState(false);
+  const [bulkSending, setBulkSending]             = useState(false);
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
@@ -175,6 +197,48 @@ export function LeadsTab({
     }
   }
 
+  async function handleSendReminder(lead: SalesLead) {
+    setSendingReminderId(lead.id);
+    try {
+      const res = await fetch("/api/notifications/lead-reminder", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ assignedPTId: lead.assignedPTId, customerName: lead.customerName }),
+      });
+      if (res.ok) {
+        const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
+        setSuccessToast(`Đã gửi nhắc nhở đến ${ptName}`);
+        setTimeout(() => setSuccessToast(""), 3000);
+      }
+    } finally {
+      setSendingReminderId(null);
+    }
+  }
+
+  async function handleBulkReminder() {
+    setBulkSending(true);
+    try {
+      const entries = Object.values(visibleGrouped)
+        .flat()
+        .filter(l => l.assignedPTId !== currentUserId && needsReminder(l.notes))
+        .map(l => ({ assignedPTId: l.assignedPTId, customerName: l.customerName }));
+
+      const res = await fetch("/api/notifications/lead-reminder", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ entries }),
+      });
+      if (res.ok) {
+        const { sent } = await res.json() as { sent: number };
+        setBulkConfirmOpen(false);
+        setSuccessToast(`Đã gửi ${sent} nhắc nhở`);
+        setTimeout(() => setSuccessToast(""), 4000);
+      }
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
   function togglePT(ptId: string) {
     setCollapsedPTs(prev => {
       const next = new Set(prev);
@@ -216,6 +280,16 @@ export function LeadsTab({
   const nextYear     = month === 12 ? year + 1 : year;
   const carryableLeads = leads.filter(l => l.status === "TAKECARE" || l.status === "DE");
 
+  // Leads that need a reminder (FM can send) — excludes FM's own leads
+  const reminderLeads = isFM
+    ? Object.values(visibleGrouped).flat().filter(l =>
+        l.assignedPTId !== currentUserId && needsReminder(l.notes)
+      )
+    : [];
+
+  // Count unique PTs for bulk confirm message
+  const reminderPTCount = new Set(reminderLeads.map(l => l.assignedPTId)).size;
+
   return (
     <div>
       {/* Branch summary */}
@@ -236,7 +310,16 @@ export function LeadsTab({
 
       {/* Action bar */}
       {(isPT || isFM) && (
-        <div className="flex justify-end gap-3 mb-4">
+        <div className="flex flex-wrap justify-end gap-3 mb-4">
+          {/* Bulk remind — FM only */}
+          {isFM && reminderLeads.length > 0 && (
+            <button
+              onClick={() => setBulkConfirmOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-amber-400 text-amber-600 hover:bg-amber-50 transition-colors"
+            >
+              ⚠️ Nhắc tất cả PT ({reminderLeads.length})
+            </button>
+          )}
           {isFM && carryableLeads.length > 0 && (
             <button
               onClick={() => setCarryOverDialogOpen(true)}
@@ -268,11 +351,11 @@ export function LeadsTab({
       ) : (
         <div className="space-y-6">
           {Object.entries(visibleGrouped).map(([ptId, ptLeads]) => {
-            const pt          = ptLeads[0].assignedPT;
-            const collapsed   = collapsedPTs.has(ptId);
-            const ptRevenue   = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
+            const pt           = ptLeads[0].assignedPT;
+            const collapsed    = collapsedPTs.has(ptId);
+            const ptRevenue    = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
             const ptRegistered = ptLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length;
-            const isFMGroup   = ptId === currentUserId && isFM;
+            const isFMGroup    = ptId === currentUserId && isFM;
 
             return (
               <div key={ptId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -329,88 +412,128 @@ export function LeadsTab({
                         </tr>
                       </thead>
                       <tbody>
-                        {ptLeads.map((l, idx) => (
-                          <tr key={l.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 even:bg-[#fafafa] divide-x divide-gray-100">
-                            <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-inherit">{idx + 1}</td>
-                            <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-inherit">
-                              <span>{l.customerName}</span>
-                              {l.notes?.includes("[Chuyển từ tháng") && (
-                                <span className="ml-1.5 text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                  🔄 Chuyển tháng
-                                </span>
-                              )}
-                              {l.consultationId && (
-                                <a
-                                  href={`/dashboard/consultation/${l.consultationId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="ml-1.5 text-[10px] font-semibold text-blue-500 hover:text-blue-700 whitespace-nowrap"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  📋 Tư vấn
-                                </a>
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
+                        {ptLeads.map((l, idx) => {
+                          const isOwnLead  = l.assignedPTId === currentUserId;
+                          const warnRow    = isPT && isOwnLead && !l.notes?.trim();
+                          const warnBanner = needsReminder(l.notes);
 
-                            {/* Chăm sóc — clickable */}
-                            <td className="px-3 py-2.5 max-w-[140px]">
-                              <button
-                                onClick={() => setCareNotesLead(l)}
-                                className="text-left w-full group cursor-pointer"
-                              >
-                                {l.notes ? (
-                                  <span className="block max-w-[120px] truncate text-gray-500 group-hover:text-[#f15b5c] transition-colors">
-                                    {l.notes.length > 30 ? l.notes.slice(0, 30) + "…" : l.notes}
+                          return (
+                            <tr
+                              key={l.id}
+                              className={cn(
+                                "border-b border-gray-100 last:border-0 hover:bg-gray-50/50 even:bg-[#fafafa] divide-x divide-gray-100",
+                                warnRow && "border-l-[3px] border-l-amber-400"
+                              )}
+                            >
+                              <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-inherit">{idx + 1}</td>
+
+                              {/* Customer name + badges */}
+                              <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-inherit">
+                                <span>{l.customerName}</span>
+                                {warnRow && (
+                                  <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                    Cần cập nhật
                                   </span>
-                                ) : (
-                                  <span className="text-gray-300 group-hover:text-[#f15b5c]/60 transition-colors">—</span>
                                 )}
-                              </button>
-                            </td>
+                                {l.notes?.includes("[Chuyển từ tháng") && (
+                                  <span className="ml-1.5 text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                    🔄 Chuyển tháng
+                                  </span>
+                                )}
+                                {l.consultationId && (
+                                  <a
+                                    href={`/dashboard/consultation/${l.consultationId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-1.5 text-[10px] font-semibold text-blue-500 hover:text-blue-700 whitespace-nowrap"
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    📋 Tư vấn
+                                  </a>
+                                )}
+                              </td>
 
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.forecast ?? "—"}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap">
-                              <span className={cn("px-2 py-0.5 rounded-full font-bold", LEAD_STATUS_STYLE[l.status])}>
-                                {LEAD_STATUS_LABEL[l.status]}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.packageRegistered ?? "—"}</td>
-                            <td className="px-3 py-2.5 font-semibold text-emerald-600 whitespace-nowrap">
-                              {l.actualRevenue != null ? l.actualRevenue.toFixed(1) : "—"}
-                            </td>
-                            <td className="px-3 py-2.5 text-orange-500 whitespace-nowrap">
-                              {l.remainingPayment != null ? l.remainingPayment.toFixed(1) : "—"}
-                            </td>
-                            {isFitpartner && (
-                              <td className="px-3 py-2.5 font-semibold text-purple-600 whitespace-nowrap">
-                                {l.fitpartnerRevenue != null ? l.fitpartnerRevenue.toFixed(1) : "—"}
+                              <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
+
+                              {/* Chăm sóc — clickable with warning indicator */}
+                              <td className="px-3 py-2.5 max-w-[140px]">
+                                <button
+                                  onClick={() => setCareNotesLead(l)}
+                                  className="text-left w-full group cursor-pointer"
+                                >
+                                  {l.notes?.trim() ? (
+                                    <span className="flex items-center gap-1">
+                                      <span className="block max-w-[100px] truncate text-gray-500 group-hover:text-[#f15b5c] transition-colors">
+                                        {l.notes.length > 25 ? l.notes.slice(0, 25) + "…" : l.notes}
+                                      </span>
+                                      {warnBanner && <span className="flex-shrink-0 text-amber-500">⚠️</span>}
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-amber-500 group-hover:text-amber-600 transition-colors">
+                                      <span>⚠️</span>
+                                      <span className="text-[10px] font-semibold">Chưa cập nhật</span>
+                                    </span>
+                                  )}
+                                </button>
                               </td>
-                            )}
-                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
-                              {l.signDate ? fmtDate(l.signDate) : "—"}
-                            </td>
-                            <td className="px-3 py-2.5 text-gray-400 max-w-[120px]">
-                              <p className="truncate" title={l.remark ?? ""}>{l.remark ?? "—"}</p>
-                            </td>
-                            {canMutate && (
+
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.forecast ?? "—"}</td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
-                                {(isFM || l.assignedPTId === currentUserId) && (
-                                  <div className="flex gap-2">
-                                    <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={() => handleDelete(l.id, l.customerName)} className="text-gray-400 hover:text-red-500">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
+                                <span className={cn("px-2 py-0.5 rounded-full font-bold", LEAD_STATUS_STYLE[l.status])}>
+                                  {LEAD_STATUS_LABEL[l.status]}
+                                </span>
                               </td>
-                            )}
-                          </tr>
-                        ))}
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.packageRegistered ?? "—"}</td>
+                              <td className="px-3 py-2.5 font-semibold text-emerald-600 whitespace-nowrap">
+                                {l.actualRevenue != null ? l.actualRevenue.toFixed(1) : "—"}
+                              </td>
+                              <td className="px-3 py-2.5 text-orange-500 whitespace-nowrap">
+                                {l.remainingPayment != null ? l.remainingPayment.toFixed(1) : "—"}
+                              </td>
+                              {isFitpartner && (
+                                <td className="px-3 py-2.5 font-semibold text-purple-600 whitespace-nowrap">
+                                  {l.fitpartnerRevenue != null ? l.fitpartnerRevenue.toFixed(1) : "—"}
+                                </td>
+                              )}
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                                {l.signDate ? fmtDate(l.signDate) : "—"}
+                              </td>
+                              <td className="px-3 py-2.5 text-gray-400 max-w-[120px]">
+                                <p className="truncate" title={l.remark ?? ""}>{l.remark ?? "—"}</p>
+                              </td>
+
+                              {/* Actions */}
+                              {canMutate && (
+                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    {(isFM || isOwnLead) && (
+                                      <>
+                                        <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button onClick={() => handleDelete(l.id, l.customerName)} className="text-gray-400 hover:text-red-500">
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                    {/* Nhắc PT — FM only, not for FM's own leads */}
+                                    {isFM && !isOwnLead && warnBanner && (
+                                      <button
+                                        onClick={() => handleSendReminder(l)}
+                                        disabled={sendingReminderId === l.id}
+                                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border border-amber-400 text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                                      >
+                                        {sendingReminderId === l.id ? "..." : "🔔 Nhắc PT"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="bg-gray-50/80 font-bold">
@@ -475,6 +598,18 @@ export function LeadsTab({
         cancelLabel="Hủy"
         onConfirm={handleCarryOver}
         loading={carrying}
+      />
+
+      {/* Bulk reminder confirm dialog */}
+      <AlertDialog
+        open={bulkConfirmOpen}
+        onClose={() => { if (!bulkSending) setBulkConfirmOpen(false); }}
+        title="Nhắc nhở chăm sóc khách hàng"
+        description={`Sẽ gửi ${reminderLeads.length} nhắc nhở đến ${reminderPTCount} PT chưa cập nhật. Tiếp tục?`}
+        confirmLabel="Gửi nhắc nhở"
+        cancelLabel="Hủy"
+        onConfirm={handleBulkReminder}
+        loading={bulkSending}
       />
 
       {/* Success toast */}
@@ -737,19 +872,15 @@ function CareNotesPopup({
         @media (min-width: 640px) { .care-sheet { animation: _fadeZoom 0.2s ease-out; } }
       `}</style>
 
-      {/* Overlay */}
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 
-      {/* Bottom sheet (mobile) / centered modal (desktop) */}
       <div className="fixed inset-x-0 bottom-0 z-50 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
         <div className="care-sheet bg-white w-full sm:max-w-[500px] rounded-t-2xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl">
 
-          {/* Drag handle — mobile only */}
           <div className="sm:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-10 h-1 rounded-full bg-gray-200" />
           </div>
 
-          {/* Header */}
           <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between flex-shrink-0">
             <div className="pr-4 min-w-0">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Lịch sử chăm sóc</p>
@@ -765,12 +896,9 @@ function CareNotesPopup({
             </button>
           </div>
 
-          {/* Timeline */}
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {entries.length === 0 ? (
-              <p className="text-sm text-gray-400 italic text-center py-8">
-                Chưa có ghi chú chăm sóc nào
-              </p>
+              <p className="text-sm text-gray-400 italic text-center py-8">Chưa có ghi chú chăm sóc nào</p>
             ) : (
               <div className="space-y-4">
                 {entries.map((e, i) => (
@@ -791,7 +919,6 @@ function CareNotesPopup({
             )}
           </div>
 
-          {/* Add note form */}
           {canEdit && (
             <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-gray-50/60">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Thêm ghi chú</p>

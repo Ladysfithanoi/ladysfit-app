@@ -864,6 +864,7 @@ model ChecklistItem {
 enum ChecklistNotifType {
   REMINDER
   DAILY_REPORT
+  LEAD_REMINDER
 }
 
 model ChecklistNotification {
