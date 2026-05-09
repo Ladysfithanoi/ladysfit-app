@@ -216,8 +216,13 @@ export function LeadsTab({
         const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
         showToast(`Đã gửi nhắc nhở đến ${ptName} về KH ${lead.customerName}`);
       } else {
-        const data = await res.json().catch(() => ({})) as { error?: string; detail?: string };
-        showToast(data.error === "Forbidden" ? "Không có quyền gửi nhắc nhở" : "Gửi nhắc nhở thất bại, thử lại!", true);
+        const data = await res.json().catch(() => ({})) as { error?: string; message?: string; code?: string; role?: string };
+        const msg = data.error === "Forbidden"
+          ? `Không có quyền (role: ${data.role ?? "?"})`
+          : data.message
+          ? `Lỗi: ${data.message}`
+          : `Lỗi ${res.status}`;
+        showToast(msg, true);
         console.error("[handleSendReminder]", res.status, data);
       }
     } catch {
@@ -245,8 +250,9 @@ export function LeadsTab({
         setBulkConfirmOpen(false);
         showToast(`Đã gửi ${sent} nhắc nhở đến ${ptCount} PT`);
       } else {
-        const data = await res.json().catch(() => ({})) as { error?: string; detail?: string };
-        showToast("Gửi nhắc nhở thất bại, thử lại!", true);
+        const data = await res.json().catch(() => ({})) as { error?: string; message?: string; code?: string; role?: string };
+        const msg = data.message ? `Lỗi: ${data.message}` : `Lỗi ${res.status}`;
+        showToast(msg, true);
         console.error("[handleBulkReminder]", res.status, data);
       }
     } catch {
