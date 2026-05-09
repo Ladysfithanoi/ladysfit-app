@@ -94,6 +94,7 @@ export function LeadsTab({
   const [pendingDelete, setPendingDelete]   = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting]             = useState(false);
   const [successToast, setSuccessToast]     = useState("");
+  const [toastIsError, setToastIsError]     = useState(false);
   const [carryOverDialogOpen, setCarryOverDialogOpen] = useState(false);
   const [carrying, setCarrying]             = useState(false);
   const [careNotesLead, setCareNotesLead]   = useState<SalesLead | null>(null);
@@ -197,6 +198,12 @@ export function LeadsTab({
     }
   }
 
+  function showToast(msg: string, isError = false) {
+    setToastIsError(isError);
+    setSuccessToast(msg);
+    setTimeout(() => setSuccessToast(""), isError ? 4000 : 3000);
+  }
+
   async function handleSendReminder(lead: SalesLead) {
     setSendingReminderId(lead.id);
     try {
@@ -207,9 +214,12 @@ export function LeadsTab({
       });
       if (res.ok) {
         const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
-        setSuccessToast(`Đã gửi nhắc nhở đến ${ptName}`);
-        setTimeout(() => setSuccessToast(""), 3000);
+        showToast(`Đã gửi nhắc nhở đến ${ptName} về KH ${lead.customerName}`);
+      } else {
+        showToast("Gửi nhắc nhở thất bại, thử lại!", true);
       }
+    } catch {
+      showToast("Lỗi kết nối!", true);
     } finally {
       setSendingReminderId(null);
     }
@@ -229,11 +239,14 @@ export function LeadsTab({
         body:    JSON.stringify({ entries }),
       });
       if (res.ok) {
-        const { sent } = await res.json() as { sent: number };
+        const { sent, ptCount } = await res.json() as { sent: number; ptCount: number };
         setBulkConfirmOpen(false);
-        setSuccessToast(`Đã gửi ${sent} nhắc nhở`);
-        setTimeout(() => setSuccessToast(""), 4000);
+        showToast(`Đã gửi ${sent} nhắc nhở đến ${ptCount} PT`);
+      } else {
+        showToast("Gửi nhắc nhở thất bại, thử lại!", true);
       }
+    } catch {
+      showToast("Lỗi kết nối!", true);
     } finally {
       setBulkSending(false);
     }
@@ -612,9 +625,12 @@ export function LeadsTab({
         loading={bulkSending}
       />
 
-      {/* Success toast */}
+      {/* Toast */}
       {successToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
+        <div className={cn(
+          "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg",
+          toastIsError ? "bg-red-600" : "bg-gray-900"
+        )}>
           {successToast}
         </div>
       )}

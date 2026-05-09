@@ -39,7 +39,8 @@ export async function POST(req: Request) {
         date:    now,
       })),
     });
-    return NextResponse.json({ sent: entries.length });
+    const ptCount = new Set(entries.map(e => e.assignedPTId)).size;
+    return NextResponse.json({ sent: entries.length, ptCount });
   }
 
   // Single

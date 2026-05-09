@@ -330,17 +330,15 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   async function openChecklistBell() {
     setChecklistBellOpen((v) => !v);
-    if (!checklistLoaded) {
-      try {
-        const res = await fetch("/api/notifications/checklist");
-        if (res.ok) {
-          const data = await res.json();
-          setChecklistNotifs(data.notifications ?? []);
-          setChecklistUnread(data.unreadCount ?? 0);
-          setChecklistLoaded(true);
-        }
-      } catch { /* ignore */ }
-    }
+    try {
+      const res = await fetch("/api/notifications/checklist");
+      if (res.ok) {
+        const data = await res.json();
+        setChecklistNotifs(data.notifications ?? []);
+        setChecklistUnread(data.unreadCount ?? 0);
+        setChecklistLoaded(true);
+      }
+    } catch { /* ignore */ }
   }
 
   async function markChecklistRead() {
