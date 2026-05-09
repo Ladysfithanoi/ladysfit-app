@@ -82,6 +82,7 @@ function fmRate(revenue: number)  { return FM_TIERS.find(t => revenue >= t.min)!
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
 export async function GET(req: Request) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "FM") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -97,6 +98,7 @@ export async function GET(req: Request) {
   }
 
   const branchFilter = branchId ? [branchId] : managedBranchIds;
+  console.log("[salary/GET] branchFilter:", branchFilter, "month:", month, "year:", year);
 
   const records = await prisma.salaryRecord.findMany({
     where: { branchId: { in: branchFilter }, month, year },
@@ -104,6 +106,7 @@ export async function GET(req: Request) {
     orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
   });
 
+  console.log("[salary/GET] records found:", records.length);
   if (records.length === 0) return NextResponse.json(records);
 
   // Fresh branch revenue (VND) per branchId — used for FM commission
@@ -184,7 +187,14 @@ export async function GET(req: Request) {
     return { ...refreshed, kocCommission, kolCommission };
   }));
 
+  console.log("[salary/GET] returning", updated.length, "records");
   return NextResponse.json(updated);
+  } catch (error: unknown) {
+    const e = error as { message?: string; stack?: string; code?: string };
+    console.error("=== Salary GET error ===", e.message);
+    console.error("Stack:", e.stack);
+    return NextResponse.json({ error: e.message, code: e.code }, { status: 500 });
+  }
 }
 
 // ── POST — generate salary records ────────────────────────────────────────
