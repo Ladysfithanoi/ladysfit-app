@@ -24,6 +24,8 @@ type SalaryRecord = {
   googleBonus: number;
   renewBonus: number;
   fixedAllowances: number;
+  kocCommission: number;
+  kolCommission: number;
   totalSalary: number;
   advancePaid: number;
   remainingPayment: number;
@@ -410,7 +412,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Thâm niên","Doanh số","% HH","Tiền HH","Buổi dạy","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương CB","Thâm niên","Doanh số","% HH","Tiền HH","Buổi dạy","KOC","KOL","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -437,6 +439,16 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                               <span>{r.showsL1L2Loyal}L1/L2 + {r.showsL3L4L5}L3+</span>
                               <span className="text-[10px] text-gray-400">{vnd(r.showPay)}</span>
                             </span>
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {(r.kocCommission ?? 0) > 0
+                              ? <span className="font-semibold text-amber-700">{vnd(r.kocCommission)}</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {(r.kolCommission ?? 0) > 0
+                              ? <span className="font-semibold text-blue-700">{vnd(r.kolCommission)}</span>
+                              : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.goalBonus)}</td>
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
@@ -467,12 +479,12 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                         </tr>
                         {editingId === r.id && (
-                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
+                          <EditRow colSpan={17} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
                             onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
                         )}
                         {expandedIds.has(r.id) && (
                           <tr>
-                            <td colSpan={15} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
+                            <td colSpan={17} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
                               <SessionDetailTable
                                 ptId={r.user.id}
                                 ptName={r.user.name ?? r.user.email}
@@ -577,6 +589,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </div>
             </div>
           )}
+
+          {/* FM edit row colSpan placeholder — FM table uses 15 cols */}
 
           {/* FM table */}
           {fmRecord && (

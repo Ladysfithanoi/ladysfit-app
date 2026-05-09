@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet, BarChart2, Settings } from "lucide-react";
+import { Wallet, BarChart2, Settings, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SalaryTableTab } from "./salary-table-tab";
 import { SalaryConfigTab } from "./salary-config-tab";
 import { PtSalaryView } from "./pt-salary-view";
+import { KOCFMPanel } from "./koc-fm-panel";
 
 export type Branch = { id: string; name: string };
 export type StaffMember = { id: string; name: string | null; email: string; branchId: string | null; role: string };
@@ -21,6 +22,7 @@ type Props = {
 
 const FM_TABS = [
   { key: "table",  label: "Bảng lương tháng", icon: BarChart2 },
+  { key: "koc",    label: "Hợp đồng KOC",      icon: Star },
   { key: "config", label: "Cấu hình lương",    icon: Settings },
 ] as const;
 type FMTab = typeof FM_TABS[number]["key"];
@@ -75,6 +77,7 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
                 currentFMName={currentUserName}
               />
             )}
+            {tab === "koc" && <KOCFMPanel />}
             {tab === "config" && (
               <SalaryConfigTab
                 branches={branches}

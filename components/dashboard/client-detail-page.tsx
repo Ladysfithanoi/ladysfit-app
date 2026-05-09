@@ -266,6 +266,8 @@ export function ClientDetailPage({
   const [pkgExtensionInputs, setPkgExtensionInputs] = useState<Record<string, string>>({});
   const [savingReservedExtId, setSavingReservedExtId] = useState<string | null>(null);
   const [addPkgContractCode, setAddPkgContractCode] = useState("");
+  const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL">("NORMAL");
+  const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
@@ -568,6 +570,8 @@ export function ClientDetailPage({
           durationDays: def.durationDays,
           price: def.discountedPrice ?? def.price,
           contractCode: addPkgContractCode || undefined,
+          contractType: addPkgContractType,
+          startWeight: addPkgContractType === "KOC" ? parseFloat(addPkgStartWeight) || undefined : undefined,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
@@ -591,6 +595,8 @@ export function ClientDetailPage({
       }]);
       setAddPkgName("");
       setAddPkgContractCode("");
+      setAddPkgContractType("NORMAL");
+      setAddPkgStartWeight("");
     } catch (err) {
       setAddPkgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -2089,6 +2095,79 @@ export function ClientDetailPage({
               </div>
             )}
             <div className="space-y-1">
+              <Label className="text-xs font-semibold text-gray-600">Loại hợp đồng</Label>
+              <div className="flex gap-2">
+                {(["NORMAL", "KOC", "KOL"] as const).map(ct => (
+                  <button
+                    key={ct}
+                    type="button"
+                    onClick={() => setAddPkgContractType(ct)}
+                    className={cn(
+                      "flex-1 h-9 rounded-xl text-xs font-bold border transition-all",
+                      addPkgContractType === ct
+                        ? ct === "KOC" ? "bg-amber-100 border-amber-400 text-amber-700"
+                          : ct === "KOL" ? "bg-blue-100 border-blue-400 text-blue-700"
+                          : "bg-gray-200 border-gray-400 text-gray-700"
+                        : "border-gray-200 text-gray-400 hover:border-gray-300"
+                    )}
+                  >
+                    {ct}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {addPkgContractType === "KOC" && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-bold text-amber-700">Điều kiện KOC</p>
+                <div className="grid grid-cols-2 gap-1 text-[11px]">
+                  <span className={cn("font-semibold", client.currentWeight >= 70 ? "text-green-600" : "text-red-500")}>
+                    {client.currentWeight >= 70 ? "✓" : "✗"} Cân nặng ≥ 70kg ({client.currentWeight}kg)
+                  </span>
+                  <span className={cn("font-semibold", client.height < 160 ? "text-green-600" : "text-red-500")}>
+                    {client.height < 160 ? "✓" : "✗"} Chiều cao &lt; 160cm ({client.height}cm)
+                  </span>
+                  {client.dateOfBirth && (() => {
+                    const age = new Date().getFullYear() - new Date(client.dateOfBirth).getFullYear();
+                    return (
+                      <span className={cn("font-semibold", age >= 25 && age <= 45 ? "text-green-600" : "text-red-500")}>
+                        {age >= 25 && age <= 45 ? "✓" : "✗"} Tuổi 25–45 ({age} tuổi)
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="space-y-1 pt-1">
+                  <Label className="text-xs font-semibold text-gray-600">Cân nặng buổi đầu (kg)</Label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="VD: 78.5"
+                    value={addPkgStartWeight}
+                    onChange={(e) => setAddPkgStartWeight(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-amber-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <p className="text-[10px] text-amber-600">FM sẽ xác nhận cân nặng này trước khi tính hoa hồng</p>
+                </div>
+                {addPkgStartWeight && (
+                  <div className="text-[11px] text-amber-700 space-y-0.5">
+                    <p className="font-semibold">Hoa hồng ước tính (nếu giảm được):</p>
+                    <p>• Giảm 3–4.9kg: 20,000đ/buổi × 60 = 1,200,000đ</p>
+                    <p>• Giảm 5–7.9kg: 25,000đ/buổi × 60 = 1,500,000đ</p>
+                    <p>• Giảm 8–9.9kg: 35,000đ/buổi × 60 = 2,100,000đ</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {addPkgContractType === "KOL" && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <p className="text-xs font-bold text-blue-700 mb-1">Hoa hồng KOL</p>
+                <p className="text-[11px] text-blue-600">60,000đ/buổi — tính theo tổng buổi đã dạy (không giới hạn điều kiện)</p>
+              </div>
+            )}
+
+            <div className="space-y-1">
               <Label className="text-xs font-semibold text-gray-600">Mã hợp đồng</Label>
               <input
                 type="text"
@@ -2101,7 +2180,7 @@ export function ClientDetailPage({
             {addPkgError && <p className="text-sm text-[#f15b5c]">{addPkgError}</p>}
             <Button
               type="button"
-              disabled={!addPkgName || addPkgLoading}
+              disabled={!addPkgName || addPkgLoading || (addPkgContractType === "KOC" && !addPkgStartWeight)}
               onClick={handleAddPackage}
               className="w-full h-10 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
               style={{ backgroundColor: "#f15b5c" }}

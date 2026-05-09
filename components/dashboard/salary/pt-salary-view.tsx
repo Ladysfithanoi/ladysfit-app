@@ -15,6 +15,8 @@ type SalaryRecord = {
   showPay:              number;
   goalBonus:            number;
   clientsAchievedGoal:  number;
+  kocCommission:        number;
+  kolCommission:        number;
   bhxh:                 number;
   totalSalary:          number;
   advancePaid:          number;
@@ -152,6 +154,20 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
                 <Row
                   label={`Thưởng KH đạt MT (${record.clientsAchievedGoal} KH)`}
                   value={vnd(record.goalBonus)}
+                />
+              )}
+
+              {(record.kocCommission ?? 0) > 0 && (
+                <Row
+                  label="Hoa hồng KOC"
+                  value={vnd(record.kocCommission)}
+                />
+              )}
+
+              {(record.kolCommission ?? 0) > 0 && (
+                <Row
+                  label="Hoa hồng KOL"
+                  value={vnd(record.kolCommission)}
                 />
               )}
 

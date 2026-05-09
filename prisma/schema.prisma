@@ -70,6 +70,7 @@ model User {
   measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
   measurementNotifications MeasurementNotification[]   @relation("PTMeasurementNotifs")
   ptSessionPhotos         SessionPhoto[]               @relation("PTSessionPhotos")
+  kocContracts            KOCContract[]                @relation("PTKOCContracts")
 
   @@map("users")
 }
@@ -156,6 +157,7 @@ model Client {
   bodyMeasurementLogs          BodyMeasurementLog[]
   measurementNotifications     MeasurementNotification[]
   sessionPhotos                SessionPhoto[]              @relation("ClientSessionPhotos")
+  kocContracts                 KOCContract[]
 
   @@map("clients")
 }
@@ -360,6 +362,7 @@ model PackageEnrollment {
   reservedDays   Int                     @default(0)
   extensionDays  Int                     @default(0)
   price          Float
+  contractType   ContractType            @default(NORMAL)
   status         PackageEnrollmentStatus @default(ACTIVE)
   notes          String?                 @db.Text
   createdAt      DateTime                @default(now())
@@ -367,6 +370,7 @@ model PackageEnrollment {
   client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   workoutPrograms WorkoutProgram[]
   sessionPhotos   SessionPhoto[]
+  kocContract     KOCContract?
 
   @@map("package_enrollments")
 }
@@ -376,6 +380,42 @@ enum PackageEnrollmentStatus {
   COMPLETED
   PAUSED
   EXPIRED
+}
+
+enum ContractType {
+  NORMAL
+  KOC
+  KOL
+}
+
+enum KOCContractStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model KOCContract {
+  id                    String            @id @default(cuid())
+  enrollmentId          String            @unique
+  clientId              String
+  ptId                  String
+  startWeight           Float
+  endWeight             Float?
+  startWeightConfirmed  Boolean           @default(false)
+  endWeightConfirmed    Boolean           @default(false)
+  contractDate          DateTime          @default(now())
+  endDate               DateTime
+  status                KOCContractStatus @default(ACTIVE)
+  totalSessions         Int               @default(0)
+  notes                 String?           @db.Text
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  enrollment PackageEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  client     Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pt         User              @relation("PTKOCContracts", fields: [ptId], references: [id])
+
+  @@map("koc_contracts")
 }
 
 enum ConsultationStatus {
@@ -953,6 +993,8 @@ model SalaryRecord {
   fixedAllowances     Float        @default(0)
   bhxh                Float        @default(0)
   totalSalary         Float        @default(0)
+  kocCommission       Float        @default(0)
+  kolCommission       Float        @default(0)
   advancePaid         Float        @default(0)
   remainingPayment    Float        @default(0)
   notes               String?      @db.Text
