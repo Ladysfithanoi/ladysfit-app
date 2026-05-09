@@ -202,12 +202,15 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ branchId: selectedBranchId, month, year, entries: genEntries }),
       });
-      if (res.ok) {
-        const { created, skipped } = await res.json() as { created: number; skipped: number };
-        showToast(`Đã tạo ${created} bảng lương${skipped > 0 ? `, bỏ qua ${skipped} (đã có)` : ""}`);
-        setShowGenModal(false);
-        fetchRecords();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        showToast("Lỗi: " + (err.error ?? `HTTP ${res.status}`));
+        return;
       }
+      const { created, skipped } = await res.json() as { created: number; skipped: number };
+      showToast(`Đã tạo ${created} bảng lương${skipped > 0 ? `, bỏ qua ${skipped} (đã có)` : ""}`);
+      setShowGenModal(false);
+      fetchRecords();
     } finally { setGenerating(false); }
   }
 
