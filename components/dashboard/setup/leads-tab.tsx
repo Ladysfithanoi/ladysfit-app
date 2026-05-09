@@ -30,24 +30,55 @@ type Props = {
 const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
+// ── Note helpers ──────────────────────────────────────────────────────────────
 
-export function LeadsTab({ branchId, branchName, month, year, currentUserId, currentUserName, isPT, isFM, ptList, selectedPTId, selectedSource, selectedStatus }: Props) {
+function todayISO() { return new Date().toISOString().split("T")[0]; }
+
+type NoteEntry = { date: string; text: string };
+
+function parseNoteEntries(raw: string): NoteEntry[] {
+  if (!raw.trim()) return [];
+  return raw
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(line => {
+      const m = /^-?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})\s*[:\s]\s*([\s\S]+)$/.exec(line);
+      if (m) {
+        const parts = m[1].split("/");
+        return {
+          date: `${parts[0].padStart(2,"0")}/${parts[1].padStart(2,"0")}/${parts[2]}`,
+          text: m[2].trim(),
+        };
+      }
+      return { date: "", text: line.replace(/^-\s*/, "") };
+    });
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function LeadsTab({
+  branchId, branchName, month, year,
+  currentUserId, currentUserName,
+  isPT, isFM,
+  ptList, selectedPTId, selectedSource, selectedStatus,
+}: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
-  const [leads, setLeads] = useState<SalesLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<SalesLead | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [collapsedPTs, setCollapsedPTs] = useState<Set<string>>(new Set());
+  const [leads, setLeads]                   = useState<SalesLead[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [formOpen, setFormOpen]             = useState(false);
+  const [editing, setEditing]               = useState<SalesLead | null>(null);
+  const [saving, setSaving]                 = useState(false);
+  const [error, setError]                   = useState("");
+  const [collapsedPTs, setCollapsedPTs]     = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [successToast, setSuccessToast] = useState("");
+  const [pendingDelete, setPendingDelete]   = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting]             = useState(false);
+  const [successToast, setSuccessToast]     = useState("");
   const [carryOverDialogOpen, setCarryOverDialogOpen] = useState(false);
-  const [carrying, setCarrying] = useState(false);
+  const [carrying, setCarrying]             = useState(false);
+  const [careNotesLead, setCareNotesLead]   = useState<SalesLead | null>(null);
 
-  // Form state
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
   const fetchLeads = useCallback(async () => {
@@ -72,10 +103,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
 
   function openEdit(lead: SalesLead) {
     setEditing(lead);
-    setForm({
-      ...lead,
-      signDateStr: lead.signDate ? lead.signDate.split("T")[0] : "",
-    });
+    setForm({ ...lead, signDateStr: lead.signDate ? lead.signDate.split("T")[0] : "" });
     setError("");
     setFormOpen(true);
   }
@@ -87,13 +115,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
     if (!form.assignedPTId) { setError("Vui lòng chọn PT phụ trách"); return; }
     setSaving(true);
     setError("");
-    const body = {
-      branchId,
-      month,
-      year,
-      ...form,
-      signDate: form.signDateStr || null,
-    };
+    const body = { branchId, month, year, ...form, signDate: form.signDateStr || null };
     try {
       const url = editing ? `/api/setup/leads/${editing.id}` : "/api/setup/leads";
       const res = await fetch(url, {
@@ -123,7 +145,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
       const res = await fetch(`/api/setup/leads/${pendingDelete.id}`, { method: "DELETE" });
       if (res.ok) {
         const deletedName = pendingDelete.name;
-        setLeads((prev) => prev.filter((l) => l.id !== pendingDelete.id));
+        setLeads(prev => prev.filter(l => l.id !== pendingDelete.id));
         setDeleteDialogOpen(false);
         setPendingDelete(null);
         setSuccessToast(`Đã xóa lead "${deletedName}" thành công`);
@@ -154,63 +176,57 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
   }
 
   function togglePT(ptId: string) {
-    setCollapsedPTs((prev) => {
+    setCollapsedPTs(prev => {
       const next = new Set(prev);
-      if (next.has(ptId)) next.delete(ptId);
-      else next.add(ptId);
+      if (next.has(ptId)) next.delete(ptId); else next.add(ptId);
       return next;
     });
   }
 
-  // Group leads by PT
   const grouped = leads.reduce<Record<string, SalesLead[]>>((acc, l) => {
     if (!acc[l.assignedPTId]) acc[l.assignedPTId] = [];
     acc[l.assignedPTId].push(l);
     return acc;
   }, {});
 
-  // Apply PT + source + status filters; drop PT groups with 0 matching leads
   const visibleGrouped: Record<string, SalesLead[]> = Object.fromEntries(
     Object.entries(grouped)
       .filter(([ptId]) => !selectedPTId || ptId === selectedPTId)
       .map(([ptId, ptLeads]) => [
         ptId,
         ptLeads.filter(
-          (l) =>
-            (!selectedSource || l.source === selectedSource) &&
-            (!selectedStatus || l.status === selectedStatus)
+          l => (!selectedSource || l.source === selectedSource) &&
+               (!selectedStatus || l.status === selectedStatus)
         ),
       ])
       .filter(([, ptLeads]) => (ptLeads as SalesLead[]).length > 0)
   );
 
-  // Summary cards reflect all active filters
   const visibleLeads = Object.values(visibleGrouped).flat();
   const branchTotal = {
-    revenue: visibleLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0),
+    revenue:           visibleLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0),
     fitpartnerRevenue: visibleLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0),
-    registered: visibleLeads.filter((l) => REGISTERED_STATUSES.includes(l.status)).length,
-    takecare: visibleLeads.filter((l) => l.status === "TAKECARE").length,
-    total: visibleLeads.length,
+    registered:        visibleLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length,
+    takecare:          visibleLeads.filter(l => l.status === "TAKECARE").length,
+    total:             visibleLeads.length,
   };
 
-  const canMutate = isPT || isFM;
-
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const carryableLeads = leads.filter((l) => l.status === "TAKECARE" || l.status === "DE");
+  const canMutate    = isPT || isFM;
+  const nextMonth    = month === 12 ? 1 : month + 1;
+  const nextYear     = month === 12 ? year + 1 : year;
+  const carryableLeads = leads.filter(l => l.status === "TAKECARE" || l.status === "DE");
 
   return (
     <div>
       {/* Branch summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Tổng doanh thu", value: `${branchTotal.revenue.toFixed(1)} tr`, color: "text-emerald-600" },
+          { label: "Tổng doanh thu",    value: `${branchTotal.revenue.toFixed(1)} tr`,           color: "text-emerald-600" },
           ...(isFitpartner ? [{ label: "Doanh thu Fitpartner", value: `${branchTotal.fitpartnerRevenue.toFixed(1)} tr`, color: "text-purple-600" }] : []),
-          { label: "KH đăng ký", value: branchTotal.registered, color: "text-blue-600" },
-          { label: "Đang chăm sóc", value: branchTotal.takecare, color: "text-yellow-600" },
-          { label: "Tổng lead", value: branchTotal.total, color: "text-gray-700" },
-        ].map((s) => (
+          { label: "KH đăng ký",        value: branchTotal.registered,                            color: "text-blue-600" },
+          { label: "Đang chăm sóc",     value: branchTotal.takecare,                              color: "text-yellow-600" },
+          { label: "Tổng lead",         value: branchTotal.total,                                 color: "text-gray-700" },
+        ].map(s => (
           <div key={s.label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
             <p className={cn("text-2xl font-black", s.color)}>{s.value}</p>
             <p className="text-xs font-semibold text-gray-400 mt-0.5">{s.label}</p>
@@ -252,32 +268,38 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
       ) : (
         <div className="space-y-6">
           {Object.entries(visibleGrouped).map(([ptId, ptLeads]) => {
-            const pt = ptLeads[0].assignedPT;
-            const collapsed = collapsedPTs.has(ptId);
-            const ptRevenue = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
-            const ptRegistered = ptLeads.filter((l) => REGISTERED_STATUSES.includes(l.status)).length;
+            const pt          = ptLeads[0].assignedPT;
+            const collapsed   = collapsedPTs.has(ptId);
+            const ptRevenue   = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
+            const ptRegistered = ptLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length;
+            const isFMGroup   = ptId === currentUserId && isFM;
 
             return (
               <div key={ptId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {/* PT header */}
+                {/* Group header */}
                 <button
                   onClick={() => togglePT(ptId)}
                   className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-black text-[#f15b5c]">
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
+                      isFMGroup ? "bg-purple-100" : "bg-[#f15b5c]/10"
+                    )}>
+                      <span className={cn("text-xs font-black", isFMGroup ? "text-purple-600" : "text-[#f15b5c]")}>
                         {(pt.name ?? pt.email)[0].toUpperCase()}
                       </span>
                     </div>
                     <span className="text-sm font-extrabold text-gray-800">
-                      {ptId === currentUserId && isFM ? "FM" : "PT"} {pt.name ?? pt.email}
+                      {isFMGroup ? "FM" : "PT"} {pt.name ?? pt.email}
                     </span>
                     <span className="text-xs text-gray-400">
                       {ptLeads.length} lead · {ptRevenue.toFixed(1)} tr · {ptRegistered} đăng ký
                     </span>
                   </div>
-                  {collapsed ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronUp className="w-4 h-4 text-gray-400" />}
+                  {collapsed
+                    ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                    : <ChevronUp   className="w-4 h-4 text-gray-400" />}
                 </button>
 
                 {!collapsed && (
@@ -323,7 +345,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="ml-1.5 text-[10px] font-semibold text-blue-500 hover:text-blue-700 whitespace-nowrap"
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={e => e.stopPropagation()}
                                 >
                                   📋 Tư vấn
                                 </a>
@@ -332,9 +354,23 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                             <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
-                            <td className="px-3 py-2.5 text-gray-500 max-w-[140px]">
-                              <p className="truncate" title={l.notes ?? ""}>{l.notes ?? "—"}</p>
+
+                            {/* Chăm sóc — clickable */}
+                            <td className="px-3 py-2.5 max-w-[140px]">
+                              <button
+                                onClick={() => setCareNotesLead(l)}
+                                className="text-left w-full group cursor-pointer"
+                              >
+                                {l.notes ? (
+                                  <span className="block max-w-[120px] truncate text-gray-500 group-hover:text-[#f15b5c] transition-colors">
+                                    {l.notes.length > 30 ? l.notes.slice(0, 30) + "…" : l.notes}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300 group-hover:text-[#f15b5c]/60 transition-colors">—</span>
+                                )}
+                              </button>
                             </td>
+
                             <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.forecast ?? "—"}</td>
                             <td className="px-3 py-2.5 whitespace-nowrap">
                               <span className={cn("px-2 py-0.5 rounded-full font-bold", LEAD_STATUS_STYLE[l.status])}>
@@ -408,7 +444,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
       <div className="mt-6 bg-gray-50 rounded-2xl p-4">
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Chú giải</p>
         <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map((s) => (
+          {STATUS_OPTIONS.map(s => (
             <span key={s} className={cn("px-2.5 py-1 rounded-full text-xs font-bold", LEAD_STATUS_STYLE[s])}>
               {s} = {LEAD_STATUS_LABEL[s]}
             </span>
@@ -416,7 +452,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
         </div>
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* Delete dialog */}
       <AlertDialog
         open={deleteDialogOpen}
         onClose={() => { if (!deleting) { setDeleteDialogOpen(false); setPendingDelete(null); } }}
@@ -429,7 +465,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
         loading={deleting}
       />
 
-      {/* Carry-over confirmation dialog */}
+      {/* Carry-over dialog */}
       <AlertDialog
         open={carryOverDialogOpen}
         onClose={() => { if (!carrying) setCarryOverDialogOpen(false); }}
@@ -448,6 +484,19 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
         </div>
       )}
 
+      {/* Care notes popup */}
+      {careNotesLead && (
+        <CareNotesPopup
+          lead={careNotesLead}
+          canEdit={isFM || (isPT && careNotesLead.assignedPTId === currentUserId)}
+          onClose={() => setCareNotesLead(null)}
+          onUpdated={(id, newNotes) => {
+            setLeads(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));
+            setCareNotesLead(prev => prev ? { ...prev, notes: newNotes } : null);
+          }}
+        />
+      )}
+
       {/* Lead form slide-over */}
       {formOpen && (
         <>
@@ -461,7 +510,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               <FormRow label="Khách hàng *">
                 <input
                   value={form.customerName ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
                   className={inputCls}
                   placeholder="Nguyễn Thị B"
                 />
@@ -471,7 +520,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                   <input
                     type="number"
                     value={form.yearOfBirth ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, yearOfBirth: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, yearOfBirth: e.target.value ? parseInt(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="1995"
                   />
@@ -479,7 +528,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                 <FormRow label="Số điện thoại">
                   <input
                     value={form.phone ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     className={inputCls}
                     placeholder="0901234567"
                   />
@@ -488,7 +537,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               {isPT ? (
                 <FormRow label="PT phụ trách">
                   <input
-                    value={ptList.find((p) => p.id === currentUserId)?.name ?? "Bạn"}
+                    value={ptList.find(p => p.id === currentUserId)?.name ?? "Bạn"}
                     readOnly
                     className={`${inputCls} bg-gray-100 text-gray-500 cursor-not-allowed`}
                   />
@@ -497,11 +546,11 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                 <FormRow label="PT phụ trách *">
                   <select
                     value={form.assignedPTId ?? currentUserId}
-                    onChange={(e) => setForm((f) => ({ ...f, assignedPTId: e.target.value }))}
+                    onChange={e => setForm(f => ({ ...f, assignedPTId: e.target.value }))}
                     className={inputCls}
                   >
                     <option value={currentUserId}>{currentUserName} (FM)</option>
-                    {ptList.map((pt) => (
+                    {ptList.map(pt => (
                       <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
                     ))}
                   </select>
@@ -510,11 +559,11 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                 <FormRow label="PT phụ trách *">
                   <select
                     value={form.assignedPTId ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, assignedPTId: e.target.value }))}
+                    onChange={e => setForm(f => ({ ...f, assignedPTId: e.target.value }))}
                     className={inputCls}
                   >
                     <option value="">— Chọn PT —</option>
-                    {ptList.map((pt) => (
+                    {ptList.map(pt => (
                       <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
                     ))}
                   </select>
@@ -523,17 +572,17 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               <FormRow label="Phân nguồn">
                 <select
                   value={form.source ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
                   className={inputCls}
                 >
                   <option value="">— Chọn nguồn —</option>
-                  {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </FormRow>
               <FormRow label="Quá trình chăm sóc">
                 <textarea
                   value={form.notes ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   rows={3}
                   className={`${inputCls} resize-none py-3`}
                   placeholder="Ngày tháng: nội dung..."
@@ -542,7 +591,7 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               <FormRow label="Dự báo gói tập">
                 <input
                   value={form.forecast ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, forecast: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, forecast: e.target.value }))}
                   className={inputCls}
                   placeholder="Gói 3 tháng..."
                 />
@@ -550,10 +599,10 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               <FormRow label="Tình trạng *">
                 <select
                   value={form.status ?? "TAKECARE"}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as LeadStatus }))}
+                  onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
                   className={inputCls}
                 >
-                  {STATUS_OPTIONS.map((s) => (
+                  {STATUS_OPTIONS.map(s => (
                     <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
                   ))}
                 </select>
@@ -561,27 +610,25 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               <FormRow label="Gói tập đăng ký">
                 <input
                   value={form.packageRegistered ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, packageRegistered: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, packageRegistered: e.target.value }))}
                   className={inputCls}
                 />
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Doanh thu (triệu)">
                   <input
-                    type="number"
-                    step="0.1"
+                    type="number" step="0.1"
                     value={form.actualRevenue ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, actualRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, actualRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="10.5"
                   />
                 </FormRow>
                 <FormRow label="Còn thiếu (triệu)">
                   <input
-                    type="number"
-                    step="0.1"
+                    type="number" step="0.1"
                     value={form.remainingPayment ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="2.0"
                   />
@@ -590,10 +637,9 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
               {isFitpartner && (
                 <FormRow label="Doanh thu Fitpartner (triệu)">
                   <input
-                    type="number"
-                    step="0.1"
+                    type="number" step="0.1"
                     value={form.fitpartnerRevenue ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="5.0"
                   />
@@ -603,14 +649,14 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
                 <input
                   type="date"
                   value={(form as { signDateStr?: string }).signDateStr ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, signDateStr: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, signDateStr: e.target.value }))}
                   className={inputCls}
                 />
               </FormRow>
               <FormRow label="Ghi chú">
                 <textarea
                   value={form.remark ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))}
+                  onChange={e => setForm(f => ({ ...f, remark: e.target.value }))}
                   rows={2}
                   className={`${inputCls} resize-none py-3`}
                 />
@@ -639,6 +685,149 @@ export function LeadsTab({ branchId, branchName, month, year, currentUserId, cur
     </div>
   );
 }
+
+// ── Care Notes Popup ──────────────────────────────────────────────────────────
+
+function CareNotesPopup({
+  lead,
+  canEdit,
+  onClose,
+  onUpdated,
+}: {
+  lead: SalesLead;
+  canEdit: boolean;
+  onClose: () => void;
+  onUpdated: (id: string, newNotes: string) => void;
+}) {
+  const [newDate, setNewDate] = useState(todayISO());
+  const [newText, setNewText] = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const entries = parseNoteEntries(lead.notes ?? "");
+  const ptName  = lead.assignedPT.name ?? lead.assignedPT.email;
+
+  async function handleAddNote() {
+    const text = newText.trim();
+    if (!text) return;
+    setSaving(true);
+    const [y, m, d] = newDate.split("-");
+    const dateLabel  = `${parseInt(d)}/${parseInt(m)}/${y}`;
+    const appended   = (lead.notes ?? "").trimEnd() + `\n- ${dateLabel}: ${text}`;
+    try {
+      const res = await fetch(`/api/setup/leads/${lead.id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ notes: appended }),
+      });
+      if (res.ok) {
+        onUpdated(lead.id, appended);
+        setNewText("");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <style>{`
+        @keyframes _slideUp  { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes _fadeZoom { from { opacity: 0; transform: scale(0.96); }      to { opacity: 1; transform: scale(1); } }
+        .care-sheet { animation: _slideUp 0.25s ease-out; }
+        @media (min-width: 640px) { .care-sheet { animation: _fadeZoom 0.2s ease-out; } }
+      `}</style>
+
+      {/* Overlay */}
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+
+      {/* Bottom sheet (mobile) / centered modal (desktop) */}
+      <div className="fixed inset-x-0 bottom-0 z-50 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+        <div className="care-sheet bg-white w-full sm:max-w-[500px] rounded-t-2xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl">
+
+          {/* Drag handle — mobile only */}
+          <div className="sm:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+            <div className="w-10 h-1 rounded-full bg-gray-200" />
+          </div>
+
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between flex-shrink-0">
+            <div className="pr-4 min-w-0">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Lịch sử chăm sóc</p>
+              <p className="text-base font-extrabold text-gray-900 mt-0.5 truncate">{lead.customerName}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">
+                PT: {ptName}
+                {lead.forecast && ` · Gói: ${lead.forecast}`}
+                {lead.source   && ` · Nguồn: ${lead.source}`}
+              </p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Timeline */}
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {entries.length === 0 ? (
+              <p className="text-sm text-gray-400 italic text-center py-8">
+                Chưa có ghi chú chăm sóc nào
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {entries.map((e, i) => (
+                  <div key={i}>
+                    {e.date ? (
+                      <div className="flex gap-3 items-start">
+                        <span className="flex-shrink-0 text-xs font-extrabold text-[#f15b5c] bg-red-50 px-2.5 py-1 rounded-lg whitespace-nowrap mt-0.5">
+                          📅 {e.date}
+                        </span>
+                        <p className="text-sm text-gray-700 leading-relaxed pt-1">{e.text}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600 leading-relaxed">{e.text}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add note form */}
+          {canEdit && (
+            <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-gray-50/60">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Thêm ghi chú</p>
+              <div className="flex gap-2 items-start">
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={e => setNewDate(e.target.value)}
+                  className="h-9 w-36 flex-shrink-0 rounded-xl border border-gray-200 px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+                <textarea
+                  value={newText}
+                  onChange={e => setNewText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAddNote(); }}
+                  rows={2}
+                  placeholder="Thêm ghi chú chăm sóc..."
+                  className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none"
+                />
+              </div>
+              <button
+                onClick={handleAddNote}
+                disabled={saving || !newText.trim()}
+                className="w-full h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {saving ? "Đang lưu..." : "Lưu ghi chú"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Shared styles ─────────────────────────────────────────────────────────────
 
 const inputCls = "w-full h-11 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
