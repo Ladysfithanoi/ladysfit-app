@@ -28,42 +28,39 @@ export async function GET(req: Request) {
 
   await Promise.all(
     userIds.map(async userId => {
-      // Sessions are attributed to the PT via client.assignedPTId,
-      // not createdById — the ADMIN typically clicks save on behalf of all PTs.
-      const logs = await prisma.workoutLog.findMany({
-        where: {
-          client:      { assignedPTId: userId },
-          sessionDate: { gte, lt },
-        },
-        select: {
-          program: {
-            select: {
-              packageEnrollment: { select: { packageName: true } },
-            },
-          },
-          client: {
-            select: {
-              packageEnrollments: {
-                where:   { status: "ACTIVE" },
-                select:  { packageName: true },
-                take:    1,
-                orderBy: { createdAt: "desc" },
-              },
-            },
-          },
-        },
-      });
+      // Sessions attributed to PT via client.assignedPTId (ADMIN logs on behalf of PTs).
+      // Use raw SQL to read contractType (may not be in stale Prisma client types).
+      // KOL sessions are excluded — they are paid via kolCommission (60k flat), not showPay.
+      const rows = await prisma.$queryRawUnsafe<{
+        contractType: string;
+        packageName:  string;
+      }[]>(
+        `
+        SELECT
+          COALESCE(pe."contractType"::text, 'NORMAL') AS "contractType",
+          COALESCE(pe."packageName", '')               AS "packageName"
+        FROM workout_logs wl
+        JOIN clients c ON c.id = wl."clientId"
+        LEFT JOIN LATERAL (
+          SELECT pe."contractType"::text AS "contractType", pe."packageName"
+          FROM package_enrollments pe
+          WHERE pe."clientId" = c.id AND pe.status = 'ACTIVE'
+          ORDER BY pe."createdAt" DESC
+          LIMIT 1
+        ) pe ON true
+        WHERE c."assignedPTId" = $1
+          AND wl."sessionDate" >= $2
+          AND wl."sessionDate" <  $3
+        `,
+        userId, gte, lt
+      );
 
       let showsL1L2Loyal = 0;
       let showsL3L4L5    = 0;
 
-      for (const log of logs) {
-        // workoutType stores phase names like "Giai đoạn 1", not package codes —
-        // use program.packageEnrollment first, then client's active enrollment.
-        const pkgName = log.program?.packageEnrollment?.packageName
-                     ?? log.client?.packageEnrollments?.[0]?.packageName
-                     ?? "";
-        if (L1_L2_LOYAL.has(pkgName)) showsL1L2Loyal++;
+      for (const row of rows) {
+        if (row.contractType === "KOL") continue;
+        if (L1_L2_LOYAL.has(row.packageName)) showsL1L2Loyal++;
         else showsL3L4L5++;
       }
 
