@@ -24,38 +24,46 @@ export async function POST(req: Request) {
 
   const now = new Date();
 
-  // Bulk
-  if ("entries" in body) {
-    const { entries } = body;
-    if (!Array.isArray(entries) || entries.length === 0) {
-      return NextResponse.json({ sent: 0 });
+  try {
+    // Bulk
+    if ("entries" in body) {
+      const { entries } = body;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return NextResponse.json({ sent: 0, ptCount: 0 });
+      }
+      await prisma.checklistNotification.createMany({
+        data: entries.map(e => ({
+          userId:  e.assignedPTId,
+          type:    "LEAD_REMINDER" as const,
+          message: `⚠️ FM nhắc nhở: Chưa cập nhật tình hình chăm sóc cho khách hàng "${e.customerName}". Hãy cập nhật ngay!`,
+          isRead:  false,
+          date:    now,
+        })),
+      });
+      const ptCount = new Set(entries.map(e => e.assignedPTId)).size;
+      return NextResponse.json({ sent: entries.length, ptCount });
     }
-    await prisma.checklistNotification.createMany({
-      data: entries.map(e => ({
-        userId:  e.assignedPTId,
-        type:    "LEAD_REMINDER" as const,
-        message: `⚠️ FM nhắc nhở: Chưa cập nhật tình hình chăm sóc cho khách hàng "${e.customerName}". Hãy cập nhật ngay!`,
+
+    // Single
+    const { assignedPTId, customerName } = body;
+    if (!assignedPTId || !customerName) {
+      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    }
+    await prisma.checklistNotification.create({
+      data: {
+        userId:  assignedPTId,
+        type:    "LEAD_REMINDER",
+        message: `⚠️ FM nhắc nhở: Chưa cập nhật tình hình chăm sóc cho khách hàng "${customerName}". Hãy cập nhật ngay!`,
         isRead:  false,
         date:    now,
-      })),
+      },
     });
-    const ptCount = new Set(entries.map(e => e.assignedPTId)).size;
-    return NextResponse.json({ sent: entries.length, ptCount });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[lead-reminder] Prisma error:", err);
+    return NextResponse.json(
+      { error: "DB error", detail: String(err) },
+      { status: 500 }
+    );
   }
-
-  // Single
-  const { assignedPTId, customerName } = body;
-  if (!assignedPTId || !customerName) {
-    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-  }
-  await prisma.checklistNotification.create({
-    data: {
-      userId:  assignedPTId,
-      type:    "LEAD_REMINDER",
-      message: `⚠️ FM nhắc nhở: Chưa cập nhật tình hình chăm sóc cho khách hàng "${customerName}". Hãy cập nhật ngay!`,
-      isRead:  false,
-      date:    now,
-    },
-  });
-  return NextResponse.json({ ok: true });
 }

@@ -216,7 +216,9 @@ export function LeadsTab({
         const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
         showToast(`Đã gửi nhắc nhở đến ${ptName} về KH ${lead.customerName}`);
       } else {
-        showToast("Gửi nhắc nhở thất bại, thử lại!", true);
+        const data = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        showToast(data.error === "Forbidden" ? "Không có quyền gửi nhắc nhở" : "Gửi nhắc nhở thất bại, thử lại!", true);
+        console.error("[handleSendReminder]", res.status, data);
       }
     } catch {
       showToast("Lỗi kết nối!", true);
@@ -243,7 +245,9 @@ export function LeadsTab({
         setBulkConfirmOpen(false);
         showToast(`Đã gửi ${sent} nhắc nhở đến ${ptCount} PT`);
       } else {
+        const data = await res.json().catch(() => ({})) as { error?: string; detail?: string };
         showToast("Gửi nhắc nhở thất bại, thử lại!", true);
+        console.error("[handleBulkReminder]", res.status, data);
       }
     } catch {
       showToast("Lỗi kết nối!", true);
