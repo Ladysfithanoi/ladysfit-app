@@ -3,17 +3,27 @@ import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
 
-// Auto-cleanup helper — call before returning data
+type RawNotif = {
+  id:        string;
+  type:      string;
+  message:   string;
+  isRead:    boolean;
+  date:      Date;
+  createdAt: Date;
+};
+
+// Auto-cleanup: delete notifications older than 7 days
 async function cleanup(userId: string) {
-  await prisma.checklistNotification.deleteMany({
-    where: {
-      userId,
-      createdAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    },
-  });
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  await prisma.$executeRaw`
+    DELETE FROM checklist_notifications
+    WHERE "userId" = ${userId} AND "createdAt" < ${cutoff}
+  `;
 }
 
 // GET — fetch checklist notifications for current user
+// Uses raw SQL so unknown enum values (e.g. LEAD_REMINDER on a stale Prisma client)
+// are returned as plain strings instead of causing a validation error.
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,11 +31,13 @@ export async function GET() {
   const userId = session.user.id;
   await cleanup(userId);
 
-  const notifs = await prisma.checklistNotification.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  const notifs = await prisma.$queryRaw<RawNotif[]>`
+    SELECT id, type, message, "isRead", date, "createdAt"
+    FROM checklist_notifications
+    WHERE "userId" = ${userId}
+    ORDER BY "createdAt" DESC
+    LIMIT 20
+  `;
 
   const unreadCount = notifs.filter((n) => !n.isRead).length;
 
@@ -35,8 +47,8 @@ export async function GET() {
       type:      n.type,
       message:   n.message,
       isRead:    n.isRead,
-      date:      n.date.toISOString(),
-      createdAt: n.createdAt.toISOString(),
+      date:      n.date instanceof Date ? n.date.toISOString() : n.date,
+      createdAt: n.createdAt instanceof Date ? n.createdAt.toISOString() : n.createdAt,
     })),
     unreadCount,
   });
@@ -51,16 +63,21 @@ export async function PATCH(req: Request) {
   const ids: string[] = body.ids ?? [];
 
   if (ids.length === 0) {
-    // Mark all as read
-    await prisma.checklistNotification.updateMany({
-      where: { userId: session.user.id, isRead: false },
-      data:  { isRead: true },
-    });
+    await prisma.$executeRaw`
+      UPDATE checklist_notifications
+      SET "isRead" = true
+      WHERE "userId" = ${session.user.id} AND "isRead" = false
+    `;
   } else {
-    await prisma.checklistNotification.updateMany({
-      where: { id: { in: ids }, userId: session.user.id },
-      data:  { isRead: true },
-    });
+    // Build a safe IN clause — ids are UUIDs/cuid strings, no SQL injection risk
+    // but we still use a loop of individual updates for safety
+    for (const id of ids) {
+      await prisma.$executeRaw`
+        UPDATE checklist_notifications
+        SET "isRead" = true
+        WHERE id = ${id} AND "userId" = ${session.user.id}
+      `;
+    }
   }
 
   return NextResponse.json({ ok: true });
