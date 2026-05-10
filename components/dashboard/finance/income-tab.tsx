@@ -76,7 +76,14 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
     transactionDateStr: todayDMY(),
   });
 
+  const [displayAmount, setDisplayAmount] = useState("");
   const [formInvoiceImages, setFormInvoiceImages] = useState<string[]>([]);
+
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value.replace(/[^0-9]/g, "");
+    setForm(f => ({ ...f, amount: raw }));
+    setDisplayAmount(raw ? Number(raw).toLocaleString("vi-VN") : "");
+  }
 
   const fetchRows = useCallback(async () => {
     if (!branchId) return;
@@ -109,6 +116,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       description:        "",
       transactionDateStr: todayDMY(),
     });
+    setDisplayAmount("");
     setFormInvoiceImages([]);
     setShowForm(true);
   }
@@ -122,6 +130,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       description:        tx.description ?? "",
       transactionDateStr: isoToDMY(tx.transactionDate),
     });
+    setDisplayAmount(tx.amount ? Number(tx.amount).toLocaleString("vi-VN") : "");
     setFormInvoiceImages(tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : []);
     setShowForm(true);
   }
@@ -390,17 +399,17 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-500">Số tiền (VND)</label>
-                <input
-                  type="number"
-                  step="1000"
-                  placeholder="0"
-                  value={form.amount}
-                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  className={inputCls}
-                />
-                {form.amount && (
-                  <p className="text-[10px] text-gray-400">{vnd(parseFloat(form.amount) || 0)}</p>
-                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={displayAmount}
+                    onChange={handleAmountChange}
+                    className={inputCls + " pr-7"}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">đ</span>
+                </div>
               </div>
 
               <div className="space-y-1">

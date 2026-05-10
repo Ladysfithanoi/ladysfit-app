@@ -12,7 +12,6 @@ import {
   getDefaultReps,
 } from "@/lib/workout-structure";
 import {
-  getAllowedPhaseOptions,
   getAllowedWorkoutTypeOptions,
 } from "@/lib/workout-permissions";
 import { SessionLogForm, SessionLogHistory } from "./session-log-panel";
@@ -253,6 +252,16 @@ function ProgramView({
   );
   const [activeWeekIdx, setActiveWeekIdx] = useState(initialWeekIdx);
   const [activeSessionIdx, setActiveSessionIdx] = useState(0);
+
+  const [phases, setPhases] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/admin/phases")
+      .then((r) => r.json())
+      .then((data: { id: string; name: string; isActive: boolean }[]) =>
+        setPhases(data.filter((p) => p.isActive))
+      )
+      .catch(() => {});
+  }, []);
 
   // Edit mode
   const [editMode, setEditMode] = useState(false);
@@ -583,8 +592,8 @@ function ProgramView({
                             onChange={(e) => handleEditPhaseChange(e.target.value)}
                             className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                           >
-                            {getAllowedPhaseOptions().map((p) => (
-                              <option key={p.value} value={p.value}>{p.label}</option>
+                            {phases.map((p) => (
+                              <option key={p.id} value={p.name}>{p.name}</option>
                             ))}
                           </select>
                         </div>

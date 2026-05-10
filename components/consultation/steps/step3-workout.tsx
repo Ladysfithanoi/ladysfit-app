@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  PHASE_OPTIONS,
   PHASE1_WORKOUT_TYPE,
   MOVEMENT_BASE_CODES,
   getSessionTypeOptions,
@@ -12,7 +11,6 @@ import {
   getDefaultReps,
 } from "@/lib/workout-structure";
 import {
-  getAllowedPhaseOptions,
   getAllowedWorkoutTypeOptions,
 } from "@/lib/workout-permissions";
 
@@ -208,18 +206,31 @@ export function Step3Workout({
 }) {
   const hasSaved = !!savedDesign;
 
-  // Config
-  const [phase, setPhase] = useState(savedDesign?.phase ?? PHASE_OPTIONS[0].value);
+  const [phases, setPhases] = useState<{ id: string; name: string }[]>([]);
+  const [phase, setPhase] = useState(savedDesign?.phase ?? "");
   const [workoutType, setWorkoutType] = useState(savedDesign?.workoutType ?? PHASE1_WORKOUT_TYPE);
   const [sessionsPerWeek, setSessionsPerWeek] = useState(savedDesign?.sessionsPerWeek ?? 3);
   const [startWeek, setStartWeek] = useState(savedDesign?.startWeek ?? 1);
-
-  // Session builder (null = config not yet confirmed)
   const [draftSessions, setDraftSessions] = useState<DraftSession[] | null>(
     hasSaved ? restoreDesign(savedDesign!) : null
   );
   const [activeSession, setActiveSession] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/phases")
+      .then((r) => r.json())
+      .then((data: { id: string; name: string; isActive: boolean }[]) => {
+        const active = data.filter((p) => p.isActive);
+        setPhases(active);
+        if (!savedDesign?.phase && active.length > 0) {
+          setPhase(active[0].name);
+          const opts = getAllowedWorkoutTypeOptions(userRole, active[0].name);
+          setWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typeOptions = getAllowedWorkoutTypeOptions(userRole, phase);
   const showTypeDropdown = typeOptions.length > 0;
@@ -379,8 +390,8 @@ export function Step3Workout({
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-gray-600">Giai đoạn *</label>
                 <select value={phase} onChange={(e) => handlePhaseChange(e.target.value)} className={selectCls}>
-                  {getAllowedPhaseOptions().map((p) => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
                   ))}
                 </select>
               </div>
