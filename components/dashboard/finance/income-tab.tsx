@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ChangeEvent } from "react";
 import { Plus, Trash2, Edit2, Lock, Save, X, Camera, Download, Upload } from "lucide-react";
 import { fmtDate } from "@/lib/format-date";
 import { DateMaskInput, todayDMY, dmyToISO, isoToDMY } from "./date-mask-input";
@@ -14,7 +14,7 @@ type Transaction = {
   description:     string | null;
   transactionDate: string;
   referenceId:     string | null;
-  receiptImages:   string | null;
+  invoiceImages:   string | null;
   createdBy:       { id: string; name: string | null };
 };
 
@@ -32,6 +32,14 @@ const INCOME_CATEGORIES = ["Hợp đồng KH", "Thu khác"];
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
 const inputCls = "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 w-full";
+
+function toBase64(file: File): Promise<string> {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
 
 function parseAutoDesc(desc: string | null) {
   if (!desc) return { customer: "—", pkg: "—", pt: "—", contract: "—" };
@@ -55,7 +63,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState<string | null>(null);
   const [toast, setToast]         = useState("");
-  const [receiptTxId, setReceiptTxId] = useState<string | null>(null);
+  const [invoiceTxId, setInvoiceTxId] = useState<string | null>(null);
 
   const [exporting, setExporting]   = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -67,6 +75,8 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
     description:        "",
     transactionDateStr: todayDMY(),
   });
+
+  const [formInvoiceImages, setFormInvoiceImages] = useState<string[]>([]);
 
   const fetchRows = useCallback(async () => {
     if (!branchId) return;
@@ -99,6 +109,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       description:        "",
       transactionDateStr: todayDMY(),
     });
+    setFormInvoiceImages([]);
     setShowForm(true);
   }
 
@@ -111,7 +122,20 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       description:        tx.description ?? "",
       transactionDateStr: isoToDMY(tx.transactionDate),
     });
+    setFormInvoiceImages(tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : []);
     setShowForm(true);
+  }
+
+  async function handleInvoiceFiles(e: ChangeEvent<HTMLInputElement>) {
+    const files  = Array.from(e.target.files ?? []);
+    const MAX_MB = 5 * 1024 * 1024;
+    for (const f of files) {
+      if (f.size > MAX_MB) { showToast(`"${f.name}" vượt quá 5MB`); return; }
+    }
+    if (formInvoiceImages.length + files.length > 5) { showToast("Tối đa 5 ảnh"); return; }
+    const bases = await Promise.all(files.map(toBase64));
+    setFormInvoiceImages(prev => [...prev, ...bases]);
+    e.target.value = "";
   }
 
   async function handleSave() {
@@ -119,13 +143,14 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
     const iso = dmyToISO(form.transactionDateStr);
     if (!cat || !form.amount || !iso) return;
 
-    const body = {
+    const body: Record<string, unknown> = {
       branchId,
       type:            "INCOME",
       category:        cat,
       amount:          parseFloat(form.amount),
       description:     form.description || undefined,
       transactionDate: iso,
+      invoiceImages:   formInvoiceImages.length > 0 ? JSON.stringify(formInvoiceImages) : undefined,
     };
 
     const res = editId
@@ -151,7 +176,6 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         showToast(`Lỗi xuất file: ${body.error ?? res.status}`);
-        console.error("[export income]", body);
         return;
       }
       const blob = await res.blob();
@@ -229,7 +253,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                {["Ngày", "Danh mục", "Khách hàng", "Gói tập", "PT", "Mã HĐ", "Số tiền", "Chứng từ", "Nguồn", ""].map(h => (
+                {["Ngày", "Danh mục", "Khách hàng", "Gói tập", "PT", "Mã HĐ", "Số tiền", "Hóa đơn", "Nguồn", ""].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide border-r border-gray-200 last:border-r-0 whitespace-nowrap">
                     {h}
                   </th>
@@ -243,7 +267,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
                 <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-400 italic">Không có khoản thu nào</td></tr>
               ) : (
                 filtered.map(tx => {
-                  const images: string[] = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+                  const images: string[] = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
                   const parsed = tx.referenceId ? parseAutoDesc(tx.description) : null;
                   return (
                     <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50/50 divide-x divide-gray-100">
@@ -266,27 +290,28 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
                         {parsed ? parsed.contract : "—"}
                       </td>
                       <td className="px-4 py-3 font-bold text-emerald-600 whitespace-nowrap">{vnd(tx.amount)}</td>
-                      {/* Chứng từ */}
+
+                      {/* Hóa đơn */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {images.length > 0 ? (
                           <button
-                            onClick={() => setReceiptTxId(tx.id)}
-                            className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors"
+                            onClick={() => setInvoiceTxId(tx.id)}
+                            className="flex items-center gap-1 text-orange-500 hover:text-orange-600 transition-colors"
                           >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span className="text-xs font-semibold">{images.length} ảnh</span>
+                            <span className="text-xs font-semibold">🧾 {images.length} ảnh</span>
                           </button>
                         ) : !isReadOnly ? (
                           <button
-                            onClick={() => setReceiptTxId(tx.id)}
+                            onClick={() => setInvoiceTxId(tx.id)}
                             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
                           >
-                            📎 Thêm ảnh
+                            📎 Thêm
                           </button>
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>
                         )}
                       </td>
+
                       <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {tx.referenceId
                           ? <span className="flex items-center gap-1"><Lock className="w-3 h-3" /> Hợp đồng</span>
@@ -387,6 +412,44 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
                   className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 w-full resize-none"
                 />
               </div>
+
+              {/* Hóa đơn upload */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-500">Hóa đơn</label>
+                {formInvoiceImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {formInvoiceImages.map((src, i) => (
+                      <div key={i} className="relative w-16 h-16">
+                        <img
+                          src={src}
+                          alt=""
+                          className="w-full h-full object-cover rounded-xl border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormInvoiceImages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-sm"
+                        >
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                    {formInvoiceImages.length < 5 && (
+                      <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-colors">
+                        <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleInvoiceFiles} />
+                        <Camera className="w-4 h-4 text-gray-300" />
+                      </label>
+                    )}
+                  </div>
+                )}
+                {formInvoiceImages.length === 0 && (
+                  <label className="flex flex-col items-center justify-center gap-2 h-20 w-full rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleInvoiceFiles} />
+                    <Camera className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-400">Tải ảnh lên · tối đa 5 ảnh</span>
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100">
@@ -403,23 +466,25 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
         </div>
       )}
 
-      {/* Receipt popover */}
-      {receiptTxId && (() => {
-        const tx     = rows.find(r => r.id === receiptTxId);
-        const images = tx?.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+      {/* Hóa đơn popover */}
+      {invoiceTxId && (() => {
+        const tx     = rows.find(r => r.id === invoiceTxId);
+        const images = tx?.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
         return (
           <ReceiptPopover
-            transactionId={receiptTxId}
+            transactionId={invoiceTxId}
             initialImages={images}
             canEdit={!isReadOnly}
-            onClose={() => setReceiptTxId(null)}
+            title="Hóa đơn"
+            saveUrl={`/api/finance/transactions/${invoiceTxId}/invoices`}
+            onClose={() => setInvoiceTxId(null)}
             onSaved={newImages => {
               setRows(prev => prev.map(r =>
-                r.id === receiptTxId
-                  ? { ...r, receiptImages: newImages.length > 0 ? JSON.stringify(newImages) : null }
+                r.id === invoiceTxId
+                  ? { ...r, invoiceImages: newImages.length > 0 ? JSON.stringify(newImages) : null }
                   : r
               ));
-              setReceiptTxId(null);
+              setInvoiceTxId(null);
             }}
           />
         );

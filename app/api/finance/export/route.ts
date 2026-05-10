@@ -106,7 +106,7 @@ async function buildReceiptsSheet(
   // ── Title ────────────────────────────────────────────────────────────────
   ws.mergeCells(cur, 1, cur, 5);
   const tc     = ws.getCell(cur, 1);
-  tc.value     = `CHỨNG TỪ GIAO DỊCH — Tháng ${mm}/${year} — ${branchName}`;
+  tc.value     = `HÓA ĐƠN GIAO DỊCH — Tháng ${mm}/${year} — ${branchName}`;
   tc.font      = { bold: true, size: 13, color: { argb: C_WHITE } };
   tc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: C_RED } };
   tc.alignment = { horizontal: "center", vertical: "middle" };
@@ -121,7 +121,7 @@ async function buildReceiptsSheet(
   });
   ws.mergeCells(cur, 1, cur, 5);
   const sc     = ws.getCell(cur, 1);
-  sc.value     = `Tổng: ${txsWithImgs.length} giao dịch có chứng từ`;
+  sc.value     = `Tổng: ${txsWithImgs.length} giao dịch có hóa đơn`;
   sc.font      = { italic: true, size: 10, color: { argb: "FF666666" } };
   sc.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8F8F8" } };
   sc.alignment = { horizontal: "center", vertical: "middle" };
@@ -297,7 +297,7 @@ export async function POST(req: Request) {
 
     let targetRows = new Map<string, number>();
     if (hasAnyImages) {
-      const ws2 = wb.addWorksheet("Chứng từ"); // Sheet 2
+      const ws2 = wb.addWorksheet("Hóa đơn"); // Sheet 2
       targetRows = await buildReceiptsSheet(wb, ws2, transactions, mm, year, branchName);
     }
 
@@ -315,7 +315,7 @@ export async function POST(req: Request) {
     ws.getRow(2).height = 6;
 
     if (type === "income") {
-      const HEADERS = ["STT","Ngày GD","Danh mục","Khách hàng","Gói tập","PT phụ trách","Mã HĐ","Số tiền (VND)","Mô tả","Chứng từ"];
+      const HEADERS = ["STT","Ngày GD","Danh mục","Khách hàng","Gói tập","PT phụ trách","Mã HĐ","Số tiền (VND)","Mô tả","Hóa đơn"];
       const WIDTHS  = [5, 13, 18, 24, 18, 18, 13, 18, 30, 18];
 
       HEADERS.forEach((h, i) => {
@@ -334,7 +334,7 @@ export async function POST(req: Request) {
         const row    = ws.getRow(DATA_START + idx);
         const even   = idx % 2 === 1;
         const p      = tx.referenceId ? parseDesc(tx.description) : null;
-        const images = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
+        const images = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
 
         const vals: ExcelJS.CellValue[] = [
           idx + 1,
@@ -346,7 +346,7 @@ export async function POST(req: Request) {
           p ? p.contract : "",
           tx.amount,
           p ? "" : "",
-          "", // receipt — set below
+          "", // invoice — set below
         ];
         vals.forEach((v, i) => { const c = row.getCell(i+1); c.value = v; styleData(c, even); });
 
@@ -359,7 +359,7 @@ export async function POST(req: Request) {
 
         const rc = row.getCell(RECEIPT_COL_1IDX);
         if (images.length > 0 && targetRows.has(tx.id)) {
-          rc.value = { text: `📎 Xem ${images.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
+          rc.value = { text: `🧾 Xem ${images.length} ảnh`, hyperlink: `#'Hóa đơn'!A${targetRows.get(tx.id)!}` };
           rc.font  = { color: { argb: "FF0563C1" }, underline: true };
         } else {
           rc.value = images.length > 0 ? `${images.length} ảnh` : "—";
@@ -383,8 +383,8 @@ export async function POST(req: Request) {
       tRow.commit();
 
     } else {
-      const HEADERS = ["STT","Ngày GD","Mô tả","Số tiền (VND)","Chứng từ","Hóa đơn"];
-      const WIDTHS  = [5, 13, 40, 18, 18, 18];
+      const HEADERS = ["STT","Ngày GD","Mô tả","Số tiền (VND)","Hóa đơn"];
+      const WIDTHS  = [5, 13, 40, 18, 18];
 
       HEADERS.forEach((h, i) => {
         const c = ws.getCell(HDR, i + 1);
@@ -394,15 +394,13 @@ export async function POST(req: Request) {
       });
       ws.getRow(HDR).height = 30;
 
-      const DATA_START        = HDR + 1;
-      const RECEIPT_COL_1IDX  = 5;
-      const INVOICE_COL_1IDX  = 6;
+      const DATA_START       = HDR + 1;
+      const INVOICE_COL_1IDX = 5;
 
       for (let idx = 0; idx < transactions.length; idx++) {
         const tx      = transactions[idx];
         const row     = ws.getRow(DATA_START + idx);
         const even    = idx % 2 === 1;
-        const recImgs = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
         const invImgs = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
 
         const vals: ExcelJS.CellValue[] = [
@@ -410,7 +408,6 @@ export async function POST(req: Request) {
           new Date(tx.transactionDate),
           tx.description ?? "",
           tx.amount,
-          "", // receipt — set below
           "", // invoice — set below
         ];
         vals.forEach((v, i) => { const c = row.getCell(i+1); c.value = v; styleData(c, even); });
@@ -422,18 +419,9 @@ export async function POST(req: Request) {
         amt.alignment          = { horizontal: "right", vertical: "middle" };
         row.height             = 22;
 
-        const rc = row.getCell(RECEIPT_COL_1IDX);
-        if (recImgs.length > 0 && targetRows.has(tx.id)) {
-          rc.value = { text: `📎 Xem ${recImgs.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
-          rc.font  = { color: { argb: "FF0563C1" }, underline: true };
-        } else {
-          rc.value = recImgs.length > 0 ? `${recImgs.length} ảnh` : "—";
-        }
-        styleData(rc, even);
-
         const ic = row.getCell(INVOICE_COL_1IDX);
         if (invImgs.length > 0 && targetRows.has(tx.id)) {
-          ic.value = { text: `🧾 Xem ${invImgs.length} ảnh`, hyperlink: `#'Chứng từ'!A${targetRows.get(tx.id)!}` };
+          ic.value = { text: `🧾 Xem ${invImgs.length} ảnh`, hyperlink: `#'Hóa đơn'!A${targetRows.get(tx.id)!}` };
           ic.font  = { color: { argb: "FF0563C1" }, underline: true };
         } else {
           ic.value = invImgs.length > 0 ? `${invImgs.length} ảnh` : "—";
@@ -446,7 +434,7 @@ export async function POST(req: Request) {
       const TR   = DATA_START + transactions.length;
       const tRow = ws.getRow(TR);
       const tot  = transactions.reduce((s, tx) => s + tx.amount, 0);
-      for (let c = 1; c <= 6; c++) styleTotal(tRow.getCell(c));
+      for (let c = 1; c <= 5; c++) styleTotal(tRow.getCell(c));
       tRow.getCell(1).value     = "TỔNG CỘNG";
       tRow.getCell(4).value     = tot;
       tRow.getCell(4).numFmt    = '#,##0"đ"';
@@ -457,7 +445,7 @@ export async function POST(req: Request) {
       tRow.commit();
     }
 
-    const buffer   = Buffer.from(await wb.xlsx.writeBuffer());
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
     const prefix   = type === "income" ? "Bang-Thu" : "Bang-Chi";
     const filename = `${prefix}-Thang-${mm}-${year}-${branchName.replace(/\s+/g, "-")}.xlsx`;
 

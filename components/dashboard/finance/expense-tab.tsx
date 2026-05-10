@@ -14,7 +14,6 @@ type Transaction = {
   description:     string | null;
   transactionDate: string;
   referenceId:     string | null;
-  receiptImages:   string | null;
   invoiceImages:   string | null;
   createdBy:       { id: string; name: string | null };
 };
@@ -46,7 +45,6 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState<string | null>(null);
   const [toast, setToast]         = useState("");
-  const [receiptTxId, setReceiptTxId] = useState<string | null>(null);
   const [invoiceTxId, setInvoiceTxId] = useState<string | null>(null);
   const [exporting, setExporting]     = useState(false);
   const [showImport, setShowImport]   = useState(false);
@@ -213,7 +211,7 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                {["Ngày", "Mô tả", "Số tiền", "Chứng từ", "Hóa đơn", ""].map(h => (
+                {["Ngày", "Mô tả", "Số tiền", "Hóa đơn", ""].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide border-r border-gray-200 last:border-r-0">
                     {h}
                   </th>
@@ -222,40 +220,17 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Đang tải...</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Đang tải...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400 italic">Không có khoản chi nào</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400 italic">Không có khoản chi nào</td></tr>
               ) : (
                 rows.map(tx => {
-                  const recImgs: string[] = tx.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
                   const invImgs: string[] = tx.invoiceImages ? (JSON.parse(tx.invoiceImages) as string[]) : [];
                   return (
                     <tr key={tx.id} className="border-b border-gray-50 hover:bg-gray-50/50 divide-x divide-gray-100">
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmtDate(tx.transactionDate)}</td>
                       <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{tx.description ?? "—"}</td>
                       <td className="px-4 py-3 font-bold text-red-500 whitespace-nowrap">-{vnd(tx.amount)}</td>
-
-                      {/* Chứng từ */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {recImgs.length > 0 ? (
-                          <button
-                            onClick={() => setReceiptTxId(tx.id)}
-                            className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            <span className="text-xs font-semibold">{recImgs.length} ảnh</span>
-                          </button>
-                        ) : !isReadOnly ? (
-                          <button
-                            onClick={() => setReceiptTxId(tx.id)}
-                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            📎 Thêm ảnh
-                          </button>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
-                      </td>
 
                       {/* Hóa đơn */}
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -271,7 +246,7 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
                             onClick={() => setInvoiceTxId(tx.id)}
                             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
                           >
-                            📎 Thêm ảnh
+                            📎 Thêm
                           </button>
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>
@@ -409,28 +384,6 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
           </div>
         </div>
       )}
-
-      {/* Chứng từ popover */}
-      {receiptTxId && (() => {
-        const tx     = rows.find(r => r.id === receiptTxId);
-        const images = tx?.receiptImages ? (JSON.parse(tx.receiptImages) as string[]) : [];
-        return (
-          <ReceiptPopover
-            transactionId={receiptTxId}
-            initialImages={images}
-            canEdit={!isReadOnly}
-            onClose={() => setReceiptTxId(null)}
-            onSaved={newImages => {
-              setRows(prev => prev.map(r =>
-                r.id === receiptTxId
-                  ? { ...r, receiptImages: newImages.length > 0 ? JSON.stringify(newImages) : null }
-                  : r
-              ));
-              setReceiptTxId(null);
-            }}
-          />
-        );
-      })()}
 
       {/* Hóa đơn popover */}
       {invoiceTxId && (() => {
