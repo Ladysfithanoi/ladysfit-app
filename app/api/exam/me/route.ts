@@ -9,7 +9,7 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  const [user, lastAttempt, lastPassedAttempt, config] = await Promise.all([
+  const [user, lastAttempt, lastPassedAttempt, config, sysConfig] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, freeUpgradedAt: true, updatedAt: true },
@@ -23,10 +23,12 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.examConfig.findFirst(),
+    prisma.systemConfig.findUnique({ where: { id: "main" } }),
   ]);
 
   const passingScore = config?.passingScore ?? 80;
   const numQuestions = config?.numQuestions ?? 10;
+  const enableLevelSystem = sysConfig?.enableLevelSystem ?? true;
 
   // Upgrade date: freeUpgradedAt is the canonical source for the 30-day window
   const upgradeDate =
@@ -63,5 +65,6 @@ export async function GET() {
       : null,
     passingScore,
     numQuestions,
+    enableLevelSystem,
   });
 }

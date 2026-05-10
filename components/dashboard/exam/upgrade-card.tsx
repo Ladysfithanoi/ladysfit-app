@@ -20,6 +20,7 @@ type ExamStatus = {
   } | null;
   passingScore: number;
   numQuestions: number;
+  enableLevelSystem: boolean;
 };
 
 function formatDate(iso: string): string {
@@ -43,6 +44,7 @@ export function UpgradeCard() {
 
   if (loading) return null;
   if (!status) return null;
+  if (!status.enableLevelSystem) return null;
 
   // ─── FREE role: active or expired ───
   if (status.role === "FREE") {
