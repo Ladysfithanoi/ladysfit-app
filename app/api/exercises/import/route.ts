@@ -15,20 +15,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Không có bài tập nào" }, { status: 400 });
     }
 
-    const existing = await prisma.workoutExercise.findMany({ select: { name: true } });
-    const existingNames = new Set(existing.map((e) => e.name.toLowerCase()));
+    const toCreate = names.filter((n) => n.trim());
 
-    const toCreate = names.filter((n) => n.trim() && !existingNames.has(n.trim().toLowerCase()));
-    const skipped = names.length - toCreate.length;
+    await prisma.workoutExercise.createMany({
+      data: toCreate.map((name) => ({ name: name.trim(), phase, type: "", movement })),
+      skipDuplicates: false,
+    });
 
-    if (toCreate.length > 0) {
-      await prisma.workoutExercise.createMany({
-        data: toCreate.map((name) => ({ name: name.trim(), phase, type: "", movement })),
-        skipDuplicates: true,
-      });
-    }
-
-    return NextResponse.json({ imported: toCreate.length, skipped });
+    return NextResponse.json({ imported: toCreate.length, skipped: 0 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Lỗi server";
     console.error("Import exercises error:", msg);
