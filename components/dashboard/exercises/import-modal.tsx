@@ -12,10 +12,14 @@ export function ExerciseImportModal({
   open,
   onClose,
   onImported,
+  phase,
+  movement,
 }: {
   open: boolean;
   onClose: () => void;
   onImported: () => void;
+  phase?: string;
+  movement?: string;
 }) {
   const [step, setStep] = useState<Step>("idle");
   const [names, setNames] = useState<string[]>([]);
@@ -73,7 +77,7 @@ export function ExerciseImportModal({
       const res = await fetch("/api/exercises/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
+        body: JSON.stringify({ names, phase: phase ?? "", movement: movement ?? "" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Lỗi server");

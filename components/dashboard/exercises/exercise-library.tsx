@@ -13,16 +13,8 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { SESSION_TYPES } from "@/lib/workout-constants";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog } from "@/components/ui/alert-dialog";
+import { ExerciseImportModal } from "./import-modal";
 
 type MovementTemplate = {
   id: string;
@@ -77,6 +69,7 @@ export function ExerciseLibrary() {
   const [editExName, setEditExName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [exerciseToDelete, setExerciseToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/exercises/movements");
@@ -560,6 +553,14 @@ export function ExerciseLibrary() {
                   <Plus className="w-3.5 h-3.5" />
                   Thêm
                 </button>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
+                  onClick={() => setImportOpen(true)}
+                  title="Thêm bài tập từ file Excel"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Excel
+                </button>
               </div>
             </div>
           </>
@@ -577,32 +578,27 @@ export function ExerciseLibrary() {
       </div>
     </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Xóa bài tập</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc muốn xóa bài tập{' '}
-              <strong className="text-gray-900">{exerciseToDelete?.name}</strong>?
-              <br />
-              <span className="text-sm text-gray-500">
-                Hành động này không thể hoàn tác.
-              </span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>
-              Hủy
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-[#f15b5c] hover:bg-[#d94d4e] text-white"
-            >
-              Xóa bài tập
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AlertDialog
+        open={deleteDialogOpen}
+        onClose={() => { setDeleteDialogOpen(false); setExerciseToDelete(null); }}
+        title="Xóa bài tập"
+        description={`Bạn có chắc muốn xóa bài tập "${exerciseToDelete?.name}"?\nHành động này không thể hoàn tác.`}
+        confirmLabel="Xóa bài tập"
+        cancelLabel="Hủy"
+        onConfirm={handleConfirmDelete}
+        variant="danger"
+      />
+
+      <ExerciseImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          loadTemplates();
+          if (selected) loadExercises(selected);
+        }}
+        phase={selected ? dbPhase(selected.phaseKey) : undefined}
+        movement={selected?.movement}
+      />
     </>
   );
 }
