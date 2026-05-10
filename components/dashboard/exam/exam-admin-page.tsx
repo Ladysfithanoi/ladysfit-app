@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Plus, Trash2, Edit2, Check, X, Settings, ClipboardList } from "lucide-react";
+import { FileText, Plus, Trash2, Edit2, Check, X, Settings, ClipboardList, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
+import { ExamImportModal } from "./exam-import-modal";
 
 type Question = {
   id: string;
@@ -78,6 +79,7 @@ export function ExamAdminPage({
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Config state
   const [configForm, setConfigForm] = useState(initialConfig);
@@ -151,6 +153,14 @@ export function ExamAdminPage({
     }
   }
 
+  async function reloadQuestions() {
+    const res = await fetch("/api/exam/questions");
+    if (res.ok) {
+      const data = await res.json();
+      setQuestions(data);
+    }
+  }
+
   function startEdit(q: Question) {
     setEditId(q.id);
     setEditForm({
@@ -204,14 +214,23 @@ export function ExamAdminPage({
               <p className="text-base font-extrabold text-gray-900">Ngân hàng câu hỏi</p>
               <p className="text-xs text-gray-400 mt-0.5">{questions.length} câu hỏi</p>
             </div>
-            <button
-              onClick={() => { setShowAdd(true); setForm(emptyForm); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              <Plus className="w-4 h-4" />
-              Thêm câu hỏi
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setImportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                Nhập từ Excel
+              </button>
+              <button
+                onClick={() => { setShowAdd(true); setForm(emptyForm); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                <Plus className="w-4 h-4" />
+                Thêm câu hỏi
+              </button>
+            </div>
           </div>
 
           {/* Add form */}
@@ -376,6 +395,12 @@ export function ExamAdminPage({
           </div>
         </div>
       )}
+
+      <ExamImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={reloadQuestions}
+      />
 
       {/* ─── Results Tab ─── */}
       {tab === "results" && (
