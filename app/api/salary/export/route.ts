@@ -81,6 +81,31 @@ export async function POST(req: Request) {
     const ptAdminRecords = records.filter(r => r.user.role !== "FM");
     const ptUserIds = ptAdminRecords.map(r => r.userId);
 
+    // KOC contracts for branch PTs (fetched first so rates populate session rows)
+    type KOCRow = {
+      enrollmentId: string; startWeight: number; endWeight: number | null;
+      startWeightConfirmed: boolean; endWeightConfirmed: boolean;
+      status: string; totalSessions: number;
+      clientName: string; ptName: string;
+    };
+    const kocContracts: KOCRow[] = ptUserIds.length > 0
+      ? await prisma.$queryRawUnsafe<KOCRow[]>(
+          `SELECT k."enrollmentId", k."startWeight", k."endWeight",
+                  k."startWeightConfirmed", k."endWeightConfirmed", k.status, k."totalSessions",
+                  c."fullName" AS "clientName",
+                  u.name       AS "ptName"
+           FROM koc_contracts k
+           JOIN clients c ON c.id = k."clientId"
+           JOIN users u   ON u.id = k."ptId"
+           WHERE k."ptId" = ANY($1::text[])
+           ORDER BY u.name ASC, c."fullName" ASC`,
+          ptUserIds
+        )
+      : [];
+
+    const kocByEnrollmentId = new Map<string, KOCRow>();
+    for (const k of kocContracts) kocByEnrollmentId.set(k.enrollmentId, k);
+
     // Session details per PT
     type EnrollmentRow = {
       id: string; clientId: string; contractCode: string | null;
@@ -88,10 +113,10 @@ export async function POST(req: Request) {
       contractType: string; fullName: string;
     };
     type SessionRow = {
-      stt: number; contractCode: string | null; clientName: string;
+      stt: number; ptName: string; clientName: string;
       packageName: string; contractType: string;
       totalSessions: number; sessionsRemaining: number;
-      sessionsThisMonth: number; valuePerSession: number; totalValue: number;
+      sessionsThisMonth: number; valuePerSession: number | string; totalValue: number;
     };
 
     const sessionDetailsByUser = new Map<string, SessionRow[]>();
@@ -116,17 +141,36 @@ export async function POST(req: Request) {
       const logCount = new Map<string, number>();
       for (const l of logs) logCount.set(l.clientId, (logCount.get(l.clientId) ?? 0) + 1);
 
+      const ptName = r.user.name ?? r.user.email;
+
       const rows: SessionRow[] = enrollments.map((e, idx) => {
         const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
         const sessionsThisMonth = logCount.get(e.clientId) ?? 0;
-        const valuePerSession =
-          contractType === "KOC" ? 0
-          : contractType === "KOL" ? 60_000
-          : ["L1", "L2", "Loyalfit"].includes(e.packageName) ? 60_000
-          : 100_000;
+
+        let valuePerSession: number | string;
+        let totalValue: number;
+
+        if (contractType === "KOC") {
+          const koc = kocByEnrollmentId.get(e.id);
+          if (koc?.endWeightConfirmed) {
+            const rate = calcKOCRate(Number(koc.startWeight), koc.endWeight != null ? Number(koc.endWeight) : null);
+            valuePerSession = rate > 0 ? rate : 0;
+            totalValue = sessionsThisMonth * (rate > 0 ? rate : 0);
+          } else {
+            valuePerSession = "Chờ kết quả";
+            totalValue = 0;
+          }
+        } else if (contractType === "KOL") {
+          valuePerSession = 60_000;
+          totalValue = sessionsThisMonth * 60_000;
+        } else {
+          valuePerSession = ["L1", "L2", "Loyalfit"].includes(e.packageName) ? 60_000 : 100_000;
+          totalValue = sessionsThisMonth * (valuePerSession as number);
+        }
+
         return {
           stt: idx + 1,
-          contractCode: e.contractCode,
+          ptName,
           clientName: e.fullName,
           packageName: e.packageName,
           contractType,
@@ -134,34 +178,12 @@ export async function POST(req: Request) {
           sessionsRemaining: Number(e.sessions) - Number(e.sessionsUsed),
           sessionsThisMonth,
           valuePerSession,
-          totalValue: contractType !== "KOC" ? sessionsThisMonth * valuePerSession : 0,
+          totalValue,
         };
       });
 
       sessionDetailsByUser.set(r.userId, rows);
     }));
-
-    // KOC contracts for branch PTs
-    type KOCRow = {
-      enrollmentId: string; startWeight: number; endWeight: number | null;
-      startWeightConfirmed: boolean; endWeightConfirmed: boolean;
-      status: string; totalSessions: number;
-      clientName: string; ptName: string;
-    };
-    const kocContracts: KOCRow[] = ptUserIds.length > 0
-      ? await prisma.$queryRawUnsafe<KOCRow[]>(
-          `SELECT k."enrollmentId", k."startWeight", k."endWeight",
-                  k."startWeightConfirmed", k."endWeightConfirmed", k.status, k."totalSessions",
-                  c."fullName" AS "clientName",
-                  u.name       AS "ptName"
-           FROM koc_contracts k
-           JOIN clients c ON c.id = k."clientId"
-           JOIN users u   ON u.id = k."ptId"
-           WHERE k."ptId" = ANY($1::text[])
-           ORDER BY u.name ASC, c."fullName" ASC`,
-          ptUserIds
-        )
-      : [];
 
     // ── Build workbook ─────────────────────────────────────────────────────
 
@@ -298,7 +320,7 @@ export async function POST(req: Request) {
     });
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Sheet 2: Chi tiết buổi dạy
+    // Sheet 2: Chi tiết buổi dạy (all types merged)
     // ═══════════════════════════════════════════════════════════════════════
 
     const ws2 = wb.addWorksheet("Chi tiết buổi dạy");
@@ -312,11 +334,11 @@ export async function POST(req: Request) {
     s2TitleCell.fill = solidFill(RED.argb);
     s2TitleCell.alignment = { horizontal: "center", vertical: "middle" };
 
-    const S2_HEADERS = ["STT","Mã HĐ","Tên KH","Gói tập","Loại HĐ","Tổng buổi","Còn lại","Buổi tháng","Giá/buổi","Tổng giá trị"];
+    const S2_HEADERS = ["STT","Tên PT","Tên KH","Gói tập","Loại HĐ","Tổng buổi","Còn lại","Buổi dạy tháng","Giá/buổi","Tổng giá trị"];
 
     for (const r of ptAdminRecords) {
-      // Section header
-      const secRow = ws2.addRow([`${r.user.name ?? r.user.email} — Tháng ${monthStr}/${year}`, ...Array(S2_COLS - 1).fill("")]);
+      // Section header per PT
+      const secRow = ws2.addRow([`${r.user.name ?? r.user.email}`, ...Array(S2_COLS - 1).fill("")]);
       ws2.mergeCells(secRow.number, 1, secRow.number, S2_COLS);
       secRow.height = 22;
       const secCell = ws2.getCell(secRow.number, 1);
@@ -336,20 +358,20 @@ export async function POST(req: Request) {
         ws2.getCell(emptyRow.number, 1).alignment = { horizontal: "center" };
       } else {
         let ptTotal = 0;
-        for (const s of sessionRows) {
+        sessionRows.forEach((s, idx) => {
           const dr = ws2.addRow([
-            s.stt, s.contractCode ?? "", s.clientName, s.packageName,
+            idx + 1, s.ptName, s.clientName, s.packageName,
             s.contractType, s.totalSessions, s.sessionsRemaining,
             s.sessionsThisMonth, s.valuePerSession, s.totalValue,
           ]);
           dr.height = 17;
-          dr.getCell(9).numFmt = VND_FMT;
+          if (typeof s.valuePerSession === "number") dr.getCell(9).numFmt = VND_FMT;
           dr.getCell(10).numFmt = VND_FMT;
           dr.eachCell(cell => {
             cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
           });
           ptTotal += s.totalValue;
-        }
+        });
 
         // Sub-total row
         const subRow = ws2.addRow([...Array(8).fill(""), "", ptTotal]);
@@ -367,67 +389,8 @@ export async function POST(req: Request) {
       ws2.addRow([]); // spacer between PTs
     }
 
-    [5,16,25,14,10,10,10,12,14,16].forEach((w, i) => {
+    [5,22,25,14,10,10,10,15,16,16].forEach((w, i) => {
       ws2.getColumn(i + 1).width = w;
-    });
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Sheet 3: KOC
-    // ═══════════════════════════════════════════════════════════════════════
-
-    const ws3 = wb.addWorksheet("KOC");
-    const S3_COLS = 9;
-
-    const s3Title = ws3.addRow([`HỢP ĐỒNG KOC — THÁNG ${monthStr}/${year}`, ...Array(S3_COLS - 1).fill("")]);
-    ws3.mergeCells(s3Title.number, 1, s3Title.number, S3_COLS);
-    s3Title.height = 28;
-    const s3TitleCell = ws3.getCell(s3Title.number, 1);
-    s3TitleCell.font = { bold: true, size: 13, color: WHITE };
-    s3TitleCell.fill = solidFill(RED.argb);
-    s3TitleCell.alignment = { horizontal: "center", vertical: "middle" };
-
-    const S3_HEADERS = ["STT","Tên PT","Tên KH","Cân đầu (kg)","Cân cuối (kg)","Kg giảm","Số buổi","HH/buổi","Tổng HH"];
-    const s3Hdr = ws3.addRow(S3_HEADERS);
-    applyHeaderStyle(s3Hdr);
-
-    if (kocContracts.length === 0) {
-      const emptyRow = ws3.addRow(["Không có hợp đồng KOC", ...Array(S3_COLS - 1).fill("")]);
-      ws3.mergeCells(emptyRow.number, 1, emptyRow.number, S3_COLS);
-      ws3.getCell(emptyRow.number, 1).font = { italic: true, color: { argb: "FF999999" } };
-      ws3.getCell(emptyRow.number, 1).alignment = { horizontal: "center" };
-    } else {
-      kocContracts.forEach((k, idx) => {
-        const sw = Number(k.startWeight);
-        const ew = k.endWeight != null ? Number(k.endWeight) : null;
-        const lost = ew != null ? sw - ew : null;
-        const rate = k.endWeightConfirmed ? calcKOCRate(sw, ew) : 0;
-        const total = k.endWeightConfirmed ? calcKOCTotal(sw, ew, Number(k.totalSessions)) : 0;
-
-        const kr = ws3.addRow([
-          idx + 1,
-          k.ptName,
-          k.clientName,
-          sw,
-          ew ?? "Chưa có",
-          lost != null ? lost : "—",
-          Number(k.totalSessions),
-          rate > 0 ? rate : "—",
-          total,
-        ]);
-        kr.height = 17;
-        kr.getCell(4).numFmt = "0.0";
-        if (ew != null) kr.getCell(5).numFmt = "0.0";
-        if (lost != null) kr.getCell(6).numFmt = "0.0";
-        if (rate > 0) kr.getCell(8).numFmt = VND_FMT;
-        kr.getCell(9).numFmt = VND_FMT;
-        kr.eachCell(cell => {
-          cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
-        });
-      });
-    }
-
-    [5,20,25,14,14,10,10,14,16].forEach((w, i) => {
-      ws3.getColumn(i + 1).width = w;
     });
 
     // ── Return file ────────────────────────────────────────────────────────
