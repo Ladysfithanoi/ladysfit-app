@@ -283,7 +283,7 @@ export async function POST(req: Request) {
       if (role === "FM") dr.fill = solidFill(BLUE_BG.argb);
 
       // Number formats
-      [4,5,6,7,9,10,11,12,13,14,15].forEach(col => {
+      [4,5,6,7,9,10,11,12,13,14,15].forEach((col: number) => {
         const cell = dr.getCell(col);
         cell.numFmt = VND_FMT;
       });
