@@ -582,8 +582,12 @@ export function ExerciseLibrary() {
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa bài tập</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc muốn xóa bài tập <strong>{selectedExercise?.name}</strong>?
-              Hành động này không thể hoàn tác.
+              Bạn có chắc muốn xóa bài tập{' '}
+              <strong className="text-gray-900">{selectedExercise?.name}</strong>?
+              <br />
+              <span className="text-sm text-gray-500">
+                Hành động này không thể hoàn tác.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
