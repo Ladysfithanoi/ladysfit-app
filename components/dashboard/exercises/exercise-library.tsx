@@ -70,6 +70,7 @@ export function ExerciseLibrary() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [exerciseToDelete, setExerciseToDelete] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/exercises/movements");
@@ -96,6 +97,7 @@ export function ExerciseLibrary() {
     setEditingEx(null);
     setNewExercise("");
     setRightSearch("");
+    setMobileView("detail");
     loadExercises(tpl);
   }
 
@@ -251,7 +253,7 @@ export function ExerciseLibrary() {
     <>
     <div className="flex h-[calc(100vh-9rem)] border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
       {/* ── Left panel ─────────────────────────────────────────────────── */}
-      <div className="w-[340px] flex-shrink-0 border-r border-gray-100 flex flex-col">
+      <div className={`${mobileView === "detail" ? "hidden sm:flex" : "flex"} w-full sm:w-[340px] flex-shrink-0 border-r border-gray-100 flex-col`}>
         <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Chuyển động</p>
           <div className="relative">
@@ -448,11 +450,17 @@ export function ExerciseLibrary() {
       </div>
 
       {/* ── Right panel ────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`${mobileView === "list" ? "hidden sm:flex" : "flex"} flex-1 flex-col min-w-0`}>
         {selected ? (
           <>
             {/* Right panel header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex-shrink-0">
+              <button
+                className="sm:hidden flex items-center gap-1 text-xs text-[#f15b5c] font-semibold mb-2"
+                onClick={() => setMobileView("list")}
+              >
+                ← Danh sách chuyển động
+              </button>
               <h2 className="text-sm font-bold text-gray-800">{selected.movement}</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 {displayPhaseKey(selected.phaseKey)} &middot; {selected.sessionType}
@@ -508,7 +516,7 @@ export function ExerciseLibrary() {
                       ) : (
                         <div className="group flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-gray-50">
                           <span className="flex-1 text-sm text-gray-700">{ex.name}</span>
-                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                          <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1">
                             <button
                               className="p-1 rounded-lg hover:bg-gray-200"
                               onClick={() => {
@@ -534,8 +542,8 @@ export function ExerciseLibrary() {
             </div>
 
             {/* Add exercise */}
-            <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0">
-              <div className="flex items-center gap-2">
+            <div className="px-4 sm:px-6 py-3 border-t border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40"
                   placeholder="Tên bài tập mới..."
@@ -565,7 +573,7 @@ export function ExerciseLibrary() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
+          <div className="hidden sm:flex flex-1 flex-col items-center justify-center text-center gap-3">
             <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
               <Dumbbell className="w-6 h-6 text-gray-300" />
             </div>
