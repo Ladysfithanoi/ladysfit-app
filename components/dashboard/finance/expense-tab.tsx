@@ -172,37 +172,35 @@ export function ExpenseTab({ branchId, month, year, isReadOnly, onMutate }: Prop
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors disabled:opacity-50"
-            style={{ borderColor: "#f15b5c", color: "#f15b5c" }}
-          >
-            <Download className="w-4 h-4" />
-            {exporting ? "Đang xuất..." : "Xuất Excel"}
-          </button>
-          {!isReadOnly && (
-            <>
-              <button
-                onClick={() => setShowImport(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors"
-                style={{ borderColor: "#f15b5c", color: "#f15b5c" }}
-              >
-                <Upload className="w-4 h-4" />
-                Nhập từ Excel
-              </button>
-              <button
-                onClick={openAdd}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold"
-                style={{ backgroundColor: "#ef4444" }}
-              >
-                <Plus className="w-4 h-4" /> Thêm khoản chi
-              </button>
-            </>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors disabled:opacity-50"
+          style={{ borderColor: "#f15b5c", color: "#f15b5c" }}
+        >
+          <Download className="w-4 h-4" />
+          {exporting ? "Đang xuất..." : "Xuất Excel"}
+        </button>
+        {!isReadOnly && (
+          <>
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors"
+              style={{ borderColor: "#f15b5c", color: "#f15b5c" }}
+            >
+              <Upload className="w-4 h-4" />
+              Nhập từ Excel
+            </button>
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold"
+              style={{ backgroundColor: "#ef4444" }}
+            >
+              <Plus className="w-4 h-4" /> Thêm khoản chi
+            </button>
+          </>
+        )}
       </div>
 
       {/* Table */}
