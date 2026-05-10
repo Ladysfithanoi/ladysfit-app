@@ -43,6 +43,9 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  ptLevelId             String?
+  ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
+
   branch                Branch?              @relation(fields: [branchId], references: [id])
   accounts              Account[]
   sessions              Session[]
@@ -451,13 +454,14 @@ model WorkoutMovementTemplate {
 }
 
 model WorkoutPhase {
-  id        String           @id @default(cuid())
-  name      String
-  order     Int
-  isActive  Boolean          @default(true)
-  programs  WorkoutProgram[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String               @id @default(cuid())
+  name        String
+  order       Int
+  isActive    Boolean              @default(true)
+  programs    WorkoutProgram[]
+  levelAccess PTLevelPhaseAccess[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@map("workout_phases")
 }
@@ -1129,4 +1133,42 @@ model SessionPhoto {
 
   @@unique([ptId, packageEnrollmentId, month, year])
   @@map("session_photos")
+}
+
+// ── PT Level System ───────────────────────────────────────────────────────────
+
+model PTLevel {
+  id                 String               @id @default(cuid())
+  name               String
+  order              Int
+  color              String               @default("#6b7280")
+  retestIntervalDays Int                  @default(30)
+  isDefault          Boolean              @default(false)
+  isActive           Boolean              @default(true)
+  phaseAccess        PTLevelPhaseAccess[]
+  users              User[]               @relation("UserPTLevel")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@map("pt_levels")
+}
+
+model PTLevelPhaseAccess {
+  id        String       @id @default(cuid())
+  levelId   String
+  level     PTLevel      @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  phaseId   String
+  phase     WorkoutPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  hasAccess Boolean      @default(true)
+
+  @@unique([levelId, phaseId])
+  @@map("pt_level_phase_access")
+}
+
+model SystemConfig {
+  id                String   @id
+  enableLevelSystem Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
+
+  @@map("system_config")
 }

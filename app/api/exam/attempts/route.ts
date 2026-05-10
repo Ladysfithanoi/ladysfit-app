@@ -33,8 +33,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu câu trả lời" }, { status: 400 });
   }
 
-  const config = await prisma.examConfig.findFirst();
+  const [config, sysConfig] = await Promise.all([
+    prisma.examConfig.findFirst(),
+    prisma.systemConfig.findUnique({ where: { id: "main" } }),
+  ]);
   const passingScore = config?.passingScore ?? 80;
+
+  if (sysConfig?.enableLevelSystem === false) {
+    return NextResponse.json({ error: "Hệ thống phân cấp độ đang tắt" }, { status: 403 });
+  }
 
   // Fetch the actual questions to grade
   const questionIds = Object.keys(answers);
