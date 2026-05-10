@@ -76,7 +76,7 @@ export function ExerciseLibrary() {
   const [editingEx, setEditingEx] = useState<Exercise | null>(null);
   const [editExName, setEditExName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [exerciseToDelete, setExerciseToDelete] = useState<{ id: string; name: string } | null>(null);
 
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/exercises/movements");
@@ -208,15 +208,15 @@ export function ExerciseLibrary() {
   }
 
   function handleDeleteClick(ex: Exercise) {
-    setSelectedExercise(ex);
+    setExerciseToDelete({ id: ex.id, name: ex.name });
     setDeleteDialogOpen(true);
   }
 
   async function handleConfirmDelete() {
-    if (!selectedExercise) return;
-    await fetch(`/api/exercises/${selectedExercise.id}`, { method: "DELETE" });
+    if (!exerciseToDelete) return;
+    await fetch(`/api/exercises/${exerciseToDelete.id}`, { method: "DELETE" });
     setDeleteDialogOpen(false);
-    setSelectedExercise(null);
+    setExerciseToDelete(null);
     if (selected) loadExercises(selected);
     loadTemplates();
   }
@@ -583,7 +583,7 @@ export function ExerciseLibrary() {
             <AlertDialogTitle>Xóa bài tập</AlertDialogTitle>
             <AlertDialogDescription>
               Bạn có chắc muốn xóa bài tập{' '}
-              <strong className="text-gray-900">{selectedExercise?.name}</strong>?
+              <strong className="text-gray-900">{exerciseToDelete?.name}</strong>?
               <br />
               <span className="text-sm text-gray-500">
                 Hành động này không thể hoàn tác.
@@ -591,12 +591,14 @@ export function ExerciseLibrary() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeleteDialogOpen(false)}>
+              Hủy
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-[#f15b5c] hover:bg-[#d94d4e] text-white"
             >
-              Xóa
+              Xóa bài tập
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
