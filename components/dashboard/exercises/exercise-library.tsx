@@ -13,6 +13,16 @@ import {
   Dumbbell,
 } from "lucide-react";
 import { SESSION_TYPES } from "@/lib/workout-constants";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type MovementTemplate = {
   id: string;
@@ -65,6 +75,8 @@ export function ExerciseLibrary() {
   const [newExercise, setNewExercise] = useState("");
   const [editingEx, setEditingEx] = useState<Exercise | null>(null);
   const [editExName, setEditExName] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/exercises/movements");
@@ -195,9 +207,16 @@ export function ExerciseLibrary() {
     if (selected) loadExercises(selected);
   }
 
-  async function handleDeleteExercise(ex: Exercise) {
-    if (!confirm(`Xóa "${ex.name}"?`)) return;
-    await fetch(`/api/exercises/${ex.id}`, { method: "DELETE" });
+  function handleDeleteClick(ex: Exercise) {
+    setSelectedExercise(ex);
+    setDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!selectedExercise) return;
+    await fetch(`/api/exercises/${selectedExercise.id}`, { method: "DELETE" });
+    setDeleteDialogOpen(false);
+    setSelectedExercise(null);
     if (selected) loadExercises(selected);
     loadTemplates();
   }
@@ -236,6 +255,7 @@ export function ExerciseLibrary() {
   }
 
   return (
+    <>
     <div className="flex h-[calc(100vh-9rem)] border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
       {/* ── Left panel ─────────────────────────────────────────────────── */}
       <div className="w-[340px] flex-shrink-0 border-r border-gray-100 flex flex-col">
@@ -507,7 +527,7 @@ export function ExerciseLibrary() {
                             </button>
                             <button
                               className="p-1 rounded-lg hover:bg-red-50"
-                              onClick={() => handleDeleteExercise(ex)}
+                              onClick={() => handleDeleteClick(ex)}
                             >
                               <Trash2 className="w-3 h-3 text-red-400" />
                             </button>
@@ -556,5 +576,27 @@ export function ExerciseLibrary() {
         )}
       </div>
     </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa bài tập</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa bài tập <strong>{selectedExercise?.name}</strong>?
+              Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-[#f15b5c] hover:bg-[#d94d4e] text-white"
+            >
+              Xóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
