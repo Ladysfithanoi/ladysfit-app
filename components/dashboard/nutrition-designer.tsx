@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, Sparkles, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NutritionFoodSearch } from "./nutrition-food-search";
 
 // ── Nutrition calculation ──────────────────────────────────────────────────
 
@@ -350,6 +351,13 @@ export function NutritionDesigner({
             )}
           </button>
           {genError && <p className="text-xs text-red-500 font-medium">{genError}</p>}
+
+          <div className="border-t border-gray-100 pt-3">
+            <NutritionFoodSearch
+              mealsPerDay={mealsPerDay}
+              onAdd={(item) => setMeals((prev) => [...prev, item])}
+            />
+          </div>
         </div>
       )}
 
