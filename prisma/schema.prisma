@@ -450,12 +450,25 @@ model WorkoutMovementTemplate {
   @@map("workout_movement_templates")
 }
 
+model WorkoutPhase {
+  id        String           @id @default(cuid())
+  name      String
+  order     Int
+  isActive  Boolean          @default(true)
+  programs  WorkoutProgram[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@map("workout_phases")
+}
+
 model WorkoutProgram {
   id                  String               @id @default(cuid())
   clientId            String?
   consultationId      String?
   packageEnrollmentId String?
   phase               String
+  phaseId             String?
   workoutType         String?
   sessionsPerWeek     Int
   currentWeek         Int                  @default(1)
@@ -469,6 +482,7 @@ model WorkoutProgram {
   consultation      Consultation?      @relation(fields: [consultationId], references: [id], onDelete: SetNull)
   packageEnrollment PackageEnrollment? @relation(fields: [packageEnrollmentId], references: [id])
   createdBy         User               @relation(fields: [createdById], references: [id])
+  workoutPhase      WorkoutPhase?      @relation(fields: [phaseId], references: [id])
   sessions          WorkoutSession[]
   weeks             WorkoutWeek[]
   workoutLogs       WorkoutLog[]
@@ -520,10 +534,11 @@ model ExamQuestion {
 }
 
 model ExamConfig {
-  id           String   @id @default(cuid())
-  numQuestions Int      @default(10)
-  passingScore Int      @default(80)
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  numQuestions     Int      @default(10)
+  passingScore     Int      @default(80)
+  shuffleQuestions Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
 
   @@map("exam_config")
 }

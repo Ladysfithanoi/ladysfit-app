@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { numQuestions, passingScore } = body;
+  const { numQuestions, passingScore, shuffleQuestions } = body;
 
   const config = await getOrCreateConfig();
   const updated = await prisma.examConfig.update({
@@ -32,6 +32,7 @@ export async function PUT(req: NextRequest) {
     data: {
       numQuestions: numQuestions ?? config.numQuestions,
       passingScore: passingScore ?? config.passingScore,
+      ...(shuffleQuestions !== undefined && { shuffleQuestions }),
     },
   });
 

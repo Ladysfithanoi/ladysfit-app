@@ -15,6 +15,7 @@ export async function GET() {
   const config = await prisma.examConfig.findFirst();
   const numQuestions = config?.numQuestions ?? 10;
   const passingScore = config?.passingScore ?? 80;
+  const shuffleQuestions = config?.shuffleQuestions ?? true;
 
   const allQuestions = await prisma.examQuestion.findMany({ orderBy: { order: "asc" } });
 
@@ -22,9 +23,10 @@ export async function GET() {
     return NextResponse.json({ error: "Chưa có câu hỏi trong ngân hàng" }, { status: 400 });
   }
 
-  // Shuffle and pick numQuestions
-  const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-  const picked = shuffled.slice(0, Math.min(numQuestions, shuffled.length));
+  const pool = shuffleQuestions
+    ? [...allQuestions].sort(() => Math.random() - 0.5)
+    : [...allQuestions];
+  const picked = pool.slice(0, Math.min(numQuestions, pool.length));
 
   // Strip correct answer before sending to client
   const questions = picked.map(({ id, question, optionA, optionB, optionC, optionD }) => ({

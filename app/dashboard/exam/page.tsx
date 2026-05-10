@@ -18,7 +18,7 @@ export default async function ExamPage() {
     }),
   ]);
 
-  const config = configRaw ?? { id: "", numQuestions: 10, passingScore: 80, updatedAt: new Date() };
+  const config = configRaw ?? { id: "", numQuestions: 10, passingScore: 80, shuffleQuestions: true, updatedAt: new Date() };
 
   const serializedAttempts = attempts.map((a) => ({
     id: a.id,
@@ -33,7 +33,7 @@ export default async function ExamPage() {
   return (
     <ExamAdminPage
       questions={questions.map((q) => ({ ...q, createdAt: q.createdAt.toISOString() }))}
-      config={{ numQuestions: config.numQuestions, passingScore: config.passingScore }}
+      config={{ numQuestions: config.numQuestions, passingScore: config.passingScore, shuffleQuestions: config.shuffleQuestions }}
       attempts={serializedAttempts}
     />
   );

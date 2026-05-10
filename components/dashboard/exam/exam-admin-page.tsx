@@ -21,6 +21,7 @@ type Question = {
 type Config = {
   numQuestions: number;
   passingScore: number;
+  shuffleQuestions: boolean;
 };
 
 type Attempt = {
@@ -144,7 +145,7 @@ export function ExamAdminPage({
       });
       if (res.ok) {
         const updated = await res.json();
-        setConfigForm({ numQuestions: updated.numQuestions, passingScore: updated.passingScore });
+        setConfigForm({ numQuestions: updated.numQuestions, passingScore: updated.passingScore, shuffleQuestions: updated.shuffleQuestions });
         setConfigSaved(true);
         setTimeout(() => setConfigSaved(false), 2000);
       }
@@ -374,6 +375,33 @@ export function ExamAdminPage({
               />
               <p className="text-xs text-gray-400">
                 Ví dụ: 80 = trả lời đúng ít nhất 80% mới đạt
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-bold text-gray-700">Xáo trộn câu hỏi</label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={configForm.shuffleQuestions}
+                  onClick={() => setConfigForm((prev) => ({ ...prev, shuffleQuestions: !prev.shuffleQuestions }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    configForm.shuffleQuestions ? "bg-[#f15b5c]" : "bg-gray-200"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                      configForm.shuffleQuestions ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+                <span className="text-sm font-semibold text-gray-600">
+                  {configForm.shuffleQuestions ? "Bật" : "Tắt"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Khi bật, thứ tự câu hỏi sẽ được xáo trộn ngẫu nhiên cho mỗi lần thi
               </p>
             </div>
 
