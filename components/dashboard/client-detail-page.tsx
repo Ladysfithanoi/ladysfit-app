@@ -64,6 +64,8 @@ type ClientDetail = {
   injuries: string | null;
   targetDate: string | null;
   goalNote: string | null;
+  myPlateImageUrl: string | null;
+  myPlateNote: string | null;
   status: "ACTIVE" | "PAUSED" | "RESERVED";
   createdAt: string;
   assignedPT: PT;
@@ -224,6 +226,7 @@ export function ClientDetailPage({
   activityLogs: initialActivityLogs = [],
   userRole,
   currentUserId,
+  isSubstitute,
 }: {
   client: ClientDetail;
   branches: Branch[];
@@ -235,6 +238,7 @@ export function ClientDetailPage({
   activityLogs?: ActivityLogItem[];
   userRole?: string;
   currentUserId?: string;
+  isSubstitute?: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
@@ -1815,6 +1819,7 @@ export function ClientDetailPage({
         <WorkoutTab
           clientId={client.id}
           initialPrograms={initialWorkoutPrograms}
+          isSubstitute={isSubstitute}
           initialLogs={initialWorkoutLogs}
           onPackageUpdated={(pkg) =>
             setPackages((prev) =>
@@ -1836,6 +1841,9 @@ export function ClientDetailPage({
           initialPlans={initialMealPlans ?? []}
           clientWeight={client.currentWeight}
           clientHeight={client.height}
+          myPlateImageUrl={client.myPlateImageUrl}
+          myPlateNote={client.myPlateNote}
+          userRole={userRole}
         />
       )}
 

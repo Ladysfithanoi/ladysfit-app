@@ -101,11 +101,25 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const isFM = session.user.role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
+  // Check if current user is an active substitute for this client
+  let isSubstitute = false;
+  if (!isAdmin && !isFM && client.assignedPTId !== session.user.id) {
+    const subReq = await prisma.substituteRequest.findFirst({
+      where: {
+        clientId: params.id,
+        substituteId: session.user.id,
+        status: "ACTIVE",
+        OR: [{ type: "LONG_TERM" }, { endDate: { gt: new Date() } }],
+      },
+    });
+    isSubstitute = !!subReq;
+  }
+
   if (!isAdmin) {
     if (isFM) {
       if (!managedBranchIds.includes(client.branchId)) redirect("/dashboard/clients");
     } else {
-      if (client.assignedPTId !== session.user.id) redirect("/dashboard/clients");
+      if (client.assignedPTId !== session.user.id && !isSubstitute) redirect("/dashboard/clients");
     }
   }
 
@@ -127,6 +141,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
     injuries: client.injuries,
     targetDate: client.targetDate?.toISOString() ?? null,
     goalNote: client.goalNote,
+    myPlateImageUrl: client.myPlateImageUrl ?? null,
+    myPlateNote: client.myPlateNote ?? null,
     status: client.status,
     createdAt: client.createdAt.toISOString(),
     assignedPT: client.assignedPT,
@@ -267,6 +283,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       }))}
       userRole={session.user.role}
       currentUserId={session.user.id}
+      isSubstitute={isSubstitute}
     />
   );
 }

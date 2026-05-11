@@ -139,6 +139,8 @@ model Client {
   injuries         String?      @db.Text
   targetDate       DateTime?
   goalNote         String?      @db.Text
+  myPlateImageUrl  String?      @db.Text
+  myPlateNote      String?
   assignedPTId     String
   branchId         String
   status           ClientStatus @default(ACTIVE)
