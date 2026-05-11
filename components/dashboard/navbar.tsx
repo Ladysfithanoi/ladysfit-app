@@ -422,14 +422,12 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   async function openInfo() {
     setDropdownOpen(false);
     setInfoOpen(true);
-    if (!userInfo) {
-      setInfoLoading(true);
-      try {
-        const res = await fetch("/api/staff/me");
-        if (res.ok) setUserInfo(await res.json());
-      } finally {
-        setInfoLoading(false);
-      }
+    setInfoLoading(true);
+    try {
+      const res = await fetch("/api/staff/me");
+      if (res.ok) setUserInfo(await res.json());
+    } finally {
+      setInfoLoading(false);
     }
   }
 

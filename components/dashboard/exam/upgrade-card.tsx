@@ -11,6 +11,11 @@ type ExamStatus = {
   freeUpgradedAt: string | null;
   daysLeft: number | null;
   expired: boolean;
+  retestIntervalDays: number;
+  ptLevelName: string | null;
+  ptLevelColor: string | null;
+  defaultLevelName: string | null;
+  defaultLevelColor: string | null;
   lastAttempt: {
     id: string;
     score: number;
@@ -51,8 +56,11 @@ export function UpgradeCard() {
     const daysLeft = status.daysLeft ?? 0;
     const isExpired = status.expired;
     const isWarning = !isExpired && daysLeft <= 7;
-    const daysUsed = 30 - daysLeft;
-    const progressPct = Math.min(100, Math.round((daysUsed / 30) * 100));
+    const retestDays = status.retestIntervalDays;
+    const levelName = status.ptLevelName || "Tự do";
+    const levelColor = status.ptLevelColor || "#3b82f6";
+    const daysUsed = retestDays - daysLeft;
+    const progressPct = Math.min(100, Math.round((daysUsed / retestDays) * 100));
 
     if (isExpired) {
       return (
@@ -64,12 +72,12 @@ export function UpgradeCard() {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-sm font-extrabold text-gray-900">Quyền truy cập hết hạn</p>
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-600">
-                  Tự do
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: levelColor + "22", color: levelColor }}>
+                  {levelName}
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                Thời gian cấp độ Tự do đã hết. Tài khoản sẽ về cấp Hạn chế khi đăng nhập lại.
+                Thời gian cấp độ {levelName} đã hết. Tài khoản sẽ về cấp Hạn chế khi đăng nhập lại.
               </p>
               {status.upgradeDate && (
                 <p className="text-xs text-gray-400 mt-1">
@@ -99,8 +107,8 @@ export function UpgradeCard() {
             {/* Header row */}
             <div className="flex items-center gap-2 mb-2">
               <p className="text-sm font-extrabold text-gray-900">Cấp độ hiện tại</p>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-600">
-                Tự do
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: levelColor + "22", color: levelColor }}>
+                {levelName}
               </span>
             </div>
 
@@ -114,7 +122,7 @@ export function UpgradeCard() {
               )}
               <p className="text-xs text-gray-500 font-medium">
                 Thời hạn duy trì:{" "}
-                <span className="font-bold text-gray-700">30 ngày</span>
+                <span className="font-bold text-gray-700">{retestDays} ngày</span>
               </p>
             </div>
 
@@ -167,6 +175,7 @@ export function UpgradeCard() {
   // ─── RESTRICTED role ───
   if (status.role === "RESTRICTED") {
     const lastFailed = status.lastAttempt && !status.lastAttempt.passed;
+    const targetName = status.defaultLevelName || "Tự do";
     return (
       <div className="bg-white rounded-2xl border border-[#f15b5c]/20 shadow-sm p-5 mb-5">
         <div className="flex items-start gap-4">
@@ -174,7 +183,7 @@ export function UpgradeCard() {
             <GraduationCap className="w-5 h-5 text-[#f15b5c]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-extrabold text-gray-900">Thăng cấp lên Tự do</p>
+            <p className="text-sm font-extrabold text-gray-900">Thăng cấp lên {targetName}</p>
             <p className="text-xs text-gray-400 mt-0.5 font-medium">
               Vượt qua bài kiểm tra để mở khóa đầy đủ tính năng trong 30 ngày
             </p>

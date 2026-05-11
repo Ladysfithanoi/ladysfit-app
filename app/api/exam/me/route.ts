@@ -9,10 +9,10 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  const [user, lastAttempt, lastPassedAttempt, config, sysConfig] = await Promise.all([
+  const [user, lastAttempt, lastPassedAttempt, config, sysConfig, defaultLevel] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, freeUpgradedAt: true, updatedAt: true },
+      select: { role: true, freeUpgradedAt: true, updatedAt: true, ptLevel: { select: { name: true, color: true, retestIntervalDays: true } } },
     }),
     prisma.examAttempt.findFirst({
       where: { userId },
@@ -24,6 +24,7 @@ export async function GET() {
     }),
     prisma.examConfig.findFirst(),
     prisma.systemConfig.findUnique({ where: { id: "main" } }),
+    prisma.pTLevel.findFirst({ where: { isDefault: true, isActive: true }, select: { name: true, color: true } }),
   ]);
 
   const passingScore = config?.passingScore ?? 80;
@@ -38,15 +39,18 @@ export async function GET() {
   let expired = false;
 
   if (user?.role === "FREE" && upgradeDate) {
+    const retestDays = user.ptLevel?.retestIntervalDays ?? 30;
     // Strip time components so the comparison is purely day-based
     const upgraded = new Date(upgradeDate);
     upgraded.setHours(0, 0, 0, 0);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const daysUsed = Math.floor((today.getTime() - upgraded.getTime()) / (1000 * 60 * 60 * 24));
-    daysLeft = Math.max(0, 30 - daysUsed);
+    daysLeft = Math.max(0, retestDays - daysUsed);
     expired = daysLeft <= 0;
   }
+
+  const retestIntervalDays = user?.ptLevel?.retestIntervalDays ?? 30;
 
   return NextResponse.json({
     role: user?.role,
@@ -54,6 +58,11 @@ export async function GET() {
     freeUpgradedAt: user?.freeUpgradedAt?.toISOString() ?? null,
     daysLeft,
     expired,
+    retestIntervalDays,
+    ptLevelName: user?.ptLevel?.name ?? null,
+    ptLevelColor: user?.ptLevel?.color ?? null,
+    defaultLevelName: defaultLevel?.name ?? null,
+    defaultLevelColor: defaultLevel?.color ?? null,
     lastAttempt: lastAttempt
       ? {
           id: lastAttempt.id,
