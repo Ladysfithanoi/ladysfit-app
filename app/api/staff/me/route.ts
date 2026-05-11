@@ -14,6 +14,8 @@ export async function GET() {
       name: true,
       email: true,
       role: true,
+      ptLevelId: true,
+      ptLevel: { select: { id: true, name: true, color: true } },
       branch: { select: { name: true } },
     },
   });

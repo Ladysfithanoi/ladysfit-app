@@ -236,6 +236,7 @@ function ProgramView({
   onArchive,
   onLogAdded,
   userRole,
+  isSubstitute,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -244,6 +245,7 @@ function ProgramView({
   onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   userRole?: string;
+  isSubstitute?: boolean;
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -283,14 +285,14 @@ function ProgramView({
   const phaseLabel = getPhaseLabel(program.phase);
   const showType = program.workoutType && program.workoutType !== program.phase;
 
-  const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase);
+  const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase, isSubstitute);
   const showEditTypeDropdown = editTypeOptions.length > 0;
   const effectiveEditType = showEditTypeDropdown ? editWorkoutType : PHASE1_WORKOUT_TYPE;
   const editSessionTypeOptions = getSessionTypeOptions(editPhase, effectiveEditType);
 
   function enterEditMode() {
     if (!currentWeekData) return;
-    const allowedTypes = getAllowedWorkoutTypeOptions(userRole, program.phase);
+    const allowedTypes = getAllowedWorkoutTypeOptions(userRole, program.phase, isSubstitute);
     const currentType = program.workoutType ?? PHASE1_WORKOUT_TYPE;
     const typeAllowed = allowedTypes.length === 0 || allowedTypes.some((t) => t.dbValue === currentType);
     setDraftSessions(currentWeekData.sessions.map(sessionToDraft));
@@ -309,7 +311,7 @@ function ProgramView({
 
   function handleEditPhaseChange(newPhase: string) {
     setEditPhase(newPhase);
-    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase);
+    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, isSubstitute);
     setEditWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
   }
 
@@ -865,12 +867,14 @@ export function WorkoutTab({
   initialLogs,
   onPackageUpdated,
   userRole,
+  isSubstitute,
 }: {
   clientId: string;
   initialPrograms: WorkoutProgram[];
   initialLogs?: WorkoutLogRow[];
   onPackageUpdated?: (pkg: PackageUpdate) => void;
   userRole?: string;
+  isSubstitute?: boolean;
 }) {
   const [programs, setPrograms] = useState(initialPrograms);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
@@ -906,6 +910,11 @@ export function WorkoutTab({
             {active.length} đang áp dụng · {archived.length} đã lưu trữ
           </p>
         </div>
+        {isSubstitute && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-full">
+            ⚡ Truy cập đặc biệt - Dạy hộ
+          </span>
+        )}
       </div>
 
       {active.length === 0 && (
@@ -928,6 +937,7 @@ export function WorkoutTab({
           onArchive={handleArchive}
           onLogAdded={handleLogAdded}
           userRole={userRole}
+          isSubstitute={isSubstitute}
         />
       ))}
 
@@ -953,6 +963,7 @@ export function WorkoutTab({
                   onArchive={handleArchive}
                   onLogAdded={handleLogAdded}
                   userRole={userRole}
+                  isSubstitute={isSubstitute}
                 />
               ))}
             </div>

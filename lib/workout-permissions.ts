@@ -11,8 +11,10 @@ const RESTRICTED_ALLOWED_TYPES: Record<string, string[]> = {
 export function isPhaseAllowed(
   role: string | undefined,
   phase: string,
-  workoutType?: string
+  workoutType?: string,
+  isSubstitute?: boolean
 ): boolean {
+  if (isSubstitute) return true;
   if (role !== "RESTRICTED") return true;
   if (phase === "Giai đoạn 1") return true;
   if (!workoutType || workoutType === phase) return false;
@@ -27,9 +29,11 @@ export function getAllowedPhaseOptions() {
 /** Filtered workout type options for the given phase and role */
 export function getAllowedWorkoutTypeOptions(
   role: string | undefined,
-  phase: string
+  phase: string,
+  isSubstitute?: boolean
 ): { label: string; dbValue: string }[] {
   const all = WORKOUT_TYPE_OPTIONS[phase] ?? [];
+  if (isSubstitute) return all;
   if (role !== "RESTRICTED") return all;
   const allowed = RESTRICTED_ALLOWED_TYPES[phase];
   if (!allowed) return all; // GD1 has no types — pass through

@@ -63,7 +63,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds: newManagedIds } = body;
+  const { name, email, password, branchId, role, managedBranchIds: newManagedIds, ptLevelId } = body;
 
   // FM cannot assign ADMIN or FM roles
   if (isFM && role && (role === "ADMIN" || role === "FM")) {
@@ -86,6 +86,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (name) updateData.name = name;
   if (email) updateData.email = email;
   if (password) updateData.password = await bcrypt.hash(password, 12);
+  if (ptLevelId !== undefined) updateData.ptLevelId = ptLevelId || null;
 
   if (role === "FM") {
     updateData.role = role;
@@ -100,6 +101,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     data: updateData,
     select: {
       id: true, name: true, email: true, role: true, branchId: true,
+      ptLevelId: true,
+      ptLevel: { select: { id: true, name: true, color: true } },
       branch: { select: { id: true, name: true } },
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },

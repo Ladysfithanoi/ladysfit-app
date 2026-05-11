@@ -20,6 +20,8 @@ export async function GET() {
       email: true,
       role: true,
       branchId: true,
+      ptLevelId: true,
+      ptLevel: { select: { id: true, name: true, color: true } },
       branch: { select: { id: true, name: true } },
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds } = body;
+  const { name, email, password, branchId, role, managedBranchIds, ptLevelId } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -76,9 +78,12 @@ export async function POST(req: Request) {
       password: hashed,
       branchId: role === "FM" ? null : branchId,
       role,
+      ...(ptLevelId && { ptLevelId }),
     },
     select: {
       id: true, name: true, email: true, role: true, branchId: true,
+      ptLevelId: true,
+      ptLevel: { select: { id: true, name: true, color: true } },
       branch: { select: { id: true, name: true } },
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },
