@@ -28,7 +28,7 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { branchId: { in: managedBranchIds }, role: { in: ["FREE", "RESTRICTED", "ADMIN"] } },
+        where: { branchId: { in: managedBranchIds }, role: { in: ["FREE", "RESTRICTED", "ADMIN"] }, deletedAt: null },
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }),

@@ -44,7 +44,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
-      where: isFM ? { branchId: { in: managedBranchIds } } : undefined,
+      where: { deletedAt: null, ...(isFM ? { branchId: { in: managedBranchIds } } : {}) },
       select: { id: true, name: true, email: true, branchId: true },
       orderBy: { name: "asc" },
     }),

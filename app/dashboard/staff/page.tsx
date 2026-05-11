@@ -17,10 +17,10 @@ export default async function StaffPage() {
   const [staff, branches] = await Promise.all([
     prisma.user.findMany({
       where: (isAdmin || isCEO)
-        ? undefined
+        ? { deletedAt: null }
         : isFM
-        ? { branchId: { in: managedBranchIds } }
-        : { branchId: session.user.branchId ?? undefined },
+        ? { branchId: { in: managedBranchIds }, deletedAt: null }
+        : { branchId: session.user.branchId ?? undefined, deletedAt: null },
       select: {
         id: true, name: true, email: true, role: true, branchId: true,
         ptLevelId: true,

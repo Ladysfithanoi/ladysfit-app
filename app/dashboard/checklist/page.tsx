@@ -20,13 +20,13 @@ export default async function ChecklistPageRoute() {
   let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string }[] = [];
   if (isAdmin) {
     staffList = await prisma.user.findMany({
-      where: { role: { in: ["FREE", "RESTRICTED"] } },
+      where: { role: { in: ["FREE", "RESTRICTED"] }, deletedAt: null },
       select: { id: true, name: true, email: true, branchId: true, role: true },
       orderBy: { name: "asc" },
     });
   } else if (isFM) {
     staffList = await prisma.user.findMany({
-      where: { branchId: { in: managedBranchIds } },
+      where: { branchId: { in: managedBranchIds }, deletedAt: null },
       select: { id: true, name: true, email: true, branchId: true, role: true },
       orderBy: { name: "asc" },
     });

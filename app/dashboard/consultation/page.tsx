@@ -32,9 +32,10 @@ export default async function ConsultationPage() {
       ? prisma.user.findMany({
           // FM: filter to managed branches; skip filter if managedBranchIds is empty
           // to avoid `IN ()` returning nothing when branches aren't assigned yet
-          where: isFM && managedBranchIds.length > 0
-            ? { branchId: { in: managedBranchIds } }
-            : undefined,
+          where: {
+            deletedAt: null,
+            ...(isFM && managedBranchIds.length > 0 ? { branchId: { in: managedBranchIds } } : {}),
+          },
           select: { id: true, name: true, email: true },
           orderBy: { name: "asc" },
         })

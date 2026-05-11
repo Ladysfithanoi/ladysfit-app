@@ -43,6 +43,7 @@ export async function POST(req: Request) {
   const fm = await prisma.user.findFirst({
     where: {
       role: "FM",
+      deletedAt: null,
       managedBranches: { some: { branchId: client.branchId } },
     },
     select: { id: true },
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
 
   // Fallback to any ADMIN
   const assignedFMId = fm?.id ?? (
-    await prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } })
+    await prisma.user.findFirst({ where: { role: "ADMIN", deletedAt: null }, select: { id: true } })
   )?.id ?? null;
 
   const complaint = await prisma.complaint.create({
