@@ -40,6 +40,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       prisma.branch.findMany({ orderBy: { name: "asc" } })
         .catch((e) => { console.error("branches query failed:", e); return []; }),
       prisma.user.findMany({
+        where: { deletedAt: null },
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }).catch((e) => { console.error("staff query failed:", e); return []; }),

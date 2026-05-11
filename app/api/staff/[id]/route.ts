@@ -47,7 +47,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   }
 
   try {
-    await prisma.user.delete({ where: { id: params.id } });
+    await prisma.user.update({
+      where: { id: params.id },
+      data: {
+        deletedAt: new Date(),
+        // Obfuscate email so the address can be reused in future
+        email: `deleted_${Date.now()}_${user.email}`,
+      },
+    });
   } catch (err) {
     console.error("Delete staff error:", err);
     return NextResponse.json({ error: "Không thể xóa nhân sự. Vui lòng thử lại." }, { status: 500 });

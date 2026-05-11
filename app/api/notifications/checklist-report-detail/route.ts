@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
   const pts = await prisma.user.findMany({
-    where: { role: { in: ["FREE", "RESTRICTED"] }, branchId: { in: managedBranchIds } },
+    where: { role: { in: ["FREE", "RESTRICTED"] }, branchId: { in: managedBranchIds }, deletedAt: null },
     select: { id: true, name: true, email: true, branch: { select: { name: true } } },
     orderBy: { name: "asc" },
   });

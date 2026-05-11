@@ -44,6 +44,7 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   ptLevelId             String?
+  deletedAt             DateTime?
   ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
 
   branch                Branch?              @relation(fields: [branchId], references: [id])

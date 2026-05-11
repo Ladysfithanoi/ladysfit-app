@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   // Get all FM users with their managed branches
   const fms = await prisma.user.findMany({
-    where: { role: "FM" },
+    where: { role: "FM", deletedAt: null },
     select: {
       id: true,
       managedBranches: { select: { branchId: true } },
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     // Get all PTs in managed branches with branch name
     const pts = await prisma.user.findMany({
-      where: { role: { in: ["FREE", "RESTRICTED"] }, branchId: { in: branchIds } },
+      where: { role: { in: ["FREE", "RESTRICTED"] }, branchId: { in: branchIds }, deletedAt: null },
       select: { id: true, name: true, email: true, branchId: true, branch: { select: { name: true } } },
     });
     if (pts.length === 0) continue;
