@@ -5,18 +5,29 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const levels = await prisma.pTLevel.findMany({
-    orderBy: { order: "asc" },
-    include: {
-      phaseAccess: { include: { phase: true } },
-      _count: { select: { users: true } },
-    },
-  });
+  const isAdmin = session.user.role === "ADMIN";
 
+  if (isAdmin) {
+    const levels = await prisma.pTLevel.findMany({
+      orderBy: { order: "asc" },
+      include: {
+        phaseAccess: { include: { phase: true } },
+        _count: { select: { users: true } },
+      },
+    });
+    return NextResponse.json(levels);
+  }
+
+  // Non-admin: return minimal list of active levels (for staff form dropdowns)
+  const levels = await prisma.pTLevel.findMany({
+    where: { isActive: true },
+    orderBy: { order: "asc" },
+    select: { id: true, name: true, color: true, retestIntervalDays: true, isDefault: true, isActive: true, order: true },
+  });
   return NextResponse.json(levels);
 }
 

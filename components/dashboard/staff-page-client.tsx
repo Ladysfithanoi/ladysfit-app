@@ -171,7 +171,7 @@ export function StaffPageClient({
   const [selectedPtLevelId, setSelectedPtLevelId] = useState<string>("");
 
   useEffect(() => {
-    if (selectedRole === "PT") {
+    if (open && selectedRole === "PT") {
       fetch("/api/admin/pt-levels")
         .then((r) => r.json())
         .then((data: unknown) => {
@@ -179,7 +179,7 @@ export function StaffPageClient({
         })
         .catch(() => setPtLevels([]));
     }
-  }, [selectedRole]);
+  }, [open, selectedRole]);
 
   const canManage = isAdmin || isFM;
 
