@@ -238,14 +238,22 @@ export async function POST(req: Request) {
   });
   const totalBranchRevenue = Number(branchAgg._sum.actualRevenue ?? 0) * 1_000_000;
 
+  // Delete any existing records for this branch/month/year so regeneration
+  // always produces fresh data instead of silently skipping.
+  const targetUserIds = body.entries.map((e) => e.userId);
+  await prisma.salaryRecord.deleteMany({
+    where: {
+      branchId: body.branchId,
+      month:    body.month,
+      year:     body.year,
+      userId:   { in: targetUserIds },
+    },
+  });
+
   let created = 0;
-  let skipped = 0;
+  const skipped = 0;
 
   for (const entry of body.entries) {
-    const existing = await prisma.salaryRecord.findFirst({
-      where: { userId: entry.userId, month: body.month, year: body.year },
-    });
-    if (existing) { skipped++; continue; }
 
     const config = await prisma.salaryConfig.findFirst({
       where: { userId: entry.userId },
