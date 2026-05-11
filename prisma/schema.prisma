@@ -74,6 +74,8 @@ model User {
   measurementNotifications MeasurementNotification[]   @relation("PTMeasurementNotifs")
   ptSessionPhotos         SessionPhoto[]               @relation("PTSessionPhotos")
   kocContracts            KOCContract[]                @relation("PTKOCContracts")
+  substituteRequestsMade     SubstituteRequest[]          @relation("RequesterSub")
+  substituteRequestsReceived SubstituteRequest[]          @relation("SubstituteSub")
 
   @@map("users")
 }
@@ -161,6 +163,7 @@ model Client {
   measurementNotifications     MeasurementNotification[]
   sessionPhotos                SessionPhoto[]              @relation("ClientSessionPhotos")
   kocContracts                 KOCContract[]
+  substituteRequests           SubstituteRequest[]
 
   @@map("clients")
 }
@@ -1171,4 +1174,39 @@ model SystemConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("system_config")
+}
+
+// ── Substitute Teaching ───────────────────────────────────────────────────────
+
+enum SubType {
+  SHORT_TERM
+  LONG_TERM
+}
+
+enum SubStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model SubstituteRequest {
+  id            String    @id @default(cuid())
+  clientId      String
+  requestedById String
+  substituteId  String
+  type          SubType
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  durationDays  Int?
+  status        SubStatus @default(PENDING)
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client      Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation("RequesterSub", fields: [requestedById], references: [id])
+  substitute  User   @relation("SubstituteSub", fields: [substituteId], references: [id])
+
+  @@map("substitute_requests")
 }

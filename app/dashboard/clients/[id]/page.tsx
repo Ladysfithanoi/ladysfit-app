@@ -40,7 +40,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       prisma.branch.findMany({ orderBy: { name: "asc" } })
         .catch((e) => { console.error("branches query failed:", e); return []; }),
       prisma.user.findMany({
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }).catch((e) => { console.error("staff query failed:", e); return []; }),
       prisma.$queryRawUnsafe<{
@@ -266,6 +266,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
         note: l.note,
       }))}
       userRole={session.user.role}
+      currentUserId={session.user.id}
     />
   );
 }

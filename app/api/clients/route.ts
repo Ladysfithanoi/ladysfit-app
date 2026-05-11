@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ClientStatus } from "@prisma/client";
+import { ClientStatus, PackageEnrollmentStatus } from "@prisma/client";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -12,51 +12,106 @@ export async function GET(req: Request) {
   const search = searchParams.get("search") ?? "";
   const status = searchParams.get("status") as ClientStatus | "ALL" | null;
 
-  const isFM = session.user.role === "FM";
+  const role = session.user.role;
+  const isFM = role === "FM";
+  const isPT = role === "FREE" || role === "RESTRICTED";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  const clients = await prisma.client.findMany({
-    where: {
-      AND: [
-        search
-          ? {
-              OR: [
-                { fullName: { contains: search, mode: "insensitive" } },
-                { phone: { contains: search } },
-              ],
-            }
-          : {},
-        status && status !== "ALL" ? { status: status as ClientStatus } : {},
-        isFM ? { branchId: { in: managedBranchIds } } : {},
-      ],
-    },
-    select: {
-      id: true,
-      fullName: true,
-      phone: true,
-      height: true,
-      currentWeight: true,
-      targetWeight: true,
-      initialWeight: true,
-      status: true,
-      createdAt: true,
-      assignedPT: { select: { id: true, name: true } },
-      branch: { select: { id: true, name: true } },
-      packageEnrollments: {
-        where: { status: "ACTIVE" },
-        orderBy: { createdAt: "asc" },
-        take: 1,
-        select: {
-          packageName: true,
-          sessions: true,
-          sessionsUsed: true,
-          startDate: true,
-          endDate: true,
-        },
+  // For PT: find substitute client IDs they can currently view
+  let substituteClientIds: string[] = [];
+  if (isPT) {
+    const activeSubs = await prisma.substituteRequest.findMany({
+      where: {
+        substituteId: session.user.id,
+        status: "ACTIVE",
+        OR: [{ type: "LONG_TERM" }, { endDate: { gt: new Date() } }],
+      },
+      select: { clientId: true },
+    });
+    substituteClientIds = activeSubs.map((s) => s.clientId);
+  }
+
+  const searchFilter = search
+    ? {
+        OR: [
+          { fullName: { contains: search, mode: "insensitive" as const } },
+          { phone: { contains: search } },
+        ],
+      }
+    : {};
+  const statusFilter =
+    status && status !== "ALL" ? { status: status as ClientStatus } : {};
+
+  // Build ownership filter
+  const ownershipFilter = isPT
+    ? {
+        OR: [
+          { assignedPTId: session.user.id },
+          ...(substituteClientIds.length > 0
+            ? [{ id: { in: substituteClientIds } }]
+            : []),
+        ],
+      }
+    : isFM
+    ? { branchId: { in: managedBranchIds } }
+    : {};
+
+  const clientSelect = {
+    id: true,
+    fullName: true,
+    phone: true,
+    height: true,
+    currentWeight: true,
+    targetWeight: true,
+    initialWeight: true,
+    status: true,
+    createdAt: true,
+    assignedPT: { select: { id: true, name: true } },
+    branch: { select: { id: true, name: true } },
+    packageEnrollments: {
+      where: { status: PackageEnrollmentStatus.ACTIVE },
+      orderBy: { createdAt: "asc" as const },
+      take: 1,
+      select: {
+        packageName: true,
+        sessions: true,
+        sessionsUsed: true,
+        startDate: true,
+        endDate: true,
       },
     },
+  };
+
+  const clients = await prisma.client.findMany({
+    where: { AND: [searchFilter, statusFilter, ownershipFilter] },
+    select: clientSelect,
     orderBy: { createdAt: "desc" },
   });
+
+  // Attach substitute metadata for PT view
+  if (isPT && substituteClientIds.length > 0) {
+    const subMap = new Map<string, { endDate: Date | null; type: string }>();
+    const activeSubs = await prisma.substituteRequest.findMany({
+      where: {
+        substituteId: session.user.id,
+        status: "ACTIVE",
+        clientId: { in: substituteClientIds },
+      },
+      select: { clientId: true, endDate: true, type: true },
+    });
+    for (const s of activeSubs) subMap.set(s.clientId, { endDate: s.endDate, type: s.type });
+
+    const enriched = clients.map((c) => {
+      const sub = subMap.get(c.id);
+      if (!sub) return c;
+      const daysLeft =
+        sub.type === "SHORT_TERM" && sub.endDate
+          ? Math.max(0, Math.ceil((sub.endDate.getTime() - Date.now()) / 86400000))
+          : null;
+      return { ...c, substituteInfo: { type: sub.type, daysLeft } };
+    });
+    return NextResponse.json(enriched);
+  }
 
   return NextResponse.json(clients);
 }

@@ -12,7 +12,7 @@ import { MiniWeightChart, DetailWeightChart, ChartPoint } from "@/components/das
 import {
   ChevronLeft, Star, Pencil, Plus, Scale,
   Salad, User, Heart, BarChart2, Info,
-  TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer,
+  TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw,
 } from "lucide-react";
 import { WorkoutTab, type WorkoutProgram, type WorkoutLogRow } from "@/components/dashboard/workout-tab";
 import { NutritionTab } from "@/components/dashboard/nutrition-tab";
@@ -24,7 +24,7 @@ import { PACKAGES } from "@/lib/packages";
 import { cn } from "@/lib/utils";
 
 type Branch = { id: string; name: string };
-type PT = { id: string; name: string | null; email: string };
+type PT = { id: string; name: string | null; email: string; branchId?: string | null; role?: string };
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
 type ActivityLogItem = { id: string; date: string; steps: number | null; minutesActive: number | null; note: string | null };
 type PackageEnrollment = {
@@ -223,6 +223,7 @@ export function ClientDetailPage({
   mealPlans: initialMealPlans,
   activityLogs: initialActivityLogs = [],
   userRole,
+  currentUserId,
 }: {
   client: ClientDetail;
   branches: Branch[];
@@ -233,6 +234,7 @@ export function ClientDetailPage({
   mealPlans?: MealPlanRow[];
   activityLogs?: ActivityLogItem[];
   userRole?: string;
+  currentUserId?: string;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
@@ -275,6 +277,56 @@ export function ClientDetailPage({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
+
+  // Substitute modal state
+  const [subOpen, setSubOpen] = useState(false);
+  const [subSubstituteId, setSubSubstituteId] = useState("");
+  const [subType, setSubType] = useState<"SHORT_TERM" | "LONG_TERM">("SHORT_TERM");
+  const [subDays, setSubDays] = useState("7");
+  const [subNotes, setSubNotes] = useState("");
+  const [subLoading, setSubLoading] = useState(false);
+  const [subError, setSubError] = useState("");
+  const [subSuccess, setSubSuccess] = useState(false);
+
+  async function handleSubstituteSubmit() {
+    setSubError("");
+    if (!subSubstituteId) { setSubError("Vui lòng chọn PT hỗ trợ"); return; }
+    if (subType === "SHORT_TERM" && (!subDays || parseInt(subDays) < 1)) {
+      setSubError("Vui lòng nhập số ngày hỗ trợ"); return;
+    }
+    setSubLoading(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/substitute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          substituteId: subSubstituteId,
+          type: subType,
+          durationDays: subType === "SHORT_TERM" ? parseInt(subDays) : undefined,
+          notes: subNotes || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Có lỗi xảy ra");
+      }
+      setSubSuccess(true);
+      router.refresh();
+    } catch (err) {
+      setSubError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSubLoading(false);
+    }
+  }
+
+  // PTs available for substitute selection
+  const isPT = userRole === "FREE" || userRole === "RESTRICTED";
+  const substitutablePTs = staffList.filter((pt) => {
+    if (!pt.role || pt.role === "ADMIN" || pt.role === "FM" || pt.role === "CEO_FITPARTNER") return false;
+    if (pt.id === currentUserId) return false;
+    if (isPT && pt.branchId !== client.branch?.id) return false;
+    return true;
+  });
 
   // Food scan logs (loaded client-side for detail view)
   const [foodLogs, setFoodLogs] = useState<FoodScanLogItem[]>([]);
@@ -763,6 +815,22 @@ export function ClientDetailPage({
               </button>
             ))}
           </div>
+          <Button
+            onClick={() => {
+              setSubOpen(true);
+              setSubSubstituteId("");
+              setSubType("SHORT_TERM");
+              setSubDays("7");
+              setSubNotes("");
+              setSubError("");
+              setSubSuccess(false);
+            }}
+            variant="outline"
+            className="gap-1.5 rounded-xl text-sm font-semibold h-9 border-gray-300 text-gray-600 hover:bg-gray-50"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Nhờ dạy hộ
+          </Button>
           <Button
             onClick={() => {
               setEditError("");
@@ -2382,6 +2450,144 @@ export function ClientDetailPage({
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-green-500 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-2">
           {toastMsg}
+        </div>
+      )}
+
+      {/* ── Nhờ dạy hộ modal ── */}
+      {subOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !subLoading && setSubOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+            <h2 className="text-base font-extrabold text-gray-900">
+              🔄 Nhờ dạy hộ —{" "}
+              <span className="text-[#f15b5c]">{client.fullName}</span>
+            </h2>
+
+            {subSuccess ? (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+                  <p className="text-sm font-bold text-green-700">✓ Đã gửi yêu cầu thành công</p>
+                  <p className="text-xs text-green-600 mt-1">PT hỗ trợ đã được thông báo</p>
+                </div>
+                <button
+                  onClick={() => setSubOpen(false)}
+                  className="w-full h-10 rounded-xl text-white font-bold text-sm"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  Đóng
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Step 1: PT selection */}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">PT hỗ trợ *</label>
+                  <select
+                    value={subSubstituteId}
+                    onChange={(e) => setSubSubstituteId(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+                  >
+                    <option value="">— Chọn PT —</option>
+                    {substitutablePTs.map((pt) => (
+                      <option key={pt.id} value={pt.id}>
+                        {pt.name ?? pt.email}
+                      </option>
+                    ))}
+                  </select>
+                  {substitutablePTs.length === 0 && (
+                    <p className="text-xs text-amber-500 font-semibold">Không có PT nào khả dụng trong cơ sở này</p>
+                  )}
+                </div>
+
+                {/* Step 2: Type */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">Loại hỗ trợ *</label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="subType"
+                        value="SHORT_TERM"
+                        checked={subType === "SHORT_TERM"}
+                        onChange={() => setSubType("SHORT_TERM")}
+                        className="mt-0.5 accent-[#f15b5c]"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-800">Hỗ trợ ngắn hạn</p>
+                        {subType === "SHORT_TERM" && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <input
+                              type="number"
+                              value={subDays}
+                              onChange={(e) => setSubDays(e.target.value)}
+                              min={1}
+                              max={90}
+                              className="w-20 h-8 rounded-lg border border-gray-200 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                            />
+                            <span className="text-sm text-gray-500">ngày</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="subType"
+                        value="LONG_TERM"
+                        checked={subType === "LONG_TERM"}
+                        onChange={() => setSubType("LONG_TERM")}
+                        className="mt-0.5 accent-[#f15b5c]"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">Chuyển giao dài hạn</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Khách hàng sẽ chuyển về PT này vĩnh viễn
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Step 3: Notes */}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-gray-700">Ghi chú (tuỳ chọn)</label>
+                  <textarea
+                    value={subNotes}
+                    onChange={(e) => setSubNotes(e.target.value)}
+                    placeholder="VD: KH đang ở giai đoạn 2, cần chú ý chế độ ăn..."
+                    rows={2}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none"
+                  />
+                </div>
+
+                {subError && (
+                  <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
+                    <p className="text-sm text-[#f15b5c] font-semibold">{subError}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={handleSubstituteSubmit}
+                    disabled={subLoading}
+                    className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60 flex items-center justify-center gap-1.5"
+                    style={{ backgroundColor: "#f15b5c" }}
+                  >
+                    {subLoading ? "Đang xử lý..." : (
+                      <><RefreshCw className="w-4 h-4" /> Xác nhận chuyển giao</>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSubOpen(false)}
+                    disabled={subLoading}
+                    className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>

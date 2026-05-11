@@ -34,6 +34,7 @@ type ClientRow = {
   foodLogToday: boolean;
   foodLogStale: boolean;
   selfMeasuredThisWeek: boolean;
+  substituteInfo?: { type: string; daysLeft: number | null } | null;
 };
 
 const STATUS_STYLE = {
@@ -402,6 +403,14 @@ export function ClientsPageClient({
                             )}
                             {c.selfMeasuredThisWeek && (
                               <span title="Khách tự cập nhật số đo tuần này" className="text-xs leading-none">📏</span>
+                            )}
+                            {c.substituteInfo && (
+                              <span
+                                title={c.substituteInfo.type === "SHORT_TERM" ? `Dạy hộ - còn ${c.substituteInfo.daysLeft} ngày` : "Dạy hộ dài hạn"}
+                                className="text-[10px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full leading-none"
+                              >
+                                🔄{c.substituteInfo.type === "SHORT_TERM" && c.substituteInfo.daysLeft != null ? ` ${c.substituteInfo.daysLeft}n` : ""}
+                              </span>
                             )}
                           </div>
                         </div>
