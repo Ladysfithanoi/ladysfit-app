@@ -9,6 +9,7 @@ type RawNotif = {
   message:   string;
   isRead:    boolean;
   date:      Date;
+  relatedId: string | null;
   createdAt: Date;
 };
 
@@ -32,7 +33,7 @@ export async function GET() {
   await cleanup(userId);
 
   const notifs = await prisma.$queryRaw<RawNotif[]>`
-    SELECT id, type, message, "isRead", date, "createdAt"
+    SELECT id, type, message, "isRead", date, "relatedId", "createdAt"
     FROM checklist_notifications
     WHERE "userId" = ${userId}
     ORDER BY "createdAt" DESC
@@ -48,6 +49,7 @@ export async function GET() {
       message:   n.message,
       isRead:    n.isRead,
       date:      n.date instanceof Date ? n.date.toISOString() : n.date,
+      relatedId: n.relatedId ?? null,
       createdAt: n.createdAt instanceof Date ? n.createdAt.toISOString() : n.createdAt,
     })),
     unreadCount,

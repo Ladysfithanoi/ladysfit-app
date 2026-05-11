@@ -109,18 +109,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
   }
 
-  // Notify substitute PT
-  const typeLabel =
-    type === "SHORT_TERM" ? `${durationDays} ngày` : "Dài hạn (chuyển giao vĩnh viễn)";
-  await prisma.checklistNotification.create({
-    data: {
-      userId: substituteId,
-      type: "LEAD_REMINDER",
-      message: `🔄 Bạn được nhờ dạy hộ KH ${client.fullName} — ${typeLabel}`,
-      isRead: false,
-      date: new Date(),
-    },
-  });
+  // Notify substitute PT — raw SQL to support the SUBSTITUTE_REQUEST enum value
+  const typeLabel = type === "SHORT_TERM" ? `${durationDays} ngày` : "Dài hạn";
+  const notifMessage = `🔄 Bạn được nhờ dạy hộ KH ${client.fullName} — ${typeLabel}`;
+  const now = new Date();
+  await prisma.$executeRaw`
+    INSERT INTO checklist_notifications (id, "userId", type, message, "isRead", date, "relatedId", "createdAt")
+    VALUES (gen_random_uuid()::text, ${substituteId}, 'SUBSTITUTE_REQUEST'::"ChecklistNotifType", ${notifMessage}, false, ${now}, ${params.id}, ${now})
+  `;
 
   return NextResponse.json({ success: true });
 }
