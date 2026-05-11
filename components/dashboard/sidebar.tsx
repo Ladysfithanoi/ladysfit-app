@@ -51,13 +51,13 @@ const NAV_SECTIONS: NavSection[] = [
     header: "DỮ LIỆU NHÂN SỰ",
     items: [
       { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
-      { href: "/dashboard/salary",    icon: Wallet,      label: "Quỹ lương",          show: forFMandPT },
     ],
   },
   {
     header: "TÀI CHÍNH",
     items: [
-      { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi", show: forAdminFMCEO },
+      { href: "/dashboard/salary",  icon: Wallet,     label: "Quỹ lương", show: forFMandPT },
+      { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi",   show: (r) => isFM(r) || isCEO(r) },
     ],
   },
   {
