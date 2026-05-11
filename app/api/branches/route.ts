@@ -8,7 +8,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const branches = await prisma.branch.findMany({
-    include: { _count: { select: { users: true, clients: true } } },
+    include: { _count: { select: { users: { where: { deletedAt: null } }, clients: true } } },
     orderBy: { name: "asc" },
   });
 

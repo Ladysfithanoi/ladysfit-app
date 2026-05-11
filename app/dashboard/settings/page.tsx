@@ -25,7 +25,7 @@ export default async function SettingsPage() {
   }
 
   const branches = await prisma.branch.findMany({
-    include: { _count: { select: { users: true, clients: true } } },
+    include: { _count: { select: { users: { where: { deletedAt: null } }, clients: true } } },
     orderBy: { name: "asc" },
   });
 

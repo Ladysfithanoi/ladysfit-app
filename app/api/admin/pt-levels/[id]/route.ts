@@ -35,7 +35,7 @@ export async function PUT(
     },
     include: {
       phaseAccess: { include: { phase: true } },
-      _count: { select: { users: true } },
+      _count: { select: { users: { where: { deletedAt: null } } } },
     },
   });
 

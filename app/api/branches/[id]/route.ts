@@ -34,7 +34,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 
   const branch = await prisma.branch.findUnique({
     where: { id: params.id },
-    include: { _count: { select: { users: true, clients: true } } },
+    include: { _count: { select: { users: { where: { deletedAt: null } }, clients: true } } },
   });
 
   if (!branch) return NextResponse.json({ error: "Không tìm thấy cơ sở" }, { status: 404 });

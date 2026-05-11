@@ -35,7 +35,7 @@ export async function GET() {
     }),
     prisma.branch.findMany({
       where: branchFilter,
-      select: { id: true, name: true, _count: { select: { users: true } } },
+      select: { id: true, name: true, _count: { select: { users: { where: { deletedAt: null } } } } },
       orderBy: { name: "asc" },
     }),
     prisma.weightLog.findMany({

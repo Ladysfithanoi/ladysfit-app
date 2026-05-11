@@ -16,7 +16,7 @@ export async function GET() {
       orderBy: { order: "asc" },
       include: {
         phaseAccess: { include: { phase: true } },
-        _count: { select: { users: true } },
+        _count: { select: { users: { where: { deletedAt: null } } } },
       },
     });
     return NextResponse.json(levels);
