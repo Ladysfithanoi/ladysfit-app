@@ -1026,15 +1026,12 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                   label: "Cấp độ",
                   value:
                     (userInfo.role === "FREE" || userInfo.role === "RESTRICTED") && userInfo.ptLevel ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <span
-                          className="px-2.5 py-1 rounded-full text-xs font-bold"
-                          style={{ backgroundColor: userInfo.ptLevel.color + "22", color: userInfo.ptLevel.color }}
-                        >
-                          {userInfo.ptLevel.name}
-                        </span>
-                        <span className="text-xs text-gray-400">{ROLE_LABEL[userInfo.role]}</span>
-                      </div>
+                      <span
+                        className="px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ backgroundColor: userInfo.ptLevel.color + "22", color: userInfo.ptLevel.color }}
+                      >
+                        {userInfo.ptLevel.name}
+                      </span>
                     ) : (
                       <span
                         className={cn(

@@ -470,12 +470,9 @@ export function StaffPageClient({
                   </td>
                   <td className="px-5 py-3.5">
                     {(s.role === "FREE" || s.role === "RESTRICTED") && s.ptLevel ? (
-                      <div className="flex flex-col gap-1">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold w-fit" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
-                          {s.ptLevel.name}
-                        </span>
-                        <span className="text-xs text-gray-400">{ROLE_LABEL[s.role]}</span>
-                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold w-fit" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
+                        {s.ptLevel.name}
+                      </span>
                     ) : (
                       <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold", ROLE_STYLE[s.role])}>
                         {ROLE_LABEL[s.role]}
