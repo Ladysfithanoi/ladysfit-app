@@ -6,6 +6,7 @@ import { fmtDate } from "@/lib/format-date";
 import { DateMaskInput, todayDMY, dmyToISO, isoToDMY } from "./date-mask-input";
 import { ReceiptPopover } from "./receipt-popover";
 import { ImportModal } from "./import-modal";
+import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type Transaction = {
   id:              string;
@@ -67,6 +68,8 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
 
   const [exporting, setExporting]   = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<{ id: string; amount: number; description?: string } | null>(null);
 
   const [form, setForm] = useState({
     category:           INCOME_CATEGORIES[0],
@@ -200,7 +203,6 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Xoá khoản thu này?")) return;
     const res = await fetch(`/api/finance/transactions/${id}`, { method: "DELETE" });
     if (res.ok) {
       await fetchRows();
@@ -332,7 +334,13 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
                             <button onClick={() => openEdit(tx)} className="text-gray-400 hover:text-blue-500 transition-colors">
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => handleDelete(tx.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                            <button
+                              onClick={() => {
+                                setTransactionToDelete({ id: tx.id, amount: tx.amount, description: tx.description ?? undefined });
+                                setDeleteDialogOpen(true);
+                              }}
+                              className="text-gray-400 hover:text-red-500 transition-colors"
+                            >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -507,6 +515,21 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
           onImported={() => { fetchRows(); onMutate(); setShowImport(false); }}
         />
       )}
+
+      <AlertDialog
+        open={deleteDialogOpen}
+        onClose={() => { setDeleteDialogOpen(false); setTransactionToDelete(null); }}
+        title="Xóa khoản giao dịch"
+        description={`Bạn có chắc muốn xóa khoản ${transactionToDelete?.amount?.toLocaleString("vi-VN")}đ${transactionToDelete?.description ? ` — ${transactionToDelete.description}` : ""}?\n\nHành động này không thể hoàn tác.`}
+        confirmLabel="Xóa"
+        cancelLabel="Hủy"
+        onConfirm={() => {
+          if (transactionToDelete) handleDelete(transactionToDelete.id);
+          setDeleteDialogOpen(false);
+          setTransactionToDelete(null);
+        }}
+        variant="danger"
+      />
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
