@@ -16,6 +16,9 @@ type ExamStatus = {
   ptLevelColor: string | null;
   defaultLevelName: string | null;
   defaultLevelColor: string | null;
+  nextLevelName: string | null;
+  nextLevelColor: string | null;
+  isAtDefaultLevel: boolean;
   lastAttempt: {
     id: string;
     score: number;
@@ -51,7 +54,55 @@ export function UpgradeCard() {
   if (!status) return null;
   if (!status.enableLevelSystem) return null;
 
-  // ─── FREE role: active or expired ───
+  // ─── FREE at default level: show upgrade card, not retest countdown ───
+  if (status.role === "FREE" && status.isAtDefaultLevel) {
+    if (!status.nextLevelName) return null;
+    const targetName = status.nextLevelName;
+    const targetColor = status.nextLevelColor || "#f15b5c";
+    const lastFailed = status.lastAttempt && !status.lastAttempt.passed;
+    return (
+      <div className="bg-white rounded-2xl border border-[#f15b5c]/20 shadow-sm p-5 mb-5">
+        <div className="flex items-start gap-4">
+          <div className="p-2.5 rounded-xl bg-[#f15b5c]/10 shrink-0">
+            <GraduationCap className="w-5 h-5 text-[#f15b5c]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-extrabold text-gray-900">Nâng lên cấp{" "}
+              <span style={{ color: targetColor }}>{targetName}</span>
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5 font-medium">
+              Vượt qua bài kiểm tra để thăng lên cấp độ cao hơn
+            </p>
+            <div className="mt-2.5 flex items-center gap-3 flex-wrap">
+              <span className="flex items-center gap-1 text-xs text-gray-500">
+                <span className="font-bold text-gray-700">{status.numQuestions}</span> câu hỏi
+              </span>
+              <span className="text-gray-200">·</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500">
+                Điểm đạt{" "}
+                <span className="font-bold text-gray-700">{status.passingScore}%</span>
+              </span>
+            </div>
+            {lastFailed && status.lastAttempt && (
+              <p className="mt-2 text-xs text-red-500 font-semibold">
+                Lần trước: {Math.round((status.lastAttempt.score / status.lastAttempt.total) * 100)}% — Chưa đạt
+              </p>
+            )}
+            <Link
+              href="/dashboard/exam/take"
+              className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-opacity"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              {lastFailed ? "Thi lại ngay" : "Bắt đầu thi"}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── FREE role: active or expired retest countdown ───
   if (status.role === "FREE") {
     const daysLeft = status.daysLeft ?? 0;
     const isExpired = status.expired;
@@ -174,8 +225,12 @@ export function UpgradeCard() {
 
   // ─── RESTRICTED role ───
   if (status.role === "RESTRICTED") {
+    // Hide exam card entirely if no higher level exists to upgrade to
+    if (!status.nextLevelName) return null;
+
     const lastFailed = status.lastAttempt && !status.lastAttempt.passed;
-    const targetName = status.defaultLevelName || "Tự do";
+    const targetName = status.nextLevelName;
+    const targetColor = status.nextLevelColor || "#f15b5c";
     return (
       <div className="bg-white rounded-2xl border border-[#f15b5c]/20 shadow-sm p-5 mb-5">
         <div className="flex items-start gap-4">
@@ -183,9 +238,11 @@ export function UpgradeCard() {
             <GraduationCap className="w-5 h-5 text-[#f15b5c]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-extrabold text-gray-900">Thăng cấp lên {targetName}</p>
+            <p className="text-sm font-extrabold text-gray-900">Nâng lên cấp{" "}
+              <span style={{ color: targetColor }}>{targetName}</span>
+            </p>
             <p className="text-xs text-gray-400 mt-0.5 font-medium">
-              Vượt qua bài kiểm tra để mở khóa đầy đủ tính năng trong 30 ngày
+              Vượt qua bài kiểm tra để thăng lên cấp độ cao hơn
             </p>
 
             <div className="mt-2.5 flex items-center gap-3 flex-wrap">
