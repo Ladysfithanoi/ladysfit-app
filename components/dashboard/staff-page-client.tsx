@@ -12,12 +12,15 @@ import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type Branch = { id: string; name: string };
 type FMAssignment = { branchId: string; branch: { id: string; name: string } };
+type PTLevel = { id: string; name: string; color: string; isActive: boolean };
 type StaffMember = {
   id: string;
   name: string | null;
   email: string;
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "FREE" | "RESTRICTED";
   branchId: string | null;
+  ptLevelId: string | null;
+  ptLevel: { id: string; name: string; color: string } | null;
   branch: Branch | null;
   managedBranches: FMAssignment[];
   _count: { clients: number };
@@ -162,8 +165,21 @@ export function StaffPageClient({
   const [copied, setCopied] = useState(false);
 
   // Form state
-  const [selectedRole, setSelectedRole] = useState<string>("FREE");
+  const [selectedRole, setSelectedRole] = useState<string>("PT");
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
+  const [ptLevels, setPtLevels] = useState<PTLevel[]>([]);
+  const [selectedPtLevelId, setSelectedPtLevelId] = useState<string>("");
+
+  useEffect(() => {
+    if (selectedRole === "PT") {
+      fetch("/api/admin/pt-levels")
+        .then((r) => r.json())
+        .then((data: unknown) => {
+          if (Array.isArray(data)) setPtLevels((data as PTLevel[]).filter((l) => l.isActive));
+        })
+        .catch(() => setPtLevels([]));
+    }
+  }, [selectedRole]);
 
   const canManage = isAdmin || isFM;
 
@@ -183,15 +199,18 @@ export function StaffPageClient({
   function openAdd() {
     setEditing(null);
     setError("");
-    setSelectedRole("FREE");
+    setSelectedRole("PT");
     setSelectedBranchIds([]);
+    setSelectedPtLevelId("");
     setOpen(true);
   }
   function openEdit(s: StaffMember) {
     setEditing(s);
     setError("");
-    setSelectedRole(s.role);
+    const uiRole = s.role === "FREE" || s.role === "RESTRICTED" ? "PT" : s.role;
+    setSelectedRole(uiRole);
     setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
+    setSelectedPtLevelId(s.ptLevelId ?? "");
     setOpen(true);
   }
   function closePanel() { setOpen(false); setEditing(null); setError(""); }
@@ -253,16 +272,28 @@ export function StaffPageClient({
       return;
     }
 
+    // "PT" is a UI alias — map to actual system role
+    const actualRole =
+      selectedRole === "PT"
+        ? editing?.role ?? "RESTRICTED"
+        : selectedRole;
+
     const body: Record<string, unknown> = {
       name: fd.get("name") as string,
       email: fd.get("email") as string,
-      role: selectedRole,
+      role: actualRole,
     };
 
     if (selectedRole === "FM") {
       body.managedBranchIds = selectedBranchIds;
     } else {
       body.branchId = fd.get("branchId") as string;
+    }
+
+    if (selectedRole === "PT") {
+      body.ptLevelId = selectedPtLevelId || null;
+    } else {
+      body.ptLevelId = null;
     }
 
     const pw = fd.get("password") as string;
@@ -438,9 +469,18 @@ export function StaffPageClient({
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold", ROLE_STYLE[s.role])}>
-                      {ROLE_LABEL[s.role]}
-                    </span>
+                    {(s.role === "FREE" || s.role === "RESTRICTED") && s.ptLevel ? (
+                      <div className="flex flex-col gap-1">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold w-fit" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
+                          {s.ptLevel.name}
+                        </span>
+                        <span className="text-xs text-gray-400">{ROLE_LABEL[s.role]}</span>
+                      </div>
+                    ) : (
+                      <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold", ROLE_STYLE[s.role])}>
+                        {ROLE_LABEL[s.role]}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     <span className="text-sm font-bold text-gray-800">{s._count.clients}</span>
@@ -654,22 +694,37 @@ export function StaffPageClient({
             />
           </Field>
 
-          <Field label="Cấp độ *">
+          <Field label="Chức vụ *">
             <select
               value={selectedRole}
               onChange={(e) => {
                 setSelectedRole(e.target.value);
                 setSelectedBranchIds([]);
+                setSelectedPtLevelId("");
               }}
               className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
             >
               {isAdmin && <option value="ADMIN">Admin</option>}
               {isAdmin && <option value="CEO_FITPARTNER">CEO Fitpartner</option>}
               {isAdmin && <option value="FM">FM (Fitness Manager)</option>}
-              <option value="FREE">Tự do</option>
-              <option value="RESTRICTED">Hạn chế</option>
+              <option value="PT">PT (Personal Trainer)</option>
             </select>
           </Field>
+
+          {selectedRole === "PT" && (
+            <Field label="Cấp độ PT">
+              <select
+                value={selectedPtLevelId}
+                onChange={(e) => setSelectedPtLevelId(e.target.value)}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              >
+                <option value="">— Không có cấp độ —</option>
+                {ptLevels.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           {selectedRole === "FM" ? (
             <Field label="Cơ sở quản lý *">

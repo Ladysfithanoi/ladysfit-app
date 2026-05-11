@@ -21,7 +21,10 @@ export default async function StaffPage() {
         : isFM
         ? { branchId: { in: managedBranchIds } }
         : { branchId: session.user.branchId ?? undefined },
-      include: {
+      select: {
+        id: true, name: true, email: true, role: true, branchId: true,
+        ptLevelId: true,
+        ptLevel: { select: { id: true, name: true, color: true } },
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },

@@ -65,6 +65,7 @@ type UserInfo = {
   name: string | null;
   email: string;
   role: string;
+  ptLevel: { id: string; name: string; color: string } | null;
   branch: { name: string } | null;
 };
 
@@ -1025,16 +1026,27 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 { label: "Email", value: userInfo.email },
                 {
                   label: "Cấp độ",
-                  value: (
-                    <span
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-xs font-bold",
-                        ROLE_STYLE[userInfo.role] ?? "bg-gray-100 text-gray-600"
-                      )}
-                    >
-                      {ROLE_LABEL[userInfo.role] ?? userInfo.role}
-                    </span>
-                  ),
+                  value:
+                    (userInfo.role === "FREE" || userInfo.role === "RESTRICTED") && userInfo.ptLevel ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className="px-2.5 py-1 rounded-full text-xs font-bold"
+                          style={{ backgroundColor: userInfo.ptLevel.color + "22", color: userInfo.ptLevel.color }}
+                        >
+                          {userInfo.ptLevel.name}
+                        </span>
+                        <span className="text-xs text-gray-400">{ROLE_LABEL[userInfo.role]}</span>
+                      </div>
+                    ) : (
+                      <span
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-bold",
+                          ROLE_STYLE[userInfo.role] ?? "bg-gray-100 text-gray-600"
+                        )}
+                      >
+                        {ROLE_LABEL[userInfo.role] ?? userInfo.role}
+                      </span>
+                    ),
                 },
                 { label: "Cơ sở", value: userInfo.branch?.name ?? "—" },
               ].map((row) => (
