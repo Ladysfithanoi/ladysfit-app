@@ -159,6 +159,9 @@ export function NutritionFoodSearch({
       <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest">
         Thêm bữa ăn thủ công
       </p>
+      <p className="text-xs text-gray-400 italic mt-1">
+        * Toàn bộ dữ liệu dinh dưỡng đều được trích xuất từ tài liệu của USDA (Bộ Nông Nghiệp Hoa Kỳ)
+      </p>
 
       {/* Slot + meal name */}
       <div className="flex gap-2">
