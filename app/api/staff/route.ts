@@ -4,18 +4,34 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const branchId = searchParams.get("branchId");
 
   const role = session.user.role;
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
+  let staffWhere: Record<string, unknown> = { deletedAt: null };
+  if (isFM) {
+    staffWhere.branchId = (branchId && managedBranchIds.includes(branchId))
+      ? branchId
+      : { in: managedBranchIds };
+  } else if (branchId) {
+    staffWhere = {
+      deletedAt: null,
+      OR: [
+        { branchId },
+        { managedBranches: { some: { branchId } } },
+      ],
+    };
+  }
+
   const staff = await prisma.user.findMany({
-    where: isFM
-      ? { branchId: { in: managedBranchIds }, deletedAt: null }
-      : { deletedAt: null },
+    where: staffWhere,
     select: {
       id: true,
       name: true,

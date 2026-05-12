@@ -54,6 +54,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
   // Fetch PT list for filter dropdown (FM/CEO/ADMIN only)
   useEffect(() => {
     if (isPT || !branchId) return;
+    setPtList([]);
     fetch(`/api/staff?branchId=${branchId}`)
       .then((r) => r.json())
       .then((data: (PTUser & { role: string })[]) =>
