@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -30,9 +31,15 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json(consultations);
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation GET]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -51,4 +58,9 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json(consultation, { status: 201 });
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation POST]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }

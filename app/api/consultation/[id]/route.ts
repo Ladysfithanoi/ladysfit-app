@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -25,6 +26,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 
   return NextResponse.json(c);
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation/[id] GET]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }
 
 type WDMovement = {
@@ -38,6 +44,7 @@ type WorkoutDesignBody = {
 };
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -224,9 +231,15 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     ...rest,
     workoutDesign: workoutDesignJson ? JSON.parse(workoutDesignJson) : null,
   });
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation/[id] PUT]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -245,4 +258,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 
   await prisma.consultation.delete({ where: { id: params.id } });
   return NextResponse.json({ ok: true });
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation/[id] DELETE]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }

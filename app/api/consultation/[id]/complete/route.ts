@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -156,4 +157,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   });
 
   return NextResponse.json({ clientId: client.id });
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("[consultation/complete] error:", e.message, "code:", e.code);
+    return NextResponse.json({ error: e.message ?? "Internal server error", code: e.code }, { status: 500 });
+  }
 }
