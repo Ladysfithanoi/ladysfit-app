@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -29,9 +30,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       createdAt: l.createdAt.toISOString(),
     }))
   );
+  } catch (error: unknown) {
+    const e = error as { message?: string };
+    console.error("[workout-logs GET]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -177,4 +184,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     createdAt: log.createdAt.toISOString(),
     packageUpdate,
   });
+  } catch (error: unknown) {
+    const e = error as { message?: string };
+    console.error("[workout-logs POST]", e.message);
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
 }
