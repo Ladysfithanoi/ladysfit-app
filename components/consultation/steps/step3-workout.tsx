@@ -209,8 +209,8 @@ export function Step3Workout({
   const [phases, setPhases] = useState<{ id: string; name: string }[]>([]);
   const [phase, setPhase] = useState(savedDesign?.phase ?? "");
   const [workoutType, setWorkoutType] = useState(savedDesign?.workoutType ?? PHASE1_WORKOUT_TYPE);
-  const [sessionsPerWeek, setSessionsPerWeek] = useState(savedDesign?.sessionsPerWeek ?? 3);
-  const [startWeek, setStartWeek] = useState(savedDesign?.startWeek ?? 1);
+  const [sessionsPerWeek, setSessionsPerWeek] = useState<number | "">(savedDesign?.sessionsPerWeek ?? 3);
+  const [startWeek, setStartWeek] = useState<number | "">(savedDesign?.startWeek ?? 1);
   const [draftSessions, setDraftSessions] = useState<DraftSession[] | null>(
     hasSaved ? restoreDesign(savedDesign!) : null
   );
@@ -244,7 +244,7 @@ export function Step3Workout({
   }
 
   function handleConfigConfirm() {
-    const drafts = buildDraftSessions(phase, effectiveWorkoutType, sessionsPerWeek);
+    const drafts = buildDraftSessions(phase, effectiveWorkoutType, Number(sessionsPerWeek) || 3);
     setDraftSessions(drafts);
     setActiveSession(0);
   }
@@ -281,8 +281,8 @@ export function Step3Workout({
       workoutDesign: {
         phase,
         workoutType: effectiveWorkoutType,
-        sessionsPerWeek,
-        startWeek,
+        sessionsPerWeek: Number(sessionsPerWeek) || 3,
+        startWeek: Number(startWeek) || 1,
         sessions: draftSessions.map((s) => {
           const isCardio = s.sessionType === "Cardio";
           return {
@@ -413,8 +413,16 @@ export function Step3Workout({
                   type="number"
                   min={1}
                   max={7}
+                  inputMode="numeric"
                   value={sessionsPerWeek}
-                  onChange={(e) => setSessionsPerWeek(Math.min(7, Math.max(1, Number(e.target.value))))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSessionsPerWeek(v === "" ? "" : parseInt(v) || "");
+                  }}
+                  onBlur={() => {
+                    const n = Number(sessionsPerWeek);
+                    setSessionsPerWeek(isNaN(n) || n < 1 ? 1 : Math.min(7, n));
+                  }}
                   className={selectCls}
                 />
               </div>
@@ -424,8 +432,16 @@ export function Step3Workout({
                 <input
                   type="number"
                   min={1}
+                  inputMode="numeric"
                   value={startWeek}
-                  onChange={(e) => setStartWeek(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setStartWeek(v === "" ? "" : parseInt(v) || "");
+                  }}
+                  onBlur={() => {
+                    const n = Number(startWeek);
+                    setStartWeek(isNaN(n) || n < 1 ? 1 : n);
+                  }}
                   className={selectCls}
                 />
               </div>
