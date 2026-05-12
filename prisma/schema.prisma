@@ -735,17 +735,17 @@ model WorkoutSetLog {
   movementId    String?
   movementName  String
   exerciseName  String
-  set1Load      Float?
+  set1Load      String?
   set1Reps      Int?
-  set2Load      Float?
+  set2Load      String?
   set2Reps      Int?
-  set3Load      Float?
+  set3Load      String?
   set3Reps      Int?
-  set4Load      Float?
+  set4Load      String?
   set4Reps      Int?
-  set5Load      Float?
+  set5Load      String?
   set5Reps      Int?
-  set6Load      Float?
+  set6Load      String?
   set6Reps      Int?
   exerciseNotes String? @db.Text
 

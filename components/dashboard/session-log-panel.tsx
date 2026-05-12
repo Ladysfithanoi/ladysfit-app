@@ -185,17 +185,17 @@ export function SessionLogForm({
           movementId: sl.movementId,
           movementName: sl.movementName,
           exerciseName: sl.exerciseName,
-          set1Load: sl.sets[0].load ? parseFloat(sl.sets[0].load) : null,
+          set1Load: sl.sets[0].load || null,
           set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
-          set2Load: sl.sets[1].load ? parseFloat(sl.sets[1].load) : null,
+          set2Load: sl.sets[1].load || null,
           set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
-          set3Load: sl.sets[2].load ? parseFloat(sl.sets[2].load) : null,
+          set3Load: sl.sets[2].load || null,
           set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
-          set4Load: sl.sets[3].load ? parseFloat(sl.sets[3].load) : null,
+          set4Load: sl.sets[3].load || null,
           set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
-          set5Load: sl.sets[4].load ? parseFloat(sl.sets[4].load) : null,
+          set5Load: sl.sets[4].load || null,
           set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
-          set6Load: sl.sets[5].load ? parseFloat(sl.sets[5].load) : null,
+          set6Load: sl.sets[5].load || null,
           set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
           exerciseNotes: sl.exerciseNotes || null,
         })),
@@ -289,9 +289,8 @@ export function SessionLogForm({
                         <td key={si} className="px-1 py-1.5 align-top">
                           <div className="flex flex-col gap-0.5 items-center">
                             <input
-                              type="number"
-                              step="0.5"
-                              min="0"
+                              type="text"
+                              inputMode="numeric"
                               value={s.load}
                               onChange={(e) => updateSet(mi, si, "load", e.target.value)}
                               placeholder="—"
@@ -482,7 +481,7 @@ export function SessionLogHistory({
                                       {sv.load != null || sv.reps != null ? (
                                         <div className="space-y-0.5">
                                           {sv.load != null && (
-                                            <div className="font-bold text-[#f15b5c]">{sv.load}kg</div>
+                                            <div className="font-bold text-[#f15b5c]">{sv.load}</div>
                                           )}
                                           {sv.reps != null && (
                                             <div className="text-gray-600">×{sv.reps}</div>
