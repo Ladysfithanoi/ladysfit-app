@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     const branchName = branch?.name ?? branchId;
 
     const records = await prisma.salaryRecord.findMany({
-      where: { branchId, month, year },
+      where: { branchId, month, year, user: { deletedAt: null } },
       include: { user: { select: { id: true, name: true, email: true, role: true } } },
       orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
     });
