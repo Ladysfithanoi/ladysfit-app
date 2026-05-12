@@ -26,9 +26,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
     },
   };
 
-  let client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs;
+  let client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs, sysConfig;
   try {
-    [client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs] = await Promise.all([
+    [client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs, sysConfig] = await Promise.all([
       prisma.client.findUnique({
         where: { id: params.id },
         include: {
@@ -89,6 +89,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
         orderBy: { date: "desc" },
         take: 30,
       }).catch((e) => { console.error("activityLogs query failed:", e); return []; }),
+      prisma.systemConfig.findUnique({ where: { id: "main" } })
+        .catch(() => null),
     ]);
     console.log("Data fetched OK. client found:", !!client);
   } catch (error) {
@@ -285,6 +287,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       userRole={session.user.role}
       currentUserId={session.user.id}
       isSubstitute={isSubstitute}
+      enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
     />
   );
 }

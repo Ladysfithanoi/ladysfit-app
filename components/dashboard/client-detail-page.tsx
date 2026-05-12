@@ -227,6 +227,7 @@ export function ClientDetailPage({
   userRole,
   currentUserId,
   isSubstitute,
+  enableLevelSystem = true,
 }: {
   client: ClientDetail;
   branches: Branch[];
@@ -239,6 +240,7 @@ export function ClientDetailPage({
   userRole?: string;
   currentUserId?: string;
   isSubstitute?: boolean;
+  enableLevelSystem?: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
@@ -1833,6 +1835,7 @@ export function ClientDetailPage({
             )
           }
           userRole={userRole}
+          enableLevelSystem={enableLevelSystem}
         />
       )}
 

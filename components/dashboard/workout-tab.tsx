@@ -237,6 +237,7 @@ function ProgramView({
   onLogAdded,
   userRole,
   isSubstitute,
+  enableLevelSystem = true,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -246,6 +247,7 @@ function ProgramView({
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  enableLevelSystem?: boolean;
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -285,14 +287,14 @@ function ProgramView({
   const phaseLabel = getPhaseLabel(program.phase);
   const showType = program.workoutType && program.workoutType !== program.phase;
 
-  const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase, isSubstitute);
+  const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase, isSubstitute, enableLevelSystem);
   const showEditTypeDropdown = editTypeOptions.length > 0;
   const effectiveEditType = showEditTypeDropdown ? editWorkoutType : PHASE1_WORKOUT_TYPE;
   const editSessionTypeOptions = getSessionTypeOptions(editPhase, effectiveEditType);
 
   function enterEditMode() {
     if (!currentWeekData) return;
-    const allowedTypes = getAllowedWorkoutTypeOptions(userRole, program.phase, isSubstitute);
+    const allowedTypes = getAllowedWorkoutTypeOptions(userRole, program.phase, isSubstitute, enableLevelSystem);
     const currentType = program.workoutType ?? PHASE1_WORKOUT_TYPE;
     const typeAllowed = allowedTypes.length === 0 || allowedTypes.some((t) => t.dbValue === currentType);
     setDraftSessions(currentWeekData.sessions.map(sessionToDraft));
@@ -311,7 +313,7 @@ function ProgramView({
 
   function handleEditPhaseChange(newPhase: string) {
     setEditPhase(newPhase);
-    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, isSubstitute);
+    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, isSubstitute, enableLevelSystem);
     setEditWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
   }
 
@@ -868,6 +870,7 @@ export function WorkoutTab({
   onPackageUpdated,
   userRole,
   isSubstitute,
+  enableLevelSystem = true,
 }: {
   clientId: string;
   initialPrograms: WorkoutProgram[];
@@ -875,6 +878,7 @@ export function WorkoutTab({
   onPackageUpdated?: (pkg: PackageUpdate) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  enableLevelSystem?: boolean;
 }) {
   const [programs, setPrograms] = useState(initialPrograms);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
@@ -938,6 +942,7 @@ export function WorkoutTab({
           onLogAdded={handleLogAdded}
           userRole={userRole}
           isSubstitute={isSubstitute}
+          enableLevelSystem={enableLevelSystem}
         />
       ))}
 
@@ -964,6 +969,7 @@ export function WorkoutTab({
                   onLogAdded={handleLogAdded}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
+                  enableLevelSystem={enableLevelSystem}
                 />
               ))}
             </div>

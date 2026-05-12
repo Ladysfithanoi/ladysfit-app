@@ -197,12 +197,14 @@ export function Step3Workout({
   isReadOnly,
   workoutDesign: savedDesign,
   userRole,
+  enableLevelSystem = true,
 }: {
   onNext: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
   isReadOnly: boolean;
   workoutDesign?: WorkoutDesign | null;
   userRole?: string;
+  enableLevelSystem?: boolean;
 }) {
   const hasSaved = !!savedDesign;
 
@@ -225,21 +227,21 @@ export function Step3Workout({
         setPhases(active);
         if (!savedDesign?.phase && active.length > 0) {
           setPhase(active[0].name);
-          const opts = getAllowedWorkoutTypeOptions(userRole, active[0].name);
+          const opts = getAllowedWorkoutTypeOptions(userRole, active[0].name, false, enableLevelSystem);
           setWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
         }
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const typeOptions = getAllowedWorkoutTypeOptions(userRole, phase);
+  const typeOptions = getAllowedWorkoutTypeOptions(userRole, phase, false, enableLevelSystem);
   const showTypeDropdown = typeOptions.length > 0;
   const effectiveWorkoutType = showTypeDropdown ? workoutType : PHASE1_WORKOUT_TYPE;
   const sessionTypeOptions = getSessionTypeOptions(phase, effectiveWorkoutType);
 
   function handlePhaseChange(newPhase: string) {
     setPhase(newPhase);
-    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase);
+    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, false, enableLevelSystem);
     setWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
   }
 

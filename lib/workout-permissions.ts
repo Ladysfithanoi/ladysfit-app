@@ -12,9 +12,11 @@ export function isPhaseAllowed(
   role: string | undefined,
   phase: string,
   workoutType?: string,
-  isSubstitute?: boolean
+  isSubstitute?: boolean,
+  enableLevelSystem?: boolean
 ): boolean {
   if (isSubstitute) return true;
+  if (enableLevelSystem === false) return true;
   if (role !== "RESTRICTED") return true;
   if (phase === "Giai đoạn 1") return true;
   if (!workoutType || workoutType === phase) return false;
@@ -30,10 +32,12 @@ export function getAllowedPhaseOptions() {
 export function getAllowedWorkoutTypeOptions(
   role: string | undefined,
   phase: string,
-  isSubstitute?: boolean
+  isSubstitute?: boolean,
+  enableLevelSystem?: boolean
 ): { label: string; dbValue: string }[] {
   const all = WORKOUT_TYPE_OPTIONS[phase] ?? [];
   if (isSubstitute) return all;
+  if (enableLevelSystem === false) return all;
   if (role !== "RESTRICTED") return all;
   const allowed = RESTRICTED_ALLOWED_TYPES[phase];
   if (!allowed) return all; // GD1 has no types — pass through

@@ -38,7 +38,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
     }
   }
 
-  const [branches, staff] = await Promise.all([
+  const [branches, staff, sysConfig] = await Promise.all([
     prisma.branch.findMany({
       where: isFM ? { id: { in: managedBranchIds } } : undefined,
       orderBy: { name: "asc" },
@@ -48,6 +48,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       select: { id: true, name: true, email: true, branchId: true },
       orderBy: { name: "asc" },
     }),
+    prisma.systemConfig.findUnique({ where: { id: "main" } }).catch(() => null),
   ]);
 
   const { workoutDesignJson, ...cRest } = c;
@@ -65,6 +66,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       isFM={isFM}
       currentUserId={session.user.id}
       userRole={role}
+      enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
     />
   );
 }

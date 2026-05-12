@@ -47,12 +47,12 @@ type SetLogItem = {
   id: string;
   movementName: string;
   exerciseName: string;
-  set1Load: number | null; set1Reps: number | null;
-  set2Load: number | null; set2Reps: number | null;
-  set3Load: number | null; set3Reps: number | null;
-  set4Load: number | null; set4Reps: number | null;
-  set5Load: number | null; set5Reps: number | null;
-  set6Load: number | null; set6Reps: number | null;
+  set1Load: string | null; set1Reps: number | null;
+  set2Load: string | null; set2Reps: number | null;
+  set3Load: string | null; set3Reps: number | null;
+  set4Load: string | null; set4Reps: number | null;
+  set5Load: string | null; set5Reps: number | null;
+  set6Load: string | null; set6Reps: number | null;
   exerciseNotes: string | null;
 };
 
@@ -170,12 +170,12 @@ function WorkoutProgramSection({ program }: { program: PortalProgram | null }) {
 const SET_KEYS = [1, 2, 3, 4, 5, 6] as const;
 
 function setVal(sl: SetLogItem, n: typeof SET_KEYS[number]) {
-  const load = sl[`set${n}Load` as keyof SetLogItem] as number | null;
+  const load = sl[`set${n}Load` as keyof SetLogItem] as string | null;
   const reps = sl[`set${n}Reps` as keyof SetLogItem] as number | null;
   if (load == null && reps == null) return null;
-  if (load != null && reps != null) return `${load}kg×${reps}`;
+  if (load != null && reps != null) return `${load}×${reps}`;
   if (reps != null) return `${reps} reps`;
-  return `${load}kg`;
+  return `${load}`;
 }
 
 function ProgressionBadge({ sl }: { sl: SetLogItem }) {

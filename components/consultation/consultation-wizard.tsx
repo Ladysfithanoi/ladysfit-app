@@ -43,6 +43,7 @@ export function ConsultationWizard({
   isAdmin,
   isFM = false,
   userRole,
+  enableLevelSystem = true,
 }: {
   consultation: ConsultationData;
   branches: Branch[];
@@ -51,6 +52,7 @@ export function ConsultationWizard({
   isFM?: boolean;
   currentUserId: string;
   userRole?: string;
+  enableLevelSystem?: boolean;
 }) {
   const router = useRouter();
   const [consultation, setConsultation] = useState(initial);
@@ -206,6 +208,7 @@ export function ConsultationWizard({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             workoutDesign={consultation.workoutDesign as any}
             userRole={userRole}
+            enableLevelSystem={enableLevelSystem}
           />
         )}
         {step === 4 && (
