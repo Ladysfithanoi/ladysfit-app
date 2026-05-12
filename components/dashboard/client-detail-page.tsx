@@ -324,11 +324,13 @@ export function ClientDetailPage({
   }
 
   // PTs available for substitute selection
-  const isPT = userRole === "FREE" || userRole === "RESTRICTED";
   const substitutablePTs = staffList.filter((pt) => {
-    if (!pt.role || pt.role === "ADMIN" || pt.role === "FM" || pt.role === "CEO_FITPARTNER") return false;
+    // Exclude management-only roles that don't teach
+    if (!pt.role || pt.role === "COO" || pt.role === "CEO_FITPARTNER") return false;
+    // Exclude self
     if (pt.id === currentUserId) return false;
-    if (isPT && pt.branchId !== client.branch?.id) return false;
+    // Always restrict to client's branch — substitutes must be at the same branch
+    if (pt.branchId !== client.branch?.id) return false;
     return true;
   });
 
