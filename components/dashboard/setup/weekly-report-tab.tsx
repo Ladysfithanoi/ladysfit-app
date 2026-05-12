@@ -35,6 +35,18 @@ type Props = {
   isReadOnly: boolean;
 };
 
+function getRoleDisplay(role: string): string {
+  switch (role) {
+    case "ADMIN": return "Admin";
+    case "FM": return "FM";
+    case "COO": return "COO";
+    case "CEO_FITPARTNER": return "CEO";
+    case "FREE": return "PT";
+    case "RESTRICTED": return "PT";
+    default: return role;
+  }
+}
+
 function getCurrentWeek(month: number, year: number): number {
   const d = new Date(year, month - 1, 1);
   const dow = d.getDay() || 7;
@@ -194,7 +206,7 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
             <div className="grid grid-cols-3 gap-4 text-sm border border-gray-200 rounded-lg overflow-hidden">
               <div className="px-4 py-2.5 border-r border-gray-200">
                 <span className="text-gray-400 text-xs font-semibold">Vị trí:</span>{" "}
-                <span className="font-semibold text-gray-700">FM {userName}</span>
+                <span className="font-semibold text-gray-700">{getRoleDisplay(currentUserRole)} {userName}</span>
               </div>
               <div className="px-4 py-2.5 border-r border-gray-200">
                 <span className="text-gray-400 text-xs font-semibold">Cơ sở:</span>{" "}
