@@ -52,7 +52,7 @@ function computeWeekDates(year: number, month: number, weekNumber: number) {
   return { weekStart, weekEnd };
 }
 
-export function TargetsTab({ branchId, branchName, month, year, currentUserId, isReadOnly, isPT, ptList }: Props) {
+export function TargetsTab({ branchId, branchName, month, year, currentUserId, currentUserRole, isReadOnly, isPT, ptList }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_KEYS = getKpiKeys(isFitpartner);
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
@@ -66,6 +66,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, i
   const [weeklyEdit, setWeeklyEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
   const [weeklyForm, setWeeklyForm] = useState<Record<string, number | string>>({});
   const [saving, setSaving] = useState(false);
+  const [filterRole, setFilterRole] = useState<"all" | "FM" | "PT">("all");
 
   const fetchTargets = useCallback(async () => {
     if (!branchId) return;
@@ -302,12 +303,42 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, i
   // Merge ptList with targets so all PTs are shown even without targets
   const allPTs = ptList.length > 0 ? ptList : targets.map((t) => t.user);
 
+  const filteredPTs = filterRole === "all"
+    ? allPTs
+    : allPTs.filter((pt) =>
+        filterRole === "FM" ? pt.role === "FM" : (pt.role === "FREE" || pt.role === "RESTRICTED")
+      );
+  const filteredTargets = targets.filter((t) => filteredPTs.some((pt) => pt.id === t.userId));
+
   if (allPTs.length === 0) {
     return <div className="py-12 text-center text-sm text-gray-300">Chưa có PT nào trong cơ sở này</div>;
   }
 
+  const isManagerView = currentUserRole === "ADMIN" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+
   return (
     <div className="space-y-6">
+      {/* Role filter pills — Admin/CEO/COO only */}
+      {isManagerView && allPTs.some((pt) => pt.role === "FM") && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-400">Lọc vai trò:</span>
+          {(["all", "FM", "PT"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setFilterRole(r)}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold border transition-all",
+                filterRole === r
+                  ? "bg-[#f15b5c] text-white border-[#f15b5c]"
+                  : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+              )}
+            >
+              {r === "all" ? "Tất cả" : r}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Summary table: all PTs + total row */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
@@ -328,7 +359,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, i
               </tr>
             </thead>
             <tbody>
-              {allPTs.map((pt) => {
+              {filteredPTs.map((pt) => {
                 const t = targets.find((tgt) => tgt.userId === pt.id) ?? null;
                 return (
                   <tr key={pt.id} className="border-b border-gray-100 hover:bg-gray-50/40 divide-x divide-gray-100 even:bg-[#fafafa]">
@@ -361,8 +392,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, i
               <tr className="bg-gray-50 border-t-2 border-gray-200 divide-x divide-gray-200">
                 <td className="px-4 py-2.5 font-extrabold text-gray-900">Tổng</td>
                 {KPI_KEYS.map((k) => {
-                  const totalMT = targets.reduce((s, t) => s + ((t[k.targetKey as keyof MonthlyTarget] as number) ?? 0), 0);
-                  const totalAT = targets.reduce((s, t) =>
+                  const totalMT = filteredTargets.reduce((s, t) => s + ((t[k.targetKey as keyof MonthlyTarget] as number) ?? 0), 0);
+                  const totalAT = filteredTargets.reduce((s, t) =>
                     s + t.weeklyActuals.reduce((ws, w) => ws + ((w[k.actualKey as keyof typeof w] as number) ?? 0), 0), 0);
                   const pct = totalMT > 0 ? Math.round((totalAT / totalMT) * 100) : 0;
                   return (
@@ -382,7 +413,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, i
       </div>
 
       {/* Per-PT weekly breakdown */}
-      {allPTs.map((pt) => {
+      {filteredPTs.map((pt) => {
         const t = targets.find((tgt) => tgt.userId === pt.id) ?? null;
         const ptName = pt.name ?? pt.email;
 
