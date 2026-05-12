@@ -734,7 +734,7 @@ export function StaffPageClient({
                 onChange={setSelectedBranchIds}
               />
             </Field>
-          ) : (
+          ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" && selectedRole !== "ADMIN" ? (
             <Field label="Cơ sở *">
               <select
                 name="branchId"
@@ -748,7 +748,7 @@ export function StaffPageClient({
                 ))}
               </select>
             </Field>
-          )}
+          ) : null}
 
           {error && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3">

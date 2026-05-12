@@ -58,11 +58,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "FM không thể tạo tài khoản Admin hoặc FM" }, { status: 403 });
   }
 
+  const noBranchRole = role === "FM" || role === "CEO_FITPARTNER" || role === "COO" || role === "ADMIN";
+
   if (role === "FM") {
     if (!managedBranchIds || managedBranchIds.length === 0 || managedBranchIds.length > 5) {
       return NextResponse.json({ error: "FM phải có từ 1 đến 5 cơ sở quản lý" }, { status: 400 });
     }
-  } else if (!branchId) {
+  } else if (!noBranchRole && !branchId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
 
@@ -73,30 +75,35 @@ export async function POST(req: Request) {
 
   const hashed = await bcrypt.hash(password, 12);
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashed,
-      branchId: role === "FM" ? null : branchId,
-      role,
-      ...(ptLevelId && { ptLevelId }),
-    },
-    select: {
-      id: true, name: true, email: true, role: true, branchId: true,
-      ptLevelId: true,
-      ptLevel: { select: { id: true, name: true, color: true } },
-      branch: { select: { id: true, name: true } },
-      managedBranches: { include: { branch: { select: { id: true, name: true } } } },
-      _count: { select: { clients: true } },
-    },
-  });
-
-  if (role === "FM" && managedBranchIds?.length) {
-    await prisma.fMBranchAssignment.createMany({
-      data: (managedBranchIds as string[]).map((bid) => ({ userId: user.id, branchId: bid })),
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashed,
+        branchId: noBranchRole ? null : branchId,
+        role,
+        ...(ptLevelId && { ptLevelId }),
+      },
+      select: {
+        id: true, name: true, email: true, role: true, branchId: true,
+        ptLevelId: true,
+        ptLevel: { select: { id: true, name: true, color: true } },
+        branch: { select: { id: true, name: true } },
+        managedBranches: { include: { branch: { select: { id: true, name: true } } } },
+        _count: { select: { clients: true } },
+      },
     });
-  }
 
-  return NextResponse.json(user, { status: 201 });
+    if (role === "FM" && managedBranchIds?.length) {
+      await prisma.fMBranchAssignment.createMany({
+        data: (managedBranchIds as string[]).map((bid) => ({ userId: user.id, branchId: bid })),
+      });
+    }
+
+    return NextResponse.json(user, { status: 201 });
+  } catch (err) {
+    console.error("Create staff error:", err);
+    return NextResponse.json({ error: "Không thể tạo nhân sự. Vui lòng thử lại." }, { status: 500 });
+  }
 }

@@ -109,31 +109,36 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (branchId) updateData.branchId = branchId;
   }
 
-  const user = await prisma.user.update({
-    where: { id: params.id },
-    data: updateData,
-    select: {
-      id: true, name: true, email: true, role: true, branchId: true,
-      ptLevelId: true,
-      ptLevel: { select: { id: true, name: true, color: true } },
-      branch: { select: { id: true, name: true } },
-      managedBranches: { include: { branch: { select: { id: true, name: true } } } },
-      _count: { select: { clients: true } },
-    },
-  });
+  try {
+    const user = await prisma.user.update({
+      where: { id: params.id },
+      data: updateData,
+      select: {
+        id: true, name: true, email: true, role: true, branchId: true,
+        ptLevelId: true,
+        ptLevel: { select: { id: true, name: true, color: true } },
+        branch: { select: { id: true, name: true } },
+        managedBranches: { include: { branch: { select: { id: true, name: true } } } },
+        _count: { select: { clients: true } },
+      },
+    });
 
-  // Handle FM branch assignments update
-  if (newManagedIds !== undefined) {
-    await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
-    if (Array.isArray(newManagedIds) && newManagedIds.length > 0) {
-      await prisma.fMBranchAssignment.createMany({
-        data: (newManagedIds as string[]).map((bid) => ({ userId: params.id, branchId: bid })),
-      });
+    // Handle FM branch assignments update
+    if (newManagedIds !== undefined) {
+      await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
+      if (Array.isArray(newManagedIds) && newManagedIds.length > 0) {
+        await prisma.fMBranchAssignment.createMany({
+          data: (newManagedIds as string[]).map((bid) => ({ userId: params.id, branchId: bid })),
+        });
+      }
+    } else if (role && role !== "FM") {
+      // Changing FROM FM to another role — remove assignments
+      await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
     }
-  } else if (role && role !== "FM") {
-    // Changing FROM FM to another role — remove assignments
-    await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
-  }
 
-  return NextResponse.json(user);
+    return NextResponse.json(user);
+  } catch (err) {
+    console.error("Update staff error:", err);
+    return NextResponse.json({ error: "Không thể cập nhật nhân sự. Vui lòng thử lại." }, { status: 500 });
+  }
 }
