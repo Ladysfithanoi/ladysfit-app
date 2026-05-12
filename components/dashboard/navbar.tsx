@@ -514,7 +514,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </button>
 
             {bellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Thông báo thi</p>
                   {unreadCount > 0 && (
@@ -564,7 +567,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -585,7 +589,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </button>
 
             {perfBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setPerfBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Cảnh báo tiến độ</p>
                   {perfAlerts.length > 0 && (
@@ -636,7 +643,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -657,7 +665,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </button>
 
             {complaintBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setComplaintBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Khiếu nại</p>
                   <a
@@ -699,7 +710,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -721,7 +733,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </button>
 
             {measBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setMeasBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Số đo từ khách hàng</p>
                   {measUnread > 0 && (
@@ -777,7 +792,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -802,7 +818,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </button>
 
             {checklistBellOpen && (
-              <div className="absolute right-0 top-full mt-2 w-[min(320px,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setChecklistBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-bold text-gray-900">Thông báo Check-list</p>
                   {checklistUnread > 0 && (
@@ -937,7 +956,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     ))}
                   </div>
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
