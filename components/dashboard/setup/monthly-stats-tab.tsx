@@ -43,7 +43,7 @@ const SOURCE_COLORS: Record<string, string> = {
   "Outdoor":       "#f59e0b",
   "Website":       "#6366f1",
   "Renew":         "#f43f5e",
-  "Khác":          "#9ca3af",
+  "Referral.PT":   "#9ca3af",
 };
 
 function fmtRevenue(v: number) {
