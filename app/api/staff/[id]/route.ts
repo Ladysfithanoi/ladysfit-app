@@ -137,8 +137,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     }
 
     return NextResponse.json(user);
-  } catch (err) {
-    console.error("Update staff error:", err);
-    return NextResponse.json({ error: "Không thể cập nhật nhân sự. Vui lòng thử lại." }, { status: 500 });
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error("Update staff error:", e.message, e.code);
+    return NextResponse.json({ error: e.message ?? "Không thể cập nhật nhân sự.", code: e.code }, { status: 500 });
   }
 }

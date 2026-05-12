@@ -308,8 +308,13 @@ export function StaffPageClient({
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Có lỗi xảy ra");
+        let errMsg = "Có lỗi xảy ra";
+        try {
+          const err = await res.json();
+          errMsg = err.error ?? errMsg;
+          if (err.code) errMsg += ` (${err.code})`;
+        } catch {}
+        throw new Error(errMsg);
       }
       closePanel();
       router.refresh();
