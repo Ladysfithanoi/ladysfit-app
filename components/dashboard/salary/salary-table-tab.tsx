@@ -61,6 +61,7 @@ type Props = {
   staffList: StaffMember[];
   currentFMId: string;
   currentFMName: string;
+  currentUserRole?: string;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -78,9 +79,10 @@ const TH = "px-3 py-2.5 text-left font-bold text-gray-400 text-[10px] uppercase 
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName }: Props) {
+export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName, currentUserRole }: Props) {
+  const isCOO = currentUserRole === "COO";
   const now = new Date();
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id ?? "");
+  const [selectedBranchId, setSelectedBranchId] = useState(isCOO ? "" : (branches[0]?.id ?? ""));
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year, setYear]    = useState(now.getFullYear());
   const [records, setRecords]   = useState<SalaryRecord[]>([]);
@@ -118,13 +120,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   }
 
   const fetchRecords = useCallback(async () => {
-    if (!selectedBranchId) return;
+    if (!isCOO && !selectedBranchId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/salary/records?branchId=${selectedBranchId}&month=${month}&year=${year}`);
+      const branchParam = selectedBranchId ? `&branchId=${selectedBranchId}` : "";
+      const res = await fetch(`/api/salary/records?month=${month}&year=${year}${branchParam}`);
       if (res.ok) setRecords(await res.json());
     } finally { setLoading(false); }
-  }, [selectedBranchId, month, year]);
+  }, [selectedBranchId, month, year, isCOO]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -385,6 +388,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Chi nhánh:</label>
             <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}
               className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30">
+              {isCOO && <option value="">Tất cả cơ sở</option>}
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
@@ -408,12 +412,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 {exporting ? "Đang xuất..." : "Xuất Excel"}
               </button>
             )}
-            <button onClick={openGenModal} disabled={!selectedBranchId}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
-              style={{ backgroundColor: "#f15b5c" }}>
-              <RefreshCw className="w-4 h-4" />
-              Tạo bảng lương tháng
-            </button>
+            {!isCOO && (
+              <button onClick={openGenModal} disabled={!selectedBranchId}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+                style={{ backgroundColor: "#f15b5c" }}>
+                <RefreshCw className="w-4 h-4" />
+                Tạo bảng lương tháng
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -24,6 +24,7 @@ export default async function SalaryPageRoute() {
   if (isCOO) {
     [branches, staffList] = await Promise.all([
       prisma.branch.findMany({
+        where: { name: { not: { contains: "Fitpartner" } } },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       }),

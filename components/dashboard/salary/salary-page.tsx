@@ -29,6 +29,8 @@ type FMTab = typeof FM_TABS[number]["key"];
 
 export function SalaryPage({ currentUserId, currentUserName, currentUserRole, managedBranchIds, branches, staffList }: Props) {
   const isFM = currentUserRole === "FM";
+  const isCOO = currentUserRole === "COO";
+  const isManager = isFM || isCOO;
   const [tab, setTab] = useState<FMTab>("table");
 
   return (
@@ -41,12 +43,12 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
           <div>
             <h1 className="text-xl font-extrabold text-gray-900">Quỹ lương</h1>
             <p className="text-xs text-gray-400 font-semibold mt-0.5">
-              {isFM ? "Quản lý lương nhân sự" : currentUserName}
+              {isManager ? "Quản lý lương nhân sự" : currentUserName}
             </p>
           </div>
         </div>
 
-        {isFM && (
+        {isFM && !isCOO && (
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
             {FM_TABS.map(({ key, label, icon: Icon }) => (
               <button
@@ -66,19 +68,20 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
       </div>
 
       <div className="px-8 py-6">
-        {isFM ? (
+        {isManager ? (
           <>
-            {tab === "table"  && (
+            {(tab === "table" || isCOO) && (
               <SalaryTableTab
                 branches={branches}
                 managedBranchIds={managedBranchIds}
                 staffList={staffList}
                 currentFMId={currentUserId}
                 currentFMName={currentUserName}
+                currentUserRole={currentUserRole}
               />
             )}
-            {tab === "koc" && <KOCFMPanel />}
-            {tab === "config" && (
+            {isFM && tab === "koc" && <KOCFMPanel />}
+            {isFM && tab === "config" && (
               <SalaryConfigTab
                 branches={branches}
                 staffList={staffList}

@@ -85,19 +85,32 @@ export async function GET(req: Request) {
   try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "FM") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const userRole = session.user.role;
+  if (userRole !== "FM" && userRole !== "COO") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const branchId = searchParams.get("branchId");
   const month    = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
   const year     = parseInt(searchParams.get("year")  ?? String(new Date().getFullYear()));
 
-  const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
-  if (branchId && !managedBranchIds.includes(branchId)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  let branchFilter: string[];
+  if (userRole === "COO") {
+    if (branchId) {
+      branchFilter = [branchId];
+    } else {
+      const allBranches = await prisma.branch.findMany({
+        where: { name: { not: { contains: "Fitpartner" } } },
+        select: { id: true },
+      });
+      branchFilter = allBranches.map(b => b.id);
+    }
+  } else {
+    const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
+    if (branchId && !managedBranchIds.includes(branchId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    branchFilter = branchId ? [branchId] : managedBranchIds;
   }
-
-  const branchFilter = branchId ? [branchId] : managedBranchIds;
   console.log("[salary/GET] branchFilter:", branchFilter, "month:", month, "year:", year);
 
   const records = await prisma.salaryRecord.findMany({
