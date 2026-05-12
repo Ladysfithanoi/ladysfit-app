@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 
-const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "FREE", "RESTRICTED"];
+const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "FREE", "RESTRICTED"];
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   const isAdmin = role === "ADMIN";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (isAdmin || isFM || role === "CEO_FITPARTNER") {
+  if (isAdmin || isFM || role === "CEO_FITPARTNER" || role === "COO") {
     return NextResponse.json({ error: "Chỉ PT mới có thể thêm lead" }, { status: 403 });
   }
 

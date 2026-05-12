@@ -19,7 +19,7 @@ type ImportBody = {
 };
 
 function canAccess(role: string, branchId: string, managed: string[]) {
-  if (role === "ADMIN" || role === "CEO_FITPARTNER") return true;
+  if (role === "ADMIN" || role === "CEO_FITPARTNER" || role === "COO") return true;
   if (role === "FM") return managed.includes(branchId);
   return false;
 }

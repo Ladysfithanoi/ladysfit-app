@@ -54,7 +54,7 @@ export default async function DashboardPage() {
 
   const role = session.user.role;
   const isAdmin = role === "ADMIN";
-  const isCEO = role === "CEO_FITPARTNER";
+  const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
   const greet = greeting();

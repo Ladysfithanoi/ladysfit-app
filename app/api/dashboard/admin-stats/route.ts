@@ -8,7 +8,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "FM" && role !== "CEO_FITPARTNER") {
+  if (role !== "ADMIN" && role !== "FM" && role !== "CEO_FITPARTNER" && role !== "COO") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

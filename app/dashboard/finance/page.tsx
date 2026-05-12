@@ -10,7 +10,7 @@ export default async function FinancePageRoute() {
 
   const role = session.user.role;
   const isAdmin = role === "ADMIN";
-  const isCEO   = role === "CEO_FITPARTNER";
+  const isCEO   = role === "CEO_FITPARTNER" || role === "COO";
   const isFM    = role === "FM";
 
   if (!isAdmin && !isCEO && !isFM) redirect("/dashboard");

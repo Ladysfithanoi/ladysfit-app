@@ -39,6 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
   RESTRICTED: "PT Hạn chế",
   ADMIN: "Admin",
   CEO_FITPARTNER: "CEO Fitpartner",
+  COO: "COO",
 };
 
 export function CEODashboard({ month, year }: { month: number; year: number }) {

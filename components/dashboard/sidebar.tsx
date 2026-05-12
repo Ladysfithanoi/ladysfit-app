@@ -17,12 +17,13 @@ type Role = string | undefined;
 const isAdmin  = (r: Role) => r === "ADMIN";
 const isFM     = (r: Role) => r === "FM";
 const isCEO    = (r: Role) => r === "CEO_FITPARTNER";
+const isCOO    = (r: Role) => r === "COO";
 
 const forAll        = () => true;
-const forAdminFMCEO = (r: Role) => isAdmin(r) || isFM(r) || isCEO(r);
+const forAdminFMCEO = (r: Role) => isAdmin(r) || isFM(r) || isCEO(r) || isCOO(r);
 const forAdminFM    = (r: Role) => isAdmin(r) || isFM(r);
 const forAdminOnly  = (r: Role) => isAdmin(r);
-const forNotCEO     = (r: Role) => !isCEO(r);
+const forNotCEO     = (r: Role) => !isCEO(r) && !isCOO(r);
 const forFMandPT    = (r: Role) => isFM(r) || r === "FREE" || r === "RESTRICTED";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
@@ -56,8 +57,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     header: "TÀI CHÍNH",
     items: [
-      { href: "/dashboard/salary",  icon: Wallet,     label: "Quỹ lương", show: forFMandPT },
-      { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi",   show: (r) => isFM(r) || isCEO(r) },
+      { href: "/dashboard/salary",  icon: Wallet,     label: "Quỹ lương", show: (r) => forFMandPT(r) || isCOO(r) },
+      { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi",   show: (r) => isFM(r) || isCEO(r) || isCOO(r) },
     ],
   },
   {

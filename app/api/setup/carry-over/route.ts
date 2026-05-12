@@ -9,7 +9,7 @@ export async function POST(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isCEO = role === "CEO_FITPARTNER";
+  const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   if (!isFM && !isCEO) {
     return NextResponse.json({ error: "Chỉ FM hoặc CEO mới có thể chuyển lead" }, { status: 403 });
   }

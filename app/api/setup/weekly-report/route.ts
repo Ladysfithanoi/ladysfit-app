@@ -35,7 +35,7 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["ADMIN", "FM", "CEO_FITPARTNER"].includes(role)) {
+  if (!["ADMIN", "FM", "CEO_FITPARTNER", "COO"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -90,7 +90,7 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["FM", "CEO_FITPARTNER"].includes(role)) {
+  if (!["FM", "CEO_FITPARTNER", "COO"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

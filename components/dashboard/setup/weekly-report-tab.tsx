@@ -66,7 +66,7 @@ const isFitpartnerLabel = (label: string) => label.toLowerCase().includes("fitpa
 
 export function WeeklyReportTab({ branchId, branchName, month, year, currentUserRole, userName, isReadOnly }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
-  const canEdit = (currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER") && !isReadOnly;
+  const canEdit = (currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO") && !isReadOnly;
 
   const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeek(month, year));
   const [weekBounds, setWeekBounds] = useState<WeekBound[]>([]);

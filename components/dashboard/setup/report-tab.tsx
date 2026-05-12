@@ -35,7 +35,7 @@ function pctColor(pct: number) {
 export function ReportTab({ branchId, branchName, month, year, currentUserRole, isPT }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_ROWS = isFitpartner ? [BASE_KPI_ROWS[0], FITPARTNER_KPI_ROW, ...BASE_KPI_ROWS.slice(1)] : BASE_KPI_ROWS;
-  const canEdit = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER";
+  const canEdit = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
 
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
   const [loading, setLoading] = useState(true);

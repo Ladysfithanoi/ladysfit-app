@@ -17,7 +17,7 @@ type StaffMember = {
   id: string;
   name: string | null;
   email: string;
-  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "FREE" | "RESTRICTED";
+  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "FREE" | "RESTRICTED";
   branchId: string | null;
   ptLevelId: string | null;
   ptLevel: { id: string; name: string; color: string } | null;
@@ -30,6 +30,7 @@ const ROLE_STYLE: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-700",
   FM: "bg-indigo-100 text-indigo-700",
   CEO_FITPARTNER: "bg-amber-100 text-amber-700",
+  COO: "bg-orange-100 text-orange-700",
   FREE: "bg-blue-100 text-blue-700",
   RESTRICTED: "bg-gray-100 text-gray-600",
 };
@@ -37,6 +38,7 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   FM: "FM (Fitness Manager)",
   CEO_FITPARTNER: "CEO Fitpartner",
+  COO: "COO",
   FREE: "Tự do",
   RESTRICTED: "Hạn chế",
 };
@@ -702,8 +704,9 @@ export function StaffPageClient({
               className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
             >
               {isAdmin && <option value="ADMIN">Admin</option>}
-              {isAdmin && <option value="CEO_FITPARTNER">CEO Fitpartner</option>}
               {isAdmin && <option value="FM">FM (Fitness Manager)</option>}
+              {isAdmin && <option value="CEO_FITPARTNER">CEO</option>}
+              {isAdmin && <option value="COO">COO</option>}
               <option value="PT">PT (Personal Trainer)</option>
             </select>
           </Field>

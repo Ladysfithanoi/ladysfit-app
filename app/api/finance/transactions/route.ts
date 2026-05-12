@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 
 function canAccess(role: string, branchId: string, managedBranchIds: string[]) {
-  if (role === "ADMIN" || role === "CEO_FITPARTNER") return true;
+  if (role === "ADMIN" || role === "CEO_FITPARTNER" || role === "COO") return true;
   if (role === "FM") return managedBranchIds.includes(branchId);
   return false;
 }

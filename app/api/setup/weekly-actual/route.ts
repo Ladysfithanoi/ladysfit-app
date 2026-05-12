@@ -28,7 +28,7 @@ export async function PUT(req: Request) {
   if (!target) return NextResponse.json({ error: "Không tìm thấy mục tiêu" }, { status: 404 });
 
   const isFM = role === "FM";
-  const isCEO = role === "CEO_FITPARTNER";
+  const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   const isPT = role === "FREE" || role === "RESTRICTED";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 

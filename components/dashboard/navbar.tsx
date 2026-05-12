@@ -12,6 +12,7 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   FM: "FM (Fitness Manager)",
   CEO_FITPARTNER: "CEO Fitpartner",
+  COO: "COO",
   FREE: "Tự do",
   RESTRICTED: "Hạn chế",
 };
@@ -19,6 +20,7 @@ const ROLE_STYLE: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-700",
   FM: "bg-indigo-100 text-indigo-700",
   CEO_FITPARTNER: "bg-amber-100 text-amber-700",
+  COO: "bg-orange-100 text-orange-700",
   FREE: "bg-blue-100 text-blue-700",
   RESTRICTED: "bg-gray-100 text-gray-600",
 };

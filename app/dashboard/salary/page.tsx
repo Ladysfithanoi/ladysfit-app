@@ -12,15 +12,28 @@ export default async function SalaryPageRoute() {
 
   const role = session.user.role;
   const isFM = role === "FM";
+  const isCOO = role === "COO";
   const isPT = role === "FREE" || role === "RESTRICTED";
-  if (!isFM && !isPT) redirect("/dashboard");
+  if (!isFM && !isPT && !isCOO) redirect("/dashboard");
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
   let branches: { id: string; name: string }[] = [];
   let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string }[] = [];
 
-  if (isFM) {
+  if (isCOO) {
+    [branches, staffList] = await Promise.all([
+      prisma.branch.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.user.findMany({
+        where: { role: { in: ["FREE", "RESTRICTED", "ADMIN"] }, deletedAt: null },
+        select: { id: true, name: true, email: true, branchId: true, role: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+  } else if (isFM) {
     [branches, staffList] = await Promise.all([
       prisma.branch.findMany({
         where: { id: { in: managedBranchIds } },

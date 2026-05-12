@@ -40,7 +40,7 @@ const TABS = [
 type TabKey = "ALL" | "PENDING" | "PROCESSING" | "RESOLVED";
 
 export function ComplaintsPage({ userRole }: { userRole: string }) {
-  const isReadOnly = userRole === "CEO_FITPARTNER";
+  const isReadOnly = userRole === "CEO_FITPARTNER" || userRole === "COO";
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>("ALL");

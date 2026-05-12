@@ -49,7 +49,7 @@ export async function PUT(req: Request) {
   const role = session.user.role;
   const isPT = role === "FREE" || role === "RESTRICTED";
   const isFM = role === "FM";
-  const isCEO = role === "CEO_FITPARTNER";
+  const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   if (!isPT && !isFM && !isCEO) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
