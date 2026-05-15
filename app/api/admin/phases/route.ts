@@ -24,6 +24,22 @@ export async function GET() {
       orderBy: { order: "asc" },
     });
 
+    if (session.user.role === "PT") {
+      const [sysConfig, user] = await Promise.all([
+        prisma.systemConfig.findUnique({ where: { id: "main" } }),
+        prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { ptLevel: { select: { phaseAccess: { select: { phaseId: true, hasAccess: true } } } } },
+        }),
+      ]);
+      if (sysConfig?.enableLevelSystem && user?.ptLevel?.phaseAccess.length) {
+        const allowedIds = new Set(
+          user.ptLevel.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId)
+        );
+        return NextResponse.json(phases.filter((p) => allowedIds.has(p.id)));
+      }
+    }
+
     return NextResponse.json(phases);
   } catch (error) {
     console.error("Phases GET error:", error);
