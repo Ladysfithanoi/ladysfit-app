@@ -61,7 +61,7 @@ export const clientAuthOptions: NextAuthOptions = {
           id: client.id,
           name: client.fullName,
           email: client.email ?? "",
-          role: Role.FREE,
+          role: Role.PT,
         };
       },
     }),

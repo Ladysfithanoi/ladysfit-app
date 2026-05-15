@@ -259,7 +259,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       {/* ── PT config cards ── */}
       {branchPTs.length === 0 ? (
         <div className="py-10 text-center text-sm text-gray-400 italic">
-          Không có nhân sự PT/RESTRICTED trong chi nhánh này
+          Không có nhân sự PT trong chi nhánh này
         </div>
       ) : (
         branchPTs.map(staff => {

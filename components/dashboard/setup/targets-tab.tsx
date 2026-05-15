@@ -306,7 +306,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const filteredPTs = filterRole === "all"
     ? allPTs
     : allPTs.filter((pt) =>
-        filterRole === "FM" ? pt.role === "FM" : ["FREE", "RESTRICTED", "PT"].includes(pt.role)
+        filterRole === "FM" ? pt.role === "FM" : pt.role === "PT"
       );
   const filteredTargets = targets.filter((t) => filteredPTs.some((pt) => pt.id === t.userId));
 

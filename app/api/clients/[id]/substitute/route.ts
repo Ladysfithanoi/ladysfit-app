@@ -37,8 +37,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const canRequest =
-    role === "ADMIN" || role === "FM" || role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const canRequest = ["ADMIN", "FM", "PT"].includes(role);
   if (!canRequest) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();

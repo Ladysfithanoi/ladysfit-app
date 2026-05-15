@@ -13,7 +13,7 @@ export default async function SalaryPageRoute() {
   const role = session.user.role;
   const isFM = role === "FM";
   const isCOO = role === "COO";
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "PT";
   if (!isFM && !isPT && !isCOO) redirect("/dashboard");
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
@@ -29,7 +29,7 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { role: { in: ["FREE", "RESTRICTED", "ADMIN"] }, deletedAt: null },
+        where: { role: { in: ["PT", "ADMIN"] }, deletedAt: null },
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }),
@@ -42,7 +42,7 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { branchId: { in: managedBranchIds }, role: { in: ["FREE", "RESTRICTED", "ADMIN"] }, deletedAt: null },
+        where: { branchId: { in: managedBranchIds }, role: { in: ["PT", "ADMIN"] }, deletedAt: null },
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }),

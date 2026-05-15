@@ -17,7 +17,7 @@ type StaffMember = {
   id: string;
   name: string | null;
   email: string;
-  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "FREE" | "RESTRICTED";
+  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT";
   branchId: string | null;
   ptLevelId: string | null;
   ptLevel: { id: string; name: string; color: string } | null;
@@ -32,8 +32,6 @@ const ROLE_STYLE: Record<string, string> = {
   CEO_FITPARTNER: "bg-amber-100 text-amber-700",
   COO: "bg-orange-100 text-orange-700",
   PT: "bg-blue-100 text-blue-700",
-  FREE: "bg-blue-100 text-blue-700",
-  RESTRICTED: "bg-gray-100 text-gray-600",
 };
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -41,8 +39,6 @@ const ROLE_LABEL: Record<string, string> = {
   CEO_FITPARTNER: "CEO Fitpartner",
   COO: "COO",
   PT: "Huấn luyện viên",
-  FREE: "Tự do",
-  RESTRICTED: "Hạn chế",
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -211,7 +207,7 @@ export function StaffPageClient({
   function openEdit(s: StaffMember) {
     setEditing(s);
     setError("");
-    const uiRole = ["FREE", "RESTRICTED", "PT"].includes(s.role) ? "PT" : s.role;
+    const uiRole = s.role === "PT" ? "PT" : s.role;
     setSelectedRole(uiRole);
     setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
     setSelectedPtLevelId(s.ptLevelId ?? "");
@@ -276,11 +272,7 @@ export function StaffPageClient({
       return;
     }
 
-    // "PT" is a UI alias — for new staff save as "PT"; editing keeps existing FREE/RESTRICTED for backward compat
-    const actualRole =
-      selectedRole === "PT"
-        ? (editing && ["FREE", "RESTRICTED"].includes(editing.role) ? editing.role : "PT")
-        : selectedRole;
+    const actualRole = selectedRole;
 
     const body: Record<string, unknown> = {
       name: fd.get("name") as string,
@@ -478,7 +470,7 @@ export function StaffPageClient({
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    {["FREE", "RESTRICTED", "PT"].includes(s.role) && s.ptLevel ? (
+                    {s.role === "PT" && s.ptLevel ? (
                       <span className="px-2.5 py-1 rounded-full text-xs font-bold w-fit" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
                         {s.ptLevel.name}
                       </span>

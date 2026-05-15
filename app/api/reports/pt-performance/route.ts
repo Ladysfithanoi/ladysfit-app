@@ -15,7 +15,7 @@ export async function GET() {
   const ptFilter = isFM ? { branchId: { in: managedBranchIds } } : {};
 
   const pts = await prisma.user.findMany({
-    where: { ...ptFilter, role: { in: ["FREE", "RESTRICTED", "PT"] }, deletedAt: null },
+    where: { ...ptFilter, role: "PT", deletedAt: null },
     select: {
       id: true,
       name: true,

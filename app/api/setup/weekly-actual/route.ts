@@ -29,7 +29,7 @@ export async function PUT(req: Request) {
 
   const isFM = role === "FM";
   const isCEO = role === "CEO_FITPARTNER" || role === "COO";
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   if (isFM && !managedBranchIds.includes(target.branchId)) {

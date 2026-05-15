@@ -73,7 +73,7 @@ async function main() {
       email: "pt1@ladysfit.vn",
       name: "Nguyễn Thị Mai",
       password: ptHash,
-      role: Role.RESTRICTED,
+      role: Role.PT,
       branchId: branchNguyenXien.id,
     },
   });
@@ -86,7 +86,7 @@ async function main() {
       email: "pt2@ladysfit.vn",
       name: "Trần Thị Lan",
       password: ptHash,
-      role: Role.FREE,
+      role: Role.PT,
       branchId: branchMyDinh.id,
     },
   });

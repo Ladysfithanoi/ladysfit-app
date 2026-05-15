@@ -24,7 +24,7 @@ const forAdminFMCEO = (r: Role) => isAdmin(r) || isFM(r) || isCEO(r) || isCOO(r)
 const forAdminFM    = (r: Role) => isAdmin(r) || isFM(r);
 const forAdminOnly  = (r: Role) => isAdmin(r);
 const forNotCEO     = (r: Role) => !isCEO(r) && !isCOO(r);
-const forFMandPT    = (r: Role) => isFM(r) || r === "FREE" || r === "RESTRICTED" || r === "PT";
+const forFMandPT    = (r: Role) => isFM(r) || r === "PT";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 

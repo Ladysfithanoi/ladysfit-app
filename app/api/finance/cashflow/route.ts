@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
   const role    = session.user.role;
   const managed: string[] = session.user.managedBranchIds ?? [];
-  if (["FREE", "RESTRICTED", "PT"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (role === "PT") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (role === "FM" && !managed.includes(branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // ── Daily view ────────────────────────────────────────────────────────────

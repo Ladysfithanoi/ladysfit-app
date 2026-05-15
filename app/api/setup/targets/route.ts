@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   }
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
@@ -47,7 +47,7 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const isFM = role === "FM";
   const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   if (!isPT && !isFM && !isCEO) {

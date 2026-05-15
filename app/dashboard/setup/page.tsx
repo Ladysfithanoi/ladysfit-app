@@ -9,7 +9,7 @@ export default async function Setup() {
   if (!session) redirect("/login");
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "PT";
 
   const branches = await prisma.branch.findMany({
     where: { name: { not: { contains: "Fitpartner" } } },

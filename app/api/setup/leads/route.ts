@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 
-const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT", "FREE", "RESTRICTED"];
+const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"];
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   if (isFM && !managedBranchIds.includes(branchId)) {
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
   const managedBranchIds = session.user.managedBranchIds ?? [];

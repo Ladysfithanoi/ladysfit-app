@@ -10,7 +10,7 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   if (!isFM && !isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   if (!isFM && !isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {

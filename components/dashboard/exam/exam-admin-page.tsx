@@ -40,8 +40,6 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   FM: "FM",
   PT: "Huấn luyện viên",
-  FREE: "Tự do",
-  RESTRICTED: "Hạn chế",
 };
 
 const TABS = [

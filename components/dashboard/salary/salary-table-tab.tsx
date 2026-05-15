@@ -132,7 +132,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
   async function openGenModal() {
-    const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && ["FREE", "RESTRICTED", "PT"].includes(s.role));
+    const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && s.role === "PT");
     const branchAdmins = staffList.filter(s => s.branchId === selectedBranchId && s.role === "ADMIN");
     const entries: GenEntry[] = [
       {
@@ -282,7 +282,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     setTimeout(() => setToast(""), 3000);
   }
 
-  const ptRecords    = records.filter(r => ["FREE", "RESTRICTED", "PT"].includes(r.user.role));
+  const ptRecords    = records.filter(r => r.user.role === "PT");
   const adminRecords = records.filter(r => r.user.role === "ADMIN");
   const fmRecord     = records.find(r => r.user.role === "FM");
   const totalFund      = records.reduce((s, r) => s + r.totalSalary, 0);

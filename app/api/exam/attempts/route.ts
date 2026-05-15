@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["FREE", "RESTRICTED", "PT"].includes(role)) {
+  if (role !== "PT") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -68,20 +68,31 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // If passed and role is RESTRICTED, upgrade to FREE
-  if (passed && role === "RESTRICTED") {
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { role: "FREE", freeUpgradedAt: new Date() },
-    });
+  const userName = session.user.name ?? session.user.email ?? "PT";
 
-    // Create admin notification
-    const userName = session.user.name ?? session.user.email ?? "PT";
+  if (passed) {
+    // Upgrade to next ptLevel if one exists above the current level
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { ptLevelId: true, ptLevel: { select: { order: true } } },
+    });
+    const nextLevel = await prisma.pTLevel.findFirst({
+      where: {
+        isActive: true,
+        order: { gt: currentUser?.ptLevel?.order ?? -1 },
+      },
+      orderBy: { order: "asc" },
+    });
+    if (nextLevel) {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { ptLevelId: nextLevel.id },
+      });
+    }
     await prisma.upgradeNotification.create({
       data: { userId: session.user.id, userName, passed: true },
     });
-  } else if (!passed) {
-    const userName = session.user.name ?? session.user.email ?? "PT";
+  } else {
     await prisma.upgradeNotification.create({
       data: { userId: session.user.id, userName, passed: false },
     });

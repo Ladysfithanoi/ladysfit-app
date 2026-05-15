@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   tomorrow.setDate(today.getDate() + 1);
 
   const pts = await prisma.user.findMany({
-    where: { role: { in: ["FREE", "RESTRICTED", "PT"] }, deletedAt: null },
+    where: { role: "PT", deletedAt: null },
     select: { id: true },
   });
   if (pts.length === 0) return NextResponse.json({ created: 0 });

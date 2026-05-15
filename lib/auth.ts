@@ -114,7 +114,7 @@ export const authOptions: NextAuthOptions = {
           user: {
             ...session.user,
             id:               "",
-            role:             token.role ?? Role.FREE,
+            role:             token.role ?? Role.PT,
             branchId:         token.branchId ?? null,
             managedBranchIds: [],
           },
@@ -127,28 +127,11 @@ export const authOptions: NextAuthOptions = {
           name:             true,
           role:             true,
           branchId:         true,
-          freeUpgradedAt:   true,
           managedBranches:  { select: { branchId: true } },
         },
       });
 
-      let resolvedRole = dbUser?.role ?? token.role ?? Role.FREE;
-
-      // Auto-downgrade FREE to RESTRICTED if 30-day window expired (day-based, no time skew)
-      if (resolvedRole === "FREE" && dbUser?.freeUpgradedAt) {
-        const upgraded = new Date(dbUser.freeUpgradedAt);
-        upgraded.setHours(0, 0, 0, 0);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const daysUsed = Math.floor((today.getTime() - upgraded.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysUsed >= 30) {
-          await prisma.user.update({
-            where: { id: token.sub },
-            data:  { role: "RESTRICTED", freeUpgradedAt: null },
-          });
-          resolvedRole = Role.RESTRICTED;
-        }
-      }
+      const resolvedRole = dbUser?.role ?? token.role ?? Role.PT;
 
       return {
         ...session,

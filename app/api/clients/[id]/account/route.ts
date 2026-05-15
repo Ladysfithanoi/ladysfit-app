@@ -13,7 +13,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const role    = session.user.role;
   const isAdmin = role === "ADMIN";
   const isFM    = role === "FM";
-  const isPT    = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT    = role === "PT";
 
   if (!isAdmin && !isFM && !isPT) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

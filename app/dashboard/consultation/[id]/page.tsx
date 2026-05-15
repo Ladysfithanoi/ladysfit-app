@@ -29,7 +29,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   // Access check: ADMIN sees all; FM sees consultations in their managed branches;
-  // FREE/RESTRICTED see only their own
+  // PT sees only their own
   if (!isAdmin) {
     if (isFM) {
       if (!managedBranchIds.includes(c.branchId)) redirect("/dashboard/consultation");

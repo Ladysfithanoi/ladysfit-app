@@ -8,7 +8,7 @@ export default async function TakeExamPage() {
   if (!session) redirect("/login");
 
   const role = session.user.role;
-  if (role !== "RESTRICTED" && role !== "FREE") redirect("/dashboard");
+  if (role !== "PT") redirect("/dashboard");
 
   return <ExamTakePage />;
 }

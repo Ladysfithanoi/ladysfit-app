@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
+  const isPT = role === "PT";
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 

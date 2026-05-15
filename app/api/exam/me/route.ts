@@ -9,17 +9,13 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  const [user, lastAttempt, lastPassedAttempt, config, sysConfig, defaultLevel, allLevels] = await Promise.all([
+  const [user, lastAttempt, config, sysConfig, defaultLevel, allLevels] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, freeUpgradedAt: true, updatedAt: true, ptLevel: { select: { id: true, name: true, color: true, retestIntervalDays: true, order: true } } },
+      select: { role: true, ptLevel: { select: { id: true, name: true, color: true, retestIntervalDays: true, order: true } } },
     }),
     prisma.examAttempt.findFirst({
       where: { userId },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.examAttempt.findFirst({
-      where: { userId, passed: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.examConfig.findFirst(),
@@ -32,43 +28,19 @@ export async function GET() {
   const numQuestions = config?.numQuestions ?? 10;
   const enableLevelSystem = sysConfig?.enableLevelSystem ?? true;
 
-  // Upgrade date: freeUpgradedAt is the canonical source for the 30-day window
-  const upgradeDate =
-    user?.freeUpgradedAt ?? lastPassedAttempt?.createdAt ?? user?.updatedAt ?? null;
-
-  let daysLeft: number | null = null;
-  let expired = false;
-
-  if (user?.role === "FREE" && upgradeDate) {
-    const retestDays = user.ptLevel?.retestIntervalDays ?? 30;
-    // Strip time components so the comparison is purely day-based
-    const upgraded = new Date(upgradeDate);
-    upgraded.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const daysUsed = Math.floor((today.getTime() - upgraded.getTime()) / (1000 * 60 * 60 * 24));
-    daysLeft = Math.max(0, retestDays - daysUsed);
-    expired = daysLeft <= 0;
-  }
-
   const retestIntervalDays = user?.ptLevel?.retestIntervalDays ?? 30;
 
-  // Next level above the default (target for RESTRICTED and FREE-at-default PTs)
-  const nextLevel = defaultLevel
-    ? allLevels.find((l) => l.order > defaultLevel.order) ?? null
+  // Next level above the PT's current level
+  const nextLevel = user?.ptLevel
+    ? allLevels.find((l) => l.order > user.ptLevel!.order) ?? null
     : allLevels.length > 0 ? allLevels[0] : null;
 
-  // FREE PT is "at default level" when their current level is the default (or they have no level yet)
+  // PT is "at default level" when their level is the default (or they have no level yet)
   const isAtDefaultLevel =
-    user?.role === "FREE" &&
-    (!user.ptLevel || !defaultLevel || user.ptLevel.order <= defaultLevel.order);
+    !user?.ptLevel || !defaultLevel || user.ptLevel.order <= defaultLevel.order;
 
   return NextResponse.json({
     role: user?.role,
-    upgradeDate: upgradeDate?.toISOString() ?? null,
-    freeUpgradedAt: user?.freeUpgradedAt?.toISOString() ?? null,
-    daysLeft,
-    expired,
     retestIntervalDays,
     ptLevelName: user?.ptLevel?.name ?? null,
     ptLevelColor: user?.ptLevel?.color ?? null,

@@ -43,7 +43,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
   const [selectedSource, setSelectedSource] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
-  const isPT = ["FREE", "RESTRICTED", "PT"].includes(currentUserRole);
+  const isPT = currentUserRole === "PT";
   const isFM = currentUserRole === "FM";
   const isCEO = currentUserRole === "CEO_FITPARTNER";
   const branchName = branches.find((b) => b.id === branchId)?.name ?? "";
@@ -58,7 +58,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
     fetch(`/api/staff?branchId=${branchId}`)
       .then((r) => r.json())
       .then((data: (PTUser & { role: string })[]) =>
-        setPtList(data.filter((u) => u.role === "FM" || u.role === "FREE" || u.role === "RESTRICTED" || u.role === "PT" || u.role === "PT"))
+        setPtList(data.filter((u) => u.role === "FM" || u.role === "PT"))
       )
       .catch(() => {});
   }, [branchId, isPT]);
@@ -90,10 +90,10 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
             </select>
           )}
           {/* PT filter — Tab 1 only, FM/CEO/ADMIN only (show PT roles only) */}
-          {!isPT && tab === "leads" && ptList.some((u) => u.role === "FREE" || u.role === "RESTRICTED" || u.role === "PT") && (
+          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT") && (
             <select value={selectedPTId} onChange={(e) => setSelectedPTId(e.target.value)} className={selectCls}>
               <option value="">Tất cả PT</option>
-              {ptList.filter((u) => u.role === "FREE" || u.role === "RESTRICTED" || u.role === "PT").map((pt) => (
+              {ptList.filter((u) => u.role === "PT").map((pt) => (
                 <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
               ))}
             </select>

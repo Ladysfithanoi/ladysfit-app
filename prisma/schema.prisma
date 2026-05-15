@@ -37,7 +37,7 @@ model User {
   emailVerified   DateTime?
   image           String?
   password        String?
-  role            Role      @default(FREE)
+  role            Role      @default(PT)
   branchId        String?
   freeUpgradedAt  DateTime?
   createdAt       DateTime  @default(now())
@@ -310,8 +310,6 @@ enum Role {
   CEO_FITPARTNER
   COO
   PT
-  FREE
-  RESTRICTED
 }
 
 model FMBranchAssignment {

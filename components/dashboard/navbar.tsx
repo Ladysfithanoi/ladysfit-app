@@ -14,8 +14,6 @@ const ROLE_LABEL: Record<string, string> = {
   CEO_FITPARTNER: "CEO Fitpartner",
   COO: "COO",
   PT: "Huấn luyện viên",
-  FREE: "Tự do",
-  RESTRICTED: "Hạn chế",
 };
 const ROLE_STYLE: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-700",
@@ -23,8 +21,6 @@ const ROLE_STYLE: Record<string, string> = {
   CEO_FITPARTNER: "bg-amber-100 text-amber-700",
   COO: "bg-orange-100 text-orange-700",
   PT: "bg-blue-100 text-blue-700",
-  FREE: "bg-blue-100 text-blue-700",
-  RESTRICTED: "bg-gray-100 text-gray-600",
 };
 
 const inputCls =
@@ -118,7 +114,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const isFM = session?.user?.role === "FM";
-  const isPT = ["FREE", "RESTRICTED", "PT"].includes(session?.user?.role ?? "");
+  const isPT = session?.user?.role === "PT";
 
   // Dropdown
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -1074,7 +1070,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 {
                   label: "Cấp độ",
                   value:
-                    ["FREE", "RESTRICTED", "PT"].includes(userInfo.role) && userInfo.ptLevel ? (
+                    userInfo.role === "PT" && userInfo.ptLevel ? (
                       <span
                         className="px-2.5 py-1 rounded-full text-xs font-bold"
                         style={{ backgroundColor: userInfo.ptLevel.color + "22", color: userInfo.ptLevel.color }}

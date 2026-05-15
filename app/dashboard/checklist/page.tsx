@@ -10,7 +10,7 @@ export default async function ChecklistPageRoute() {
 
   const role = session.user.role;
   const isFM      = role === "FM";
-  const isPT      = role === "FREE" || role === "RESTRICTED";
+  const isPT      = role === "PT";
   const isAdmin   = role === "ADMIN";
   if (!isFM && !isPT && !isAdmin) redirect("/dashboard");
 
@@ -20,7 +20,7 @@ export default async function ChecklistPageRoute() {
   let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string }[] = [];
   if (isAdmin) {
     staffList = await prisma.user.findMany({
-      where: { role: { in: ["FREE", "RESTRICTED"] }, deletedAt: null },
+      where: { role: "PT", deletedAt: null },
       select: { id: true, name: true, email: true, branchId: true, role: true },
       orderBy: { name: "asc" },
     });
