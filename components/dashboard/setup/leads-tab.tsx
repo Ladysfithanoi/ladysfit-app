@@ -101,6 +101,7 @@ export function LeadsTab({
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [bulkConfirmOpen, setBulkConfirmOpen]     = useState(false);
   const [bulkSending, setBulkSending]             = useState(false);
+  const [syncingLeadId, setSyncingLeadId]         = useState<string | null>(null);
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
@@ -202,6 +203,26 @@ export function LeadsTab({
     setToastIsError(isError);
     setSuccessToast(msg);
     setTimeout(() => setSuccessToast(""), isError ? 4000 : 3000);
+  }
+
+  async function handleSyncLead(leadId: string) {
+    setSyncingLeadId(leadId);
+    try {
+      const res = await fetch(`/api/setup/leads/${leadId}/sync`, { method: "POST" });
+      const data = await res.json() as { synced?: boolean; clientId?: string; reason?: string };
+      if (data.synced && data.clientId) {
+        setLeads(prev => prev.map(l => l.id === leadId ? { ...l, syncedClientId: data.clientId! } : l));
+        showToast("Đã đồng bộ hợp đồng vào hồ sơ khách hàng");
+      } else if (data.reason === "no_client") {
+        showToast("Không tìm thấy khách hàng có số điện thoại này", true);
+      } else {
+        showToast("Không thể đồng bộ", true);
+      }
+    } catch {
+      showToast("Lỗi kết nối!", true);
+    } finally {
+      setSyncingLeadId(null);
+    }
   }
 
   async function handleSendReminder(lead: SalesLead) {
@@ -474,6 +495,11 @@ export function LeadsTab({
                                     📋 Tư vấn
                                   </a>
                                 )}
+                                {l.syncedClientId && (
+                                  <span className="ml-1.5 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                    ✓ Đồng bộ KH
+                                  </span>
+                                )}
                               </td>
 
                               <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
@@ -549,6 +575,16 @@ export function LeadsTab({
                                         className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border border-amber-400 text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50 whitespace-nowrap"
                                       >
                                         {sendingReminderId === l.id ? "..." : "🔔 Nhắc PT"}
+                                      </button>
+                                    )}
+                                    {/* Sync to client — FM only, contract leads not yet synced */}
+                                    {isFM && REGISTERED_STATUSES.includes(l.status) && l.phone && !l.syncedClientId && (
+                                      <button
+                                        onClick={() => handleSyncLead(l.id)}
+                                        disabled={syncingLeadId === l.id}
+                                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border border-emerald-400 text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                                      >
+                                        {syncingLeadId === l.id ? "..." : "🔄 Đồng bộ KH"}
                                       </button>
                                     )}
                                   </div>

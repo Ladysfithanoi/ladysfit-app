@@ -786,6 +786,7 @@ model SalesLead {
   month             Int
   year              Int
   consultationId    String?    @unique
+  syncedClientId    String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 

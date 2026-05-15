@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
+import { syncLeadToClient } from "@/lib/sync-lead-to-client";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -65,7 +66,31 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
   await syncLeadToTransaction(updated);
 
-  return NextResponse.json(updated);
+  // Auto-sync to client profile when status is PIF/DE/PB
+  let syncedClientId = updated.syncedClientId ?? null;
+  if (["PIF", "DE", "PB"].includes(updated.status) && !syncedClientId) {
+    try {
+      const clientId = await syncLeadToClient({
+        id: updated.id,
+        phone: updated.phone,
+        packageRegistered: updated.packageRegistered,
+        actualRevenue: updated.actualRevenue,
+        signDate: updated.signDate,
+        assignedPTId: updated.assignedPTId,
+      });
+      if (clientId) {
+        await prisma.salesLead.update({
+          where: { id: params.id },
+          data: { syncedClientId: clientId },
+        });
+        syncedClientId = clientId;
+      }
+    } catch {
+      // Non-critical — don't fail the request
+    }
+  }
+
+  return NextResponse.json({ ...updated, syncedClientId });
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {

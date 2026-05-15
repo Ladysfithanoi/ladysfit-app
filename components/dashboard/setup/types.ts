@@ -47,6 +47,7 @@ export type SalesLead = {
   remark: string | null;
   month: number;
   year: number;
+  syncedClientId: string | null;
   assignedPT: PTUser;
   createdBy: { id: string; name: string | null };
 };
