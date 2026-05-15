@@ -181,7 +181,7 @@ export function NutritionTab({
   const [archiving, setArchiving] = useState(false);
 
   const activePlan = plans.find((p) => p.status === "ACTIVE") ?? null;
-  const canEdit = userRole === "ADMIN" || userRole === "FM" || userRole === "FREE" || userRole === "RESTRICTED";
+  const canEdit = userRole === "ADMIN" || userRole === "FM" || userRole === "FREE" || userRole === "RESTRICTED" || userRole === "PT";
 
   function handleSaved(plan: MealPlanRow) {
     setPlans((prev) => [plan, ...prev.map((p) => ({ ...p, status: "ARCHIVED" as const }))]);

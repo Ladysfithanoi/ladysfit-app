@@ -14,7 +14,7 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   // For PT: find substitute client IDs they can currently view

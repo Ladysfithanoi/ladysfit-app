@@ -11,7 +11,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
@@ -98,7 +98,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 

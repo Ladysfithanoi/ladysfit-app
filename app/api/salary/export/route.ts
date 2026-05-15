@@ -199,7 +199,7 @@ export async function POST(req: Request) {
       PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán",
     };
     const ROLE_VN: Record<string, string> = {
-      FM: "FM", FREE: "PT", RESTRICTED: "PT", ADMIN: "Admin",
+      FM: "FM", PT: "PT", FREE: "PT", RESTRICTED: "PT", ADMIN: "Admin",
     };
 
     // ═══════════════════════════════════════════════════════════════════════

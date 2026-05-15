@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
 
   if (isPT && userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

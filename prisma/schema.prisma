@@ -309,6 +309,7 @@ enum Role {
   FM
   CEO_FITPARTNER
   COO
+  PT
   FREE
   RESTRICTED
 }

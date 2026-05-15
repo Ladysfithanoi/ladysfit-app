@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const role = session.user.role;
   const canRequest =
-    role === "ADMIN" || role === "FM" || role === "FREE" || role === "RESTRICTED";
+    role === "ADMIN" || role === "FM" || role === "FREE" || role === "RESTRICTED" || role === "PT";
   if (!canRequest) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();

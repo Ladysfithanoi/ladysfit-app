@@ -90,8 +90,8 @@ export function PTDashboard({
         </p>
       </div>
 
-      {/* Upgrade card for RESTRICTED or FREE roles */}
-      {(role === "RESTRICTED" || role === "FREE") && <UpgradeCard />}
+      {/* Upgrade card for PT roles */}
+      {["FREE", "RESTRICTED", "PT"].includes(role) && <UpgradeCard />}
 
       {/* 3 stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">

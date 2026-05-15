@@ -8,7 +8,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const allowed = role === "ADMIN" || role === "FM" || role === "FREE" || role === "RESTRICTED";
+  const allowed = role === "ADMIN" || role === "FM" || role === "FREE" || role === "RESTRICTED" || role === "PT";
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();

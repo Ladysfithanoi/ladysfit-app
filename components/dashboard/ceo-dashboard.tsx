@@ -35,6 +35,7 @@ function pctColor(pct: number) {
 
 const ROLE_LABEL: Record<string, string> = {
   FM: "FM (Fitness Manager)",
+  PT: "Huấn luyện viên",
   FREE: "PT Tự do",
   RESTRICTED: "PT Hạn chế",
   ADMIN: "Admin",

@@ -41,6 +41,7 @@ function getRoleDisplay(role: string): string {
     case "FM": return "FM";
     case "COO": return "COO";
     case "CEO_FITPARTNER": return "CEO";
+    case "PT": return "PT";
     case "FREE": return "PT";
     case "RESTRICTED": return "PT";
     default: return role;

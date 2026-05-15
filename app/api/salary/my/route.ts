@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isPT = role === "FREE" || role === "RESTRICTED";
+  const isPT = role === "FREE" || role === "RESTRICTED" || role === "PT";
   if (!isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);

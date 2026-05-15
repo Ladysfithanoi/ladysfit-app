@@ -17,7 +17,7 @@ export function isPhaseAllowed(
 ): boolean {
   if (isSubstitute) return true;
   if (enableLevelSystem === false) return true;
-  if (role !== "RESTRICTED") return true;
+  if (role !== "RESTRICTED") return true; // FREE and PT have full access
   if (phase === "Giai đoạn 1") return true;
   if (!workoutType || workoutType === phase) return false;
   return (RESTRICTED_ALLOWED_TYPES[phase] ?? []).includes(workoutType);
@@ -38,7 +38,7 @@ export function getAllowedWorkoutTypeOptions(
   const all = WORKOUT_TYPE_OPTIONS[phase] ?? [];
   if (isSubstitute) return all;
   if (enableLevelSystem === false) return all;
-  if (role !== "RESTRICTED") return all;
+  if (role !== "RESTRICTED") return all; // FREE and PT have full access
   const allowed = RESTRICTED_ALLOWED_TYPES[phase];
   if (!allowed) return all; // GD1 has no types — pass through
   return all.filter((opt) => allowed.includes(opt.dbValue));

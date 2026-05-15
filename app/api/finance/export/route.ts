@@ -247,7 +247,7 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (role === "FREE" || role === "RESTRICTED") {
+  if (["FREE", "RESTRICTED", "PT"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

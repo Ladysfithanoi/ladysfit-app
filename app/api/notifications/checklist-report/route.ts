@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     // Get all PTs in managed branches with branch name
     const pts = await prisma.user.findMany({
-      where: { role: { in: ["FREE", "RESTRICTED"] }, branchId: { in: branchIds }, deletedAt: null },
+      where: { role: { in: ["FREE", "RESTRICTED", "PT"] }, branchId: { in: branchIds }, deletedAt: null },
       select: { id: true, name: true, email: true, branchId: true, branch: { select: { name: true } } },
     });
     if (pts.length === 0) continue;
