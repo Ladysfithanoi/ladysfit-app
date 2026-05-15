@@ -271,7 +271,9 @@ function ProgramView({
   const [editMode, setEditMode] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const [editPhase, setEditPhase] = useState(program.phase);
-  const [editWorkoutType, setEditWorkoutType] = useState(program.workoutType ?? PHASE1_WORKOUT_TYPE);
+  const [editWorkoutType, setEditWorkoutType] = useState(
+    program.workoutType ?? (getAllowedWorkoutTypeOptions(undefined, program.phase)[0]?.dbValue ?? PHASE1_WORKOUT_TYPE)
+  );
   const [showPhaseChange, setShowPhaseChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingWeek, setAddingWeek] = useState(false);
