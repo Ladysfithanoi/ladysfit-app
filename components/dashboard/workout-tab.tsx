@@ -10,6 +10,7 @@ import {
   getSlotsForSessionType,
   getPhaseLabel,
   getDefaultReps,
+  basePhase,
 } from "@/lib/workout-structure";
 import {
   getAllowedWorkoutTypeOptions,
@@ -199,7 +200,7 @@ function EditMovementRow({
       </td>
       <td className="py-2 pr-3 min-w-[180px]">
         <ExerciseSelect
-          phase={phase}
+          phase={basePhase(phase)}
           movementCode={mov.movementCode}
           value={mov.selectedExercise}
           onChange={(v) =>
@@ -271,9 +272,7 @@ function ProgramView({
   const [editMode, setEditMode] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const [editPhase, setEditPhase] = useState(program.phase);
-  const [editWorkoutType, setEditWorkoutType] = useState(
-    program.workoutType ?? (getAllowedWorkoutTypeOptions(undefined, program.phase)[0]?.dbValue ?? PHASE1_WORKOUT_TYPE)
-  );
+  const [editWorkoutType, setEditWorkoutType] = useState(program.workoutType ?? PHASE1_WORKOUT_TYPE);
   const [showPhaseChange, setShowPhaseChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingWeek, setAddingWeek] = useState(false);
@@ -287,11 +286,11 @@ function ProgramView({
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
   const phaseLabel = getPhaseLabel(program.phase);
-  const showType = program.workoutType && program.workoutType !== program.phase;
+  const showType = !program.phase.includes(":") && program.workoutType && program.workoutType !== program.phase;
 
   const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase, isSubstitute, enableLevelSystem);
   const showEditTypeDropdown = editTypeOptions.length > 0;
-  const effectiveEditType = showEditTypeDropdown ? editWorkoutType : PHASE1_WORKOUT_TYPE;
+  const effectiveEditType = showEditTypeDropdown ? editWorkoutType : editPhase;
   const editSessionTypeOptions = getSessionTypeOptions(editPhase, effectiveEditType);
 
   function enterEditMode() {
@@ -316,11 +315,11 @@ function ProgramView({
   function handleEditPhaseChange(newPhase: string) {
     setEditPhase(newPhase);
     const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, isSubstitute, enableLevelSystem);
-    setEditWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
+    setEditWorkoutType(opts.length > 0 ? opts[0].dbValue : newPhase);
   }
 
   function applyPhaseChange() {
-    const newType = showEditTypeDropdown ? editWorkoutType : PHASE1_WORKOUT_TYPE;
+    const newType = showEditTypeDropdown ? editWorkoutType : editPhase;
     const typeOpts = getSessionTypeOptions(editPhase, newType);
     setDraftSessions((prev) =>
       prev.map((s, i) => {

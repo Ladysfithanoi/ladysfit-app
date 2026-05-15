@@ -293,7 +293,7 @@ export const PHASE_DEFAULT_REPS: Record<string, string> = {
 };
 
 export function getDefaultReps(phase: string): string {
-  return PHASE_DEFAULT_REPS[phase] ?? "15-20";
+  return PHASE_DEFAULT_REPS[phase] ?? PHASE_DEFAULT_REPS[basePhase(phase)] ?? "15-20";
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -318,6 +318,17 @@ export function getSlotsForSessionType(sessionType: string, workoutType?: string
   if (workoutType) {
     const key = `${workoutType}|${sessionType}`;
     if (SESSION_TYPE_MOVEMENT_TEMPLATES[key]) return SESSION_TYPE_MOVEMENT_TEMPLATES[key];
+    // WorkoutPhase DB names include sub-type (e.g. "Giai đoạn 2: Skinny Fat") — extract it
+    if (workoutType.includes(":")) {
+      const subType = workoutType.split(":").slice(1).join(":").trim();
+      const subKey = `${subType}|${sessionType}`;
+      if (SESSION_TYPE_MOVEMENT_TEMPLATES[subKey]) return SESSION_TYPE_MOVEMENT_TEMPLATES[subKey];
+    }
   }
   return SESSION_TYPE_MOVEMENT_TEMPLATES[sessionType] ?? [];
+}
+
+/** Extract base phase name (e.g. "Giai đoạn 2: Skinny Fat" → "Giai đoạn 2") */
+export function basePhase(phase: string): string {
+  return phase.split(":")[0].trim();
 }

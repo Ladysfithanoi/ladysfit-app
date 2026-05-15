@@ -9,6 +9,7 @@ import {
   getSessionTypeOptions,
   getSlotsForSessionType,
   getDefaultReps,
+  basePhase,
 } from "@/lib/workout-structure";
 import {
   getAllowedWorkoutTypeOptions,
@@ -117,7 +118,7 @@ function MovementRow({
         ) : (
           <>
             <ExerciseSelect
-              phase={phase}
+              phase={basePhase(phase)}
               movementCode={mov.movementCode}
               value={mov.selectedExercise}
               onChange={(v) =>
@@ -228,7 +229,7 @@ export function Step3Workout({
         if (!savedDesign?.phase && active.length > 0) {
           setPhase(active[0].name);
           const opts = getAllowedWorkoutTypeOptions(userRole, active[0].name, false, enableLevelSystem);
-          setWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
+          setWorkoutType(opts.length > 0 ? opts[0].dbValue : active[0].name);
         }
       })
       .catch(() => {});
@@ -236,13 +237,13 @@ export function Step3Workout({
 
   const typeOptions = getAllowedWorkoutTypeOptions(userRole, phase, false, enableLevelSystem);
   const showTypeDropdown = typeOptions.length > 0;
-  const effectiveWorkoutType = showTypeDropdown ? workoutType : PHASE1_WORKOUT_TYPE;
+  const effectiveWorkoutType = showTypeDropdown ? workoutType : phase;
   const sessionTypeOptions = getSessionTypeOptions(phase, effectiveWorkoutType);
 
   function handlePhaseChange(newPhase: string) {
     setPhase(newPhase);
     const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, false, enableLevelSystem);
-    setWorkoutType(opts.length > 0 ? opts[0].dbValue : PHASE1_WORKOUT_TYPE);
+    setWorkoutType(opts.length > 0 ? opts[0].dbValue : newPhase);
   }
 
   function handleConfigConfirm() {
@@ -550,7 +551,7 @@ export function Step3Workout({
                     <MovementRow
                       key={m.movementCode + mi}
                       mov={m}
-                      phase={phase}
+                      phase={basePhase(phase)}
                       onChange={(updated) => updateMovement(si, mi, updated)}
                     />
                   ))}
