@@ -98,7 +98,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     };
     type DraftSession = { key: string; sessionType: string; movements: DraftMovement[] };
     type WorkoutDesign = {
-      phase: string; workoutType: string; sessionsPerWeek: number;
+      phaseId?: string; phase: string; workoutType: string; sessionsPerWeek: number;
       startWeek: number; sessions: DraftSession[];
     };
 
@@ -111,7 +111,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
           clientId: client.id,
           createdById: c.createdById,
           phase: design.phase,
-          workoutType: design.workoutType,
+          phaseId: design.phaseId || null,
+          workoutType: design.workoutType || null,
           sessionsPerWeek: design.sessionsPerWeek,
           currentWeek: startWeek,
         },

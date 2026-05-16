@@ -187,6 +187,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const serializedPrograms = programs.map((p) => ({
     id: p.id,
     phase: p.phase,
+    phaseId: p.phaseId ?? null,
     workoutType: p.workoutType ?? null,
     sessionsPerWeek: p.sessionsPerWeek,
     currentWeek: p.currentWeek,

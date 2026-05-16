@@ -460,14 +460,17 @@ model WorkoutMovementTemplate {
 }
 
 model WorkoutPhase {
-  id          String               @id @default(cuid())
-  name        String
-  order       Int
-  isActive    Boolean              @default(true)
-  programs    WorkoutProgram[]
-  levelAccess PTLevelPhaseAccess[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id           String               @id @default(cuid())
+  name         String
+  order        Int
+  isActive     Boolean              @default(true)
+  sessionTypes String[]             @default([])
+  defaultReps  String               @default("15-20")
+  templateKey  String               @default("")
+  programs     WorkoutProgram[]
+  levelAccess  PTLevelPhaseAccess[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@map("workout_phases")
 }

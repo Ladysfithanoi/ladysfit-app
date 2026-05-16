@@ -4,20 +4,22 @@ import { useState, useEffect, useCallback } from "react";
 import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  PHASE1_WORKOUT_TYPE,
   MOVEMENT_BASE_CODES,
-  getSessionTypeOptions,
   getSlotsForSessionType,
-  getPhaseLabel,
-  getDefaultReps,
   basePhase,
 } from "@/lib/workout-structure";
-import {
-  getAllowedWorkoutTypeOptions,
-} from "@/lib/workout-permissions";
 import { SessionLogForm, SessionLogHistory } from "./session-log-panel";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+type PhaseData = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  sessionTypes: string[];
+  defaultReps: string;
+  templateKey: string;
+};
 
 export type WorkoutMovement = {
   id: string;
@@ -46,6 +48,7 @@ export type WorkoutWeek = {
 export type WorkoutProgram = {
   id: string;
   phase: string;
+  phaseId: string | null;
   workoutType: string | null;
   sessionsPerWeek: number;
   currentWeek: number;
@@ -168,15 +171,15 @@ function sessionToDraft(s: WorkoutSession): DraftSession {
   };
 }
 
-function buildMovementsFromType(sessionType: string, workoutType?: string, phase?: string): DraftMovement[] {
+function buildMovementsFromType(sessionType: string, templateKey: string, defaultReps: string): DraftMovement[] {
   const isCardio = sessionType === "Cardio";
-  return getSlotsForSessionType(sessionType, workoutType).map((slot, i) => ({
+  return getSlotsForSessionType(sessionType, templateKey || undefined).map((slot, i) => ({
     movementCode: slot.code,
     movementName: slot.name,
     selectedExercise: "",
     customExercise: "",
     sets: isCardio ? 6 : 3,
-    reps: isCardio ? "20-60s" : getDefaultReps(phase ?? "Giai đoạn 1"),
+    reps: isCardio ? "20-60s" : defaultReps,
     order: i,
   }));
 }
@@ -200,7 +203,7 @@ function EditMovementRow({
       </td>
       <td className="py-2 pr-3 min-w-[180px]">
         <ExerciseSelect
-          phase={basePhase(phase)}
+          phase={basePhase(phase ?? "")}
           movementCode={mov.movementCode}
           value={mov.selectedExercise}
           onChange={(v) =>
@@ -258,21 +261,18 @@ function ProgramView({
   const [activeWeekIdx, setActiveWeekIdx] = useState(initialWeekIdx);
   const [activeSessionIdx, setActiveSessionIdx] = useState(0);
 
-  const [phases, setPhases] = useState<{ id: string; name: string }[]>([]);
+  const [phases, setPhases] = useState<PhaseData[]>([]);
   useEffect(() => {
     fetch("/api/admin/phases")
       .then((r) => r.json())
-      .then((data: { id: string; name: string; isActive: boolean }[]) =>
-        setPhases(data.filter((p) => p.isActive))
-      )
+      .then((data: PhaseData[]) => setPhases(data.filter((p) => p.isActive)))
       .catch(() => {});
   }, []);
 
   // Edit mode
   const [editMode, setEditMode] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
-  const [editPhase, setEditPhase] = useState(program.phase);
-  const [editWorkoutType, setEditWorkoutType] = useState(program.workoutType ?? PHASE1_WORKOUT_TYPE);
+  const [editPhaseId, setEditPhaseId] = useState(program.phaseId ?? "");
   const [showPhaseChange, setShowPhaseChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingWeek, setAddingWeek] = useState(false);
@@ -285,22 +285,17 @@ function ProgramView({
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
-  const phaseLabel = getPhaseLabel(program.phase);
-  const showType = !program.phase.includes(":") && program.workoutType && program.workoutType !== program.phase;
-
-  const editTypeOptions = getAllowedWorkoutTypeOptions(userRole, editPhase, isSubstitute, enableLevelSystem);
-  const showEditTypeDropdown = editTypeOptions.length > 0;
-  const effectiveEditType = showEditTypeDropdown ? editWorkoutType : editPhase;
-  const editSessionTypeOptions = getSessionTypeOptions(editPhase, effectiveEditType);
+  const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
+  const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
 
   function enterEditMode() {
     if (!currentWeekData) return;
-    const allowedTypes = getAllowedWorkoutTypeOptions(userRole, program.phase, isSubstitute, enableLevelSystem);
-    const currentType = program.workoutType ?? PHASE1_WORKOUT_TYPE;
-    const typeAllowed = allowedTypes.length === 0 || allowedTypes.some((t) => t.dbValue === currentType);
+    const resolvedPhaseId =
+      program.phaseId ??
+      phases.find((p) => p.name === program.phase)?.id ??
+      "";
     setDraftSessions(currentWeekData.sessions.map(sessionToDraft));
-    setEditPhase(program.phase);
-    setEditWorkoutType(typeAllowed ? currentType : (allowedTypes[0]?.dbValue ?? PHASE1_WORKOUT_TYPE));
+    setEditPhaseId(resolvedPhaseId);
     setShowPhaseChange(false);
     setError("");
     setEditMode(true);
@@ -312,29 +307,29 @@ function ProgramView({
     setShowPhaseChange(false);
   }
 
-  function handleEditPhaseChange(newPhase: string) {
-    setEditPhase(newPhase);
-    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, isSubstitute, enableLevelSystem);
-    setEditWorkoutType(opts.length > 0 ? opts[0].dbValue : newPhase);
+  function handleEditPhaseChange(newPhaseId: string) {
+    setEditPhaseId(newPhaseId);
   }
 
   function applyPhaseChange() {
-    const newType = showEditTypeDropdown ? editWorkoutType : editPhase;
-    const typeOpts = getSessionTypeOptions(editPhase, newType);
+    if (!editSelectedPhase) return;
+    const { sessionTypes, templateKey, defaultReps } = editSelectedPhase;
     setDraftSessions((prev) =>
       prev.map((s, i) => {
-        const sessionType = typeOpts[i % typeOpts.length]?.value ?? "";
-        return { ...s, sessionType, movements: buildMovementsFromType(sessionType, newType, editPhase) };
+        const sessionType = sessionTypes[i % sessionTypes.length] ?? "";
+        return { ...s, sessionType, movements: buildMovementsFromType(sessionType, templateKey, defaultReps) };
       })
     );
     setShowPhaseChange(false);
   }
 
   function handleSessionTypeChange(sessionIdx: number, newType: string) {
+    const templateKey = editSelectedPhase?.templateKey ?? "";
+    const defaultReps = editSelectedPhase?.defaultReps ?? "15-20";
     setDraftSessions((prev) =>
       prev.map((s, i) =>
         i === sessionIdx
-          ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, effectiveEditType, editPhase) }
+          ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, templateKey, defaultReps) }
           : s
       )
     );
@@ -355,7 +350,7 @@ function ProgramView({
     setSaving(true);
     setError("");
     try {
-      const defaultReps = getDefaultReps(editPhase);
+      const defaultReps = editSelectedPhase?.defaultReps ?? "15-20";
       const sessions = draftSessions.map((s, idx) => {
         const isCardio = s.sessionType === "Cardio";
         return {
@@ -385,8 +380,9 @@ function ProgramView({
 
       onUpdate({
         id: program.id,
-        phase: editPhase,
-        workoutType: effectiveEditType,
+        phase: editSelectedPhase?.name ?? program.phase,
+        phaseId: editSelectedPhase?.id ?? program.phaseId,
+        workoutType: editSelectedPhase?.templateKey ?? program.workoutType,
         weeks: program.weeks.map((w) => (w.id === updatedWeek.id ? updatedWeek : w)),
       });
       setEditMode(false);
@@ -446,12 +442,7 @@ function ProgramView({
       <div className="flex items-start justify-between px-5 py-4 border-b border-gray-50">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-extrabold text-gray-900">{phaseLabel}</span>
-            {showType && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
-                {program.workoutType}
-              </span>
-            )}
+            <span className="text-sm font-extrabold text-gray-900">{program.phase}</span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600">
               {program.sessionsPerWeek} buổi/tuần
             </span>
@@ -590,32 +581,18 @@ function ProgramView({
                         ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
+                        <div className="space-y-1 col-span-2">
                           <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
                           <select
-                            value={editPhase}
+                            value={editPhaseId}
                             onChange={(e) => handleEditPhaseChange(e.target.value)}
                             className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                           >
                             {phases.map((p) => (
-                              <option key={p.id} value={p.name}>{p.name}</option>
+                              <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
                         </div>
-                        {showEditTypeDropdown && (
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-gray-600">Mục tiêu</label>
-                            <select
-                              value={editWorkoutType}
-                              onChange={(e) => setEditWorkoutType(e.target.value)}
-                              className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                            >
-                              {editTypeOptions.map((t) => (
-                                <option key={t.dbValue} value={t.dbValue}>{t.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -671,8 +648,8 @@ function ProgramView({
                         onChange={(e) => handleSessionTypeChange(activeSessionIdx, e.target.value)}
                         className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
                       >
-                        {editSessionTypeOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        {editSessionTypeOptions.map((t) => (
+                          <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
                     </div>
@@ -690,7 +667,7 @@ function ProgramView({
                             <EditMovementRow
                               key={m.movementCode + mi}
                               mov={m}
-                              phase={editPhase}
+                              phase={editSelectedPhase?.name ?? program.phase}
                               onChange={(updated) => updateMovement(activeSessionIdx, mi, updated)}
                             />
                           ))}

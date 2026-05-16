@@ -56,6 +56,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const body = await req.json() as {
     phase: string;
+    phaseId?: string;
     workoutType?: string;
     sessionsPerWeek: number;
     currentWeek?: number;
@@ -71,6 +72,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       clientId: params.id,
       createdById: session.user.id,
       phase: body.phase,
+      phaseId: body.phaseId || null,
       workoutType: body.workoutType || null,
       sessionsPerWeek: body.sessionsPerWeek,
       currentWeek: startWeek,

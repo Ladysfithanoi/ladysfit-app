@@ -4,18 +4,21 @@ import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  PHASE1_WORKOUT_TYPE,
   MOVEMENT_BASE_CODES,
-  getSessionTypeOptions,
   getSlotsForSessionType,
-  getDefaultReps,
   basePhase,
 } from "@/lib/workout-structure";
-import {
-  getAllowedWorkoutTypeOptions,
-} from "@/lib/workout-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────
+
+type PhaseData = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  sessionTypes: string[];
+  defaultReps: string;
+  templateKey: string;
+};
 
 type DraftMovement = {
   movementCode: string;
@@ -34,6 +37,7 @@ type DraftSession = {
 };
 
 type WorkoutDesign = {
+  phaseId?: string;
   phase: string;
   workoutType: string;
   sessionsPerWeek: number;
@@ -149,27 +153,26 @@ function MovementRow({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function buildMovementsFromType(sessionType: string, workoutType?: string, phase?: string): DraftMovement[] {
+function buildMovementsFromType(sessionType: string, templateKey: string, defaultReps: string): DraftMovement[] {
   const isCardio = sessionType === "Cardio";
-  return getSlotsForSessionType(sessionType, workoutType).map((slot, i) => ({
+  return getSlotsForSessionType(sessionType, templateKey || undefined).map((slot, i) => ({
     movementCode: slot.code,
     movementName: slot.name,
     selectedExercise: "",
     customExercise: "",
     sets: isCardio ? 6 : 3,
-    reps: isCardio ? "20-60s" : getDefaultReps(phase ?? "Giai đoạn 1"),
+    reps: isCardio ? "20-60s" : defaultReps,
     order: i,
   }));
 }
 
-function buildDraftSessions(phase: string, workoutType: string, spw: number): DraftSession[] {
-  const typeOptions = getSessionTypeOptions(phase, workoutType);
+function buildDraftSessions(phase: PhaseData, spw: number): DraftSession[] {
   return Array.from({ length: spw }, (_, i) => {
-    const sessionType = typeOptions[i % typeOptions.length]?.value ?? "";
+    const sessionType = phase.sessionTypes[i % phase.sessionTypes.length] ?? "";
     return {
       key: SESSION_LABELS[i] ?? String(i + 1),
       sessionType,
-      movements: buildMovementsFromType(sessionType, workoutType, phase),
+      movements: buildMovementsFromType(sessionType, phase.templateKey, phase.defaultReps),
     };
   });
 }
@@ -197,8 +200,6 @@ export function Step3Workout({
   onPrev,
   isReadOnly,
   workoutDesign: savedDesign,
-  userRole,
-  enableLevelSystem = true,
 }: {
   onNext: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
@@ -209,9 +210,8 @@ export function Step3Workout({
 }) {
   const hasSaved = !!savedDesign;
 
-  const [phases, setPhases] = useState<{ id: string; name: string }[]>([]);
-  const [phase, setPhase] = useState(savedDesign?.phase ?? "");
-  const [workoutType, setWorkoutType] = useState(savedDesign?.workoutType ?? PHASE1_WORKOUT_TYPE);
+  const [phases, setPhases] = useState<PhaseData[]>([]);
+  const [phaseId, setPhaseId] = useState(savedDesign?.phaseId ?? "");
   const [sessionsPerWeek, setSessionsPerWeek] = useState<number | "">(savedDesign?.sessionsPerWeek ?? 3);
   const [startWeek, setStartWeek] = useState<number | "">(savedDesign?.startWeek ?? 1);
   const [draftSessions, setDraftSessions] = useState<DraftSession[] | null>(
@@ -220,44 +220,44 @@ export function Step3Workout({
   const [activeSession, setActiveSession] = useState(0);
   const [saving, setSaving] = useState(false);
 
+  const selectedPhase = phases.find((p) => p.id === phaseId) ?? phases[0] ?? null;
+  const sessionTypeOptions = selectedPhase?.sessionTypes ?? [];
+
   useEffect(() => {
     fetch("/api/admin/phases")
       .then((r) => r.json())
-      .then((data: { id: string; name: string; isActive: boolean }[]) => {
+      .then((data: PhaseData[]) => {
         const active = data.filter((p) => p.isActive);
         setPhases(active);
-        if (!savedDesign?.phase && active.length > 0) {
-          setPhase(active[0].name);
-          const opts = getAllowedWorkoutTypeOptions(userRole, active[0].name, false, enableLevelSystem);
-          setWorkoutType(opts.length > 0 ? opts[0].dbValue : active[0].name);
+        if (!savedDesign?.phaseId && active.length > 0) {
+          setPhaseId(active[0].id);
         }
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const typeOptions = getAllowedWorkoutTypeOptions(userRole, phase, false, enableLevelSystem);
-  const showTypeDropdown = typeOptions.length > 0;
-  const effectiveWorkoutType = showTypeDropdown ? workoutType : phase;
-  const sessionTypeOptions = getSessionTypeOptions(phase, effectiveWorkoutType);
-
-  function handlePhaseChange(newPhase: string) {
-    setPhase(newPhase);
-    const opts = getAllowedWorkoutTypeOptions(userRole, newPhase, false, enableLevelSystem);
-    setWorkoutType(opts.length > 0 ? opts[0].dbValue : newPhase);
-  }
+  // If saved design has no phaseId, resolve it by name match after phases load
+  useEffect(() => {
+    if (savedDesign?.phase && !savedDesign.phaseId && phases.length > 0 && !phaseId) {
+      const match = phases.find((p) => p.name === savedDesign.phase);
+      if (match) setPhaseId(match.id);
+    }
+  }, [phases, savedDesign, phaseId]);
 
   function handleConfigConfirm() {
-    const drafts = buildDraftSessions(phase, effectiveWorkoutType, Number(sessionsPerWeek) || 3);
+    if (!selectedPhase) return;
+    const drafts = buildDraftSessions(selectedPhase, Number(sessionsPerWeek) || 3);
     setDraftSessions(drafts);
     setActiveSession(0);
   }
 
   function handleSessionTypeChange(idx: number, newType: string) {
+    if (!selectedPhase) return;
     setDraftSessions((prev) =>
       prev
         ? prev.map((s, i) =>
             i === idx
-              ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, effectiveWorkoutType, phase) }
+              ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, selectedPhase.templateKey, selectedPhase.defaultReps) }
               : s
           )
         : prev
@@ -277,13 +277,13 @@ export function Step3Workout({
   }
 
   async function handleSave() {
-    if (!draftSessions) return;
+    if (!draftSessions || !selectedPhase) return;
     setSaving(true);
-    const defaultReps = getDefaultReps(phase);
     await onNext({
       workoutDesign: {
-        phase,
-        workoutType: effectiveWorkoutType,
+        phaseId: selectedPhase.id,
+        phase: selectedPhase.name,
+        workoutType: selectedPhase.templateKey || selectedPhase.name,
         sessionsPerWeek: Number(sessionsPerWeek) || 3,
         startWeek: Number(startWeek) || 1,
         sessions: draftSessions.map((s) => {
@@ -293,7 +293,7 @@ export function Step3Workout({
             movements: s.movements.map((m) => ({
               ...m,
               sets: isCardio ? 6 : 3,
-              reps: isCardio ? "20-60s" : defaultReps,
+              reps: isCardio ? "20-60s" : selectedPhase.defaultReps,
             })),
           };
         }),
@@ -322,11 +322,6 @@ export function Step3Workout({
             <span className="px-3 py-1.5 rounded-xl bg-orange-50 text-xs font-bold text-orange-700">
               {savedDesign.phase}
             </span>
-            {savedDesign.workoutType !== savedDesign.phase && (
-              <span className="px-3 py-1.5 rounded-xl bg-blue-50 text-xs font-bold text-blue-700">
-                {savedDesign.workoutType}
-              </span>
-            )}
             <span className="px-3 py-1.5 rounded-xl bg-gray-100 text-xs font-bold text-gray-600">
               {savedDesign.sessionsPerWeek} buổi/tuần
             </span>
@@ -392,23 +387,12 @@ export function Step3Workout({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-gray-600">Giai đoạn *</label>
-                <select value={phase} onChange={(e) => handlePhaseChange(e.target.value)} className={selectCls}>
+                <select value={phaseId} onChange={(e) => setPhaseId(e.target.value)} className={selectCls}>
                   {phases.map((p) => (
-                    <option key={p.id} value={p.name}>{p.name}</option>
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
-
-              {showTypeDropdown && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-600">Mục tiêu *</label>
-                  <select value={workoutType} onChange={(e) => setWorkoutType(e.target.value)} className={selectCls}>
-                    {typeOptions.map((t) => (
-                      <option key={t.dbValue} value={t.dbValue}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-gray-600">Số buổi/tuần *</label>
@@ -458,7 +442,8 @@ export function Step3Workout({
           </button>
           <button
             onClick={handleConfigConfirm}
-            className="flex-1 h-10 rounded-xl text-white text-sm font-bold"
+            disabled={!selectedPhase}
+            className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60"
             style={{ backgroundColor: "#f15b5c" }}
           >
             Tiếp tục — chọn bài tập →
@@ -489,10 +474,9 @@ export function Step3Workout({
           </button>
         </div>
         <div className="flex flex-wrap gap-2 mb-5">
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700">{phase}</span>
-          {showTypeDropdown && (
-            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">{workoutType}</span>
-          )}
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700">
+            {selectedPhase?.name}
+          </span>
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
             {sessionsPerWeek} buổi/tuần · Tuần {startWeek}
           </span>
@@ -531,8 +515,8 @@ export function Step3Workout({
                 onChange={(e) => handleSessionTypeChange(si, e.target.value)}
                 className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
               >
-                {sessionTypeOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {sessionTypeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
@@ -551,7 +535,7 @@ export function Step3Workout({
                     <MovementRow
                       key={m.movementCode + mi}
                       mov={m}
-                      phase={basePhase(phase)}
+                      phase={selectedPhase?.name ?? ""}
                       onChange={(updated) => updateMovement(si, mi, updated)}
                     />
                   ))}
