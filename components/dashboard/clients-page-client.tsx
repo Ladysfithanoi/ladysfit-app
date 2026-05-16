@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type Branch = { id: string; name: string };
-type PT = { id: string; name: string | null; branchId: string | null };
+type PT = { id: string; name: string | null; branchId: string | null; role: string; managedBranches?: { branchId: string }[] };
 
 type ActivePackage = {
   packageName: string;
@@ -163,12 +163,29 @@ export function ClientsPageClient({
     setDateTo("");
   }
 
-  // Staff visible in PT dropdown
+  // Staff visible in PT dropdown (base scope)
   const visibleStaff = useMemo(() => {
     if (!staffList) return [];
-    if (isPrivileged) return staffList; // server already scoped to managed branches for FM
+    if (isPrivileged) return staffList;
     return staffList.filter((s) => s.branchId === currentUserBranchId);
   }, [staffList, isPrivileged, currentUserBranchId]);
+
+  // Cascading: narrow to selected branch when branchFilter is set
+  const branchFilteredStaff = useMemo(() => {
+    if (!branchFilter) return visibleStaff;
+    return visibleStaff.filter(
+      (s) =>
+        s.branchId === branchFilter ||
+        (s.role === "FM" && s.managedBranches?.some((mb) => mb.branchId === branchFilter))
+    );
+  }, [visibleStaff, branchFilter]);
+
+  // Auto-reset PT filter when branch changes and selected PT is no longer in scope
+  useEffect(() => {
+    if (ptFilter && !branchFilteredStaff.some((s) => s.id === ptFilter)) {
+      setPtFilter("");
+    }
+  }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -243,7 +260,21 @@ export function ClientsPageClient({
             />
           </div>
 
-          {/* PT filter — privileged only */}
+          {/* Branch filter — privileged only (comes first so PT cascades from it) */}
+          {isPrivileged && visibleBranches.length > 0 && (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className={cn(inputCls, "min-w-[180px]")}
+            >
+              <option value="">Tất cả cơ sở</option>
+              {visibleBranches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* PT filter — cascades from selected branch */}
           {isPrivileged && visibleStaff.length > 0 && (
             <select
               value={ptFilter}
@@ -251,7 +282,13 @@ export function ClientsPageClient({
               className={cn(inputCls, "min-w-[160px]")}
             >
               <option value="">Tất cả PT</option>
-              {isAdmin && branches && branches.length > 0 ? (
+              {branchFilter ? (
+                // Cascaded: flat list for the selected branch only
+                branchFilteredStaff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name ?? `(${s.id.slice(0, 6)})`}</option>
+                ))
+              ) : isAdmin && branches && branches.length > 0 ? (
+                // No branch selected + admin: grouped by branch
                 branches.map((b) => {
                   const branchPTs = visibleStaff.filter((s) => s.branchId === b.id);
                   if (branchPTs.length === 0) return null;
@@ -264,24 +301,11 @@ export function ClientsPageClient({
                   );
                 })
               ) : (
+                // FM or no branches: flat list
                 visibleStaff.map((s) => (
                   <option key={s.id} value={s.id}>{s.name ?? `(${s.id.slice(0, 6)})`}</option>
                 ))
               )}
-            </select>
-          )}
-
-          {/* Branch filter — privileged only */}
-          {isPrivileged && visibleBranches.length > 0 && (
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className={cn(inputCls, "min-w-[180px]")}
-            >
-              <option value="">Tất cả cơ sở</option>
-              {visibleBranches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
             </select>
           )}
 

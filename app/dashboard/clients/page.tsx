@@ -40,8 +40,23 @@ export default async function ClientsPage() {
     prisma.branch.findMany({ orderBy: { name: "asc" } }),
     (isAdmin || isFM)
       ? prisma.user.findMany({
-          where: { deletedAt: null, ...(isFM ? { branchId: { in: managedBranchIds } } : {}) },
-          select: { id: true, name: true, branchId: true },
+          where: {
+            deletedAt: null,
+            role: { in: ["PT", "FM", "ADMIN"] },
+            ...(isFM ? {
+              OR: [
+                { branchId: { in: managedBranchIds } },
+                { role: "FM", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
+              ],
+            } : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            branchId: true,
+            role: true,
+            managedBranches: { select: { branchId: true } },
+          },
           orderBy: { name: "asc" },
         })
       : Promise.resolve([]),
