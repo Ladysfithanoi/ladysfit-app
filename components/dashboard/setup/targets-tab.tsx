@@ -66,7 +66,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const [weeklyEdit, setWeeklyEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
   const [weeklyForm, setWeeklyForm] = useState<Record<string, number | string>>({});
   const [saving, setSaving] = useState(false);
-  const [filterRole, setFilterRole] = useState<"all" | "FM" | "PT">("all");
+  const [filterRole, setFilterRole] = useState<"all" | "ADMIN" | "FM" | "PT">("all");
 
   const fetchTargets = useCallback(async () => {
     if (!branchId) return;
@@ -306,23 +306,28 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const filteredPTs = filterRole === "all"
     ? allPTs
     : allPTs.filter((pt) =>
-        filterRole === "FM" ? pt.role === "FM" : pt.role === "PT"
+        filterRole === "FM" ? pt.role === "FM"
+        : filterRole === "ADMIN" ? pt.role === "ADMIN"
+        : pt.role === "PT"
       );
   const filteredTargets = targets.filter((t) => filteredPTs.some((pt) => pt.id === t.userId));
 
   if (allPTs.length === 0) {
-    return <div className="py-12 text-center text-sm text-gray-300">Chưa có PT nào trong cơ sở này</div>;
+    return <div className="py-12 text-center text-sm text-gray-300">Chưa có nhân sự nào trong cơ sở này</div>;
   }
 
   const isManagerView = currentUserRole === "ADMIN" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+  const hasMultipleRoles = allPTs.some((pt) => pt.role === "FM") || allPTs.some((pt) => pt.role === "ADMIN");
 
   return (
     <div className="space-y-6">
       {/* Role filter pills — Admin/CEO/COO only */}
-      {isManagerView && allPTs.some((pt) => pt.role === "FM") && (
+      {isManagerView && hasMultipleRoles && (
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-gray-400">Lọc vai trò:</span>
-          {(["all", "FM", "PT"] as const).map((r) => (
+          {(["all", "ADMIN", "FM", "PT"] as const).filter((r) =>
+            r === "all" || allPTs.some((pt) => pt.role === r)
+          ).map((r) => (
             <button
               key={r}
               onClick={() => setFilterRole(r)}

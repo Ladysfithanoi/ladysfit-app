@@ -181,9 +181,9 @@ export function Step1Info({
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </Field>
-          <Field label="PT phụ trách" required>
+          <Field label="Nhân sự phụ trách" required>
             <select value={createdById} onChange={(e) => setCreatedById(e.target.value)} disabled={(!isAdmin && !isFM) || isReadOnly} className={selectCls}>
-              <option value="">— Chọn PT —</option>
+              <option value="">— Chọn nhân sự —</option>
               {filteredStaff.map((s) => <option key={s.id} value={s.id}>{s.name ?? s.email}</option>)}
             </select>
           </Field>

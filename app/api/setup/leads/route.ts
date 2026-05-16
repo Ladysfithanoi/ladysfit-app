@@ -53,11 +53,10 @@ export async function POST(req: Request) {
   const role = session.user.role;
   const isPT = role === "PT";
   const isFM = role === "FM";
-  const isAdmin = role === "ADMIN";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (isAdmin || isFM || role === "CEO_FITPARTNER" || role === "COO") {
-    return NextResponse.json({ error: "Chỉ PT mới có thể thêm lead" }, { status: 403 });
+  if (role === "CEO_FITPARTNER") {
+    return NextResponse.json({ error: "Không có quyền thêm lead" }, { status: 403 });
   }
 
   const body = await req.json();

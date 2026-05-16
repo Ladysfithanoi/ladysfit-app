@@ -1217,7 +1217,7 @@ export function ClientDetailPage({
               <InfoRow label="Họ tên" value={client.fullName} />
               <InfoRow label="SĐT" value={client.phone} />
               <InfoRow label="Ngày sinh" value={formatDate(client.dateOfBirth)} />
-              <InfoRow label="PT phụ trách" value={client.assignedPT.name ?? client.assignedPT.email} />
+              <InfoRow label="Nhân sự phụ trách" value={client.assignedPT.name ?? client.assignedPT.email} />
               <InfoRow label="Cơ sở" value={client.branch.name} />
               <InfoRow label="Ngày bắt đầu" value={formatDate(client.createdAt)} />
             </div>
@@ -1964,7 +1964,7 @@ export function ClientDetailPage({
           </Field>
 
           <SectionTitle>Phân công</SectionTitle>
-          <Field label="PT phụ trách *">
+          <Field label="Nhân sự phụ trách *">
             <select name="assignedPTId" required defaultValue={client.assignedPT.id} className={selectCls}>
               {staffList.map((s) => (
                 <option key={s.id} value={s.id}>{s.name ?? s.email}</option>

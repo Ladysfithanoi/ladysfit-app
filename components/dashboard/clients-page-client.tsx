@@ -369,7 +369,7 @@ export function ClientsPageClient({
             <table className="w-full min-w-[700px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  {["Họ tên", "PT phụ trách", "Cơ sở", "Chiều cao", "Lộ trình", "Cân nặng", "Tình trạng", "Trạng thái", ""].map((h) => (
+                  {["Họ tên", "Nhân sự phụ trách", "Cơ sở", "Chiều cao", "Lộ trình", "Cân nặng", "Tình trạng", "Trạng thái", ""].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap"

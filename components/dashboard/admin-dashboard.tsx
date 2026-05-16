@@ -237,7 +237,7 @@ export function AdminDashboard({
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-50 bg-gray-50/50">
-                    {["Tên KH", "Cơ sở", "PT phụ trách", "Đã giảm", "Thời gian"].map((h, i) => (
+                    {["Tên KH", "Cơ sở", "Nhân sự phụ trách", "Đã giảm", "Thời gian"].map((h, i) => (
                       <th
                         key={h}
                         className={cn(

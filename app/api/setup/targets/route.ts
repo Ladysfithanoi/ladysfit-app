@@ -49,8 +49,9 @@ export async function PUT(req: Request) {
   const role = session.user.role;
   const isPT = role === "PT";
   const isFM = role === "FM";
+  const isAdmin = role === "ADMIN";
   const isCEO = role === "CEO_FITPARTNER" || role === "COO";
-  if (!isPT && !isFM && !isCEO) {
+  if (!isPT && !isFM && !isAdmin && !isCEO) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -72,6 +73,8 @@ export async function PUT(req: Request) {
       if (isFM && !managedBranchIds.includes(t.branchId)) return null;
       // PT can only save their own target
       if (isPT && t.userId !== session.user.id) return null;
+      // ADMIN can save their own target and can also set up targets for PT/FM
+      // (no restriction — admin has full authority)
       return prisma.monthlyTarget.upsert({
         where: { branchId_userId_month_year: { branchId: t.branchId, userId: t.userId, month: t.month, year: t.year } },
         update: {

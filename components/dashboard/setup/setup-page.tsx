@@ -58,7 +58,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
     fetch(`/api/staff?branchId=${branchId}`)
       .then((r) => r.json())
       .then((data: (PTUser & { role: string })[]) =>
-        setPtList(data.filter((u) => u.role === "FM" || u.role === "PT"))
+        setPtList(data.filter((u) => u.role === "FM" || u.role === "PT" || u.role === "ADMIN"))
       )
       .catch(() => {});
   }, [branchId, isPT]);
@@ -89,11 +89,11 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
               ))}
             </select>
           )}
-          {/* PT filter — Tab 1 only, FM/CEO/ADMIN only (show PT roles only) */}
-          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT") && (
+          {/* Nhân sự filter — Tab 1 only, FM/CEO/ADMIN only */}
+          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT" || u.role === "ADMIN") && (
             <select value={selectedPTId} onChange={(e) => setSelectedPTId(e.target.value)} className={selectCls}>
-              <option value="">Tất cả PT</option>
-              {ptList.filter((u) => u.role === "PT").map((pt) => (
+              <option value="">Tất cả nhân sự</option>
+              {ptList.filter((u) => u.role === "PT" || u.role === "ADMIN").map((pt) => (
                 <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
               ))}
             </select>

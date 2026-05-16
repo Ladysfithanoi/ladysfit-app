@@ -26,6 +26,7 @@ export async function GET(req: Request) {
       OR: [
         { branchId },
         { managedBranches: { some: { branchId } } },
+        { role: "ADMIN" },
       ],
     };
   }

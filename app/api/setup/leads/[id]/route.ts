@@ -13,9 +13,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const role = session.user.role;
   const isPT = role === "PT";
   const isFM = role === "FM";
+  const isAdmin = role === "ADMIN";
+  const isCOO = role === "COO";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (!isPT && !isFM) {
+  if (!isPT && !isFM && !isAdmin && !isCOO) {
     return NextResponse.json({ error: "Không có quyền sửa lead" }, { status: 403 });
   }
 
@@ -31,8 +33,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const body = await req.json();
 
-  // Only FM can reassign the PT; PT cannot change assignedPTId
-  const newAssignedPTId = (isFM && body.assignedPTId) ? body.assignedPTId : lead.assignedPTId;
+  // FM/ADMIN/COO can reassign the staff; PT cannot change assignedPTId
+  const canReassign = isFM || isAdmin || isCOO;
+  const newAssignedPTId = (canReassign && body.assignedPTId) ? body.assignedPTId : lead.assignedPTId;
 
   const updated = await prisma.salesLead.update({
     where: { id: params.id },
@@ -100,9 +103,11 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const role = session.user.role;
   const isPT = role === "PT";
   const isFM = role === "FM";
+  const isAdmin = role === "ADMIN";
+  const isCOO = role === "COO";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (!isPT && !isFM) {
+  if (!isPT && !isFM && !isAdmin && !isCOO) {
     return NextResponse.json({ error: "Không có quyền xóa lead" }, { status: 403 });
   }
 

@@ -78,10 +78,12 @@ function needsReminder(notes: string | null | undefined): boolean {
 
 export function LeadsTab({
   branchId, branchName, month, year,
-  currentUserId, currentUserName,
+  currentUserId, currentUserName, currentUserRole,
   isPT, isFM,
   ptList, selectedPTId, selectedSource, selectedStatus,
 }: Props) {
+  const isAdmin = currentUserRole === "ADMIN";
+  const isCOO   = currentUserRole === "COO";
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const [leads, setLeads]                   = useState<SalesLead[]>([]);
   const [loading, setLoading]               = useState(true);
@@ -136,7 +138,7 @@ export function LeadsTab({
 
   async function handleSave() {
     if (!form.customerName?.trim()) { setError("Tên khách hàng không được để trống"); return; }
-    if (!form.assignedPTId) { setError("Vui lòng chọn PT phụ trách"); return; }
+    if (!form.assignedPTId) { setError("Vui lòng chọn nhân sự phụ trách"); return; }
     setSaving(true);
     setError("");
     const body = { branchId, month, year, ...form, signDate: form.signDateStr || null };
@@ -319,7 +321,7 @@ export function LeadsTab({
     total:             visibleLeads.length,
   };
 
-  const canMutate    = isPT || isFM;
+  const canMutate    = isPT || isFM || isAdmin || isCOO;
   const nextMonth    = month === 12 ? 1 : month + 1;
   const nextYear     = month === 12 ? year + 1 : year;
   const carryableLeads = leads.filter(l => l.status === "TAKECARE" || l.status === "DE");
@@ -353,7 +355,7 @@ export function LeadsTab({
       </div>
 
       {/* Action bar */}
-      {(isPT || isFM) && (
+      {(isPT || isFM || isAdmin || isCOO) && (
         <div className="flex flex-wrap justify-end gap-3 mb-4">
           {/* Bulk remind — FM only */}
           {isFM && reminderLeads.length > 0 && (
@@ -372,15 +374,13 @@ export function LeadsTab({
               📤 Đẩy sang tháng sau
             </button>
           )}
-          {(isPT || isFM) && (
-            <button
-              onClick={openAdd}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              <Plus className="w-4 h-4" /> Thêm Lead
-            </button>
-          )}
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            <Plus className="w-4 h-4" /> Thêm Lead
+          </button>
         </div>
       )}
 
@@ -557,7 +557,7 @@ export function LeadsTab({
                               {canMutate && (
                                 <td className="px-3 py-2.5 whitespace-nowrap">
                                   <div className="flex items-center gap-2">
-                                    {(isFM || isOwnLead) && (
+                                    {(isFM || isOwnLead || isAdmin || isCOO) && (
                                       <>
                                         <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
                                           <Pencil className="w-3.5 h-3.5" />
@@ -685,7 +685,7 @@ export function LeadsTab({
       {careNotesLead && (
         <CareNotesPopup
           lead={careNotesLead}
-          canEdit={isFM || (isPT && careNotesLead.assignedPTId === currentUserId)}
+          canEdit={isFM || isAdmin || isCOO || (isPT && careNotesLead.assignedPTId === currentUserId)}
           onClose={() => setCareNotesLead(null)}
           onUpdated={(id, newNotes) => {
             setLeads(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));
@@ -732,7 +732,7 @@ export function LeadsTab({
                 </FormRow>
               </div>
               {isPT ? (
-                <FormRow label="PT phụ trách">
+                <FormRow label="Nhân sự phụ trách">
                   <input
                     value={ptList.find(p => p.id === currentUserId)?.name ?? "Bạn"}
                     readOnly
@@ -740,7 +740,7 @@ export function LeadsTab({
                   />
                 </FormRow>
               ) : isFM ? (
-                <FormRow label="PT phụ trách *">
+                <FormRow label="Nhân sự phụ trách *">
                   <select
                     value={form.assignedPTId ?? currentUserId}
                     onChange={e => setForm(f => ({ ...f, assignedPTId: e.target.value }))}
@@ -753,13 +753,13 @@ export function LeadsTab({
                   </select>
                 </FormRow>
               ) : (
-                <FormRow label="PT phụ trách *">
+                <FormRow label="Nhân sự phụ trách *">
                   <select
                     value={form.assignedPTId ?? ""}
                     onChange={e => setForm(f => ({ ...f, assignedPTId: e.target.value }))}
                     className={inputCls}
                   >
-                    <option value="">— Chọn PT —</option>
+                    <option value="">— Chọn nhân sự —</option>
                     {ptList.map(pt => (
                       <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
                     ))}
@@ -948,7 +948,7 @@ function CareNotesPopup({
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Lịch sử chăm sóc</p>
               <p className="text-base font-extrabold text-gray-900 mt-0.5 truncate">{lead.customerName}</p>
               <p className="text-xs text-gray-400 mt-0.5 truncate">
-                PT: {ptName}
+                Nhân sự: {ptName}
                 {lead.forecast && ` · Gói: ${lead.forecast}`}
                 {lead.source   && ` · Nguồn: ${lead.source}`}
               </p>

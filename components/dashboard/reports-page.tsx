@@ -293,7 +293,7 @@ export function ReportsPage({ userRole }: { userRole: string }) {
           <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                {["Khách hàng", "Loại", "Chi tiết", "Tuần", "PT phụ trách", "Trạng thái"].map((h) => (
+                {["Khách hàng", "Loại", "Chi tiết", "Tuần", "Nhân sự phụ trách", "Trạng thái"].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
                     {h}
                   </th>
