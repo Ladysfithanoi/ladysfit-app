@@ -71,7 +71,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds, ptLevelId } = body;
+  const { name, email, password, branchId, role, managedBranchIds, ptLevelId, dateOfBirth } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -100,6 +100,8 @@ export async function POST(req: Request) {
   const hashed = await bcrypt.hash(password, 12);
 
   try {
+    const parsedDOB = dateOfBirth ? new Date(dateOfBirth) : undefined;
+
     const user = await prisma.user.create({
       data: {
         name,
@@ -108,6 +110,7 @@ export async function POST(req: Request) {
         branchId: noBranchRole ? null : branchId,
         role,
         ...(ptLevelId && { ptLevelId }),
+        ...(parsedDOB && !isNaN(parsedDOB.getTime()) && { dateOfBirth: parsedDOB }),
       },
       select: {
         id: true, name: true, email: true, role: true, branchId: true,

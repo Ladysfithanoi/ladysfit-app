@@ -6,7 +6,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
@@ -19,6 +19,7 @@ type StaffMember = {
   email: string;
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT";
   branchId: string | null;
+  dateOfBirth: Date | null;
   ptLevelId: string | null;
   ptLevel: { id: string; name: string; color: string } | null;
   branch: Branch | null;
@@ -169,6 +170,8 @@ export function StaffPageClient({
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
   const [ptLevels, setPtLevels] = useState<PTLevel[]>([]);
   const [selectedPtLevelId, setSelectedPtLevelId] = useState<string>("");
+  const [birthDateVal, setBirthDateVal] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (open && selectedRole === "PT") {
@@ -196,12 +199,31 @@ export function StaffPageClient({
     });
   }, [initialStaff, branchFilter, search]);
 
+  function isoToDmy(iso: Date | string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  }
+
+  function dmyToIso(dmy: string): string | null {
+    if (!dmy) return null;
+    const parts = dmy.split("/");
+    if (parts.length !== 3) return null;
+    const [dd, mm, yyyy] = parts;
+    if (!dd || !mm || !yyyy || yyyy.length !== 4) return null;
+    const d = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T00:00:00.000Z`);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
   function openAdd() {
     setEditing(null);
     setError("");
     setSelectedRole("PT");
     setSelectedBranchIds([]);
     setSelectedPtLevelId("");
+    setBirthDateVal("");
+    setShowPassword(false);
     setOpen(true);
   }
   function openEdit(s: StaffMember) {
@@ -211,6 +233,8 @@ export function StaffPageClient({
     setSelectedRole(uiRole);
     setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
     setSelectedPtLevelId(s.ptLevelId ?? "");
+    setBirthDateVal(isoToDmy(s.dateOfBirth));
+    setShowPassword(false);
     setOpen(true);
   }
   function closePanel() { setOpen(false); setEditing(null); setError(""); }
@@ -278,6 +302,7 @@ export function StaffPageClient({
       name: fd.get("name") as string,
       email: fd.get("email") as string,
       role: actualRole,
+      dateOfBirth: dmyToIso(birthDateVal),
     };
 
     if (selectedRole === "FM") {
@@ -682,14 +707,34 @@ export function StaffPageClient({
               className="h-11 rounded-xl"
             />
           </Field>
-          <Field label={editing ? "Mật khẩu mới (bỏ trống để giữ nguyên)" : "Mật khẩu *"}>
-            <Input
-              name="password"
-              type="password"
-              required={!editing}
-              placeholder="••••••••"
-              className="h-11 rounded-xl"
+          <Field label="Ngày sinh (dd/mm/yyyy)">
+            <input
+              type="text"
+              value={birthDateVal}
+              onChange={(e) => setBirthDateVal(e.target.value)}
+              placeholder="vd: 15/08/1995"
+              maxLength={10}
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
             />
+          </Field>
+          <Field label={editing ? "Mật khẩu mới (bỏ trống để giữ nguyên)" : "Mật khẩu *"}>
+            <div className="relative">
+              <input
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required={!editing}
+                placeholder="••••••••"
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 pr-11 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </Field>
 
           <Field label="Chức vụ *">

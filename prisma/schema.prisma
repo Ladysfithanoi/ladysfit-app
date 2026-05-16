@@ -43,6 +43,7 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  dateOfBirth           DateTime?
   ptLevelId             String?
   deletedAt             DateTime?
   ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
