@@ -45,3 +45,18 @@ export async function POST(req: Request) {
 
   return NextResponse.json(exercise);
 }
+
+export async function DELETE(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session || !["ADMIN", "FM"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await req.json() as { ids: string[] };
+  if (!Array.isArray(body.ids) || body.ids.length === 0) {
+    return NextResponse.json({ error: "Missing ids" }, { status: 400 });
+  }
+
+  await prisma.workoutExercise.deleteMany({ where: { id: { in: body.ids } } });
+  return NextResponse.json({ success: true, deleted: body.ids.length });
+}

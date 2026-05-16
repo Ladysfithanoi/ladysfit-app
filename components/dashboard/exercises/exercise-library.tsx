@@ -122,6 +122,8 @@ export function ExerciseLibrary() {
   const [exerciseToDelete, setExerciseToDelete] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const [selectedExerciseIds, setSelectedExerciseIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
   // Phase CRUD
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -190,6 +192,7 @@ export function ExerciseLibrary() {
     setEditingEx(null);
     setNewExercise("");
     setRightSearch("");
+    setSelectedExerciseIds(new Set());
     setMobileView("detail");
     loadExercises(tpl);
   }
@@ -290,6 +293,35 @@ export function ExerciseLibrary() {
     await fetch(`/api/exercises/${exerciseToDelete.id}`, { method: "DELETE" });
     setDeleteDialogOpen(false);
     setExerciseToDelete(null);
+    if (selected) loadExercises(selected);
+    loadTemplates();
+  }
+
+  function toggleSelectAll() {
+    if (filteredExercises.length > 0 && filteredExercises.every((e) => selectedExerciseIds.has(e.id))) {
+      setSelectedExerciseIds(new Set());
+    } else {
+      setSelectedExerciseIds(new Set(filteredExercises.map((e) => e.id)));
+    }
+  }
+
+  function toggleSelectExercise(id: string) {
+    setSelectedExerciseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleConfirmBulkDelete() {
+    const ids = Array.from(selectedExerciseIds);
+    await fetch("/api/exercises", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    setBulkDeleteConfirmOpen(false);
+    setSelectedExerciseIds(new Set());
     if (selected) loadExercises(selected);
     loadTemplates();
   }
@@ -873,6 +905,27 @@ export function ExerciseLibrary() {
                   onChange={(e) => setRightSearch(e.target.value)}
                 />
               </div>
+              {filteredExercises.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="checkbox"
+                    checked={filteredExercises.every((e) => selectedExerciseIds.has(e.id))}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded accent-[#f15b5c] cursor-pointer flex-shrink-0"
+                  />
+                  <span className="text-xs text-gray-500 flex-1">
+                    {selectedExerciseIds.size > 0 ? `Đã chọn ${selectedExerciseIds.size}` : "Chọn tất cả"}
+                  </span>
+                  {selectedExerciseIds.size > 0 && (
+                    <button
+                      onClick={() => setBulkDeleteConfirmOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" /> Xóa {selectedExerciseIds.size} mục đã chọn
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-3">
@@ -907,6 +960,13 @@ export function ExerciseLibrary() {
                         </div>
                       ) : (
                         <div className="group flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={selectedExerciseIds.has(ex.id)}
+                            onChange={() => toggleSelectExercise(ex.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-3.5 h-3.5 rounded accent-[#f15b5c] cursor-pointer flex-shrink-0"
+                          />
                           <span className="flex-1 text-sm text-gray-700">{ex.name}</span>
                           <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1">
                             <button className="p-1 rounded-lg hover:bg-gray-200" onClick={() => { setEditingEx(ex); setEditExName(ex.name); }}>
@@ -972,6 +1032,18 @@ export function ExerciseLibrary() {
       confirmLabel="Xóa bài tập"
       cancelLabel="Hủy"
       onConfirm={handleConfirmDeleteExercise}
+      variant="danger"
+    />
+
+    {/* ── Bulk delete dialog ────────────────────────────────────────────── */}
+    <AlertDialog
+      open={bulkDeleteConfirmOpen}
+      onClose={() => setBulkDeleteConfirmOpen(false)}
+      title="Xóa bài tập đã chọn"
+      description={`Bạn có chắc chắn muốn xóa ${selectedExerciseIds.size} bài tập đã chọn?\nHành động này không thể hoàn tác.`}
+      confirmLabel="Xóa"
+      cancelLabel="Hủy"
+      onConfirm={handleConfirmBulkDelete}
       variant="danger"
     />
 
