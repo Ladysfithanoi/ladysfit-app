@@ -163,7 +163,26 @@ export async function GET(req: Request) {
     };
   });
 
-  // Only expose aggregate to privileged roles; PT gets their own row via perUserKpi
+  // Ensure the logged-in user always has an entry in perUserKpi so they can enter
+  // their own actuals even if no MonthlyTarget has been created for them yet.
+  const currentUserInList = perUserKpi.some((p) => p.userId === session.user.id);
+  if (!currentUserInList) {
+    const wb = weekBounds.find((b) => b.weekNumber === weekNumber);
+    perUserKpi.push({
+      monthlyTargetId: null as unknown as string, // sentinel: auto-create on first save
+      userId: session.user.id,
+      userName: session.user.name ?? session.user.email ?? "",
+      weeklyActualId: null,
+      weekStart: wb?.weekStart ?? null,
+      weekEnd: wb?.weekEnd ?? null,
+      kpi: KPI_DEFS.map((k) => ({
+        label: k.label, weekTarget: 0, weekActual: 0, pct: 0,
+        isFloat: k.isFloat, actualKey: k.actualKey,
+      })),
+    });
+  }
+
+  // Only expose aggregate to privileged roles; PT/Admin see only their own row
   const kpiForRole = (isPT || isAdmin) ? [] : kpi;
 
   return NextResponse.json({ report, kpi: kpiForRole, perUserKpi, weekBounds });

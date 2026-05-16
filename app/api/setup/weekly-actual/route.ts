@@ -36,11 +36,11 @@ export async function PUT(req: Request) {
   const isCEO = role === "CEO_FITPARTNER" || role === "COO";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  // FM can only update targets in their managed branches
-  if (isFM && !managedBranchIds.includes(target.branchId)) {
+  // FM can always update their OWN row; otherwise restricted to managed branches
+  if (isFM && target.userId !== session.user.id && !managedBranchIds.includes(target.branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  // Anyone who is not FM/CEO/Admin can only update their own target row
+  // Non-FM/CEO/Admin can only update their own row
   if (!isFM && !isAdmin && !isCEO && target.userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

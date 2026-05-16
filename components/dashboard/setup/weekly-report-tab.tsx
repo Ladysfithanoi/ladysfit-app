@@ -16,7 +16,7 @@ type KpiRow = {
 type KpiRowPersonal = KpiRow & { actualKey: string };
 
 type PerUserKpi = {
-  monthlyTargetId: string;
+  monthlyTargetId: string | null; // null = no MonthlyTarget yet; auto-created on first save
   userId: string;
   userName: string;
   weeklyActualId: string | null;
@@ -193,11 +193,28 @@ export function WeeklyReportTab({
 
     setSavingActuals(true);
     try {
+      // If the user has no MonthlyTarget yet, auto-create one first (all-zero monthly values)
+      let monthlyTargetId = myRow.monthlyTargetId;
+      if (!monthlyTargetId) {
+        const res = await fetch("/api/setup/targets", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify([{
+            branchId, userId: currentUserId, month, year,
+            revenueTarget: 0, fitpartnerRevenueTarget: 0, fitTarget: 0,
+            cooperationTarget: 0, transformTarget: 0, googleReviewTarget: 0, cvTarget: 0,
+          }]),
+        });
+        const created = await res.json() as Array<{ id: string }>;
+        monthlyTargetId = created[0]?.id ?? null;
+      }
+      if (!monthlyTargetId) { setSavingActuals(false); return; }
+
       await fetch("/api/setup/weekly-actual", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          monthlyTargetId: myRow.monthlyTargetId,
+          monthlyTargetId,
           weekNumber: selectedWeek,
           weekStart: currentBound.weekStart,
           weekEnd: currentBound.weekEnd,

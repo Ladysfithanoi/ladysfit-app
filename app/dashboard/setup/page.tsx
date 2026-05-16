@@ -33,7 +33,9 @@ export default async function Setup() {
     ptBranchId = ptUser?.branchId ?? null;
   }
 
-  const isReadOnly = role === "ADMIN";
+  // Read-only: no role in this app needs full read-only mode on the setup screen.
+  // CEO/COO can edit arising tasks; ADMIN/FM/PT can all edit their own data.
+  const isReadOnly = false;
 
   return (
     <SetupPage
