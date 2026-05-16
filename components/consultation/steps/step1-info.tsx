@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { ConsultationData } from "../consultation-wizard";
 
 type Branch = { id: string; name: string };
-type Staff = { id: string; name: string | null; email: string; branchId: string | null };
+type Staff = { id: string; name: string | null; email: string; branchId: string | null; role: string; managedBranches?: { branchId: string }[] };
 
 const inputCls = "w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white";
 const selectCls = "w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white";
@@ -92,7 +92,12 @@ export function Step1Info({
   const [motivationLevel, setMotivationLevel] = useState((info?.motivationLevel as number) ?? 7);
   const [stressLevel, setStressLevel] = useState((info?.stressLevel as number) ?? 5);
 
-  const filteredStaff = branchId ? staff.filter((s) => s.branchId === branchId) : staff;
+  const filteredStaff = branchId
+    ? staff.filter((s) =>
+        s.branchId === branchId ||
+        (s.role === "FM" && s.managedBranches?.some((mb) => mb.branchId === branchId))
+      )
+    : staff;
 
   const idealLow = height ? ((Number(height) - 100) * 0.9 - 5).toFixed(1) : null;
   const idealHigh = height ? ((Number(height) - 100) * 0.9 + 5).toFixed(1) : null;

@@ -17,15 +17,22 @@ export async function GET(req: Request) {
 
   let staffWhere: Record<string, unknown> = { deletedAt: null };
   if (isFM) {
-    staffWhere.branchId = (branchId && managedBranchIds.includes(branchId))
-      ? branchId
-      : { in: managedBranchIds };
+    const targetBranchId = (branchId && managedBranchIds.includes(branchId)) ? branchId : null;
+    const branchCondition = targetBranchId ?? { in: managedBranchIds };
+    staffWhere = {
+      deletedAt: null,
+      role: { in: ["PT", "FM", "ADMIN"] },
+      OR: [
+        { branchId: branchCondition },
+        { role: "FM", managedBranches: { some: { branchId: branchCondition } } },
+      ],
+    };
   } else if (branchId) {
     staffWhere = {
       deletedAt: null,
       OR: [
         { branchId },
-        { managedBranches: { some: { branchId } } },
+        { role: "FM", managedBranches: { some: { branchId } } },
         { role: "ADMIN" },
       ],
     };

@@ -34,7 +34,7 @@ export type ConsultationData = {
 };
 
 type Branch = { id: string; name: string };
-type Staff = { id: string; name: string | null; email: string; branchId: string | null };
+type Staff = { id: string; name: string | null; email: string; branchId: string | null; role: string; managedBranches?: { branchId: string }[] };
 
 export function ConsultationWizard({
   consultation: initial,

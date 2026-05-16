@@ -47,9 +47,21 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       where: {
         deletedAt: null,
         role: { in: ["PT", "FM", "ADMIN"] },
-        ...(isFM ? { branchId: { in: managedBranchIds } } : {}),
+        ...(isFM ? {
+          OR: [
+            { branchId: { in: managedBranchIds } },
+            { role: "FM", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
+          ],
+        } : {}),
       },
-      select: { id: true, name: true, email: true, branchId: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        branchId: true,
+        role: true,
+        managedBranches: { select: { branchId: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.systemConfig.findUnique({ where: { id: "main" } }).catch(() => null),
