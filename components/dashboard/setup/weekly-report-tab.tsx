@@ -13,6 +13,18 @@ type KpiRow = {
   isFloat: boolean;
 };
 
+type KpiRowPersonal = KpiRow & { actualKey: string };
+
+type PerUserKpi = {
+  monthlyTargetId: string;
+  userId: string;
+  userName: string;
+  weeklyActualId: string | null;
+  weekStart: string | null;
+  weekEnd: string | null;
+  kpi: KpiRowPersonal[];
+};
+
 type WeekBound = {
   weekNumber: number;
   weekStart: string;
@@ -31,6 +43,7 @@ type Props = {
   month: number;
   year: number;
   currentUserRole: string;
+  currentUserId: string;
   userName: string;
   isReadOnly: boolean;
 };
@@ -64,7 +77,7 @@ function getCurrentWeek(month: number, year: number): number {
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
-  return `${s.getDate()} - ${e.getDate()}/${e.getMonth() + 1}`;
+  return `${s.getDate()}/${s.getMonth() + 1} - ${e.getDate()}/${e.getMonth() + 1}`;
 }
 
 function pctColor(pct: number): string {
@@ -75,17 +88,25 @@ function pctColor(pct: number): string {
 
 const isFitpartnerLabel = (label: string) => label.toLowerCase().includes("fitpartner");
 
-export function WeeklyReportTab({ branchId, branchName, month, year, currentUserRole, userName, isReadOnly }: Props) {
+export function WeeklyReportTab({
+  branchId, branchName, month, year, currentUserRole, currentUserId, userName, isReadOnly,
+}: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
+  // FM/CEO/COO can edit arising tasks + incomplete work
   const canEdit = (currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO") && !isReadOnly;
+  // Everyone can edit their own personal actuals
+  const canEditOwn = !isReadOnly;
 
   const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeek(month, year));
   const [weekBounds, setWeekBounds] = useState<WeekBound[]>([]);
   const [kpiRows, setKpiRows] = useState<KpiRow[]>([]);
+  const [perUserKpi, setPerUserKpi] = useState<PerUserKpi[]>([]);
+  const [personalActuals, setPersonalActuals] = useState<Record<string, number>>({});
   const [arisingTasks, setArisingTasks] = useState<ArisingTask[]>([]);
   const [incompleteWork, setIncompleteWork] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingActuals, setSavingActuals] = useState(false);
 
   const fetchReport = useCallback(async () => {
     if (!branchId) return;
@@ -95,12 +116,13 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
         `/api/setup/weekly-report?branchId=${branchId}&month=${month}&year=${year}&weekNumber=${selectedWeek}`
       );
       if (res.ok) {
-        const data: { report: ReportData | null; kpi: KpiRow[]; weekBounds: WeekBound[] } = await res.json();
+        const data: { report: ReportData | null; kpi: KpiRow[]; perUserKpi: PerUserKpi[]; weekBounds: WeekBound[] } = await res.json();
         setWeekBounds(data.weekBounds ?? []);
         const rows = isFitpartner
-          ? data.kpi
-          : data.kpi.filter((r) => !isFitpartnerLabel(r.label));
+          ? (data.kpi ?? [])
+          : (data.kpi ?? []).filter((r) => !isFitpartnerLabel(r.label));
         setKpiRows(rows);
+        setPerUserKpi(data.perUserKpi ?? []);
         const report = data.report;
         setArisingTasks(report?.arisingTasks ? (JSON.parse(report.arisingTasks) as ArisingTask[]) : []);
         setIncompleteWork(report?.incompleteWork ?? "");
@@ -111,6 +133,17 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
   }, [branchId, month, year, selectedWeek, isFitpartner]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  // Sync personalActuals from perUserKpi when data loads
+  useEffect(() => {
+    const myRow = perUserKpi.find((p) => p.userId === currentUserId);
+    if (!myRow) return;
+    const actuals: Record<string, number> = {};
+    myRow.kpi.forEach((k) => {
+      actuals[k.actualKey] = k.weekActual;
+    });
+    setPersonalActuals(actuals);
+  }, [perUserKpi, currentUserId]);
 
   // Reset selected week when month/year changes
   useEffect(() => {
@@ -152,18 +185,47 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
     }
   }
 
+  async function savePersonalActuals() {
+    const myRow = perUserKpi.find((p) => p.userId === currentUserId);
+    if (!myRow) return;
+    const currentBound = weekBounds.find((b) => b.weekNumber === selectedWeek);
+    if (!currentBound) return;
+
+    setSavingActuals(true);
+    try {
+      await fetch("/api/setup/weekly-actual", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthlyTargetId: myRow.monthlyTargetId,
+          weekNumber: selectedWeek,
+          weekStart: currentBound.weekStart,
+          weekEnd: currentBound.weekEnd,
+          ...personalActuals,
+        }),
+      });
+      await fetchReport();
+    } finally {
+      setSavingActuals(false);
+    }
+  }
+
   const currentBound = weekBounds.find((b) => b.weekNumber === selectedWeek);
   const dateRange = currentBound ? formatDateRange(currentBound.weekStart, currentBound.weekEnd) : "";
 
   const thStyle = "border border-gray-300 px-3 py-2 text-left text-xs font-bold text-white";
   const tdStyle = "border border-gray-200 px-3 py-2 text-xs text-gray-700";
 
+  const myPerUserRow = perUserKpi.find((p) => p.userId === currentUserId);
+  const showAggregate = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+  const showPerUser = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+
   return (
     <div className="space-y-5 max-w-4xl">
       {/* Week selector */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-semibold text-gray-500">Tuần:</span>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {[1, 2, 3, 4, 5].map((w) => {
             const bound = weekBounds.find((b) => b.weekNumber === w);
             const range = bound ? formatDateRange(bound.weekStart, bound.weekEnd) : "";
@@ -177,16 +239,13 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
                     ? "bg-[#f15b5c] text-white border-[#f15b5c]"
                     : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                 )}
-                title={range}
               >
-                W{w}
+                <span>Tuần {w}</span>
+                {range && <span className="ml-1 text-[11px] opacity-75">({range})</span>}
               </button>
             );
           })}
         </div>
-        {dateRange && (
-          <span className="text-xs text-gray-400">({dateRange})</span>
-        )}
       </div>
 
       {loading ? (
@@ -217,57 +276,186 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
               </div>
             </div>
 
-            {/* Table 1: Important tasks (KPI) */}
-            <div>
-              <div className="w-full overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300 text-xs">
-                  <thead>
-                    <tr>
-                      <th
-                        colSpan={5}
-                        className="border border-gray-300 px-4 py-2.5 text-center text-sm font-extrabold text-white uppercase"
-                        style={{ backgroundColor: "#f15b5c" }}
-                      >
-                        I/ CÔNG VIỆC QUAN TRỌNG
-                      </th>
-                    </tr>
-                    <tr style={{ backgroundColor: "#f15b5c" }}>
-                      <th className={thStyle + " w-8"}>STT</th>
-                      <th className={thStyle}>Nội dung công việc</th>
-                      <th className={cn(thStyle, "text-center w-24")}>KPI tuần (MT)</th>
-                      <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
-                      <th className={cn(thStyle, "text-center w-16")}>%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kpiRows.map((row, idx) => (
-                      <tr key={row.label} className="even:bg-gray-50/50">
-                        <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
-                        <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
-                        <td className={cn(tdStyle, "text-center text-gray-500")}>
-                          {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
-                        </td>
-                        <td className={cn(tdStyle, "text-center font-bold text-gray-800")}>
-                          {row.isFloat ? row.weekActual.toFixed(1) : row.weekActual}
-                        </td>
-                        <td className={cn(tdStyle, "text-center")}>
-                          <span className={pctColor(row.pct)}>{row.pct}%</span>
-                        </td>
+            {/* Table 1a: My personal KPI (editable actuals) — visible to all roles */}
+            {myPerUserRow && (
+              <div>
+                <div
+                  className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  I/ CÔNG VIỆC QUAN TRỌNG — KPI CỦA TÔI
+                </div>
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-xs">
+                    <thead>
+                      <tr style={{ backgroundColor: "#f15b5c" }}>
+                        <th className={thStyle + " w-8"}>STT</th>
+                        <th className={thStyle}>Nội dung công việc</th>
+                        <th className={cn(thStyle, "text-center w-28")}>KPI tuần (MT)</th>
+                        <th className={cn(thStyle, "text-center w-28")}>Thực đạt</th>
+                        <th className={cn(thStyle, "text-center w-16")}>%</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {myPerUserRow.kpi
+                        .filter((row) => isFitpartner || !isFitpartnerLabel(row.label))
+                        .map((row, idx) => {
+                          const actual = personalActuals[row.actualKey] ?? row.weekActual;
+                          const pct = row.weekTarget > 0 ? Math.round((actual / row.weekTarget) * 100) : 0;
+                          return (
+                            <tr key={row.label} className="even:bg-gray-50/50">
+                              <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
+                              <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
+                              <td className={cn(tdStyle, "text-center text-gray-500")}>
+                                {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
+                              </td>
+                              <td className={cn(tdStyle, "text-center p-1")}>
+                                {canEditOwn ? (
+                                  <input
+                                    type="number"
+                                    step={row.isFloat ? "0.1" : "1"}
+                                    value={actual}
+                                    onChange={(e) =>
+                                      setPersonalActuals((prev) => ({
+                                        ...prev,
+                                        [row.actualKey]: parseFloat(e.target.value) || 0,
+                                      }))
+                                    }
+                                    className="w-full text-center bg-white border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/50 text-gray-800 font-bold"
+                                  />
+                                ) : (
+                                  <span className="font-bold text-gray-800">
+                                    {row.isFloat ? actual.toFixed(1) : actual}
+                                  </span>
+                                )}
+                              </td>
+                              <td className={cn(tdStyle, "text-center")}>
+                                <span className={pctColor(pct)}>{pct}%</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+                {canEditOwn && (
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={savePersonalActuals}
+                      disabled={savingActuals}
+                      className="px-5 h-9 rounded-lg text-white font-bold text-xs disabled:opacity-60 shadow-sm"
+                      style={{ backgroundColor: "#f15b5c" }}
+                    >
+                      {savingActuals ? "Đang lưu..." : "Lưu thực đạt của tôi"}
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Table 2: Arising tasks (editable) */}
+            {/* Table 1b: Aggregate KPI (FM/CEO/COO view) */}
+            {showAggregate && kpiRows.length > 0 && (
+              <div>
+                <div
+                  className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
+                  style={{ backgroundColor: "#6b7280" }}
+                >
+                  TỔNG HỢP KPI TUẦN — TẤT CẢ NHÂN SỰ
+                </div>
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-xs">
+                    <thead>
+                      <tr style={{ backgroundColor: "#6b7280" }}>
+                        <th className={thStyle + " w-8"}>STT</th>
+                        <th className={thStyle}>Nội dung công việc</th>
+                        <th className={cn(thStyle, "text-center w-24")}>KPI tuần (MT)</th>
+                        <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
+                        <th className={cn(thStyle, "text-center w-16")}>%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kpiRows.map((row, idx) => (
+                        <tr key={row.label} className="even:bg-gray-50/50">
+                          <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
+                          <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
+                          <td className={cn(tdStyle, "text-center text-gray-500")}>
+                            {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
+                          </td>
+                          <td className={cn(tdStyle, "text-center font-bold text-gray-800")}>
+                            {row.isFloat ? row.weekActual.toFixed(1) : row.weekActual}
+                          </td>
+                          <td className={cn(tdStyle, "text-center")}>
+                            <span className={pctColor(row.pct)}>{row.pct}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Per-user KPI breakdown (FM/CEO/COO) */}
+            {showPerUser && perUserKpi.length > 0 && (
+              <div>
+                <div
+                  className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
+                  style={{ backgroundColor: "#6b7280" }}
+                >
+                  CHI TIẾT KPI TỪNG NHÂN SỰ
+                </div>
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-xs">
+                    <thead>
+                      <tr style={{ backgroundColor: "#6b7280" }}>
+                        <th className={thStyle}>Nhân sự</th>
+                        <th className={thStyle}>Chỉ số</th>
+                        <th className={cn(thStyle, "text-center w-24")}>MT tuần</th>
+                        <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
+                        <th className={cn(thStyle, "text-center w-16")}>%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {perUserKpi.map((pu) =>
+                        pu.kpi
+                          .filter((row) => isFitpartner || !isFitpartnerLabel(row.label))
+                          .map((row, idx) => (
+                            <tr key={`${pu.userId}-${row.label}`} className="even:bg-gray-50/50">
+                              {idx === 0 && (
+                                <td
+                                  className={cn(tdStyle, "font-bold text-gray-800 align-top")}
+                                  rowSpan={isFitpartner ? pu.kpi.length : pu.kpi.filter((r) => !isFitpartnerLabel(r.label)).length}
+                                >
+                                  {pu.userName}
+                                </td>
+                              )}
+                              <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
+                              <td className={cn(tdStyle, "text-center text-gray-500")}>
+                                {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
+                              </td>
+                              <td className={cn(tdStyle, "text-center font-bold text-gray-800")}>
+                                {row.isFloat ? row.weekActual.toFixed(1) : row.weekActual}
+                              </td>
+                              <td className={cn(tdStyle, "text-center")}>
+                                <span className={pctColor(row.pct)}>{row.pct}%</span>
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Table 2: Arising tasks (editable by FM/CEO/COO) */}
             <div>
               <div className="w-full overflow-x-auto">
                 <table className="w-full border-collapse border border-gray-300 text-xs">
                   <thead>
                     <tr>
                       <th
-                        colSpan={5}
+                        colSpan={canEdit ? 5 : 4}
                         className="border border-gray-300 px-4 py-2.5 text-center text-sm font-extrabold text-white uppercase"
                         style={{ backgroundColor: "#f15b5c" }}
                       >
@@ -358,13 +546,13 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
               )}
             </div>
 
-            {/* Section 2: Incomplete work */}
+            {/* Section: Incomplete work */}
             <div className="space-y-2">
               <div
                 className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
                 style={{ backgroundColor: "#f15b5c" }}
               >
-                II/ VIỆC CHƯA HOÀN THÀNH - NGUYÊN NHÂN VÀ GIẢI PHÁP
+                III/ VIỆC CHƯA HOÀN THÀNH - NGUYÊN NHÂN VÀ GIẢI PHÁP
               </div>
               {canEdit ? (
                 <textarea
@@ -381,7 +569,7 @@ export function WeeklyReportTab({ branchId, branchName, month, year, currentUser
               )}
             </div>
 
-            {/* Save button */}
+            {/* Save report button (FM/CEO/COO only) */}
             {canEdit && (
               <div className="flex justify-end">
                 <button

@@ -12,10 +12,15 @@ export async function PUT(req: Request) {
   const body = await req.json() as {
     monthlyTargetId: string; weekNumber: number;
     weekStart: string; weekEnd: string;
+    // actuals
     revenueActual?: number; fitpartnerRevenueActual?: number;
     fitActual?: number; cooperationActual?: number;
     transformActual?: number; googleReviewActual?: number; cvActual?: number;
     weeklyTaskNotes?: string;
+    // per-week targets
+    revenueTarget?: number; fitpartnerRevenueTarget?: number;
+    fitTarget?: number; cooperationTarget?: number;
+    transformTarget?: number; googleReviewTarget?: number; cvTarget?: number;
   };
 
   const { monthlyTargetId, weekNumber, weekStart, weekEnd } = body;
@@ -29,31 +34,40 @@ export async function PUT(req: Request) {
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
   const isCEO = role === "CEO_FITPARTNER" || role === "COO";
-  const isPT = role === "PT";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
+  // FM can only update targets in their managed branches
   if (isFM && !managedBranchIds.includes(target.branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  // PT and ADMIN can only update their own target's actuals
-  if ((isPT || isAdmin) && target.userId !== session.user.id) {
+  // Anyone who is not FM/CEO/Admin can only update their own target row
+  if (!isFM && !isAdmin && !isCEO && target.userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const canWriteNotes = isFM || isAdmin || isCEO;
 
+  // Build partial update — only include fields that were explicitly sent
+  const updateFields: Record<string, unknown> = {};
+  if (body.revenueActual !== undefined) updateFields.revenueActual = body.revenueActual;
+  if (body.fitpartnerRevenueActual !== undefined) updateFields.fitpartnerRevenueActual = body.fitpartnerRevenueActual;
+  if (body.fitActual !== undefined) updateFields.fitActual = body.fitActual;
+  if (body.cooperationActual !== undefined) updateFields.cooperationActual = body.cooperationActual;
+  if (body.transformActual !== undefined) updateFields.transformActual = body.transformActual;
+  if (body.googleReviewActual !== undefined) updateFields.googleReviewActual = body.googleReviewActual;
+  if (body.cvActual !== undefined) updateFields.cvActual = body.cvActual;
+  if (canWriteNotes && body.weeklyTaskNotes !== undefined) updateFields.weeklyTaskNotes = body.weeklyTaskNotes ?? null;
+  if (body.revenueTarget !== undefined) updateFields.revenueTarget = body.revenueTarget;
+  if (body.fitpartnerRevenueTarget !== undefined) updateFields.fitpartnerRevenueTarget = body.fitpartnerRevenueTarget;
+  if (body.fitTarget !== undefined) updateFields.fitTarget = body.fitTarget;
+  if (body.cooperationTarget !== undefined) updateFields.cooperationTarget = body.cooperationTarget;
+  if (body.transformTarget !== undefined) updateFields.transformTarget = body.transformTarget;
+  if (body.googleReviewTarget !== undefined) updateFields.googleReviewTarget = body.googleReviewTarget;
+  if (body.cvTarget !== undefined) updateFields.cvTarget = body.cvTarget;
+
   const updated = await prisma.weeklyActual.upsert({
     where: { monthlyTargetId_weekNumber: { monthlyTargetId, weekNumber } },
-    update: {
-      revenueActual: body.revenueActual ?? 0,
-      fitpartnerRevenueActual: body.fitpartnerRevenueActual ?? 0,
-      fitActual: body.fitActual ?? 0,
-      cooperationActual: body.cooperationActual ?? 0,
-      transformActual: body.transformActual ?? 0,
-      googleReviewActual: body.googleReviewActual ?? 0,
-      cvActual: body.cvActual ?? 0,
-      ...(canWriteNotes ? { weeklyTaskNotes: body.weeklyTaskNotes ?? null } : {}),
-    },
+    update: updateFields,
     create: {
       monthlyTargetId, weekNumber,
       weekStart: new Date(weekStart), weekEnd: new Date(weekEnd),
@@ -65,6 +79,13 @@ export async function PUT(req: Request) {
       googleReviewActual: body.googleReviewActual ?? 0,
       cvActual: body.cvActual ?? 0,
       weeklyTaskNotes: canWriteNotes ? (body.weeklyTaskNotes ?? null) : null,
+      revenueTarget: body.revenueTarget ?? 0,
+      fitpartnerRevenueTarget: body.fitpartnerRevenueTarget ?? 0,
+      fitTarget: body.fitTarget ?? 0,
+      cooperationTarget: body.cooperationTarget ?? 0,
+      transformTarget: body.transformTarget ?? 0,
+      googleReviewTarget: body.googleReviewTarget ?? 0,
+      cvTarget: body.cvTarget ?? 0,
     },
   });
 

@@ -839,6 +839,14 @@ model WeeklyActual {
   googleReviewActual         Int      @default(0)
   cvActual                   Int      @default(0)
   weeklyTaskNotes     String?  @db.Text
+  // Per-week individual targets (set in targets tab, mapped to weekly report)
+  revenueTarget              Float    @default(0)
+  fitpartnerRevenueTarget    Float    @default(0)
+  fitTarget                  Int      @default(0)
+  cooperationTarget          Int      @default(0)
+  transformTarget            Int      @default(0)
+  googleReviewTarget         Int      @default(0)
+  cvTarget                   Int      @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

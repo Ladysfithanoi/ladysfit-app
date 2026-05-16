@@ -186,6 +186,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           month={month}
           year={year}
           currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
           userName={userName}
           isReadOnly={isReadOnly}
         />

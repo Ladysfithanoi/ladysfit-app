@@ -114,6 +114,15 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
     const t = targets.find((t) => t.id === targetId);
     const w = t?.weeklyActuals.find((w) => w.weekNumber === weekNumber);
     setWeeklyForm({
+      // per-week targets
+      revenueTarget: w?.revenueTarget ?? 0,
+      fitpartnerRevenueTarget: w?.fitpartnerRevenueTarget ?? 0,
+      fitTarget: w?.fitTarget ?? 0,
+      cooperationTarget: w?.cooperationTarget ?? 0,
+      transformTarget: w?.transformTarget ?? 0,
+      googleReviewTarget: w?.googleReviewTarget ?? 0,
+      cvTarget: w?.cvTarget ?? 0,
+      // actuals
       revenueActual: w?.revenueActual ?? 0,
       fitpartnerRevenueActual: w?.fitpartnerRevenueActual ?? 0,
       fitActual: w?.fitActual ?? 0,
@@ -150,37 +159,66 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
     fetchTargets();
   }
 
-  const weeklyModal = weeklyEdit && (
-    <>
-      <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setWeeklyEdit(null)} />
-      <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-bold text-base">Thực đạt Tuần {weeklyEdit.weekNumber}</h2>
-          <button onClick={() => setWeeklyEdit(null)}><span className="text-gray-400 text-lg">×</span></button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
-          {KPI_KEYS.map((k) => (
-            <div key={k.key}>
-              <label className="text-xs font-semibold text-gray-600">{k.label}</label>
-              <input
-                type="number"
-                step={k.isFloat ? "0.1" : "1"}
-                value={weeklyForm[k.actualKey] ?? 0}
-                onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.actualKey]: parseFloat(e.target.value) || 0 }))}
-                className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
-              />
+  const weeklyModal = weeklyEdit && (() => {
+    const { weekStart, weekEnd } = computeWeekDates(year, month, weeklyEdit.weekNumber);
+    const dateLabel = `${weekStart.getDate()}/${weekStart.getMonth() + 1} - ${weekEnd.getDate()}/${weekEnd.getMonth() + 1}`;
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setWeeklyEdit(null)} />
+        <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div>
+              <h2 className="font-bold text-base">Tuần {weeklyEdit.weekNumber}: {dateLabel}</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Mục tiêu & Thực đạt</p>
             </div>
-          ))}
+            <button onClick={() => setWeeklyEdit(null)}><span className="text-gray-400 text-lg">×</span></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div>
+              <p className="text-xs font-extrabold text-[#f15b5c] uppercase tracking-wide mb-3">Mục tiêu tuần</p>
+              <div className="space-y-3">
+                {KPI_KEYS.map((k) => (
+                  <div key={k.key}>
+                    <label className="text-xs font-semibold text-gray-600">{k.label}</label>
+                    <input
+                      type="number"
+                      step={k.isFloat ? "0.1" : "1"}
+                      value={weeklyForm[k.targetKey] ?? 0}
+                      onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
+                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border-t border-gray-100 pt-5">
+              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-3">Thực đạt</p>
+              <div className="space-y-3">
+                {KPI_KEYS.map((k) => (
+                  <div key={k.key}>
+                    <label className="text-xs font-semibold text-gray-600">{k.label}</label>
+                    <input
+                      type="number"
+                      step={k.isFloat ? "0.1" : "1"}
+                      value={weeklyForm[k.actualKey] ?? 0}
+                      onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.actualKey]: parseFloat(e.target.value) || 0 }))}
+                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="px-6 py-4 border-t flex gap-3">
+            <button onClick={saveWeekly} disabled={saving} className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60" style={{ backgroundColor: "#f15b5c" }}>
+              {saving ? "Đang lưu..." : "Lưu"}
+            </button>
+            <button onClick={() => setWeeklyEdit(null)} className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold">Hủy</button>
+          </div>
         </div>
-        <div className="px-6 py-4 border-t flex gap-3">
-          <button onClick={saveWeekly} disabled={saving} className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60" style={{ backgroundColor: "#f15b5c" }}>
-            {saving ? "Đang lưu..." : "Lưu"}
-          </button>
-          <button onClick={() => setWeeklyEdit(null)} className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold">Hủy</button>
-        </div>
-      </div>
-    </>
-  );
+      </>
+    );
+  })();
 
   if (loading) return <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>;
 
@@ -211,12 +249,16 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                     <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
                     <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
-                    {WEEKS.map((w) => (
-                      <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                        W{w} ĐẠT
-                        <button onClick={() => openWeeklyEdit(myTarget.id, w)} className="ml-1 text-[#f15b5c] opacity-60 hover:opacity-100">✎</button>
-                      </th>
-                    ))}
+                    {WEEKS.map((w) => {
+                      const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
+                      return (
+                        <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
+                          <div>W{w} ĐẠT</div>
+                          <div className="text-[10px] font-normal text-gray-400 normal-case">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                          <button onClick={() => openWeeklyEdit(myTarget.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
+                        </th>
+                      );
+                    })}
                     <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">Tháng Đạt</th>
                     <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">%</th>
                   </tr>
@@ -447,17 +489,18 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                 <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                   <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
                   <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
-                  {WEEKS.map((w) => (
-                    <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                      W{w} ĐẠT
-                      {!isReadOnly && (
-                        <button
-                          onClick={() => openWeeklyEdit(t.id, w)}
-                          className="ml-1 text-[#f15b5c] opacity-60 hover:opacity-100"
-                        >✎</button>
-                      )}
-                    </th>
-                  ))}
+                  {WEEKS.map((w) => {
+                    const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
+                    return (
+                      <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
+                        <div>W{w} ĐẠT</div>
+                        <div className="text-[10px] font-normal text-gray-400 normal-case">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                        {!isReadOnly && (
+                          <button onClick={() => openWeeklyEdit(t.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">Tháng Đạt</th>
                   <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">%</th>
                 </tr>

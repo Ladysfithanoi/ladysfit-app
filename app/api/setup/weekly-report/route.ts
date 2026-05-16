@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
 
 function computeWeekBounds(year: number, month: number) {
   const d = new Date(year, month - 1, 1);
@@ -20,22 +19,67 @@ function computeWeekBounds(year: number, month: number) {
   });
 }
 
-const KPI_KEYS = [
-  { label: "Doanh số (triệu)", targetKey: "revenueTarget", actualKey: "revenueActual", isFloat: true },
-  { label: "Doanh thu Fitpartner (triệu)", targetKey: "fitpartnerRevenueTarget", actualKey: "fitpartnerRevenueActual", isFloat: true },
-  { label: "FIT (KH trải nghiệm)", targetKey: "fitTarget", actualKey: "fitActual", isFloat: false },
-  { label: "KH hợp tác", targetKey: "cooperationTarget", actualKey: "cooperationActual", isFloat: false },
-  { label: "Transform", targetKey: "transformTarget", actualKey: "transformActual", isFloat: false },
-  { label: "Google Business", targetKey: "googleReviewTarget", actualKey: "googleReviewActual", isFloat: false },
-  { label: "CV tuyển dụng", targetKey: "cvTarget", actualKey: "cvActual", isFloat: false },
-];
+const KPI_DEFS = [
+  { label: "Doanh số (triệu)", targetKey: "revenueTarget" as const, weekTargetKey: "revenueTarget" as const, actualKey: "revenueActual" as const, isFloat: true },
+  { label: "Doanh thu Fitpartner (triệu)", targetKey: "fitpartnerRevenueTarget" as const, weekTargetKey: "fitpartnerRevenueTarget" as const, actualKey: "fitpartnerRevenueActual" as const, isFloat: true },
+  { label: "FIT (KH trải nghiệm)", targetKey: "fitTarget" as const, weekTargetKey: "fitTarget" as const, actualKey: "fitActual" as const, isFloat: false },
+  { label: "KH hợp tác", targetKey: "cooperationTarget" as const, weekTargetKey: "cooperationTarget" as const, actualKey: "cooperationActual" as const, isFloat: false },
+  { label: "Transform", targetKey: "transformTarget" as const, weekTargetKey: "transformTarget" as const, actualKey: "transformActual" as const, isFloat: false },
+  { label: "Google Business", targetKey: "googleReviewTarget" as const, weekTargetKey: "googleReviewTarget" as const, actualKey: "googleReviewActual" as const, isFloat: false },
+  { label: "CV tuyển dụng", targetKey: "cvTarget" as const, weekTargetKey: "cvTarget" as const, actualKey: "cvActual" as const, isFloat: false },
+] as const;
+
+type MonthlyTargetRow = {
+  id: string;
+  userId: string;
+  branchId: string;
+  month: number;
+  year: number;
+  revenueTarget: number;
+  fitpartnerRevenueTarget: number;
+  fitTarget: number;
+  cooperationTarget: number;
+  transformTarget: number;
+  googleReviewTarget: number;
+  cvTarget: number;
+  user: { id: string; name: string | null; email: string };
+  weeklyActuals: {
+    id: string;
+    weekNumber: number;
+    weekStart: Date;
+    weekEnd: Date;
+    revenueActual: number;
+    fitpartnerRevenueActual: number;
+    fitActual: number;
+    cooperationActual: number;
+    transformActual: number;
+    googleReviewActual: number;
+    cvActual: number;
+    weeklyTaskNotes: string | null;
+    revenueTarget: number;
+    fitpartnerRevenueTarget: number;
+    fitTarget: number;
+    cooperationTarget: number;
+    transformTarget: number;
+    googleReviewTarget: number;
+    cvTarget: number;
+  }[];
+};
+
+function getWeekTarget(target: MonthlyTargetRow, wa: MonthlyTargetRow["weeklyActuals"][0] | undefined, weekTargetKey: keyof MonthlyTargetRow["weeklyActuals"][0]): number {
+  const perWeek = wa ? (wa[weekTargetKey] as number) : 0;
+  if (perWeek > 0) return perWeek;
+  // fallback: monthly target / 5
+  return (target[weekTargetKey as keyof MonthlyTargetRow] as number) / 5;
+}
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["ADMIN", "FM", "CEO_FITPARTNER", "COO"].includes(role)) {
+  const allowedRoles = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"];
+  if (!allowedRoles.includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -50,39 +94,79 @@ export async function GET(req: Request) {
   }
 
   const isFM = role === "FM";
+  const isPT = role === "PT";
+  const isAdmin = role === "ADMIN";
   const managedBranchIds = session.user.managedBranchIds ?? [];
+
   if (isFM && !managedBranchIds.includes(branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // PT can only see their own row; others see all rows in the branch
+  const targetsWhere = isPT
+    ? { branchId, month, year, userId: session.user.id }
+    : { branchId, month, year };
+
   const [targets, report] = await Promise.all([
     prisma.monthlyTarget.findMany({
-      where: { branchId, month, year },
+      where: targetsWhere,
       include: {
         user: { select: { id: true, name: true, email: true } },
         weeklyActuals: { orderBy: { weekNumber: "asc" } },
       },
-    }),
+    }) as Promise<MonthlyTargetRow[]>,
     prisma.weeklyReport.findUnique({
       where: { branchId_month_year_weekNumber: { branchId, month, year, weekNumber } },
     }),
   ]);
 
-  const enriched = await enrichTargetsWithDynamicActuals(targets, month, year);
   const weekBounds = computeWeekBounds(year, month);
 
-  const kpi = KPI_KEYS.map((k) => {
-    const monthTarget = enriched.reduce((s, t) => s + ((t[k.targetKey as keyof typeof t] as number) ?? 0), 0);
-    const weekTarget = monthTarget > 0 ? monthTarget / 5 : 0;
-    const weekActual = enriched.reduce((s, t) => {
+  // Aggregate KPI (sum across all users) — used by FM/Admin/CEO view
+  const kpi = KPI_DEFS.map((k) => {
+    const weekTarget = targets.reduce((s, t) => {
       const wa = t.weeklyActuals.find((a) => a.weekNumber === weekNumber);
-      return s + ((wa?.[k.actualKey as keyof typeof wa] as number) ?? 0);
+      return s + getWeekTarget(t, wa, k.weekTargetKey);
+    }, 0);
+    const weekActual = targets.reduce((s, t) => {
+      const wa = t.weeklyActuals.find((a) => a.weekNumber === weekNumber);
+      return s + ((wa?.[k.actualKey] as number) ?? 0);
     }, 0);
     const pct = weekTarget > 0 ? Math.round((weekActual / weekTarget) * 100) : 0;
     return { label: k.label, weekTarget, weekActual, pct, isFloat: k.isFloat };
   });
 
-  return NextResponse.json({ report, kpi, weekBounds });
+  // Per-user KPI breakdown
+  const perUserKpi = targets.map((t) => {
+    const wa = t.weeklyActuals.find((a) => a.weekNumber === weekNumber);
+    const kpiRows = KPI_DEFS.map((k) => {
+      const weekTarget = getWeekTarget(t, wa, k.weekTargetKey);
+      const weekActual = (wa?.[k.actualKey] as number) ?? 0;
+      const pct = weekTarget > 0 ? Math.round((weekActual / weekTarget) * 100) : 0;
+      return {
+        label: k.label,
+        weekTarget,
+        weekActual,
+        pct,
+        isFloat: k.isFloat,
+        actualKey: k.actualKey,
+      };
+    });
+    return {
+      monthlyTargetId: t.id,
+      userId: t.userId,
+      userName: t.user.name ?? t.user.email,
+      weeklyActualId: wa?.id ?? null,
+      weekStart: weekBounds.find(wb => wb.weekNumber === weekNumber)?.weekStart ?? null,
+      weekEnd: weekBounds.find(wb => wb.weekNumber === weekNumber)?.weekEnd ?? null,
+      kpi: kpiRows,
+    };
+  });
+
+  // Only expose aggregate to privileged roles; PT gets their own row via perUserKpi
+  const kpiForRole = (isPT || isAdmin) ? [] : kpi;
+
+  return NextResponse.json({ report, kpi: kpiForRole, perUserKpi, weekBounds });
 }
 
 export async function PUT(req: Request) {

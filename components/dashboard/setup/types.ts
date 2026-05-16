@@ -65,6 +65,13 @@ export type WeeklyActual = {
   googleReviewActual: number;
   cvActual: number;
   weeklyTaskNotes: string | null;
+  revenueTarget: number;
+  fitpartnerRevenueTarget: number;
+  fitTarget: number;
+  cooperationTarget: number;
+  transformTarget: number;
+  googleReviewTarget: number;
+  cvTarget: number;
 };
 
 export type MonthlyTarget = {

@@ -1,0 +1,8 @@
+-- AddColumn: per-week individual targets to weekly_actuals
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "revenueTarget" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "fitpartnerRevenueTarget" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "fitTarget" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "cooperationTarget" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "transformTarget" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "googleReviewTarget" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "weekly_actuals" ADD COLUMN IF NOT EXISTS "cvTarget" INTEGER NOT NULL DEFAULT 0;
