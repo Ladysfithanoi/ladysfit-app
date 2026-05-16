@@ -530,8 +530,6 @@ export function ExerciseLibrary() {
     );
   }
 
-  const canDeletePhase = deletingPhase ? deletingPhase._count.programs === 0 : false;
-
   return (
     <>
     <div className="flex h-[calc(100vh-9rem)] border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
@@ -1056,13 +1054,13 @@ export function ExerciseLibrary() {
       description={
         phaseDeleteError
           ? phaseDeleteError
-          : !canDeletePhase
-          ? `Giai đoạn "${deletingPhase?.name}" đang có ${deletingPhase?._count.programs} chương trình, không thể xóa.`
+          : deletingPhase && deletingPhase._count.programs > 0
+          ? `Giai đoạn "${deletingPhase.name}" có ${deletingPhase._count.programs} chương trình đang liên kết. Xóa sẽ hủy liên kết các chương trình đó khỏi giai đoạn này nhưng không xóa dữ liệu khách hàng.\nHành động không thể hoàn tác.`
           : `Bạn có chắc muốn xóa giai đoạn "${deletingPhase?.name}"?\nHành động này không thể hoàn tác.`
       }
-      confirmLabel={canDeletePhase && !phaseDeleteError ? "Xóa" : undefined}
-      onConfirm={canDeletePhase && !phaseDeleteError ? handleConfirmDeletePhase : () => { setDeletingPhase(null); setPhaseDeleteError(""); }}
-      cancelLabel={canDeletePhase && !phaseDeleteError ? "Hủy" : "Đóng"}
+      confirmLabel={!phaseDeleteError ? "Xóa" : undefined}
+      onConfirm={!phaseDeleteError ? handleConfirmDeletePhase : () => { setDeletingPhase(null); setPhaseDeleteError(""); }}
+      cancelLabel={!phaseDeleteError ? "Hủy" : "Đóng"}
       loading={phaseDeleteLoading}
     />
 

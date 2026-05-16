@@ -98,14 +98,24 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const programCount = await prisma.workoutProgram.count({ where: { phaseId: params.id } });
-    if (programCount > 0) {
-      return NextResponse.json(
-        { error: `Giai đoạn này có ${programCount} chương trình, không thể xóa` },
-        { status: 400 }
-      );
-    }
+    const phase = await prisma.workoutPhase.findUnique({
+      where: { id: params.id },
+      select: { name: true },
+    });
+    if (!phase) return NextResponse.json({ error: "Không tìm thấy giai đoạn" }, { status: 404 });
 
+    // Unlink client programs so they're preserved but no longer reference this phase
+    await prisma.workoutProgram.updateMany({
+      where: { phaseId: params.id },
+      data: { phaseId: null },
+    });
+
+    // Delete all movement templates belonging to this phase
+    await prisma.workoutMovementTemplate.deleteMany({
+      where: { phaseKey: phase.name },
+    });
+
+    // Delete the phase (PTLevelPhaseAccess cascades automatically via onDelete: Cascade)
     await prisma.workoutPhase.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
