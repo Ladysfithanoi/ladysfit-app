@@ -17,7 +17,7 @@ export const LEAD_STATUS_STYLE: Record<LeadStatus, string> = {
 };
 
 export const SOURCES = [
-  "Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT",
+  "Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân",
 ];
 
 export type PTUser = {

@@ -58,9 +58,13 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // PT: set own target
-  const [targetModal, setTargetModal] = useState(false);
+  // Target modal (unified for PT self + FM/Admin setting targets for any PT)
+  const [targetModalUserId, setTargetModalUserId] = useState<string | null>(null);
+  const [targetModalUserName, setTargetModalUserName] = useState<string>("");
+  const [targetModalTab, setTargetModalTab] = useState<"month" | "week">("month");
+  const [targetModalWeek, setTargetModalWeek] = useState(1);
   const [targetForm, setTargetForm] = useState<Record<string, number>>({});
+  const [weeklyTargetForm, setWeeklyTargetForm] = useState<Record<string, number>>({});
 
   // Weekly actuals edit (PT + FM + CEO)
   const [weeklyEdit, setWeeklyEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
@@ -81,8 +85,26 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
 
   useEffect(() => { fetchTargets(); }, [fetchTargets]);
 
-  function openTargetModal() {
-    const existing = targets.find((t) => t.userId === currentUserId);
+  function loadWeekTargets(userId: string, weekNumber: number) {
+    const existing = targets.find((t) => t.userId === userId);
+    const wa = existing?.weeklyActuals.find((a) => a.weekNumber === weekNumber);
+    setWeeklyTargetForm({
+      revenueTarget: wa?.revenueTarget ?? 0,
+      fitpartnerRevenueTarget: wa?.fitpartnerRevenueTarget ?? 0,
+      fitTarget: wa?.fitTarget ?? 0,
+      cooperationTarget: wa?.cooperationTarget ?? 0,
+      transformTarget: wa?.transformTarget ?? 0,
+      googleReviewTarget: wa?.googleReviewTarget ?? 0,
+      cvTarget: wa?.cvTarget ?? 0,
+    });
+  }
+
+  function openTargetModal(userId: string, userName: string) {
+    const existing = targets.find((t) => t.userId === userId);
+    setTargetModalUserId(userId);
+    setTargetModalUserName(userName);
+    setTargetModalTab("month");
+    setTargetModalWeek(1);
     setTargetForm({
       revenueTarget: existing?.revenueTarget ?? 0,
       fitpartnerRevenueTarget: existing?.fitpartnerRevenueTarget ?? 0,
@@ -92,18 +114,50 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
       googleReviewTarget: existing?.googleReviewTarget ?? 0,
       cvTarget: existing?.cvTarget ?? 0,
     });
-    setTargetModal(true);
+    loadWeekTargets(userId, 1);
   }
 
-  async function saveOwnTarget() {
+  async function saveTargetModal() {
+    if (!targetModalUserId) return;
     setSaving(true);
     try {
-      await fetch("/api/setup/targets", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([{ branchId, userId: currentUserId, month, year, ...targetForm }]),
-      });
-      setTargetModal(false);
+      if (targetModalTab === "month") {
+        await fetch("/api/setup/targets", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify([{ branchId, userId: targetModalUserId, month, year, ...targetForm }]),
+        });
+      } else {
+        // Ensure MonthlyTarget exists first (create with 0s if not yet set)
+        let monthlyTargetId = targets.find((t) => t.userId === targetModalUserId)?.id;
+        if (!monthlyTargetId) {
+          const res = await fetch("/api/setup/targets", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify([{
+              branchId, userId: targetModalUserId, month, year,
+              revenueTarget: 0, fitpartnerRevenueTarget: 0, fitTarget: 0,
+              cooperationTarget: 0, transformTarget: 0, googleReviewTarget: 0, cvTarget: 0,
+            }]),
+          });
+          const created = await res.json() as Array<{ id: string }>;
+          monthlyTargetId = created[0]?.id;
+        }
+        if (!monthlyTargetId) return;
+        const { weekStart, weekEnd } = computeWeekDates(year, month, targetModalWeek);
+        await fetch("/api/setup/weekly-actual", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            monthlyTargetId,
+            weekNumber: targetModalWeek,
+            weekStart: weekStart.toISOString(),
+            weekEnd: weekEnd.toISOString(),
+            ...weeklyTargetForm,
+          }),
+        });
+      }
+      setTargetModalUserId(null);
       fetchTargets();
     } finally {
       setSaving(false);
@@ -220,6 +274,105 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
     );
   })();
 
+  // ─── Unified target-setting modal (Month/Week tabs) ───
+  const unifiedTargetModal = targetModalUserId !== null && (
+    <>
+      <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setTargetModalUserId(null)} />
+      <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h2 className="font-bold text-base">Đặt mục tiêu tháng {month}/{year}</h2>
+            {targetModalUserName && <p className="text-xs text-gray-400 mt-0.5">{targetModalUserName}</p>}
+          </div>
+          <button onClick={() => setTargetModalUserId(null)}><span className="text-gray-400 text-lg">×</span></button>
+        </div>
+        {/* Month / Week tab switcher */}
+        <div className="flex gap-1.5 px-6 pt-4">
+          {(["month", "week"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setTargetModalTab(tab)}
+              className={cn(
+                "flex-1 py-2 rounded-lg text-sm font-semibold border transition-all",
+                targetModalTab === tab
+                  ? "text-white border-transparent"
+                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+              )}
+              style={targetModalTab === tab ? { backgroundColor: "#f15b5c" } : {}}
+            >
+              {tab === "month" ? "Mục tiêu Tháng" : "Mục tiêu Tuần"}
+            </button>
+          ))}
+        </div>
+        {/* Week selector row */}
+        {targetModalTab === "week" && (
+          <div className="px-6 pt-3">
+            <p className="text-xs font-semibold text-gray-400 mb-2">Chọn tuần:</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {WEEKS.map((w) => {
+                const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
+                return (
+                  <button
+                    key={w}
+                    onClick={() => {
+                      setTargetModalWeek(w);
+                      if (targetModalUserId) loadWeekTargets(targetModalUserId, w);
+                    }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all leading-tight",
+                      targetModalWeek === w
+                        ? "text-white border-transparent"
+                        : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300"
+                    )}
+                    style={targetModalWeek === w ? { backgroundColor: "#f15b5c" } : {}}
+                  >
+                    <div>Tuần {w}</div>
+                    <div className="text-[9px] opacity-80">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {KPI_KEYS.map((k) => (
+            <div key={k.key}>
+              <label className="text-sm font-semibold text-gray-700">{k.label}</label>
+              {targetModalTab === "month" ? (
+                <input
+                  type="number"
+                  step={k.isFloat ? "0.1" : "1"}
+                  value={targetForm[k.targetKey] ?? 0}
+                  onChange={(e) => setTargetForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1.5"
+                />
+              ) : (
+                <input
+                  type="number"
+                  step={k.isFloat ? "0.1" : "1"}
+                  value={weeklyTargetForm[k.targetKey] ?? 0}
+                  onChange={(e) => setWeeklyTargetForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1.5"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 border-t flex gap-3">
+          <button
+            onClick={saveTargetModal}
+            disabled={saving}
+            className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            {saving ? "Đang lưu..." : "Lưu thay đổi"}
+          </button>
+          <button onClick={() => setTargetModalUserId(null)} className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold">Hủy</button>
+        </div>
+      </div>
+    </>
+  );
+
   if (loading) return <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>;
 
   // ─── PT VIEW ───
@@ -231,7 +384,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-500">Tháng {month}/{year}</p>
           <button
-            onClick={openTargetModal}
+            onClick={() => openTargetModal(currentUserId, "Mục tiêu của tôi")}
             className="px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
             style={{ backgroundColor: "#f15b5c" }}
           >
@@ -296,46 +449,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
           </div>
         )}
 
-        {/* PT target-setting modal */}
-        {targetModal && (
-          <>
-            <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setTargetModal(false)} />
-            <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
-                <h2 className="font-bold text-base">
-                  {myTarget ? "Chỉnh sửa" : "Đặt"} mục tiêu tháng {month}/{year}
-                </h2>
-                <button onClick={() => setTargetModal(false)}><span className="text-gray-400 text-lg">×</span></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {KPI_KEYS.map((k) => (
-                  <div key={k.key}>
-                    <label className="text-sm font-semibold text-gray-700">{k.label}</label>
-                    <input
-                      type="number"
-                      step={k.isFloat ? "0.1" : "1"}
-                      value={targetForm[k.targetKey] ?? 0}
-                      onChange={(e) => setTargetForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
-                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1.5"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="px-6 py-4 border-t flex gap-3">
-                <button
-                  onClick={saveOwnTarget}
-                  disabled={saving}
-                  className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
-                  style={{ backgroundColor: "#f15b5c" }}
-                >
-                  {saving ? "Đang lưu..." : "Lưu mục tiêu"}
-                </button>
-                <button onClick={() => setTargetModal(false)} className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold">Hủy</button>
-              </div>
-            </div>
-          </>
-        )}
-
+        {unifiedTargetModal}
         {weeklyModal}
       </div>
     );
@@ -467,12 +581,23 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         if (!t) {
           return (
             <div key={pt.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
-                <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Chưa đặt mục tiêu</span>
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
+                  <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Chưa đặt mục tiêu</span>
+                </div>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => openTargetModal(pt.id, ptName)}
+                    className="px-3 py-1 rounded-lg text-xs font-bold text-white"
+                    style={{ backgroundColor: "#f15b5c" }}
+                  >
+                    Đặt mục tiêu
+                  </button>
+                )}
               </div>
               <div className="py-6 text-center text-sm text-gray-300">
-                PT chưa đặt mục tiêu cho tháng {month}/{year}
+                Nhân sự chưa đặt mục tiêu cho tháng {month}/{year}
               </div>
             </div>
           );
@@ -480,8 +605,17 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
 
         return (
         <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
+            {!isReadOnly && (
+              <button
+                onClick={() => openTargetModal(pt.id, ptName)}
+                className="px-3 py-1 rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                Đặt mục tiêu
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -540,6 +674,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
       })}
 
       {weeklyModal}
+      {unifiedTargetModal}
     </div>
   );
 }
