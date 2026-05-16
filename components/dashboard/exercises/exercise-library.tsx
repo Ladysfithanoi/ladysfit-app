@@ -16,6 +16,14 @@ import { SESSION_TYPES } from "@/lib/workout-constants";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { ExerciseImportModal } from "./import-modal";
 
+type Phase = {
+  id: string;
+  name: string;
+  order: number;
+  isActive: boolean;
+  _count: { programs: number };
+};
+
 type MovementTemplate = {
   id: string;
   phaseKey: string;
@@ -42,7 +50,15 @@ function dbPhase(phaseKey: string): string {
   return phaseKey.split(":")[0].trim();
 }
 
+/** Match a template phaseKey to a DB Phase: exact match OR phaseKey starts with phase.name */
+function matchDBPhase(phases: Phase[], phaseKey: string): Phase | undefined {
+  return phases.find(
+    (p) => p.name === phaseKey || phaseKey.startsWith(p.name + ":") || phaseKey.startsWith(p.name + " ")
+  );
+}
+
 export function ExerciseLibrary() {
+  // ── Templates & Exercises ───────────────────────────────────────────────
   const [templates, setTemplates] = useState<MovementTemplate[]>([]);
   const [selected, setSelected] = useState<MovementTemplate | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -52,9 +68,7 @@ export function ExerciseLibrary() {
   const [leftSearch, setLeftSearch] = useState("");
   const [rightSearch, setRightSearch] = useState("");
 
-  const [openPhases, setOpenPhases] = useState<Set<string>>(
-    new Set([PHASE_KEY_ORDER[0]])
-  );
+  const [openPhases, setOpenPhases] = useState<Set<string>>(new Set());
   const [openSessions, setOpenSessions] = useState<Set<string>>(new Set());
 
   // Movement CRUD
@@ -72,11 +86,41 @@ export function ExerciseLibrary() {
   const [importOpen, setImportOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
+  // Phase CRUD
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [phaseFormOpen, setPhaseFormOpen] = useState(false);
+  const [phaseFormName, setPhaseFormName] = useState("");
+  const [phaseFormOrder, setPhaseFormOrder] = useState(1);
+  const [phaseFormLoading, setPhaseFormLoading] = useState(false);
+  const [phaseFormError, setPhaseFormError] = useState("");
+  const [inlineEditPhase, setInlineEditPhase] = useState<Phase | null>(null);
+  const [inlineEditName, setInlineEditName] = useState("");
+  const [inlineEditOrder, setInlineEditOrder] = useState(1);
+  const [inlineSaving, setInlineSaving] = useState(false);
+  const [deletingPhase, setDeletingPhase] = useState<Phase | null>(null);
+  const [phaseDeleteError, setPhaseDeleteError] = useState("");
+  const [phaseDeleteLoading, setPhaseDeleteLoading] = useState(false);
+
+  // ── Data loading ───────────────────────────────────────────────────────
+
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/exercises/movements");
     const data = await res.json();
     setTemplates(data);
     setLoading(false);
+  }, []);
+
+  const loadPhases = useCallback(async () => {
+    const res = await fetch("/api/admin/phases");
+    if (!res.ok) return;
+    const data: Phase[] = await res.json();
+    if (!Array.isArray(data)) return;
+    setPhases(data);
+    // Auto-open first phase on initial load
+    setOpenPhases((prev) => {
+      if (prev.size > 0 || data.length === 0) return prev;
+      return new Set([data[0].name]);
+    });
   }, []);
 
   const loadExercises = useCallback(async (tpl: MovementTemplate) => {
@@ -90,7 +134,9 @@ export function ExerciseLibrary() {
     setExLoading(false);
   }, []);
 
-  useEffect(() => { loadTemplates(); }, [loadTemplates]);
+  useEffect(() => {
+    Promise.all([loadTemplates(), loadPhases()]);
+  }, [loadTemplates, loadPhases]);
 
   function selectTemplate(tpl: MovementTemplate) {
     setSelected(tpl);
@@ -216,6 +262,84 @@ export function ExerciseLibrary() {
     loadTemplates();
   }
 
+  // ── Phase CRUD ─────────────────────────────────────────────────────────
+
+  function openPhaseForm() {
+    setPhaseFormName("");
+    setPhaseFormOrder(phases.length + 1);
+    setPhaseFormError("");
+    setPhaseFormOpen(true);
+  }
+
+  async function handleAddPhase() {
+    if (!phaseFormName.trim()) return;
+    setPhaseFormLoading(true);
+    setPhaseFormError("");
+    try {
+      const res = await fetch("/api/admin/phases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: phaseFormName.trim(), order: phaseFormOrder }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setPhaseFormError(d.error ?? "Có lỗi xảy ra");
+        return;
+      }
+      setPhaseFormOpen(false);
+      await loadPhases();
+    } catch {
+      setPhaseFormError("Có lỗi xảy ra");
+    } finally {
+      setPhaseFormLoading(false);
+    }
+  }
+
+  function startInlineEdit(phase: Phase) {
+    setInlineEditPhase(phase);
+    setInlineEditName(phase.name);
+    setInlineEditOrder(phase.order);
+  }
+
+  async function handleSaveInlineEdit() {
+    if (!inlineEditPhase || !inlineEditName.trim() || inlineSaving) return;
+    setInlineSaving(true);
+    try {
+      const res = await fetch(`/api/admin/phases/${inlineEditPhase.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: inlineEditName.trim(), order: inlineEditOrder }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.error ?? "Có lỗi xảy ra");
+        return;
+      }
+      setInlineEditPhase(null);
+      await loadPhases();
+    } finally {
+      setInlineSaving(false);
+    }
+  }
+
+  async function handleConfirmDeletePhase() {
+    if (!deletingPhase) return;
+    setPhaseDeleteLoading(true);
+    setPhaseDeleteError("");
+    try {
+      const res = await fetch(`/api/admin/phases/${deletingPhase.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json();
+        setPhaseDeleteError(d.error ?? "Có lỗi xảy ra");
+        return;
+      }
+      setDeletingPhase(null);
+      await loadPhases();
+    } finally {
+      setPhaseDeleteLoading(false);
+    }
+  }
+
   // ── Filtering ─────────────────────────────────────────────────────────
 
   const filteredGrouped = useMemo(() => {
@@ -241,6 +365,55 @@ export function ExerciseLibrary() {
     );
   }, [exercises, rightSearch]);
 
+  // Build ordered list of phaseKeys to display:
+  // 1. DB phases (ordered by phase.order) — with CRUD icons
+  // 2. Orphan template phaseKeys not matched by any DB phase — no CRUD icons
+  const { orderedPhaseKeys, phaseKeyToDBPhase } = useMemo(() => {
+    const map = new Map<string, Phase>();
+    const dbPhaseKeys = new Set<string>();
+
+    // For each template phaseKey, try to find a matching DB phase
+    for (const phaseKey of PHASE_KEY_ORDER) {
+      const matched = matchDBPhase(phases, phaseKey);
+      if (matched) {
+        map.set(phaseKey, matched);
+        dbPhaseKeys.add(phaseKey);
+      }
+    }
+
+    // Build order: DB phases first (by DB order), then orphan template keys
+    const dbPhasesSorted = [...phases].sort((a, b) => a.order - b.order);
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+
+    for (const dbPhase of dbPhasesSorted) {
+      // Find template phaseKey(s) that map to this DB phase
+      for (const phaseKey of PHASE_KEY_ORDER) {
+        if (map.get(phaseKey)?.id === dbPhase.id && !seen.has(phaseKey)) {
+          ordered.push(phaseKey);
+          seen.add(phaseKey);
+        }
+      }
+      // If DB phase has no matching template key, add a virtual entry using its own name
+      const hasAnyTemplate = Array.from(map.entries()).some(([, p]) => p.id === dbPhase.id);
+      if (!hasAnyTemplate && !seen.has(dbPhase.name)) {
+        ordered.push(dbPhase.name);
+        seen.add(dbPhase.name);
+        map.set(dbPhase.name, dbPhase);
+      }
+    }
+
+    // Orphan template phaseKeys (not matched to any DB phase)
+    for (const phaseKey of PHASE_KEY_ORDER) {
+      if (!seen.has(phaseKey)) {
+        ordered.push(phaseKey);
+        seen.add(phaseKey);
+      }
+    }
+
+    return { orderedPhaseKeys: ordered, phaseKeyToDBPhase: map };
+  }, [phases]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-sm text-gray-400">
@@ -248,6 +421,8 @@ export function ExerciseLibrary() {
       </div>
     );
   }
+
+  const canDeletePhase = deletingPhase ? deletingPhase._count.programs === 0 : false;
 
   return (
     <>
@@ -268,30 +443,106 @@ export function ExerciseLibrary() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {PHASE_KEY_ORDER.map((phaseKey) => {
+          {orderedPhaseKeys.map((phaseKey) => {
             const sessions = filteredGrouped[phaseKey];
-            if (!sessions) return null;
+
+            // When searching: hide phases with no matching movements
+            if (leftSearch.trim() && !sessions) return null;
+
             const isPhaseOpen = leftSearch ? true : openPhases.has(phaseKey);
-            const sessionOrder = SESSION_TYPES[phaseKey]?.types ?? Object.keys(sessions);
+            const sessionOrder = SESSION_TYPES[phaseKey]?.types ?? (sessions ? Object.keys(sessions) : []);
+            const dbP = phaseKeyToDBPhase.get(phaseKey);
+            const isInlineEditing = inlineEditPhase?.id === dbP?.id && !!dbP;
 
             return (
               <div key={phaseKey}>
                 {/* Phase header */}
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left border-b border-gray-100"
-                  onClick={() => togglePhase(phaseKey)}
-                >
-                  {isPhaseOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <div className="group flex items-center gap-1 px-3 py-2 bg-gray-50 hover:bg-gray-100 border-b border-gray-100">
+                  {isInlineEditing ? (
+                    /* ── Inline edit mode ── */
+                    <div className="flex items-center gap-1 w-full">
+                      <input
+                        className="flex-1 min-w-0 text-xs px-2 py-1 border border-[#f15b5c]/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30"
+                        value={inlineEditName}
+                        onChange={(e) => setInlineEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveInlineEdit();
+                          if (e.key === "Escape") setInlineEditPhase(null);
+                        }}
+                        placeholder="Tên giai đoạn"
+                        autoFocus
+                      />
+                      <input
+                        type="number"
+                        className="w-10 text-xs px-1.5 py-1 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300 text-center"
+                        value={inlineEditOrder}
+                        onChange={(e) => setInlineEditOrder(Number(e.target.value))}
+                        min={1}
+                        title="Thứ tự"
+                      />
+                      <button
+                        onClick={handleSaveInlineEdit}
+                        disabled={inlineSaving}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      >
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => setInlineEditPhase(null)}
+                        className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
                   ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  )}
-                  <span className="text-[11px] font-bold text-gray-600 truncate">
-                    {displayPhaseKey(phaseKey)}
-                  </span>
-                </button>
+                    /* ── Normal mode ── */
+                    <>
+                      <button
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                        onClick={() => togglePhase(phaseKey)}
+                      >
+                        {isPhaseOpen ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        )}
+                        <span className="text-[11px] font-bold text-gray-600 truncate">
+                          {displayPhaseKey(phaseKey)}
+                        </span>
+                      </button>
 
-                {isPhaseOpen && (
+                      {/* Edit / Delete icons — only for phases with a DB record */}
+                      {dbP && (
+                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 transition-opacity">
+                          <button
+                            className="p-0.5 rounded hover:bg-gray-200"
+                            title="Sửa giai đoạn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startInlineEdit(dbP);
+                            }}
+                          >
+                            <Pencil className="w-2.5 h-2.5 text-gray-400" />
+                          </button>
+                          <button
+                            className="p-0.5 rounded hover:bg-red-50"
+                            title="Xóa giai đoạn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingPhase(dbP);
+                              setPhaseDeleteError("");
+                            }}
+                          >
+                            <Trash2 className="w-2.5 h-2.5 text-red-400" />
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Sessions & movements */}
+                {!isInlineEditing && isPhaseOpen && sessions && (
                   <div>
                     {sessionOrder.map((sessionType) => {
                       const movs = sessions[sessionType];
@@ -446,6 +697,19 @@ export function ExerciseLibrary() {
               </div>
             );
           })}
+
+          {/* Add phase button */}
+          {!leftSearch.trim() && (
+            <div className="p-2 border-t border-gray-100 bg-gray-50/40">
+              <button
+                onClick={openPhaseForm}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-[#f15b5c] hover:bg-[#f15b5c]/5 rounded-lg transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                Thêm giai đoạn
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -586,27 +850,110 @@ export function ExerciseLibrary() {
       </div>
     </div>
 
-      <AlertDialog
-        open={deleteDialogOpen}
-        onClose={() => { setDeleteDialogOpen(false); setExerciseToDelete(null); }}
-        title="Xóa bài tập"
-        description={`Bạn có chắc muốn xóa bài tập "${exerciseToDelete?.name}"?\nHành động này không thể hoàn tác.`}
-        confirmLabel="Xóa bài tập"
-        cancelLabel="Hủy"
-        onConfirm={handleConfirmDelete}
-        variant="danger"
-      />
+    {/* ── Exercise delete dialog ─────────────────────────────────────────── */}
+    <AlertDialog
+      open={deleteDialogOpen}
+      onClose={() => { setDeleteDialogOpen(false); setExerciseToDelete(null); }}
+      title="Xóa bài tập"
+      description={`Bạn có chắc muốn xóa bài tập "${exerciseToDelete?.name}"?\nHành động này không thể hoàn tác.`}
+      confirmLabel="Xóa bài tập"
+      cancelLabel="Hủy"
+      onConfirm={handleConfirmDelete}
+      variant="danger"
+    />
 
-      <ExerciseImportModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={() => {
-          loadTemplates();
-          if (selected) loadExercises(selected);
-        }}
-        phase={selected ? dbPhase(selected.phaseKey) : undefined}
-        movement={selected?.movement}
-      />
+    {/* ── Phase delete dialog ────────────────────────────────────────────── */}
+    <AlertDialog
+      open={!!deletingPhase}
+      onClose={() => { setDeletingPhase(null); setPhaseDeleteError(""); }}
+      variant="danger"
+      title="Xóa giai đoạn"
+      description={
+        phaseDeleteError
+          ? phaseDeleteError
+          : !canDeletePhase
+          ? `Giai đoạn "${deletingPhase?.name}" đang có ${deletingPhase?._count.programs} chương trình, không thể xóa.`
+          : `Bạn có chắc muốn xóa giai đoạn "${deletingPhase?.name}"?\nHành động này không thể hoàn tác.`
+      }
+      confirmLabel={canDeletePhase && !phaseDeleteError ? "Xóa" : undefined}
+      onConfirm={canDeletePhase && !phaseDeleteError ? handleConfirmDeletePhase : () => { setDeletingPhase(null); setPhaseDeleteError(""); }}
+      cancelLabel={canDeletePhase && !phaseDeleteError ? "Hủy" : "Đóng"}
+      loading={phaseDeleteLoading}
+    />
+
+    {/* ── Phase add modal ────────────────────────────────────────────────── */}
+    {phaseFormOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+        onClick={() => setPhaseFormOpen(false)}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-xl w-80 p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-sm font-bold text-gray-800 mb-4">Thêm giai đoạn mới</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">
+                Tên giai đoạn <span className="text-[#f15b5c]">*</span>
+              </label>
+              <input
+                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40"
+                value={phaseFormName}
+                onChange={(e) => setPhaseFormName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddPhase();
+                  if (e.key === "Escape") setPhaseFormOpen(false);
+                }}
+                placeholder="VD: Giai đoạn 4"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">
+                Thứ tự hiển thị
+              </label>
+              <input
+                type="number"
+                className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40"
+                value={phaseFormOrder}
+                onChange={(e) => setPhaseFormOrder(Number(e.target.value))}
+                min={1}
+              />
+            </div>
+            {phaseFormError && (
+              <p className="text-xs text-[#f15b5c]">{phaseFormError}</p>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleAddPhase}
+                disabled={phaseFormLoading || !phaseFormName.trim()}
+                className="flex-1 py-2 bg-[#f15b5c] text-white text-sm font-semibold rounded-xl disabled:opacity-40 hover:bg-[#d94f50] transition-colors"
+              >
+                {phaseFormLoading ? "Đang lưu..." : "Thêm mới"}
+              </button>
+              <button
+                onClick={() => setPhaseFormOpen(false)}
+                className="py-2 px-4 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <ExerciseImportModal
+      open={importOpen}
+      onClose={() => setImportOpen(false)}
+      onImported={() => {
+        loadTemplates();
+        if (selected) loadExercises(selected);
+      }}
+      phase={selected ? dbPhase(selected.phaseKey) : undefined}
+      movement={selected?.movement}
+    />
     </>
   );
 }
