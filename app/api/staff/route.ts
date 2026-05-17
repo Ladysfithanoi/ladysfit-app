@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       OR: [
         { branchId },
         { role: "FM", managedBranches: { some: { branchId } } },
-        { role: "ADMIN" },
+        { role: "ADMIN", branchId },
       ],
     };
   }
@@ -82,13 +82,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "FM không thể tạo tài khoản Admin hoặc FM" }, { status: 403 });
   }
 
-  const noBranchRole = role === "FM" || role === "CEO_FITPARTNER" || role === "COO" || role === "ADMIN";
+  // ADMIN can optionally have a branchId (their home branch); CEO/COO/FM have no single branchId
+  const noBranchRole = role === "FM" || role === "CEO_FITPARTNER" || role === "COO";
 
   if (role === "FM") {
     if (!managedBranchIds || managedBranchIds.length === 0 || managedBranchIds.length > 5) {
       return NextResponse.json({ error: "FM phải có từ 1 đến 5 cơ sở quản lý" }, { status: 400 });
     }
-  } else if (!noBranchRole && !branchId) {
+  } else if (!noBranchRole && role !== "ADMIN" && !branchId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
 
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
         name,
         email,
         password: hashed,
-        branchId: noBranchRole ? null : branchId,
+        branchId: noBranchRole ? null : (branchId || null),
         role,
         ...(ptLevelId && { ptLevelId }),
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) && { dateOfBirth: parsedDOB }),

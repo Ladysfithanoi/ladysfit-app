@@ -19,6 +19,7 @@ function computeWeekBounds(year: number, month: number) {
 type TargetRow = {
   id: string;
   userId: string;
+  branchId: string;
   weeklyActuals: {
     id: string;
     monthlyTargetId: string;
@@ -47,6 +48,7 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
   if (targets.length === 0) return targets;
 
   const ptIds = Array.from(new Set(targets.map((t) => t.userId)));
+  const branchIds = Array.from(new Set(targets.map((t) => t.branchId)));
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
   const weekBounds = computeWeekBounds(year, month);
@@ -55,6 +57,7 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
     prisma.salesLead.findMany({
       where: {
         assignedPTId: { in: ptIds },
+        branchId: { in: branchIds },
         month,
         year,
         status: { in: ["PIF", "DE", "PB"] },

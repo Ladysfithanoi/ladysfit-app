@@ -110,7 +110,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     updateData.branchId = null;
   } else {
     if (role) updateData.role = role;
-    if (branchId) updateData.branchId = branchId;
+    // Allow explicitly setting or clearing branchId (empty string → null)
+    if (branchId !== undefined) updateData.branchId = branchId || null;
   }
 
   try {

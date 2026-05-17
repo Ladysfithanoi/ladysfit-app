@@ -778,7 +778,20 @@ export function StaffPageClient({
                 onChange={setSelectedBranchIds}
               />
             </Field>
-          ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" && selectedRole !== "ADMIN" ? (
+          ) : selectedRole === "ADMIN" ? (
+            <Field label="Cơ sở làm việc (tùy chọn)">
+              <select
+                name="branchId"
+                defaultValue={editing?.branchId ?? ""}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              >
+                <option value="">— Không chỉ định —</option>
+                {availableBranches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </Field>
+          ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" ? (
             <Field label="Cơ sở *">
               <select
                 name="branchId"
