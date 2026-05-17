@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
+import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -75,7 +76,13 @@ export async function PUT(req: Request) {
       if (isPT && t.userId !== session.user.id) return null;
       // ADMIN can save their own target and can also set up targets for PT/FM
       // (no restriction — admin has full authority)
-      return prisma.monthlyTarget.upsert({
+
+      const existing = await prisma.monthlyTarget.findUnique({
+        where: { branchId_userId_month_year: { branchId: t.branchId, userId: t.userId, month: t.month, year: t.year } },
+        select: { id: true },
+      });
+
+      const result = await prisma.monthlyTarget.upsert({
         where: { branchId_userId_month_year: { branchId: t.branchId, userId: t.userId, month: t.month, year: t.year } },
         update: {
           revenueTarget: t.revenueTarget ?? 0,
@@ -95,6 +102,14 @@ export async function PUT(req: Request) {
           googleReviewTarget: t.googleReviewTarget ?? 0, cvTarget: t.cvTarget ?? 0,
         },
       });
+
+      // On first-time creation, retroactively sync any leads that already exist
+      // so WeeklyActual revenue rows are populated immediately.
+      if (!existing) {
+        await syncLeadRevenueToWeeklyActuals(t.userId, t.branchId, t.month, t.year);
+      }
+
+      return result;
     })
   );
 

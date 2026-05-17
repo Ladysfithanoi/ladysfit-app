@@ -98,7 +98,9 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
       const transformActual = myTransforms.filter((c) => c.updatedAt >= start && c.updatedAt <= end).length;
 
       if (existing) {
-        return { ...existing, revenueActual, fitpartnerRevenueActual, fitActual, transformActual };
+        // Preserve all stored values — revenue is kept in sync by syncLeadRevenueToWeeklyActuals
+        // whenever a lead is saved. Don't override manually-entered actuals.
+        return existing;
       }
       return {
         id: `dyn-${target.id}-w${w}`,

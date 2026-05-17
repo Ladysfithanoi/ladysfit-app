@@ -31,29 +31,32 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "Không có quyền quản lý chi nhánh này" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json() as Record<string, unknown>;
 
   // FM/ADMIN/COO can reassign the staff; PT cannot change assignedPTId
   const canReassign = isFM || isAdmin || isCOO;
-  const newAssignedPTId = (canReassign && body.assignedPTId) ? body.assignedPTId : lead.assignedPTId;
+  const newAssignedPTId = (canReassign && body.assignedPTId) ? String(body.assignedPTId) : lead.assignedPTId;
 
+  // Partial update: fall back to existing lead values for any field not present in the
+  // request body. This prevents partial callers (e.g. the care-notes popup, which only
+  // sends { notes }) from inadvertently nullifying revenue and other financial fields.
   const updated = await prisma.salesLead.update({
     where: { id: params.id },
     data: {
       assignedPTId: newAssignedPTId,
-      customerName: body.customerName,
-      yearOfBirth: body.yearOfBirth ? parseInt(body.yearOfBirth) : null,
-      phone: body.phone || null,
-      source: body.source || null,
-      notes: body.notes || null,
-      forecast: body.forecast || null,
-      status: body.status,
-      packageRegistered: body.packageRegistered || null,
-      actualRevenue: body.actualRevenue != null ? parseFloat(body.actualRevenue) : null,
-      remainingPayment: body.remainingPayment != null ? parseFloat(body.remainingPayment) : null,
-      fitpartnerRevenue: body.fitpartnerRevenue != null ? parseFloat(body.fitpartnerRevenue) : null,
-      signDate: body.signDate ? new Date(body.signDate) : null,
-      remark: body.remark || null,
+      customerName: "customerName" in body ? String(body.customerName ?? "") : lead.customerName,
+      yearOfBirth: "yearOfBirth" in body ? (body.yearOfBirth ? parseInt(String(body.yearOfBirth)) : null) : lead.yearOfBirth,
+      phone: "phone" in body ? (body.phone ? String(body.phone) : null) : lead.phone,
+      source: "source" in body ? (body.source ? String(body.source) : null) : lead.source,
+      notes: "notes" in body ? (body.notes ? String(body.notes) : null) : lead.notes,
+      forecast: "forecast" in body ? (body.forecast ? String(body.forecast) : null) : lead.forecast,
+      status: "status" in body && body.status ? body.status as "TAKECARE" | "FAIL" | "DE" | "PIF" | "PB" : lead.status,
+      packageRegistered: "packageRegistered" in body ? (body.packageRegistered ? String(body.packageRegistered) : null) : lead.packageRegistered,
+      actualRevenue: "actualRevenue" in body ? (body.actualRevenue != null ? parseFloat(String(body.actualRevenue)) : null) : lead.actualRevenue,
+      remainingPayment: "remainingPayment" in body ? (body.remainingPayment != null ? parseFloat(String(body.remainingPayment)) : null) : lead.remainingPayment,
+      fitpartnerRevenue: "fitpartnerRevenue" in body ? (body.fitpartnerRevenue != null ? parseFloat(String(body.fitpartnerRevenue)) : null) : lead.fitpartnerRevenue,
+      signDate: "signDate" in body ? (body.signDate ? new Date(String(body.signDate)) : null) : lead.signDate,
+      remark: "remark" in body ? (body.remark ? String(body.remark) : null) : lead.remark,
     },
     include: {
       assignedPT: { select: { id: true, name: true, email: true, role: true } },
