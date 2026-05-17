@@ -94,8 +94,8 @@ export function WeeklyReportTab({
   branchId, branchName, month, year, currentUserRole, currentUserId, userName, isReadOnly,
 }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
-  // FM/CEO/COO/ADMIN can edit arising tasks + incomplete work
-  const canEdit = (currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO" || currentUserRole === "ADMIN") && !isReadOnly;
+  // All active staff can fill in Part II/III of their branch report
+  const canEdit = !isReadOnly;
   // Everyone can edit their own personal actuals
   const canEditOwn = !isReadOnly;
 

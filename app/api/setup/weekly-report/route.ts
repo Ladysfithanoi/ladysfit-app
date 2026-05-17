@@ -193,7 +193,7 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["FM", "CEO_FITPARTNER", "COO", "ADMIN"].includes(role)) {
+  if (!["FM", "CEO_FITPARTNER", "COO", "ADMIN", "PT"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
