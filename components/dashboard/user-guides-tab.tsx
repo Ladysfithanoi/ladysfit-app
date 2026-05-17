@@ -320,6 +320,7 @@ export function UserGuidesTab() {
                 <input
                   type="number"
                   value={form.order}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setForm((f) => ({ ...f, order: parseInt(e.target.value) || 0 }))}
                   className={inputCls}
                   min={0}

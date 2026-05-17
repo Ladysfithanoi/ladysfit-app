@@ -332,6 +332,7 @@ export function WeeklyReportTab({
                                     type="number"
                                     step={row.isFloat ? "0.1" : "1"}
                                     value={actual}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) =>
                                       setPersonalActuals((prev) => ({
                                         ...prev,

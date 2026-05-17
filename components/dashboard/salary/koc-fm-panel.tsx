@@ -192,6 +192,7 @@ export function KOCFMPanel() {
                       min="0"
                       placeholder="Cân nặng cuối (kg)"
                       value={endWeightInputs[c.id] ?? ""}
+                      onFocus={(e) => e.target.select()}
                       onChange={e => setEndWeightInputs(prev => ({ ...prev, [c.id]: e.target.value }))}
                       className="h-8 w-36 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300"
                     />

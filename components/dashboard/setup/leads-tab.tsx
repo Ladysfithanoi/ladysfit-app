@@ -717,6 +717,7 @@ export function LeadsTab({
                   <input
                     type="number"
                     value={form.yearOfBirth ?? ""}
+                    onFocus={(e) => e.target.select()}
                     onChange={e => setForm(f => ({ ...f, yearOfBirth: e.target.value ? parseInt(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="1995"
@@ -816,6 +817,7 @@ export function LeadsTab({
                   <input
                     type="number" step="0.1"
                     value={form.actualRevenue ?? ""}
+                    onFocus={(e) => e.target.select()}
                     onChange={e => setForm(f => ({ ...f, actualRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="10.5"
@@ -825,6 +827,7 @@ export function LeadsTab({
                   <input
                     type="number" step="0.1"
                     value={form.remainingPayment ?? ""}
+                    onFocus={(e) => e.target.select()}
                     onChange={e => setForm(f => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="2.0"
@@ -836,6 +839,7 @@ export function LeadsTab({
                   <input
                     type="number" step="0.1"
                     value={form.fitpartnerRevenue ?? ""}
+                    onFocus={(e) => e.target.select()}
                     onChange={e => setForm(f => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
                     className={inputCls}
                     placeholder="5.0"

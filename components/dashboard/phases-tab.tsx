@@ -225,6 +225,7 @@ export function PhasesTab() {
               defaultValue={editing?.order ?? phases.length + 1}
               placeholder="1"
               min={1}
+              onFocus={(e) => e.target.select()}
               className="h-11 rounded-xl"
             />
           </Field>

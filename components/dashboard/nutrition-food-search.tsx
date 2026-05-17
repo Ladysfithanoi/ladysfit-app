@@ -259,6 +259,7 @@ export function NutritionFoodSearch({
                   <input
                     type="number"
                     value={ing.grams}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => updateIngredient(ing.id, { grams: e.target.value })}
                     min={1}
                     className="w-full h-8 rounded-lg border border-gray-200 bg-white px-2 pr-6 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"

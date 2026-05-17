@@ -278,6 +278,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
                       type="number"
                       step="10000"
                       value={cfg.baseSalary}
+                      onFocus={(e) => e.target.select()}
                       onChange={e => patch(staff.id, { baseSalary: e.target.value })}
                       className={inputCls}
                     />

@@ -129,12 +129,12 @@ function PhotoFormPanel({
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Cân nặng trước (kg) *</label>
               <input required type="number" step="0.1" min="0" value={weightBefore}
-                onChange={(e) => setWeightBefore(e.target.value)} className={inputCls} placeholder="80" />
+                onFocus={(e) => e.target.select()} onChange={(e) => setWeightBefore(e.target.value)} className={inputCls} placeholder="80" />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Cân nặng sau (kg) *</label>
               <input required type="number" step="0.1" min="0" value={weightAfter}
-                onChange={(e) => setWeightAfter(e.target.value)} className={inputCls} placeholder="65" />
+                onFocus={(e) => e.target.select()} onChange={(e) => setWeightAfter(e.target.value)} className={inputCls} placeholder="65" />
             </div>
           </div>
 
@@ -142,12 +142,12 @@ function PhotoFormPanel({
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Thời gian tập (tháng) *</label>
               <input required type="number" min="1" value={durationMonths}
-                onChange={(e) => setDurationMonths(e.target.value)} className={inputCls} placeholder="3" />
+                onFocus={(e) => e.target.select()} onChange={(e) => setDurationMonths(e.target.value)} className={inputCls} placeholder="3" />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Thứ tự hiển thị</label>
               <input type="number" min="0" value={order}
-                onChange={(e) => setOrder(e.target.value)} className={inputCls} placeholder="0" />
+                onFocus={(e) => e.target.select()} onChange={(e) => setOrder(e.target.value)} className={inputCls} placeholder="0" />
             </div>
           </div>
 

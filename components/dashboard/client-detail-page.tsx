@@ -1865,7 +1865,7 @@ export function ClientDetailPage({
             />
           </Field>
           <Field label="Cân nặng (kg) *">
-            <Input name="weight" type="number" step="0.1" required placeholder="65.5" className={inputCls} />
+            <Input name="weight" type="number" step="0.1" required placeholder="65.5" onFocus={(e) => e.target.select()} className={inputCls} />
           </Field>
           <Field label="Ghi chú">
             <textarea
@@ -1926,24 +1926,24 @@ export function ClientDetailPage({
           <SectionTitle>Chỉ số cơ thể</SectionTitle>
           <div className="flex gap-3">
             <Field label="Cân nặng hiện tại (kg)" half>
-              <Input name="currentWeight" type="number" step="0.1" defaultValue={client.currentWeight} className={inputCls} />
+              <Input name="currentWeight" type="number" step="0.1" defaultValue={client.currentWeight} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
             <Field label="Cân nặng mục tiêu (kg)" half>
-              <Input name="targetWeight" type="number" step="0.1" defaultValue={client.targetWeight} className={inputCls} />
+              <Input name="targetWeight" type="number" step="0.1" defaultValue={client.targetWeight} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
           </div>
           <div className="flex gap-3">
             <Field label="Chiều cao (cm)" half>
-              <Input name="height" type="number" step="0.1" defaultValue={client.height} className={inputCls} />
+              <Input name="height" type="number" step="0.1" defaultValue={client.height} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
             <div className="flex-1" />
           </div>
           <div className="flex gap-3">
             <Field label="Vòng eo ban đầu (cm)" half>
-              <Input name="initialWaist" type="number" step="0.1" defaultValue={client.initialWaist ?? ""} className={inputCls} />
+              <Input name="initialWaist" type="number" step="0.1" defaultValue={client.initialWaist ?? ""} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
             <Field label="Vòng mông ban đầu (cm)" half>
-              <Input name="initialHip" type="number" step="0.1" defaultValue={client.initialHip ?? ""} className={inputCls} />
+              <Input name="initialHip" type="number" step="0.1" defaultValue={client.initialHip ?? ""} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
           </div>
 
@@ -2105,6 +2105,7 @@ export function ClientDetailPage({
                           max={pkg.sessions}
                           placeholder={String(pkg.sessionsUsed)}
                           value={pkgSessionsInputs[pkg.id] ?? pkg.sessionsUsed}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setPkgSessionsInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                           className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                         />
@@ -2138,6 +2139,7 @@ export function ClientDetailPage({
                           type="number"
                           min={0}
                           value={pkgReservedInputs[pkg.id] ?? pkg.reservedDays}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setPkgReservedInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                           className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                         />
@@ -2148,6 +2150,7 @@ export function ClientDetailPage({
                           type="number"
                           min={0}
                           value={pkgExtensionInputs[pkg.id] ?? pkg.extensionDays}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => setPkgExtensionInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                           className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                         />
@@ -2376,6 +2379,7 @@ export function ClientDetailPage({
                     min="0"
                     placeholder="VD: 78.5"
                     value={addPkgStartWeight}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setAddPkgStartWeight(e.target.value)}
                     className="w-full h-9 rounded-xl border border-amber-300 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   />
@@ -2532,6 +2536,7 @@ export function ClientDetailPage({
                             <input
                               type="number"
                               value={subDays}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => setSubDays(e.target.value)}
                               min={1}
                               max={90}

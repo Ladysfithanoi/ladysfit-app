@@ -587,6 +587,7 @@ export function ExerciseLibrary() {
                         type="number"
                         className="w-10 text-xs px-1.5 py-1 border border-gray-200 rounded-lg focus:outline-none text-center"
                         value={inlineEditOrder}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setInlineEditOrder(Number(e.target.value))}
                         min={1}
                         title="Thứ tự"
@@ -1112,6 +1113,7 @@ export function ExerciseLibrary() {
                 type="number"
                 className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40"
                 value={phaseFormOrder}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => setPhaseFormOrder(Number(e.target.value))}
                 min={1}
               />

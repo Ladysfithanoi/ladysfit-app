@@ -238,6 +238,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                       type="number"
                       step={k.isFloat ? "0.1" : "1"}
                       value={weeklyForm[k.targetKey] ?? 0}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
                       className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
                     />
@@ -255,6 +256,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                       type="number"
                       step={k.isFloat ? "0.1" : "1"}
                       value={weeklyForm[k.actualKey] ?? 0}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.actualKey]: parseFloat(e.target.value) || 0 }))}
                       className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
                     />
@@ -343,6 +345,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   type="number"
                   step={k.isFloat ? "0.1" : "1"}
                   value={targetForm[k.targetKey] ?? 0}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setTargetForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
                   className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1.5"
                 />
@@ -351,6 +354,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   type="number"
                   step={k.isFloat ? "0.1" : "1"}
                   value={weeklyTargetForm[k.targetKey] ?? 0}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setWeeklyTargetForm((f) => ({ ...f, [k.targetKey]: parseFloat(e.target.value) || 0 }))}
                   className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1.5"
                 />

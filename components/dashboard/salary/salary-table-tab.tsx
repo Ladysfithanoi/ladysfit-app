@@ -367,6 +367,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <input
                   type="number" min={0}
                   value={entry[field] as number}
+                  onFocus={(e) => e.target.select()}
                   onChange={e => updateEntry(entry.userId, field, parseInt(e.target.value) || 0)}
                   className={numInput + " w-full text-left"}
                 />
@@ -727,6 +728,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <input
                             type="number" min={0}
                             value={entry[field] as number}
+                            onFocus={(e) => e.target.select()}
                             onChange={e => updateEntry(entry.userId, field, parseInt(e.target.value) || 0)}
                             className={numInput + " w-full text-left"}
                           />
@@ -744,6 +746,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         <input
                           type="number" min={0}
                           value={entry.clientsAchievedGoal}
+                          onFocus={(e) => e.target.select()}
                           onChange={e => updateEntry(entry.userId, "clientsAchievedGoal", parseInt(e.target.value) || 0)}
                           className={numInput + " w-full text-left"}
                         />
@@ -844,7 +847,7 @@ function EditRow({ colSpan, editAdvance, editNotes, saving, onAdvance, onNotes, 
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Tạm ứng (đ)</label>
-            <input type="number" step="100000" value={editAdvance} onChange={e => onAdvance(e.target.value)}
+            <input type="number" step="100000" value={editAdvance} onFocus={(e) => e.target.select()} onChange={e => onAdvance(e.target.value)}
               className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
           </div>
           <div className="space-y-1 flex-1 min-w-[200px]">

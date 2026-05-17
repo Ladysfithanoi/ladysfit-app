@@ -421,6 +421,7 @@ export function PTLevelsTab() {
                   type="number"
                   min={1}
                   value={form.retestIntervalDays}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, retestIntervalDays: parseInt(e.target.value) || 30 }))
                   }
