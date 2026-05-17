@@ -14,6 +14,7 @@ type UserGuide = {
   order: number;
 };
 
+// Which roleGroup tabs each system role can see
 function allowedRoleGroups(role: string | undefined): string[] {
   switch (role) {
     case "ADMIN":          return ["CEO", "COO", "FM", "PT"];
@@ -27,22 +28,26 @@ function allowedRoleGroups(role: string | undefined): string[] {
 
 const ROLE_GROUP_ORDER = ["CEO", "COO", "FM", "PT"];
 
-const ROLE_GROUP_COLORS: Record<string, { tab: string; badge: string }> = {
+const RG_STYLE: Record<string, { active: string; inactive: string; catActive: string }> = {
   CEO: {
-    tab:   "bg-violet-50 text-violet-700 border-violet-200",
-    badge: "bg-violet-50 text-violet-700 border-violet-200",
+    active:    "bg-violet-600 text-white border-violet-600 shadow-sm",
+    inactive:  "bg-white text-violet-700 border-violet-200 hover:border-violet-300 hover:bg-violet-50",
+    catActive: "bg-violet-600 text-white border-violet-600",
   },
   COO: {
-    tab:   "bg-blue-50 text-blue-700 border-blue-200",
-    badge: "bg-blue-50 text-blue-700 border-blue-200",
+    active:    "bg-blue-600 text-white border-blue-600 shadow-sm",
+    inactive:  "bg-white text-blue-700 border-blue-200 hover:border-blue-300 hover:bg-blue-50",
+    catActive: "bg-blue-600 text-white border-blue-600",
   },
   FM: {
-    tab:   "bg-emerald-50 text-emerald-700 border-emerald-200",
-    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    active:    "bg-emerald-600 text-white border-emerald-600 shadow-sm",
+    inactive:  "bg-white text-emerald-700 border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50",
+    catActive: "bg-emerald-600 text-white border-emerald-600",
   },
   PT: {
-    tab:   "bg-amber-50 text-amber-700 border-amber-200",
-    badge: "bg-amber-50 text-amber-700 border-amber-200",
+    active:    "bg-amber-500 text-white border-amber-500 shadow-sm",
+    inactive:  "bg-white text-amber-700 border-amber-200 hover:border-amber-300 hover:bg-amber-50",
+    catActive: "bg-amber-500 text-white border-amber-500",
   },
 };
 
@@ -88,6 +93,7 @@ export function GuidesPageClient() {
   const [guides, setGuides]     = useState<UserGuide[]>([]);
   const [loading, setLoading]   = useState(true);
   const [activeRG, setActiveRG] = useState<string>("");
+  const [activeCat, setActiveCat] = useState<string>("");
   const [playing, setPlaying]   = useState<UserGuide | null>(null);
 
   const fetchGuides = useCallback(async () => {
@@ -102,35 +108,40 @@ export function GuidesPageClient() {
 
   useEffect(() => { fetchGuides(); }, [fetchGuides]);
 
-  // Determine which roleGroup tabs this user can see, intersected with what exists in DB
-  const allowed   = allowedRoleGroups(role);
-  const available = ROLE_GROUP_ORDER.filter(
-    (rg) => allowed.includes(rg) && guides.some((g) => g.roleGroup === rg)
-  );
+  // Tier 1 tabs: all roleGroups this user is allowed to see, in fixed order
+  const roleGroupTabs = ROLE_GROUP_ORDER.filter((rg) => allowedRoleGroups(role).includes(rg));
 
-  // Auto-select first available tab after data loads
+  // Auto-select the first roleGroup tab when session resolves
   useEffect(() => {
-    if (!loading && available.length > 0 && !available.includes(activeRG)) {
-      setActiveRG(available[0]);
+    if (roleGroupTabs.length > 0 && !roleGroupTabs.includes(activeRG)) {
+      setActiveRG(roleGroupTabs[0]);
     }
-  }, [loading, available.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleGroupTabs.join(",")]);
 
-  // Guides in the active roleGroup tab
-  const tabGuides = guides.filter((g) => g.roleGroup === activeRG);
+  // Guides belonging to the active roleGroup
+  const rgGuides = guides.filter((g) => g.roleGroup === activeRG);
 
-  // Sub-group by category (preserve insertion order, respecting `order` field)
-  const categoryGroups: { cat: string; guides: UserGuide[] }[] = [];
-  const seen = new Set<string>();
-  for (const g of tabGuides) {
-    if (!seen.has(g.category)) {
-      seen.add(g.category);
-      categoryGroups.push({ cat: g.category, guides: [] });
-    }
-    categoryGroups.find((c) => c.cat === g.category)!.guides.push(g);
+  // Ordered unique categories within the active roleGroup
+  const categories: string[] = [];
+  const seenCats = new Set<string>();
+  for (const g of rgGuides) {
+    if (!seenCats.has(g.category)) { seenCats.add(g.category); categories.push(g.category); }
   }
 
+  // Auto-select first category when roleGroup changes or categories update
+  useEffect(() => {
+    if (categories.length > 0 && !categories.includes(activeCat)) {
+      setActiveCat(categories[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRG, categories.join(",")]);
+
+  // Final guides grid: filtered by both active roleGroup and category
+  const shownGuides = rgGuides.filter((g) => g.category === activeCat);
+
+  const style = RG_STYLE[activeRG] ?? RG_STYLE.PT;
   const playingVidId = playing ? extractYouTubeId(playing.youtubeUrl) : null;
-  const colors       = ROLE_GROUP_COLORS[activeRG];
 
   return (
     <div className="p-6 max-w-full">
@@ -145,36 +156,58 @@ export function GuidesPageClient() {
 
       {loading ? (
         <div className="py-20 text-center text-sm text-gray-400">Đang tải...</div>
-      ) : guides.length === 0 ? (
-        <div className="py-20 text-center">
-          <BookOpen className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-gray-300">Chưa có bài hướng dẫn nào. Admin sẽ cập nhật sớm.</p>
-        </div>
       ) : (
         <>
-          {/* Tier 1 — RoleGroup tabs */}
-          {available.length > 1 && (
-            <div className="flex gap-2 flex-wrap mb-6">
-              {available.map((rg) => {
-                const count = guides.filter((g) => g.roleGroup === rg).length;
-                const isActive = rg === activeRG;
+          {/* ── TẦNG 1: Role group tabs ─────────────────────────────── */}
+          <div className="flex gap-2 flex-wrap mb-5">
+            {roleGroupTabs.map((rg) => {
+              const count = guides.filter((g) => g.roleGroup === rg).length;
+              const isActive = rg === activeRG;
+              const s = RG_STYLE[rg];
+              return (
+                <button
+                  key={rg}
+                  onClick={() => { setActiveRG(rg); setActiveCat(""); }}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-extrabold border transition-all",
+                    isActive ? s.active : s.inactive
+                  )}
+                >
+                  {rg}
+                  <span className={cn(
+                    "text-xs px-1.5 py-0.5 rounded-full font-bold leading-none",
+                    isActive ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500"
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── TẦNG 2: Category sub-tabs ───────────────────────────── */}
+          {categories.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-6 pb-4 border-b border-gray-100">
+              {categories.map((cat) => {
+                const isActive = cat === activeCat;
+                const catCount = rgGuides.filter((g) => g.category === cat).length;
                 return (
                   <button
-                    key={rg}
-                    onClick={() => setActiveRG(rg)}
+                    key={cat}
+                    onClick={() => setActiveCat(cat)}
                     className={cn(
-                      "flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold border transition-all",
+                      "flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold border transition-all",
                       isActive
-                        ? "bg-[#f15b5c] text-white border-[#f15b5c] shadow-sm"
+                        ? style.catActive
                         : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700"
                     )}
                   >
-                    {rg}
+                    {cat}
                     <span className={cn(
-                      "text-xs px-1.5 py-0.5 rounded-full font-bold",
-                      isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"
+                      "text-[10px] px-1 py-0.5 rounded-full font-bold leading-none",
+                      isActive ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500"
                     )}>
-                      {count}
+                      {catCount}
                     </span>
                   </button>
                 );
@@ -182,43 +215,29 @@ export function GuidesPageClient() {
             </div>
           )}
 
-          {/* Tier 2 — Category groups within active tab */}
-          {categoryGroups.length === 0 ? (
+          {/* ── Guide cards ─────────────────────────────────────────── */}
+          {shownGuides.length === 0 ? (
             <div className="py-20 text-center">
               <BookOpen className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-gray-300">Không có bài hướng dẫn trong mục này</p>
+              <p className="text-sm font-semibold text-gray-300">
+                {rgGuides.length === 0
+                  ? "Chưa có bài hướng dẫn cho nhóm này. Admin sẽ cập nhật sớm."
+                  : "Không có bài hướng dẫn trong danh mục này."}
+              </p>
             </div>
           ) : (
-            <div className="space-y-8">
-              {categoryGroups.map(({ cat, guides: catGuides }) => (
-                <div key={cat}>
-                  {/* Category header */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className={cn(
-                      "inline-block text-xs font-bold px-3 py-1 rounded-full border",
-                      colors?.badge ?? "bg-gray-50 text-gray-600 border-gray-200"
-                    )}>
-                      {cat}
-                    </span>
-                    <span className="text-xs text-gray-400">{catGuides.length} bài</span>
-                    <div className="flex-1 h-px bg-gray-100" />
-                  </div>
-                  {/* Guide cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {catGuides.map((guide) => (
-                      <div
-                        key={guide.id}
-                        className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => setPlaying(guide)}
-                      >
-                        <YouTubeThumbnail url={guide.youtubeUrl} title={guide.title} />
-                        <div className="p-4">
-                          <h3 className="text-sm font-bold text-gray-800 leading-snug line-clamp-2">
-                            {guide.title}
-                          </h3>
-                        </div>
-                      </div>
-                    ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {shownGuides.map((guide) => (
+                <div
+                  key={guide.id}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => setPlaying(guide)}
+                >
+                  <YouTubeThumbnail url={guide.youtubeUrl} title={guide.title} />
+                  <div className="p-4">
+                    <h3 className="text-sm font-bold text-gray-800 leading-snug line-clamp-2">
+                      {guide.title}
+                    </h3>
                   </div>
                 </div>
               ))}
@@ -227,7 +246,7 @@ export function GuidesPageClient() {
         </>
       )}
 
-      {/* Video player modal */}
+      {/* ── Video player modal ──────────────────────────────────────── */}
       {playing && playingVidId && (
         <div
           className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
@@ -241,7 +260,7 @@ export function GuidesPageClient() {
               <div className="flex-1 pr-4">
                 <span className={cn(
                   "inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border mb-1",
-                  ROLE_GROUP_COLORS[playing.roleGroup]?.badge ?? "bg-gray-50 text-gray-600 border-gray-200"
+                  RG_STYLE[playing.roleGroup]?.catActive ?? "bg-gray-50 text-gray-600 border-gray-200"
                 )}>
                   {playing.roleGroup} · {playing.category}
                 </span>
