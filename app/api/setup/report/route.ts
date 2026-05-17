@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   }
 
   const targets = await prisma.monthlyTarget.findMany({
-    where: { branchId, month, year },
+    where: { branchId, month, year, user: { deletedAt: null } },
     include: {
       user: { select: { id: true, name: true, email: true } },
       weeklyActuals: { orderBy: { weekNumber: "asc" } },

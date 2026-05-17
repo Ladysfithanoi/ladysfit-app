@@ -27,7 +27,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const where: Record<string, unknown> = { branchId, month, year };
+  const where: Record<string, unknown> = {
+    branchId,
+    month,
+    year,
+    user: { deletedAt: null }, // never surface targets for soft-deleted staff
+  };
   if (isPT) where.userId = session.user.id;
 
   const targets = await prisma.monthlyTarget.findMany({

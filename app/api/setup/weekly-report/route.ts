@@ -104,8 +104,8 @@ export async function GET(req: Request) {
 
   // PT can only see their own row; others see all rows in the branch
   const targetsWhere = isPT
-    ? { branchId, month, year, userId: session.user.id }
-    : { branchId, month, year };
+    ? { branchId, month, year, userId: session.user.id, user: { deletedAt: null } }
+    : { branchId, month, year, user: { deletedAt: null } };
 
   const [targets, report] = await Promise.all([
     prisma.monthlyTarget.findMany({
