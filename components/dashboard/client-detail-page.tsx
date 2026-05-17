@@ -12,7 +12,7 @@ import { MiniWeightChart, DetailWeightChart, ChartPoint } from "@/components/das
 import {
   ChevronLeft, Star, Pencil, Plus, Scale,
   Salad, User, Heart, BarChart2, Info,
-  TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw,
+  TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw, Loader2,
 } from "lucide-react";
 import { WorkoutTab, type WorkoutProgram, type WorkoutLogRow } from "@/components/dashboard/workout-tab";
 import { NutritionTab } from "@/components/dashboard/nutrition-tab";
@@ -281,6 +281,62 @@ export function ClientDetailPage({
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
   const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Local workout programs state so new programs appear without page reload
+  const [workoutProgs, setWorkoutProgs] = useState<WorkoutProgram[]>(initialWorkoutPrograms);
+
+  // Create workout program modal
+  const [createProgOpen, setCreateProgOpen] = useState(false);
+  const [createProgPhases, setCreateProgPhases] = useState<{ id: string; name: string }[]>([]);
+  const [createProgForm, setCreateProgForm] = useState({
+    phaseId: "", sessionsPerWeek: 4, currentWeek: 1, workoutType: "", notes: "",
+  });
+  const [createProgSaving, setCreateProgSaving] = useState(false);
+  const [createProgError, setCreateProgError] = useState("");
+
+  function openCreateProg() {
+    if (createProgPhases.length === 0) {
+      fetch("/api/admin/phases")
+        .then((r) => r.json())
+        .then((data: { id: string; name: string; isActive: boolean }[]) =>
+          setCreateProgPhases(data.filter((p) => p.isActive))
+        )
+        .catch(() => {});
+    }
+    setCreateProgForm({ phaseId: "", sessionsPerWeek: 4, currentWeek: 1, workoutType: "", notes: "" });
+    setCreateProgError("");
+    setCreateProgOpen(true);
+  }
+
+  async function handleCreateProg() {
+    const selectedPhase = createProgPhases.find((p) => p.id === createProgForm.phaseId);
+    if (!selectedPhase) { setCreateProgError("Vui lòng chọn giai đoạn"); return; }
+    setCreateProgSaving(true);
+    setCreateProgError("");
+    try {
+      const res = await fetch(`/api/clients/${client.id}/programs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phase: selectedPhase.name,
+          phaseId: createProgForm.phaseId,
+          sessionsPerWeek: createProgForm.sessionsPerWeek,
+          currentWeek: createProgForm.currentWeek,
+          workoutType: createProgForm.workoutType || undefined,
+          notes: createProgForm.notes || undefined,
+          sessions: [],
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Có lỗi xảy ra");
+      const created = await res.json() as WorkoutProgram;
+      setWorkoutProgs((prev) => [created, ...prev]);
+      setCreateProgOpen(false);
+    } catch (err) {
+      setCreateProgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setCreateProgSaving(false);
+    }
+  }
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
 
@@ -933,14 +989,20 @@ export function ClientDetailPage({
                 Xem tất cả →
               </button>
             </div>
-            {initialWorkoutPrograms.filter((p) => p.status === "ACTIVE").length === 0 ? (
-              <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl gap-2">
+            {workoutProgs.filter((p) => p.status === "ACTIVE").length === 0 ? (
+              <div className="h-28 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl gap-2">
                 <Dumbbell className="w-6 h-6 text-gray-200" />
                 <p className="text-xs text-gray-300 font-semibold">Chưa có chương trình tập</p>
+                <button
+                  onClick={openCreateProg}
+                  className="text-xs font-semibold text-[#f15b5c] border border-[#f15b5c]/30 rounded-lg px-3 py-1 hover:bg-[#f15b5c]/5 transition-colors"
+                >
+                  Tạo chương trình tập
+                </button>
               </div>
             ) : (
               <div className="space-y-2">
-                {initialWorkoutPrograms.filter((p) => p.status === "ACTIVE").slice(0, 2).map((p) => (
+                {workoutProgs.filter((p) => p.status === "ACTIVE").slice(0, 2).map((p) => (
                   <div key={p.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5">
                     <div>
                       <p className="text-xs font-bold text-gray-800">{p.phase} · {p.workoutType}</p>
@@ -1822,7 +1884,7 @@ export function ClientDetailPage({
       {view === "workout" && (
         <WorkoutTab
           clientId={client.id}
-          initialPrograms={initialWorkoutPrograms}
+          initialPrograms={workoutProgs}
           isSubstitute={isSubstitute}
           initialLogs={initialWorkoutLogs}
           onPackageUpdated={(pkg) =>
@@ -2605,6 +2667,107 @@ export function ClientDetailPage({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Create Workout Program Modal ── */}
+      {createProgOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-extrabold text-gray-900">Tạo chương trình tập</h3>
+              <button
+                onClick={() => setCreateProgOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Giai đoạn *</label>
+                <select
+                  value={createProgForm.phaseId}
+                  onChange={(e) => setCreateProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                >
+                  <option value="">— Chọn giai đoạn —</option>
+                  {createProgPhases.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-600">Số buổi/tuần</label>
+                  <input
+                    type="number" min={1} max={7}
+                    value={createProgForm.sessionsPerWeek}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setCreateProgForm((f) => ({ ...f, sessionsPerWeek: Number(e.target.value) }))}
+                    className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-600">Tuần bắt đầu</label>
+                  <input
+                    type="number" min={1}
+                    value={createProgForm.currentWeek}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setCreateProgForm((f) => ({ ...f, currentWeek: Number(e.target.value) }))}
+                    className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Loại hình tập</label>
+                <input
+                  type="text"
+                  placeholder="VD: Giảm mỡ, Tăng cơ, Phục hồi..."
+                  value={createProgForm.workoutType}
+                  onChange={(e) => setCreateProgForm((f) => ({ ...f, workoutType: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Ghi chú</label>
+                <textarea
+                  rows={3}
+                  placeholder="Ghi chú về chương trình tập..."
+                  value={createProgForm.notes}
+                  onChange={(e) => setCreateProgForm((f) => ({ ...f, notes: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none"
+                />
+              </div>
+
+              {createProgError && (
+                <p className="text-xs text-[#f15b5c] font-medium">{createProgError}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 px-5 pb-5">
+              <button
+                onClick={handleCreateProg}
+                disabled={createProgSaving}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {createProgSaving
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Đang tạo...</>
+                  : "Tạo chương trình tập"}
+              </button>
+              <button
+                onClick={() => setCreateProgOpen(false)}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSlotsForSessionType } from "@/lib/workout-structure";
 
 const weekInclude = {
   orderBy: { weekNumber: "asc" as const },
@@ -62,7 +63,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     currentWeek?: number;
     packageEnrollmentId?: string;
     notes?: string;
-    sessions: SessionInput[];
+    sessions?: SessionInput[];
   };
 
   const startWeek = body.currentWeek ?? 1;
@@ -85,8 +86,36 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     data: { programId: program.id, weekNumber: startWeek },
   });
 
-  for (let i = 0; i < body.sessions.length; i++) {
-    const s = body.sessions[i];
+  let sessions: SessionInput[] = body.sessions ?? [];
+
+  // Auto-generate sessions from phase template when none are provided
+  if (sessions.length === 0 && body.phaseId) {
+    const phaseData = await prisma.workoutPhase.findUnique({ where: { id: body.phaseId } });
+    if (phaseData) {
+      sessions = Array.from({ length: body.sessionsPerWeek }, (_, i) => {
+        const sessionType =
+          phaseData.sessionTypes.length > 0
+            ? phaseData.sessionTypes[i % phaseData.sessionTypes.length]
+            : "Tạ 1";
+        const slots = getSlotsForSessionType(sessionType, phaseData.templateKey || undefined);
+        return {
+          sessionName: `Buổi ${String.fromCharCode(65 + i)} — ${sessionType}`,
+          order: i,
+          movements: slots.map((slot, mi) => ({
+            movementCode: slot.code,
+            movementName: slot.name,
+            selectedExercise: "",
+            sets: slot.defaultSets,
+            reps: slot.defaultReps,
+            order: mi,
+          })),
+        };
+      });
+    }
+  }
+
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
     await prisma.workoutSession.create({
       data: {
         programId: program.id,
