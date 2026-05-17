@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type Branch = { id: string; name: string };
-type Staff = { id: string; name: string | null; email: string };
+type Staff = { id: string; name: string | null; email: string; branchId: string | null };
 type ConsultationRow = {
   id: string;
   status: "DRAFT" | "COMPLETED";
@@ -97,6 +97,20 @@ export function ConsultationListClient({
   const visibleBranches = isAdmin
     ? branches
     : branches.filter((b) => managedBranchIds.includes(b.id));
+
+  // Staff filtered by selected branch for the cascading PT dropdown
+  const staffForBranch = branchFilter
+    ? staff.filter((s) => s.branchId === branchFilter)
+    : staff;
+
+  function handleBranchChange(newBranchId: string) {
+    setBranchFilter(newBranchId);
+    // Reset PT filter if the selected PT doesn't belong to the new branch
+    if (newBranchId && ptFilter) {
+      const stillValid = staff.some((s) => s.id === ptFilter && s.branchId === newBranchId);
+      if (!stillValid) setPtFilter("");
+    }
+  }
 
   function clearFilters() {
     setPhoneSearch("");
@@ -209,7 +223,21 @@ export function ConsultationListClient({
             />
           </div>
 
-          {/* PT filter — admin & FM only */}
+          {/* Branch filter — admin & FM only */}
+          {showBranchFilter && (
+            <select
+              value={branchFilter}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className={cn(inputCls, "min-w-[180px]")}
+            >
+              <option value="">Tất cả cơ sở</option>
+              {visibleBranches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* PT filter — admin & FM only; cascades from branch selection */}
           {showPtFilter && (
             <select
               value={ptFilter}
@@ -217,22 +245,8 @@ export function ConsultationListClient({
               className={cn(inputCls, "min-w-[160px]")}
             >
               <option value="">Tất cả PT</option>
-              {staff.map((s) => (
+              {staffForBranch.map((s) => (
                 <option key={s.id} value={s.id}>{s.name ?? s.email}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Branch filter — admin & FM only */}
-          {showBranchFilter && (
-            <select
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              className={cn(inputCls, "min-w-[180px]")}
-            >
-              <option value="">Tất cả cơ sở</option>
-              {visibleBranches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
           )}

@@ -36,7 +36,7 @@ export default async function ConsultationPage() {
             deletedAt: null,
             ...(isFM && managedBranchIds.length > 0 ? { branchId: { in: managedBranchIds } } : {}),
           },
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, branchId: true },
           orderBy: { name: "asc" },
         })
       : Promise.resolve([]),
