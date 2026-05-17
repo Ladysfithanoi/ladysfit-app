@@ -1228,3 +1228,18 @@ model SubstituteRequest {
 
   @@map("substitute_requests")
 }
+
+// ── Hướng dẫn sử dụng ────────────────────────────────────────────────────────
+
+model UserGuide {
+  id         String   @id @default(cuid())
+  title      String
+  category   String
+  youtubeUrl String
+  order      Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("user_guides")
+}

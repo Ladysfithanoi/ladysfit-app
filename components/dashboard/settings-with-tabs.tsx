@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Images, ShieldCheck } from "lucide-react";
+import { Building2, Images, ShieldCheck, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsPageClient } from "./settings-page-client";
 import { TransformPhotosTab } from "./transform-photos-tab";
 import { PTLevelsTab } from "./pt-levels-tab";
+import { UserGuidesTab } from "./user-guides-tab";
 
 type BranchRow = {
   id: string;
@@ -18,6 +19,7 @@ const TABS = [
   { key: "branches",  label: "Cơ sở",        icon: Building2   },
   { key: "transform", label: "Ảnh Transform", icon: Images      },
   { key: "ptlevels",  label: "Cấp độ PT",     icon: ShieldCheck },
+  { key: "guides",    label: "Hướng dẫn",     icon: BookOpen    },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
@@ -52,6 +54,9 @@ export function SettingsWithTabs({ initialBranches }: { initialBranches: BranchR
       )}
       {tab === "ptlevels" && (
         <PTLevelsTab />
+      )}
+      {tab === "guides" && (
+        <UserGuidesTab />
       )}
     </div>
   );

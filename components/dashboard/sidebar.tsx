@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
-  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X,
+  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -64,8 +64,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     header: "DỮ LIỆU NỘI BỘ",
     items: [
-      { href: "/dashboard/exercises", icon: Dumbbell,            label: "Danh sách bài tập",  show: forAdminOnly },
-      { href: "/dashboard/exam",      icon: FileText,            label: "Đề thi",             show: forAdminOnly },
+      { href: "/dashboard/exercises", icon: Dumbbell,  label: "Danh sách bài tập", show: forAdminOnly },
+      { href: "/dashboard/exam",      icon: FileText,   label: "Đề thi",            show: forAdminOnly },
+      { href: "/dashboard/guides",    icon: BookOpen,   label: "Hướng dẫn",         show: forAll       },
     ],
   },
   {
