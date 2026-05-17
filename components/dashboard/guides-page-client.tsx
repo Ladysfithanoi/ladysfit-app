@@ -14,18 +14,14 @@ type UserGuide = {
   order: number;
 };
 
-// Maps a session role to the roleGroup tabs the user can see.
-// Admin sees everything; FM sees FM + PT; PT sees PT only; CEO/COO see their own.
 function allowedRoleGroups(role: string | undefined): string[] {
   switch (role) {
-    case "ADMIN": return ["CEO", "COO", "FM", "PT"];
-    case "COO":   return ["COO", "FM", "PT"];
-    case "FM":    return ["FM", "PT"];
-    case "PT":
-    case "FREE":
-    case "RESTRICTED": return ["PT"];
+    case "ADMIN":          return ["CEO", "COO", "FM", "PT"];
+    case "COO":            return ["COO", "FM", "PT"];
+    case "FM":             return ["FM", "PT"];
     case "CEO_FITPARTNER": return ["CEO"];
-    default: return ["PT"];
+    case "PT":             return ["PT"];
+    default:               return ["PT"];
   }
 }
 
