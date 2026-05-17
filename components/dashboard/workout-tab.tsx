@@ -475,7 +475,9 @@ function ProgramView({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Có lỗi xảy ra");
-      onUpdate({ id: program.id, ...body });
+      // API now returns the full program including updated weeks/sessions
+      const updated = await res.json() as WorkoutProgram;
+      onUpdate(updated);
       setEditProgOpen(false);
     } catch (err) {
       setProgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
