@@ -204,9 +204,10 @@ export async function PUT(req: Request) {
     weekNumber: number;
     arisingTasks: string | null;
     incompleteWork: string | null;
+    solutions: string | null;
   };
 
-  const { branchId, month, year, weekNumber, arisingTasks, incompleteWork } = body;
+  const { branchId, month, year, weekNumber, arisingTasks, incompleteWork, solutions } = body;
   if (!branchId || !month || !year || !weekNumber) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
@@ -219,7 +220,7 @@ export async function PUT(req: Request) {
 
   const report = await prisma.weeklyReport.upsert({
     where: { branchId_month_year_weekNumber: { branchId, month, year, weekNumber } },
-    update: { arisingTasks: arisingTasks ?? null, incompleteWork: incompleteWork ?? null },
+    update: { arisingTasks: arisingTasks ?? null, incompleteWork: incompleteWork ?? null, solutions: solutions ?? null },
     create: {
       branchId,
       month,
@@ -227,6 +228,7 @@ export async function PUT(req: Request) {
       weekNumber,
       arisingTasks: arisingTasks ?? null,
       incompleteWork: incompleteWork ?? null,
+      solutions: solutions ?? null,
       createdById: session.user.id,
     },
   });

@@ -862,9 +862,10 @@ model WeeklyReport {
   month          Int
   year           Int
   weekNumber     Int
-  importantTasks String?  @db.Text
-  arisingTasks   String?  @db.Text
-  incompleteWork String?  @db.Text
+  importantTasks   String?  @db.Text
+  arisingTasks     String?  @db.Text
+  incompleteWork   String?  @db.Text
+  solutions        String?  @db.Text
   createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

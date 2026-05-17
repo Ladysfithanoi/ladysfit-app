@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ArisingTask = { id: string; content: string; kpi: string; actual: string };
@@ -16,7 +17,7 @@ type KpiRow = {
 type KpiRowPersonal = KpiRow & { actualKey: string };
 
 type PerUserKpi = {
-  monthlyTargetId: string | null; // null = no MonthlyTarget yet; auto-created on first save
+  monthlyTargetId: string | null;
   userId: string;
   userName: string;
   weeklyActualId: string | null;
@@ -35,6 +36,7 @@ type ReportData = {
   id?: string;
   arisingTasks?: string | null;
   incompleteWork?: string | null;
+  solutions?: string | null;
 };
 
 type Props = {
@@ -104,6 +106,7 @@ export function WeeklyReportTab({
   const [personalActuals, setPersonalActuals] = useState<Record<string, number>>({});
   const [arisingTasks, setArisingTasks] = useState<ArisingTask[]>([]);
   const [incompleteWork, setIncompleteWork] = useState("");
+  const [solutions, setSolutions] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingActuals, setSavingActuals] = useState(false);
@@ -126,6 +129,7 @@ export function WeeklyReportTab({
         const report = data.report;
         setArisingTasks(report?.arisingTasks ? (JSON.parse(report.arisingTasks) as ArisingTask[]) : []);
         setIncompleteWork(report?.incompleteWork ?? "");
+        setSolutions(report?.solutions ?? "");
       }
     } finally {
       setLoading(false);
@@ -134,7 +138,6 @@ export function WeeklyReportTab({
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
-  // Sync personalActuals from perUserKpi when data loads
   useEffect(() => {
     const myRow = perUserKpi.find((p) => p.userId === currentUserId);
     if (!myRow) return;
@@ -145,7 +148,6 @@ export function WeeklyReportTab({
     setPersonalActuals(actuals);
   }, [perUserKpi, currentUserId]);
 
-  // Reset selected week when month/year changes
   useEffect(() => {
     setSelectedWeek(getCurrentWeek(month, year));
   }, [month, year]);
@@ -178,6 +180,7 @@ export function WeeklyReportTab({
           weekNumber: selectedWeek,
           arisingTasks: arisingTasks.length > 0 ? JSON.stringify(arisingTasks) : null,
           incompleteWork: incompleteWork.trim() || null,
+          solutions: solutions.trim() || null,
         }),
       });
     } finally {
@@ -193,7 +196,6 @@ export function WeeklyReportTab({
 
     setSavingActuals(true);
     try {
-      // If the user has no MonthlyTarget yet, auto-create one first (all-zero monthly values)
       let monthlyTargetId = myRow.monthlyTargetId;
       if (!monthlyTargetId) {
         const res = await fetch("/api/setup/targets", {
@@ -293,6 +295,8 @@ export function WeeklyReportTab({
               </div>
             </div>
 
+            {/* ── PHẦN I: SỐ LIỆU TỰ ĐỘNG ─────────────────────────────── */}
+
             {/* Table 1a: My personal KPI (editable actuals) — visible to all roles */}
             {myPerUserRow && (
               <div>
@@ -300,7 +304,7 @@ export function WeeklyReportTab({
                   className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
                   style={{ backgroundColor: "#f15b5c" }}
                 >
-                  I/ CÔNG VIỆC QUAN TRỌNG — KPI CỦA TÔI
+                  I/ SỐ LIỆU TỰ ĐỘNG — KPI CỦA TÔI
                 </div>
                 <div className="w-full overflow-x-auto">
                   <table className="w-full border-collapse border border-gray-300 text-xs">
@@ -466,8 +470,20 @@ export function WeeklyReportTab({
               </div>
             )}
 
-            {/* Table 2: Arising tasks (editable by FM/CEO/COO) */}
+            {/* ── PHẦN II: CÔNG VIỆC PHÁT SINH (BẢNG ĐIỀN TAY) ─────────── */}
             <div>
+              {/* Add button above table */}
+              {canEdit && (
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={addArisingTask}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold border border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c] hover:text-white transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Thêm công việc phát sinh
+                  </button>
+                </div>
+              )}
               <div className="w-full overflow-x-auto">
                 <table className="w-full border-collapse border border-gray-300 text-xs">
                   <thead>
@@ -493,22 +509,24 @@ export function WeeklyReportTab({
                       <tr>
                         <td
                           colSpan={canEdit ? 5 : 4}
-                          className="border border-gray-200 px-4 py-4 text-center text-xs text-gray-300 italic"
+                          className="border border-gray-200 px-4 py-6 text-center text-xs text-gray-300 italic"
                         >
-                          Chưa có công việc phát sinh
+                          {canEdit
+                            ? 'Chưa có công việc phát sinh — bấm "+ Thêm công việc phát sinh" để thêm dòng mới'
+                            : "Chưa có công việc phát sinh"}
                         </td>
                       </tr>
                     ) : (
                       arisingTasks.map((task, idx) => (
                         <tr key={task.id} className="even:bg-gray-50/50">
-                          <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
+                          <td className={cn(tdStyle, "text-center text-gray-400 font-semibold")}>{idx + 1}</td>
                           <td className={tdStyle}>
                             {canEdit ? (
                               <input
                                 value={task.content}
                                 onChange={(e) => updateArisingTask(task.id, "content", e.target.value)}
-                                placeholder="Mô tả công việc..."
-                                className="w-full bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1"
+                                placeholder="Mô tả nội dung công việc..."
+                                className="w-full bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
                               />
                             ) : (
                               task.content
@@ -520,7 +538,7 @@ export function WeeklyReportTab({
                                 value={task.kpi}
                                 onChange={(e) => updateArisingTask(task.id, "kpi", e.target.value)}
                                 placeholder="—"
-                                className="w-full text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1"
+                                className="w-full text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
                               />
                             ) : (
                               task.kpi || "—"
@@ -532,19 +550,19 @@ export function WeeklyReportTab({
                                 value={task.actual}
                                 onChange={(e) => updateArisingTask(task.id, "actual", e.target.value)}
                                 placeholder="—"
-                                className="w-full text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1"
+                                className="w-full text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
                               />
                             ) : (
                               task.actual || "—"
                             )}
                           </td>
                           {canEdit && (
-                            <td className={cn(tdStyle, "text-center")}>
+                            <td className={cn(tdStyle, "text-center p-1")}>
                               <button
                                 onClick={() => removeArisingTask(task.id)}
-                                className="text-gray-300 hover:text-red-400 text-base leading-none"
+                                className="p-1 rounded text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
                               >
-                                ×
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             </td>
                           )}
@@ -554,37 +572,67 @@ export function WeeklyReportTab({
                   </tbody>
                 </table>
               </div>
-              {canEdit && (
+              {/* Add button below table too for convenience */}
+              {canEdit && arisingTasks.length > 0 && (
                 <button
                   onClick={addArisingTask}
-                  className="mt-2 text-xs font-semibold text-[#f15b5c] hover:opacity-80"
+                  className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#f15b5c] hover:opacity-80 transition-opacity"
                 >
-                  + Thêm công việc
+                  <Plus className="w-3.5 h-3.5" />
+                  Thêm công việc phát sinh
                 </button>
               )}
             </div>
 
-            {/* Section: Incomplete work */}
-            <div className="space-y-2">
+            {/* ── PHẦN III: VIỆC CHƯA HOÀN THÀNH & GIẢI PHÁP ─────────────── */}
+            <div className="space-y-4">
+              {/* Section header */}
               <div
                 className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
                 style={{ backgroundColor: "#f15b5c" }}
               >
-                III/ VIỆC CHƯA HOÀN THÀNH - NGUYÊN NHÂN VÀ GIẢI PHÁP
+                III/ VIỆC CHƯA HOÀN THÀNH & GIẢI PHÁP
               </div>
-              {canEdit ? (
-                <textarea
-                  value={incompleteWork}
-                  onChange={(e) => setIncompleteWork(e.target.value)}
-                  rows={5}
-                  placeholder="(Giải pháp phải thật cụ thể, có kèm deadline và người phụ trách)"
-                  className="w-full rounded-b-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                />
-              ) : (
-                <div className="w-full rounded-b-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] whitespace-pre-wrap bg-gray-50">
-                  {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
-                </div>
-              )}
+
+              {/* 3a: Danh sách việc chưa hoàn thành */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                  Danh sách công việc chưa hoàn thành trong tuần
+                </label>
+                {canEdit ? (
+                  <textarea
+                    value={incompleteWork}
+                    onChange={(e) => setIncompleteWork(e.target.value)}
+                    rows={4}
+                    placeholder="Liệt kê từng công việc chưa hoàn thành, mỗi việc một dòng..."
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
+                  />
+                ) : (
+                  <div className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] whitespace-pre-wrap bg-gray-50">
+                    {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* 3b: Giải pháp khắc phục */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                  Giải pháp khắc phục / Kế hoạch xử lý tiếp theo
+                </label>
+                {canEdit ? (
+                  <textarea
+                    value={solutions}
+                    onChange={(e) => setSolutions(e.target.value)}
+                    rows={4}
+                    placeholder="Mô tả giải pháp cụ thể, kèm deadline và người phụ trách..."
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
+                  />
+                ) : (
+                  <div className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] whitespace-pre-wrap bg-gray-50">
+                    {solutions || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Save report button (FM/CEO/COO only) */}
