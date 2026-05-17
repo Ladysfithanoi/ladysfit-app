@@ -236,7 +236,7 @@ export function Step1Info({
             <Field label="Biết LDF qua đâu?">
               <select name="knowLDFVia" defaultValue={(info?.knowLDFVia as string) ?? ""} disabled={isReadOnly} className={selectCls}>
                 <option value="">— Chọn —</option>
-                {["Bạn bè", "Tivi", "Hội viên cũ", "Website", "Báo, tạp chí", "Biển hiệu", "Facebook", "Tờ rơi", "Tiktok", "Instagram", "Thread", "Referral.PT"].map((v) => <option key={v}>{v}</option>)}
+                {["Walk-in", "Referral", "Thương hiệu cá nhân", "Bạn bè", "Tivi", "Hội viên cũ", "Website", "Báo, tạp chí", "Biển hiệu", "Facebook", "Tờ rơi", "Tiktok", "Instagram", "Thread", "Referral.PT"].map((v) => <option key={v}>{v}</option>)}
               </select>
             </Field>
             <Field label="Tình trạng gia đình">
