@@ -23,18 +23,25 @@ export async function POST(req: Request) {
 
   const body = await req.json() as {
     title: string;
+    roleGroup: string;
     category: string;
     youtubeUrl: string;
     order?: number;
   };
 
-  if (!body.title?.trim() || !body.category?.trim() || !body.youtubeUrl?.trim()) {
+  if (!body.title?.trim() || !body.roleGroup?.trim() || !body.category?.trim() || !body.youtubeUrl?.trim()) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
+  }
+
+  const VALID_ROLE_GROUPS = ["CEO", "COO", "FM", "PT"];
+  if (!VALID_ROLE_GROUPS.includes(body.roleGroup)) {
+    return NextResponse.json({ error: "Phân loại không hợp lệ" }, { status: 400 });
   }
 
   const guide = await prisma.userGuide.create({
     data: {
       title: body.title.trim(),
+      roleGroup: body.roleGroup,
       category: body.category.trim(),
       youtubeUrl: body.youtubeUrl.trim(),
       order: body.order ?? 0,

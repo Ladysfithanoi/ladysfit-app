@@ -8,40 +8,42 @@ import { AlertDialog } from "@/components/ui/alert-dialog";
 type UserGuide = {
   id: string;
   title: string;
+  roleGroup: string;
   category: string;
   youtubeUrl: string;
   order: number;
   isActive: boolean;
 };
 
-const CATEGORIES = [
-  { value: "LEAD",       label: "Setup Doanh số" },
-  { value: "KPI",        label: "Mục tiêu & KPI" },
-  { value: "GIAO_AN",    label: "Giáo án / Bài tập" },
-  { value: "KHACH_HANG", label: "Quản lý Khách hàng" },
-  { value: "CAI_DAT",    label: "Cài đặt hệ thống" },
-  { value: "KHAC",       label: "Khác" },
+const ROLE_GROUPS = [
+  { value: "CEO", label: "CEO" },
+  { value: "COO", label: "COO" },
+  { value: "FM",  label: "FM"  },
+  { value: "PT",  label: "PT"  },
 ];
 
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.value, c.label])
-);
-
-const CATEGORY_COLOR: Record<string, string> = {
-  LEAD:       "bg-emerald-50 text-emerald-700",
-  KPI:        "bg-blue-50 text-blue-700",
-  GIAO_AN:    "bg-purple-50 text-purple-700",
-  KHACH_HANG: "bg-amber-50 text-amber-700",
-  CAI_DAT:    "bg-gray-100 text-gray-700",
-  KHAC:       "bg-rose-50 text-rose-700",
+const ROLE_GROUP_COLOR: Record<string, string> = {
+  CEO: "bg-violet-50 text-violet-700",
+  COO: "bg-blue-50 text-blue-700",
+  FM:  "bg-emerald-50 text-emerald-700",
+  PT:  "bg-amber-50 text-amber-700",
 };
 
 function extractYouTubeId(url: string): string | null {
-  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 const inputCls = "w-full h-11 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+
+const EMPTY_FORM = { title: "", roleGroup: "PT", category: "", youtubeUrl: "", order: 0 };
 
 export function UserGuidesTab() {
   const [guides, setGuides]             = useState<UserGuide[]>([]);
@@ -55,7 +57,7 @@ export function UserGuidesTab() {
   const [deleting, setDeleting]         = useState(false);
   const [toast, setToast]               = useState("");
 
-  const [form, setForm] = useState({ title: "", category: "LEAD", youtubeUrl: "", order: 0 });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const fetchGuides = useCallback(async () => {
     setLoading(true);
@@ -71,20 +73,21 @@ export function UserGuidesTab() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ title: "", category: "LEAD", youtubeUrl: "", order: guides.length });
+    setForm({ ...EMPTY_FORM, order: guides.length });
     setError("");
     setFormOpen(true);
   }
 
   function openEdit(g: UserGuide) {
     setEditing(g);
-    setForm({ title: g.title, category: g.category, youtubeUrl: g.youtubeUrl, order: g.order });
+    setForm({ title: g.title, roleGroup: g.roleGroup, category: g.category, youtubeUrl: g.youtubeUrl, order: g.order });
     setError("");
     setFormOpen(true);
   }
 
   async function handleSave() {
-    if (!form.title.trim()) { setError("Vui lòng nhập tiêu đề"); return; }
+    if (!form.title.trim())      { setError("Vui lòng nhập tiêu đề"); return; }
+    if (!form.category.trim())   { setError("Vui lòng nhập danh mục"); return; }
     if (!form.youtubeUrl.trim()) { setError("Vui lòng nhập link YouTube"); return; }
     if (!extractYouTubeId(form.youtubeUrl)) {
       setError("Link YouTube không hợp lệ. Vui lòng dùng dạng youtube.com/watch?v=... hoặc youtu.be/...");
@@ -93,9 +96,9 @@ export function UserGuidesTab() {
     setSaving(true);
     setError("");
     try {
-      const url  = editing ? `/api/user-guides/${editing.id}` : "/api/user-guides";
+      const url    = editing ? `/api/user-guides/${editing.id}` : "/api/user-guides";
       const method = editing ? "PUT" : "POST";
-      const res  = await fetch(url, {
+      const res    = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -133,6 +136,14 @@ export function UserGuidesTab() {
 
   const vidPreviewId = form.youtubeUrl ? extractYouTubeId(form.youtubeUrl) : null;
 
+  // Group by roleGroup → category for display
+  const grouped = ROLE_GROUPS
+    .map((rg) => ({
+      roleGroup: rg,
+      guides: guides.filter((g) => g.roleGroup === rg.value),
+    }))
+    .filter((g) => g.guides.length > 0);
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -151,7 +162,7 @@ export function UserGuidesTab() {
         </button>
       </div>
 
-      {/* Category groups */}
+      {/* Guide list grouped by roleGroup */}
       {loading ? (
         <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>
       ) : guides.length === 0 ? (
@@ -160,53 +171,66 @@ export function UserGuidesTab() {
           <p className="text-xs text-gray-300 mt-1">Nhấn "Thêm bài hướng dẫn" để bắt đầu</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {CATEGORIES.filter((c) => guides.some((g) => g.category === c.value)).map((cat) => {
-            const catGuides = guides.filter((g) => g.category === cat.value);
+        <div className="space-y-5">
+          {grouped.map(({ roleGroup: rg, guides: rgGuides }) => {
+            // Sub-group by category within this roleGroup
+            const categories = Array.from(new Set(rgGuides.map((g) => g.category)));
             return (
-              <div key={cat.value} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={rg.value} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* RoleGroup header */}
                 <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", CATEGORY_COLOR[cat.value] ?? "bg-gray-100 text-gray-600")}>
-                    {cat.label}
+                  <span className={cn("text-xs font-bold px-2.5 py-0.5 rounded-full", ROLE_GROUP_COLOR[rg.value] ?? "bg-gray-100 text-gray-600")}>
+                    {rg.label}
                   </span>
-                  <span className="text-xs text-gray-400">{catGuides.length} bài</span>
+                  <span className="text-xs text-gray-400">{rgGuides.length} bài</span>
                 </div>
-                <div className="divide-y divide-gray-100">
-                  {catGuides.map((g) => {
-                    const vid = extractYouTubeId(g.youtubeUrl);
-                    return (
-                      <div key={g.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50">
-                        <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                        {vid && (
-                          <img
-                            src={`https://img.youtube.com/vi/${vid}/default.jpg`}
-                            alt={g.title}
-                            className="w-16 h-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
-                          />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{g.title}</p>
-                          <p className="text-xs text-gray-400 truncate mt-0.5">{g.youtubeUrl}</p>
-                        </div>
-                        <span className="text-xs text-gray-300 font-semibold flex-shrink-0">#{g.order}</span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => openEdit(g)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => { setPending({ id: g.id, title: g.title }); setDeleteDialog(true); }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                {/* Category sub-groups */}
+                {categories.map((cat) => {
+                  const catGuides = rgGuides.filter((g) => g.category === cat);
+                  return (
+                    <div key={cat}>
+                      <div className="px-5 py-2 bg-gray-50/60 border-b border-gray-100">
+                        <span className="text-[11px] font-semibold text-gray-500">{cat}</span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="divide-y divide-gray-100">
+                        {catGuides.map((g) => {
+                          const vid = extractYouTubeId(g.youtubeUrl);
+                          return (
+                            <div key={g.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/50">
+                              <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                              {vid && (
+                                <img
+                                  src={`https://img.youtube.com/vi/${vid}/default.jpg`}
+                                  alt={g.title}
+                                  className="w-16 h-10 rounded-lg object-cover flex-shrink-0 bg-gray-100"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-800 truncate">{g.title}</p>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">{g.youtubeUrl}</p>
+                              </div>
+                              <span className="text-xs text-gray-300 font-semibold flex-shrink-0">#{g.order}</span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  onClick={() => openEdit(g)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => { setPending({ id: g.id, title: g.title }); setDeleteDialog(true); }}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -225,6 +249,35 @@ export function UserGuidesTab() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+              {/* Phân loại (roleGroup) */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Phân loại *</label>
+                <select
+                  value={form.roleGroup}
+                  onChange={(e) => setForm((f) => ({ ...f, roleGroup: e.target.value }))}
+                  className={inputCls}
+                >
+                  {ROLE_GROUPS.map((rg) => (
+                    <option key={rg.value} value={rg.value}>{rg.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400">Chọn nhóm nhân sự sẽ xem bài hướng dẫn này</p>
+              </div>
+
+              {/* Danh mục — free text */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700">Danh mục *</label>
+                <input
+                  value={form.category}
+                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                  placeholder="Ví dụ: Setup Doanh số, Mục tiêu KPI..."
+                  className={inputCls}
+                />
+                <p className="text-xs text-gray-400">Nhập tên danh mục tùy ý để gom nhóm bài học</p>
+              </div>
+
+              {/* Tiêu đề */}
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Tiêu đề *</label>
                 <input
@@ -234,18 +287,8 @@ export function UserGuidesTab() {
                   className={inputCls}
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-700">Danh mục *</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                  className={inputCls}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
+
+              {/* Link YouTube */}
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Link YouTube *</label>
                 <input
@@ -256,6 +299,7 @@ export function UserGuidesTab() {
                 />
                 <p className="text-xs text-gray-400">Hỗ trợ: youtube.com/watch?v=... · youtu.be/... · youtube.com/embed/...</p>
               </div>
+
               {/* YouTube preview */}
               {vidPreviewId && (
                 <div className="rounded-xl overflow-hidden border border-gray-200">
@@ -269,6 +313,8 @@ export function UserGuidesTab() {
                   </p>
                 </div>
               )}
+
+              {/* Thứ tự */}
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-gray-700">Thứ tự hiển thị</label>
                 <input
@@ -280,6 +326,7 @@ export function UserGuidesTab() {
                 />
                 <p className="text-xs text-gray-400">Số nhỏ hơn → hiển thị trước</p>
               </div>
+
               {error && (
                 <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
                   <p className="text-sm text-[#f15b5c] font-semibold">{error}</p>

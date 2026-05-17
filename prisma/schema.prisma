@@ -1234,6 +1234,7 @@ model SubstituteRequest {
 model UserGuide {
   id         String   @id @default(cuid())
   title      String
+  roleGroup  String   @default("PT")
   category   String
   youtubeUrl String
   order      Int      @default(0)
