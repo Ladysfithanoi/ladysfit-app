@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -269,7 +269,7 @@ function ProgramView({
       .catch(() => {});
   }, []);
 
-  // Edit mode
+  // Edit mode (session content)
   const [editMode, setEditMode] = useState(false);
   const [draftSessions, setDraftSessions] = useState<DraftSession[]>([]);
   const [editPhaseId, setEditPhaseId] = useState(program.phaseId ?? "");
@@ -278,6 +278,18 @@ function ProgramView({
   const [addingWeek, setAddingWeek] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState("");
+
+  // Edit program metadata modal
+  const [editProgOpen, setEditProgOpen] = useState(false);
+  const [progForm, setProgForm] = useState({
+    phaseId: program.phaseId ?? "",
+    sessionsPerWeek: program.sessionsPerWeek,
+    currentWeek: program.currentWeek,
+    workoutType: program.workoutType ?? "",
+    notes: program.notes ?? "",
+  });
+  const [progSaving, setProgSaving] = useState(false);
+  const [progError, setProgError] = useState("");
 
   // Session logging
   const [loggingSessionId, setLoggingSessionId] = useState<string | null>(null);
@@ -432,6 +444,46 @@ function ProgramView({
     }
   }
 
+  function openProgModal() {
+    setProgForm({
+      phaseId: program.phaseId ?? "",
+      sessionsPerWeek: program.sessionsPerWeek,
+      currentWeek: program.currentWeek,
+      workoutType: program.workoutType ?? "",
+      notes: program.notes ?? "",
+    });
+    setProgError("");
+    setEditProgOpen(true);
+  }
+
+  async function handleSaveProg() {
+    setProgSaving(true);
+    setProgError("");
+    try {
+      const selectedPhase = phases.find((p) => p.id === progForm.phaseId);
+      const body = {
+        phase: selectedPhase?.name ?? program.phase,
+        phaseId: progForm.phaseId || null,
+        sessionsPerWeek: progForm.sessionsPerWeek,
+        currentWeek: progForm.currentWeek,
+        workoutType: progForm.workoutType || null,
+        notes: progForm.notes || null,
+      };
+      const res = await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Có lỗi xảy ra");
+      onUpdate({ id: program.id, ...body });
+      setEditProgOpen(false);
+    } catch (err) {
+      setProgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setProgSaving(false);
+    }
+  }
+
   // If program has no weeks (legacy), show legacy sessions
   const hasWeeks = program.weeks.length > 0;
   const legacySessions = program.sessions;
@@ -468,13 +520,22 @@ function ProgramView({
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {!isArchived && !editMode && (
+            <button
+              onClick={openProgModal}
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <Settings2 className="w-3 h-3" />
+              Thông tin CT
+            </button>
+          )}
           {!isArchived && !editMode && hasWeeks && (
             <button
               onClick={enterEditMode}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
             >
               <Pencil className="w-3 h-3" />
-              Chỉnh sửa
+              Giáo án
             </button>
           )}
           <button
@@ -785,6 +846,112 @@ function ProgramView({
       {error && !editMode && (
         <div className="px-5 pb-4">
           <p className="text-xs text-[#f15b5c] font-medium">{error}</p>
+        </div>
+      )}
+
+      {/* ── Edit Program Metadata Modal ── */}
+      {editProgOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-sm font-extrabold text-gray-900">Chỉnh sửa chương trình tập</h3>
+              <button
+                onClick={() => setEditProgOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* Phase */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
+                <select
+                  value={progForm.phaseId}
+                  onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                >
+                  <option value="">— Chọn giai đoạn —</option>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sessions per week + Current week */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-600">Số buổi/tuần</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={7}
+                    value={progForm.sessionsPerWeek}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setProgForm((f) => ({ ...f, sessionsPerWeek: Number(e.target.value) }))}
+                    className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-600">Tuần hiện tại</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={progForm.currentWeek}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setProgForm((f) => ({ ...f, currentWeek: Number(e.target.value) }))}
+                    className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  />
+                </div>
+              </div>
+
+              {/* Workout type */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Loại hình tập</label>
+                <input
+                  type="text"
+                  placeholder="VD: Giảm mỡ, Tăng cơ, Phục hồi..."
+                  value={progForm.workoutType}
+                  onChange={(e) => setProgForm((f) => ({ ...f, workoutType: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Ghi chú chương trình</label>
+                <textarea
+                  rows={3}
+                  placeholder="Ghi chú về chương trình tập..."
+                  value={progForm.notes}
+                  onChange={(e) => setProgForm((f) => ({ ...f, notes: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none"
+                />
+              </div>
+
+              {progError && (
+                <p className="text-xs text-[#f15b5c] font-medium">{progError}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 px-5 pb-5">
+              <button
+                onClick={handleSaveProg}
+                disabled={progSaving}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {progSaving ? <><Loader2 className="w-4 h-4 animate-spin" />Đang lưu...</> : "Lưu thay đổi"}
+              </button>
+              <button
+                onClick={() => setEditProgOpen(false)}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
