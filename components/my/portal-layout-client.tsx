@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { Home, Scale, Dumbbell, Salad, Ruler, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutNotificationPopup } from "./workout-notification-popup";
@@ -25,6 +25,8 @@ export function PortalLayoutClient({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
+  const avatarUrl = session?.user?.image;
 
   async function handleLogout() {
     await signOut({ redirect: false, callbackUrl: "/my/login" });
@@ -39,9 +41,18 @@ export function PortalLayoutClient({
         {/* Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#f15b5c] flex items-center justify-center">
-              <span className="text-sm font-black text-white">L</span>
-            </div>
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt="Avatar"
+                className="w-8 h-8 rounded-xl object-cover"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-xl bg-[#f15b5c] flex items-center justify-center">
+                <span className="text-sm font-black text-white">L</span>
+              </div>
+            )}
             <div>
               <p className="text-[10px] font-bold text-gray-400 leading-none">LADYSFIT</p>
               <p className="text-sm font-extrabold text-gray-900 leading-tight">
