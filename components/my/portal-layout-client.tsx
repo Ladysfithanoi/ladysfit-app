@@ -64,8 +64,8 @@ export function PortalLayoutClient({
         </main>
 
         {/* Bottom navigation */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-white border-t border-gray-100 px-2 py-2">
-          <div className="flex items-center justify-around">
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-white border-t border-gray-100">
+          <div className="grid grid-cols-6 w-full justify-items-center py-2">
             {NAV.map(({ href, label, Icon }) => {
               const active = pathname === href;
               return (
@@ -73,12 +73,12 @@ export function PortalLayoutClient({
                   key={href}
                   href={href}
                   className={cn(
-                    "flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-2xl transition-colors",
+                    "flex flex-col items-center justify-center gap-1 py-1 w-full transition-colors",
                     active ? "text-[#f15b5c]" : "text-gray-400"
                   )}
                 >
                   <Icon className={cn("w-5 h-5", active && "fill-[#f15b5c]/15")} />
-                  <span className={cn("text-[10px] font-bold", active ? "text-[#f15b5c]" : "text-gray-400")}>
+                  <span className={cn("whitespace-nowrap text-[9px] tracking-tight font-medium", active ? "text-[#f15b5c]" : "text-gray-400")}>
                     {label}
                   </span>
                 </Link>
