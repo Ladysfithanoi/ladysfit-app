@@ -853,8 +853,8 @@ export function ClientDetailPage({
   return (
     <>
       {/* ── HEADER ── */}
-      <div className="flex items-start justify-between mb-6 gap-4">
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-4">
+        <div className="flex flex-col gap-2 min-w-0">
           <Link
             href="/dashboard/clients"
             className="inline-flex items-center gap-1 text-sm font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors w-fit"
@@ -890,58 +890,62 @@ export function ClientDetailPage({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0 pt-7">
-          <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
-            {(["overview", "detail", "workout", "nutrition"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-semibold transition-all",
-                  view === v
-                    ? "bg-[#f15b5c] text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                {v === "overview" ? "Tổng quan" : v === "detail" ? "Chi tiết" : v === "workout" ? "CT Tập" : "Chế độ ăn"}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 sm:pt-7 w-full sm:w-auto">
+          <div className="overflow-x-auto -mx-1 px-1 flex-1 sm:flex-none">
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-1 min-w-max">
+              {(["overview", "detail", "workout", "nutrition"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
+                    view === v
+                      ? "bg-[#f15b5c] text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  {v === "overview" ? "Tổng quan" : v === "detail" ? "Chi tiết" : v === "workout" ? "CT Tập" : "Chế độ ăn"}
+                </button>
+              ))}
+            </div>
           </div>
-          <Button
-            onClick={() => {
-              setSubOpen(true);
-              setSubSubstituteId("");
-              setSubType("SHORT_TERM");
-              setSubDays("7");
-              setSubNotes("");
-              setSubError("");
-              setSubSuccess(false);
-            }}
-            variant="outline"
-            className="gap-1.5 rounded-xl text-sm font-semibold h-9 border-gray-300 text-gray-600 hover:bg-gray-50"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Nhờ dạy hộ
-          </Button>
-          <Button
-            onClick={() => {
-              setEditError("");
-              setEditGeneration((g) => g + 1);
-              setPendingAvatarUrl(client.avatarUrl ?? null);
-              setEditOpen(true);
-            }}
-            variant="outline"
-            className="gap-1.5 rounded-xl text-sm font-semibold h-9 border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c]/5"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            Chỉnh sửa
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setSubOpen(true);
+                setSubSubstituteId("");
+                setSubType("SHORT_TERM");
+                setSubDays("7");
+                setSubNotes("");
+                setSubError("");
+                setSubSuccess(false);
+              }}
+              variant="outline"
+              className="gap-1.5 rounded-xl text-sm font-semibold h-9 border-gray-300 text-gray-600 hover:bg-gray-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Nhờ dạy hộ</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setEditError("");
+                setEditGeneration((g) => g + 1);
+                setPendingAvatarUrl(client.avatarUrl ?? null);
+                setEditOpen(true);
+              }}
+              variant="outline"
+              className="gap-1.5 rounded-xl text-sm font-semibold h-9 border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c]/5"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Chỉnh sửa
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* ── VIEW 1: OVERVIEW ── */}
       {view === "overview" && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Card 1 */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
@@ -1116,7 +1120,7 @@ export function ClientDetailPage({
               </button>
             </div>
             {actToday ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-blue-50 rounded-xl p-3">
                   <div className="flex items-center gap-1.5 mb-1">
                     <Footprints className="w-3.5 h-3.5 text-blue-400" />
@@ -1293,7 +1297,7 @@ export function ClientDetailPage({
       {view === "detail" && (
         <div className="space-y-4">
           {/* Row 1: Personal + Body metrics */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Personal */}
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
@@ -1419,7 +1423,7 @@ export function ClientDetailPage({
                 Sức khỏe & Mục tiêu
               </h3>
             </div>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
               {[
                 { label: "Tiền sử bệnh lý", value: client.healthConditions },
                 { label: "Tiền sử chấn thương", value: client.injuries },
@@ -1726,7 +1730,7 @@ export function ClientDetailPage({
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
               <div className="bg-gray-50 rounded-xl p-3">
                 <p className="text-xs text-gray-400 font-semibold mb-1">TB tuần này</p>
                 <p className="text-lg font-extrabold text-gray-900">
@@ -1826,7 +1830,7 @@ export function ClientDetailPage({
             </div>
 
             {/* Summary cards */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
               <div className="bg-gray-50 rounded-xl p-3">
                 <p className="text-xs text-gray-400 font-semibold mb-1">Hôm nay</p>
                 {actToday ? (
@@ -2780,7 +2784,7 @@ export function ClientDetailPage({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-gray-600">Số buổi/tuần</label>
                   <input

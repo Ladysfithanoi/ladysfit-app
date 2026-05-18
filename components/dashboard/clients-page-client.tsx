@@ -248,7 +248,7 @@ export function ClientsPageClient({
 
       {/* Filter bar */}
       <div className="mb-4 space-y-2">
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 items-stretch sm:items-center">
           {/* Name / phone search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
@@ -257,7 +257,7 @@ export function ClientsPageClient({
               placeholder="Tìm tên hoặc số điện thoại..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className={cn(inputCls, "pl-9 w-56")}
+              className={cn(inputCls, "pl-9 w-full sm:w-56")}
             />
           </div>
 
@@ -266,7 +266,7 @@ export function ClientsPageClient({
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className={cn(inputCls, "min-w-[180px]")}
+              className={cn(inputCls, "w-full sm:min-w-[180px] sm:w-auto")}
             >
               <option value="">Tất cả cơ sở</option>
               {visibleBranches.map((b) => (
@@ -280,16 +280,14 @@ export function ClientsPageClient({
             <select
               value={ptFilter}
               onChange={(e) => setPtFilter(e.target.value)}
-              className={cn(inputCls, "min-w-[160px]")}
+              className={cn(inputCls, "w-full sm:min-w-[160px] sm:w-auto")}
             >
               <option value="">Tất cả PT</option>
               {branchFilter ? (
-                // Cascaded: flat list for the selected branch only
                 branchFilteredStaff.map((s) => (
                   <option key={s.id} value={s.id}>{s.name ?? `(${s.id.slice(0, 6)})`}</option>
                 ))
               ) : isAdmin && branches && branches.length > 0 ? (
-                // No branch selected + admin: grouped by branch
                 branches.map((b) => {
                   const branchPTs = visibleStaff.filter((s) => s.branchId === b.id);
                   if (branchPTs.length === 0) return null;
@@ -302,7 +300,6 @@ export function ClientsPageClient({
                   );
                 })
               ) : (
-                // FM or no branches: flat list
                 visibleStaff.map((s) => (
                   <option key={s.id} value={s.id}>{s.name ?? `(${s.id.slice(0, 6)})`}</option>
                 ))
@@ -314,7 +311,7 @@ export function ClientsPageClient({
           <select
             value={pkgFilter}
             onChange={(e) => setPkgFilter(e.target.value)}
-            className={cn(inputCls, "min-w-[160px]")}
+            className={cn(inputCls, "w-full sm:min-w-[160px] sm:w-auto")}
           >
             {PACKAGE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -322,7 +319,7 @@ export function ClientsPageClient({
           </select>
 
           {/* Date range — dd/mm/yyyy */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Từ ngày</span>
             <input
               type="text"
@@ -346,7 +343,7 @@ export function ClientsPageClient({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors w-full sm:w-auto"
             >
               <X className="w-3.5 h-3.5" />
               Xóa bộ lọc
@@ -364,21 +361,23 @@ export function ClientsPageClient({
       </div>
 
       {/* Status tabs */}
-      <div className="mb-4 flex gap-1">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "px-4 py-1.5 rounded-xl text-sm font-semibold transition-colors",
-              activeTab === tab.key
-                ? "bg-[#f15b5c] text-white"
-                : "text-gray-500 hover:bg-gray-100"
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-4 overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1 min-w-max">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "px-4 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap",
+                activeTab === tab.key
+                  ? "bg-[#f15b5c] text-white"
+                  : "text-gray-500 hover:bg-gray-100"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
