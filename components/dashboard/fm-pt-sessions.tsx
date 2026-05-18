@@ -335,7 +335,7 @@ export function FMPTSessions({ branches }: { branches: Branch[] }) {
               </div>
 
               {/* Table */}
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/50">

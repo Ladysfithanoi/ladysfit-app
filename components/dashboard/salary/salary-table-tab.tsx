@@ -457,7 +457,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <span className="text-xs font-bold bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">PT</span>
                 <p className="text-sm font-extrabold text-gray-700">Bảng lương PT — tháng {month}/{year}</p>
               </div>
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -470,7 +470,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {ptRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary)}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             {r.seniorityBonus > 0 ? (
@@ -546,7 +546,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <span className="text-xs font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Admin</span>
                 <p className="text-sm font-extrabold text-gray-700">Bảng lương Quản lý dạy thêm — tháng {month}/{year}</p>
               </div>
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -559,7 +559,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {adminRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Admin</span>
                           </td>
@@ -632,7 +632,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <span className="text-xs font-bold bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">FM</span>
                 <p className="text-sm font-extrabold text-gray-700">Bảng lương FM — tháng {month}/{year}</p>
               </div>
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -644,7 +644,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   <tbody>
                     <React.Fragment key={fmRecord.id}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{fmRecord.user.name ?? fmRecord.user.email}</td>
+                        <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{fmRecord.user.name ?? fmRecord.user.email}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.baseSalary + fmRecord.fixedAllowances)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {fmRecord.seniorityBonus > 0 ? (

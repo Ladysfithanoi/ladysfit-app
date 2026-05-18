@@ -193,7 +193,7 @@ export function CashflowTab({ branchId, month, year }: Props) {
       {/* ── Monthly table ───────────────────────────────────────────────────── */}
       {viewMode === "monthly" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -263,7 +263,7 @@ export function CashflowTab({ branchId, month, year }: Props) {
       {viewMode === "quarterly" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -345,7 +345,7 @@ export function CashflowTab({ branchId, month, year }: Props) {
       {viewMode === "yearly" && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -425,7 +425,7 @@ export function CashflowTab({ branchId, month, year }: Props) {
       {/* ── Daily table ─────────────────────────────────────────────────────── */}
       {viewMode === "daily" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">

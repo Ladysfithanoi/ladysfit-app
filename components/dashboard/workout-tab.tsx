@@ -716,7 +716,7 @@ function ProgramView({
                         ))}
                       </select>
                     </div>
-                    <div className="px-4 pb-3 pt-2 overflow-x-auto">
+                    <div className="px-4 pb-3 pt-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                       <table className="w-full min-w-[480px]">
                         <thead>
                           <tr className="border-b border-gray-100">
@@ -974,7 +974,7 @@ function SessionMovementsTable({ session }: { session: WorkoutSession }) {
           <span className="text-xs font-semibold text-gray-500">{sessionType}</span>
         </div>
       )}
-      <div className="px-4 py-3 overflow-x-auto">
+      <div className="px-4 py-3 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
         <table className="w-full min-w-[360px]">
           <thead>
             <tr className="border-b border-gray-100">

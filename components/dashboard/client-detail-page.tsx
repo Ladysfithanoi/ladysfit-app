@@ -1585,7 +1585,7 @@ export function ClientDetailPage({
                   Lộ trình đăng ký
                 </h3>
               </div>
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -1771,7 +1771,7 @@ export function ClientDetailPage({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100">
@@ -1877,7 +1877,7 @@ export function ClientDetailPage({
                 <p className="text-xs text-gray-300 font-semibold">Khách hàng chưa cập nhật vận động</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100">

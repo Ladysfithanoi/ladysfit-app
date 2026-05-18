@@ -257,7 +257,7 @@ export function SessionLogForm({
         </div>
 
         {/* Set table */}
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-xl border border-gray-100">
           <table className="w-full text-xs" style={{ minWidth: showSuggestions ? 860 : 760 }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
@@ -441,7 +441,7 @@ export function SessionLogHistory({
                           {log.notes}
                         </p>
                       )}
-                      <div className="overflow-x-auto rounded-lg border border-gray-100">
+                      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
                         <table className="w-full text-xs" style={{ minWidth: 520 }}>
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-100">

@@ -306,7 +306,7 @@ export function WeeklyReportTab({
                 >
                   I/ SỐ LIỆU TỰ ĐỘNG — KPI CỦA TÔI
                 </div>
-                <div className="w-full overflow-x-auto">
+                <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   <table className="w-full border-collapse border border-gray-300 text-xs">
                     <thead>
                       <tr style={{ backgroundColor: "#f15b5c" }}>
@@ -384,7 +384,7 @@ export function WeeklyReportTab({
                 >
                   TỔNG HỢP KPI TUẦN — TẤT CẢ NHÂN SỰ
                 </div>
-                <div className="w-full overflow-x-auto">
+                <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   <table className="w-full border-collapse border border-gray-300 text-xs">
                     <thead>
                       <tr style={{ backgroundColor: "#6b7280" }}>
@@ -426,7 +426,7 @@ export function WeeklyReportTab({
                 >
                   CHI TIẾT KPI TỪNG NHÂN SỰ
                 </div>
-                <div className="w-full overflow-x-auto">
+                <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   <table className="w-full border-collapse border border-gray-300 text-xs">
                     <thead>
                       <tr style={{ backgroundColor: "#6b7280" }}>
@@ -484,7 +484,7 @@ export function WeeklyReportTab({
                   </button>
                 </div>
               )}
-              <div className="w-full overflow-x-auto">
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full border-collapse border border-gray-300 text-xs">
                   <thead>
                     <tr>

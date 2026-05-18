@@ -337,7 +337,7 @@ export function Step3Workout({
                   {s.sessionType}
                 </span>
               </div>
-              <div className="px-4 py-3 overflow-x-auto">
+              <div className="px-4 py-3 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                 <table className="w-full min-w-[360px]">
                   <thead>
                     <tr className="border-b border-gray-100">
@@ -521,7 +521,7 @@ export function Step3Workout({
               </select>
             </div>
 
-            <div className="px-4 pb-4 pt-2 overflow-x-auto">
+            <div className="px-4 pb-4 pt-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full min-w-[560px]">
                 <thead>
                   <tr className="border-b border-gray-100">

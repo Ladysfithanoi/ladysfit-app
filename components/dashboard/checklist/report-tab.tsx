@@ -266,7 +266,7 @@ export function ReportTab({ currentUserId, currentUserRole, staffList }: Props) 
             <div className="px-5 py-3.5 border-b border-gray-100">
               <p className="text-sm font-extrabold text-gray-700">Công việc quan trọng</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#f5f5f5] border-b border-gray-200">

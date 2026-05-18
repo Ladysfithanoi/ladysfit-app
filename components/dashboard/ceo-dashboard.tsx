@@ -112,7 +112,7 @@ export function CEODashboard({ month, year }: { month: number; year: number }) {
                 Setup Doanh số — Tổng hợp tháng {selMonth}/{selYear}
               </p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-100">
@@ -177,7 +177,7 @@ export function CEODashboard({ month, year }: { month: number; year: number }) {
                 ))}
               </select>
             </div>
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-100">

@@ -207,7 +207,7 @@ function HistoryTable({ logs }: { logs: MeasurementLog[] }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <p className="text-xs font-bold text-gray-500 px-4 pt-4 pb-2">Lịch sử đo</p>
-      <div className="overflow-x-auto">
+      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">

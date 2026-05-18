@@ -400,7 +400,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
           <div className="py-12 text-center text-sm text-gray-300">Chưa đặt mục tiêu tháng này</div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
@@ -509,7 +509,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Tổng hợp mục tiêu & thực đạt tháng {month}/{year}</p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
@@ -621,7 +621,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               </button>
             )}
           </div>
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">

@@ -260,7 +260,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5] border-b border-gray-200">

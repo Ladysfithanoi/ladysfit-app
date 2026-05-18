@@ -110,7 +110,7 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead</p>
         </div>
-        <div className="overflow-x-auto p-1">
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5]">
@@ -246,7 +246,7 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích theo PT</p>
         </div>
-        <div className="overflow-x-auto p-1">
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-[#f5f5f5]">

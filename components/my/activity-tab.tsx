@@ -257,7 +257,7 @@ function WorkoutLogCard({ log }: { log: WorkoutLogItem }) {
 
           {/* Exercise table */}
           {log.setLogs.length > 0 && (
-            <div className="overflow-x-auto -mx-4 px-4 mt-3">
+            <div className="overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full -mx-4 px-4 mt-3">
               <table className="w-full text-xs min-w-[420px]">
                 <thead>
                   <tr className="border-b border-gray-100">

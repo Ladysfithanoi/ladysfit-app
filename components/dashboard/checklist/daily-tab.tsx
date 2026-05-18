@@ -277,7 +277,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         {loading ? (
           <div className="py-10 text-center text-sm text-gray-400">Đang tải...</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">

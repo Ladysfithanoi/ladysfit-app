@@ -514,7 +514,7 @@ export function Step5Sales({
         {phaseRows.length > 0 && (
           <div className="p-5">
             <p className="text-sm font-extrabold text-gray-800 mb-3">Tốc độ giảm cân dự kiến</p>
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-xl border border-gray-100">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
