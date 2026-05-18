@@ -85,15 +85,35 @@ export async function POST(req: Request) {
 
 ${randomNote}Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
 
-TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không thêm text nào khác:
+QUY TẮC TRẢ VỀ JSON BẮT BUỘC:
+- Trả về DUY NHẤT một mảng JSON thuần, KHÔNG có markdown, KHÔNG có text giải thích, KHÔNG có \`\`\`
+- Mỗi phần tử PHẢI có đúng 6 trường sau (viết thường, đúng chính xác tên):
+  * "mealName": tên bữa (string, ví dụ "Bữa 1 - Sáng")
+  * "name": mô tả món ăn và định lượng cụ thể (string)
+  * "calories": tổng calo của bữa (number, KHÔNG null, KHÔNG bỏ trống)
+  * "protein": lượng đạm tính bằng gam (number, KHÔNG null, KHÔNG bỏ trống)
+  * "fat": lượng chất béo tính bằng gam (number, KHÔNG null, KHÔNG bỏ trống)
+  * "carbs": lượng tinh bột tính bằng gam (number, KHÔNG null, KHÔNG bỏ trống)
+
+CHÚ Ý QUAN TRỌNG: Tất cả các món ăn được đề xuất bắt buộc phải có đầy đủ chỉ số dinh dưỡng (calories, protein, carbs, fat). Tuyệt đối không được để trống, không được trả về null, và không được tự ý thay đổi tên các trường dữ liệu này dưới mọi hình thức. Nếu thiếu, hệ thống sẽ bị lỗi.
+
+Ví dụ format đúng:
 [
   {
     "mealName": "Bữa 1 - Sáng",
-    "name": "Mô tả chi tiết món ăn + định lượng",
-    "calories": 400,
-    "protein": 30,
-    "fat": 15,
-    "carbs": 45
+    "name": "Phở bò tái 1 tô (400g) + trứng luộc 1 quả",
+    "calories": 420,
+    "protein": 28,
+    "fat": 12,
+    "carbs": 52
+  },
+  {
+    "mealName": "Bữa 2 - Trưa",
+    "name": "Cơm gạo lứt 1 chén + ức gà luộc 150g + rau muống xào tỏi",
+    "calories": 480,
+    "protein": 38,
+    "fat": 10,
+    "carbs": 58
   }
 ]`;
 
@@ -120,14 +140,22 @@ TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không th�
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function normalize(parsed: any[]): any[] {
-    return parsed.map((item) => ({
-      mealName: item.mealName || item.name || "Bữa",
-      name: item.name || item.foods || "",
-      calories: Number(item.calories || 0),
-      protein: Number(item.protein || 0),
-      fat: Number(item.fat || 0),
-      carbs: Number(item.carbs || item.carb || 0),
-    }));
+    return parsed.map((item) => {
+      const protein = Number(item.protein ?? item.proteins ?? 0) || 0;
+      const fat     = Number(item.fat ?? item.fats ?? item.lipid ?? 0) || 0;
+      const carbs   = Number(item.carbs ?? item.carb ?? item.carbohydrate ?? item.carbohydrates ?? 0) || 0;
+      // If AI omits calories, compute from macros: protein*4 + fat*9 + carbs*4
+      const rawCal  = Number(item.calories ?? item.calorie ?? item.kcal ?? item.energy ?? 0) || 0;
+      const calories = rawCal > 0 ? rawCal : Math.round(protein * 4 + fat * 9 + carbs * 4);
+      return {
+        mealName: item.mealName || item.meal_name || item.meal || "Bữa",
+        name:     item.name || item.description || item.foods || item.food || "",
+        calories,
+        protein,
+        fat,
+        carbs,
+      };
+    });
   }
 
   let text = rawText || "";
