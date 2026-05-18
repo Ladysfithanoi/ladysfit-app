@@ -85,6 +85,26 @@ type FoodScanLogItem = {
   carbs: number;
 };
 
+function compressImage(file: File, maxPx = 400, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("canvas unavailable")); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("image load failed")); };
+    img.src = objectUrl;
+  });
+}
+
 const STATUS_STYLE = {
   ACTIVE: "bg-green-100 text-green-700",
   PAUSED: "bg-yellow-100 text-yellow-700",
@@ -811,15 +831,10 @@ export function ClientDetailPage({
     if (!file) return;
     setAvatarUploading(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      setPendingAvatarUrl(dataUrl);
+      const compressed = await compressImage(file, 400, 0.82);
+      setPendingAvatarUrl(compressed);
     } catch {
-      // silently ignore read errors
+      // silently ignore
     } finally {
       setAvatarUploading(false);
       e.target.value = "";
@@ -2001,13 +2016,18 @@ export function ClientDetailPage({
         <form key={editGeneration} onSubmit={handleEditSubmit} className="px-6 py-5 space-y-4">
           {/* ── Ảnh đại diện ── */}
           <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-100">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+            <div className="relative w-20 h-20 rounded-full overflow-hidden bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
               {pendingAvatarUrl ? (
                 <img src={pendingAvatarUrl} alt={client.fullName} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-2xl font-extrabold text-[#f15b5c]">
                   {client.fullName[0].toUpperCase()}
                 </span>
+              )}
+              {avatarUploading && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <Loader2 className="w-7 h-7 text-white animate-spin" />
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2">
