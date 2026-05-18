@@ -5,22 +5,37 @@ import { authOptions } from "@/lib/auth";
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-async function callGeminiWithRetry(
-  url: string,
+async function callGeminiOnce(
+  apiKey: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any,
-  maxRetries = 3
+  payload: any
 ): Promise<Response> {
-  for (let i = 0; i < maxRetries; i++) {
-    const res = await fetch(url, {
+  for (let i = 0; i < 3; i++) {
+    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (res.status !== 503 || i === maxRetries - 1) return res;
+    if (res.status !== 503 || i === 2) return res;
     await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
   }
   throw new Error("Retry loop exited unexpectedly");
+}
+
+async function callGeminiWithKeyRotation(
+  keys: string[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any
+): Promise<Response> {
+  const startIdx = Math.floor(Math.random() * keys.length);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    const res = await callGeminiOnce(key, payload);
+    if (res.status !== 429) return res;
+    // 429 = quota exceeded for this key — try next key
+    if (attempt < keys.length - 1) continue;
+  }
+  throw new Error("All API keys exhausted");
 }
 
 export async function POST(req: Request) {
@@ -59,8 +74,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thông tin quá dài" }, { status: 400 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
+  const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  const apiKeys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+  if (apiKeys.length === 0) return NextResponse.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
 
   const likesStr    = typeof likes    === "string" ? likes.trim()    : "";
   const dislikesStr = typeof dislikes === "string" ? dislikes.trim() : "";
@@ -117,17 +133,19 @@ Ví dụ format đúng:
   }
 ]`;
 
-  const geminiRes = await callGeminiWithRetry(`${GEMINI_URL}?key=${apiKey}`, {
+  const geminiPayload = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.7,
       maxOutputTokens: 8192,
       responseMimeType: "application/json",
     },
-  });
+  };
+
+  const geminiRes = await callGeminiWithKeyRotation(apiKeys, geminiPayload);
 
   if (!geminiRes.ok) {
-    if (geminiRes.status === 503) {
+    if (geminiRes.status === 503 || geminiRes.status === 429) {
       return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau vài giây 🔄" }, { status: 503 });
     }
     const errText = await geminiRes.text();
