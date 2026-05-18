@@ -18,6 +18,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   });
 
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Idempotency: if already completed, skip client creation and return existing clientId
+  if (c.convertedClientId) {
+    return NextResponse.json({ clientId: c.convertedClientId });
+  }
+
   if (!c.info) return NextResponse.json({ error: "Chưa có thông tin khách hàng (bước 1)" }, { status: 400 });
   if (!c.info.fullName || !c.info.phone) {
     return NextResponse.json({ error: "Họ tên và số điện thoại là bắt buộc" }, { status: 400 });
@@ -25,29 +31,40 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const info = c.info;
 
-  const count = await prisma.client.count();
-  const clientCode = `LDF${String(count + 1).padStart(4, "0")}`;
-
-  const client = await prisma.client.create({
-    data: {
-      clientCode,
-      fullName: info.fullName,
-      phone: info.phone,
-      email: info.email || null,
-      dateOfBirth: info.dateOfBirth || null,
-      initialWeight: info.currentWeight || 0,
-      currentWeight: info.currentWeight || 0,
-      targetWeight: info.targetWeight || 0,
-      height: info.height || 0,
-      initialWaist: c.assessment?.waist || null,
-      initialHip: c.assessment?.hip || null,
-      healthConditions: info.healthConditions || null,
-      injuries: info.injuries || null,
-      assignedPTId: c.createdById,
-      branchId: c.branchId,
-      status: "ACTIVE",
-    },
-  });
+  // Generate clientCode with retry to handle race conditions on concurrent completions
+  let client: { id: string } | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count = await prisma.client.count();
+    const clientCode = `LDF${String(count + 1 + attempt).padStart(4, "0")}`;
+    try {
+      client = await prisma.client.create({
+        data: {
+          clientCode,
+          fullName: info.fullName,
+          phone: info.phone,
+          email: info.email || null,
+          dateOfBirth: info.dateOfBirth || null,
+          initialWeight: info.currentWeight || 0,
+          currentWeight: info.currentWeight || 0,
+          targetWeight: info.targetWeight || 0,
+          height: info.height || 0,
+          initialWaist: c.assessment?.waist || null,
+          initialHip: c.assessment?.hip || null,
+          healthConditions: info.healthConditions || null,
+          injuries: info.injuries || null,
+          assignedPTId: c.createdById,
+          branchId: c.branchId,
+          status: "ACTIVE",
+        },
+      });
+      break; // success
+    } catch (err: unknown) {
+      const e = err as { code?: string };
+      if (e.code === "P2002" && attempt < 4) continue; // unique constraint → retry
+      throw err;
+    }
+  }
+  if (!client) throw new Error("Không thể tạo mã khách hàng sau 5 lần thử");
 
   await prisma.consultation.update({
     where: { id: params.id },
