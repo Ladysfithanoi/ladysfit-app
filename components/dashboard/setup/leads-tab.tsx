@@ -469,10 +469,10 @@ export function LeadsTab({
                                 warnRow && "border-l-[3px] border-l-amber-400"
                               )}
                             >
-                              <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-inherit">{idx + 1}</td>
+                              <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-white">{idx + 1}</td>
 
                               {/* Customer name + badges */}
-                              <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-inherit">
+                              <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-white">
                                 <span>{l.customerName}</span>
                                 {warnRow && (
                                   <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">

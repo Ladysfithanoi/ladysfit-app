@@ -311,7 +311,7 @@ export function WeeklyReportTab({
                     <thead>
                       <tr style={{ backgroundColor: "#f15b5c" }}>
                         <th className={thStyle + " w-8"}>STT</th>
-                        <th className={thStyle}>Nội dung công việc</th>
+                        <th className={cn(thStyle, "sticky left-0 z-10 bg-[#f15b5c]")}>Nội dung công việc</th>
                         <th className={cn(thStyle, "text-center w-28")}>KPI tuần (MT)</th>
                         <th className={cn(thStyle, "text-center w-28")}>Thực đạt</th>
                         <th className={cn(thStyle, "text-center w-16")}>%</th>
@@ -326,7 +326,7 @@ export function WeeklyReportTab({
                           return (
                             <tr key={row.label} className="even:bg-gray-50/50">
                               <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
-                              <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
+                              <td className={cn(tdStyle, "font-semibold text-gray-700 sticky left-0 z-10 bg-white")}>{row.label}</td>
                               <td className={cn(tdStyle, "text-center text-gray-500")}>
                                 {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
                               </td>
@@ -389,7 +389,7 @@ export function WeeklyReportTab({
                     <thead>
                       <tr style={{ backgroundColor: "#6b7280" }}>
                         <th className={thStyle + " w-8"}>STT</th>
-                        <th className={thStyle}>Nội dung công việc</th>
+                        <th className={cn(thStyle, "sticky left-0 z-10 bg-[#6b7280]")}>Nội dung công việc</th>
                         <th className={cn(thStyle, "text-center w-24")}>KPI tuần (MT)</th>
                         <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
                         <th className={cn(thStyle, "text-center w-16")}>%</th>
@@ -399,7 +399,7 @@ export function WeeklyReportTab({
                       {kpiRows.map((row, idx) => (
                         <tr key={row.label} className="even:bg-gray-50/50">
                           <td className={cn(tdStyle, "text-center text-gray-400")}>{idx + 1}</td>
-                          <td className={cn(tdStyle, "font-semibold text-gray-700")}>{row.label}</td>
+                          <td className={cn(tdStyle, "font-semibold text-gray-700 sticky left-0 z-10 bg-white")}>{row.label}</td>
                           <td className={cn(tdStyle, "text-center text-gray-500")}>
                             {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
                           </td>
@@ -430,7 +430,7 @@ export function WeeklyReportTab({
                   <table className="w-full border-collapse border border-gray-300 text-xs">
                     <thead>
                       <tr style={{ backgroundColor: "#6b7280" }}>
-                        <th className={thStyle}>Nhân sự</th>
+                        <th className={cn(thStyle, "sticky left-0 z-10 bg-[#6b7280]")}>Nhân sự</th>
                         <th className={thStyle}>Chỉ số</th>
                         <th className={cn(thStyle, "text-center w-24")}>MT tuần</th>
                         <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
@@ -445,7 +445,7 @@ export function WeeklyReportTab({
                             <tr key={`${pu.userId}-${row.label}`} className="even:bg-gray-50/50">
                               {idx === 0 && (
                                 <td
-                                  className={cn(tdStyle, "font-bold text-gray-800 align-top")}
+                                  className={cn(tdStyle, "font-bold text-gray-800 align-top sticky left-0 z-10 bg-white")}
                                   rowSpan={isFitpartner ? pu.kpi.length : pu.kpi.filter((r) => !isFitpartnerLabel(r.label)).length}
                                 >
                                   {pu.userName}
@@ -498,7 +498,7 @@ export function WeeklyReportTab({
                     </tr>
                     <tr style={{ backgroundColor: "#f15b5c" }}>
                       <th className={thStyle + " w-8"}>STT</th>
-                      <th className={thStyle}>Nội dung công việc</th>
+                      <th className={cn(thStyle, "sticky left-0 z-10 bg-[#f15b5c]")}>Nội dung công việc</th>
                       <th className={cn(thStyle, "text-center w-28")}>KPI / Mục tiêu</th>
                       <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
                       {canEdit && <th className={cn(thStyle, "w-10")} />}
@@ -520,7 +520,7 @@ export function WeeklyReportTab({
                       arisingTasks.map((task, idx) => (
                         <tr key={task.id} className="even:bg-gray-50/50">
                           <td className={cn(tdStyle, "text-center text-gray-400 font-semibold")}>{idx + 1}</td>
-                          <td className={tdStyle}>
+                          <td className={cn(tdStyle, "sticky left-0 z-10 bg-white")}>
                             {canEdit ? (
                               <input
                                 value={task.content}

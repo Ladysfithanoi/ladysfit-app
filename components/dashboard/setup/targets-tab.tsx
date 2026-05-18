@@ -404,7 +404,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
-                    <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
+                    <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap sticky left-0 z-10 bg-[#f5f5f5]">Chỉ số</th>
                     <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
                     {WEEKS.map((w) => {
                       const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
@@ -431,7 +431,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                     return (
                       <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
-                        <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap">{k.label}</td>
+                        <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10 bg-white">{k.label}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
                         {weekActuals.map((v, i) => (
                           <td key={i} className="px-3 py-2 text-center text-gray-700">{k.isFloat ? v.toFixed(1) : v}</td>
@@ -513,7 +513,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
-                <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">PT</th>
+                <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap sticky left-0 z-10 bg-[#f5f5f5]">PT</th>
                 {KPI_KEYS.map((k) => (
                   <Fragment key={k.key}>
                     <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">{k.shortLabel} MT</th>
@@ -528,7 +528,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                 const t = targets.find((tgt) => tgt.userId === pt.id) ?? null;
                 return (
                   <tr key={pt.id} className="border-b border-gray-100 hover:bg-gray-50/40 divide-x divide-gray-100 even:bg-[#fafafa]">
-                    <td className="px-4 py-2.5 whitespace-nowrap">
+                    <td className="px-4 py-2.5 whitespace-nowrap sticky left-0 z-10 bg-white">
                       <span className="font-semibold text-gray-800">{pt.name ?? pt.email}</span>
                       {!t && (
                         <span className="ml-2 text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
@@ -555,7 +555,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               })}
               {/* Total row */}
               <tr className="bg-gray-50 border-t-2 border-gray-200 divide-x divide-gray-200">
-                <td className="px-4 py-2.5 font-extrabold text-gray-900">Tổng</td>
+                <td className="px-4 py-2.5 font-extrabold text-gray-900 sticky left-0 z-10 bg-gray-50">Tổng</td>
                 {KPI_KEYS.map((k) => {
                   const totalMT = filteredTargets.reduce((s, t) => s + ((t[k.targetKey as keyof MonthlyTarget] as number) ?? 0), 0);
                   const totalAT = filteredTargets.reduce((s, t) =>
@@ -625,7 +625,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
-                  <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap">Chỉ số</th>
+                  <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap sticky left-0 z-10 bg-[#f5f5f5]">Chỉ số</th>
                   <th className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase">MT Tháng</th>
                   {WEEKS.map((w) => {
                     const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
@@ -654,7 +654,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                   return (
                     <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
-                      <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap">{k.label}</td>
+                      <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10 bg-white">{k.label}</td>
                       <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
                       {weekActuals.map((v, i) => (
                         <td key={i} className="px-3 py-2 text-center text-gray-700">{k.isFloat ? v.toFixed(1) : v}</td>
