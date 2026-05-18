@@ -136,7 +136,7 @@ export function PTDashboard({
             <p className="text-sm text-gray-300 font-semibold">Chưa có khách hàng</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-50 bg-gray-50/50">
@@ -241,7 +241,7 @@ export function PTDashboard({
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">
+                      <p className="text-sm font-semibold text-gray-800 break-words">
                         {log.clientName}
                       </p>
                       <p className="text-xs text-gray-400">{timeAgo(log.logDate)}</p>

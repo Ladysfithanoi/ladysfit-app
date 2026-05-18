@@ -159,6 +159,7 @@ function PTSessionDetailModal({
 
                 {/* Session table */}
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
@@ -183,6 +184,7 @@ function PTSessionDetailModal({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </div>
             ))

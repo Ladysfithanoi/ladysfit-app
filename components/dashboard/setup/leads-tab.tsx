@@ -430,7 +430,7 @@ export function LeadsTab({
                 </button>
 
                 {!collapsed && (
-                  <div className="overflow-x-auto">
+                  <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
@@ -472,7 +472,7 @@ export function LeadsTab({
                               <td className="px-3 py-2.5 text-gray-400 sticky left-0 z-10 bg-white">{idx + 1}</td>
 
                               {/* Customer name + badges */}
-                              <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap sticky left-10 z-10 bg-white">
+                              <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[150px] sticky left-10 z-10 bg-white">
                                 <span>{l.customerName}</span>
                                 {warnRow && (
                                   <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
