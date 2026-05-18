@@ -12,7 +12,7 @@ export const clientAuthOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   cookies: {
     sessionToken: {
-      name: `${useSecureCookies ? "__Secure-" : ""}my-client-token`,
+      name: `${useSecureCookies ? "__Secure-" : ""}my-client-token-v2`,
       options: {
         httpOnly: true,
         sameSite: "lax",
