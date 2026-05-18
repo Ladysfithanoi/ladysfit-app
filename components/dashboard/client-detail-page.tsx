@@ -2064,7 +2064,21 @@ export function ClientDetailPage({
             <Field label="Chiều cao (cm)" half>
               <Input name="height" type="number" step="0.1" defaultValue={client.height} onFocus={(e) => e.target.select()} className={inputCls} />
             </Field>
-            <div className="flex-1" />
+            <Field label="Cân nặng ban đầu (kg)" half>
+              <Input
+                name="initialWeight"
+                type="number"
+                step="0.1"
+                defaultValue={client.initialWeight}
+                onFocus={(e) => e.target.select()}
+                className={cn(inputCls, userRole === "PT" && "bg-gray-50 text-gray-400 cursor-not-allowed")}
+                disabled={userRole === "PT"}
+                title={userRole === "PT" ? "PT không được phép chỉnh sửa cân nặng ban đầu" : undefined}
+              />
+              {userRole === "PT" && (
+                <p className="text-[10px] text-gray-400 mt-1">Chỉ Admin/FM được chỉnh sửa</p>
+              )}
+            </Field>
           </div>
           <div className="flex gap-3">
             <Field label="Vòng eo ban đầu (cm)" half>

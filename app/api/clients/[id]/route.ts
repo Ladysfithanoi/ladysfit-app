@@ -66,6 +66,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const body = await req.json();
 
+  // PT is forbidden from changing initialWeight
+  if (role === "PT" && body.initialWeight !== undefined && body.initialWeight !== null) {
+    return NextResponse.json({ error: "PT không được phép chỉnh sửa cân nặng ban đầu" }, { status: 403 });
+  }
+
   const client = await prisma.client.update({
     where: { id: params.id },
     data: {
