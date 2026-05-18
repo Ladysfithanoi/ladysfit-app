@@ -59,20 +59,34 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const role = session.user.role as Role;
+  if (!["ADMIN", "FM", "PT", "COO", "CEO_FITPARTNER"].includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json();
 
   const client = await prisma.client.update({
     where: { id: params.id },
     data: {
-      ...body,
+      fullName: body.fullName,
+      phone: body.phone,
+      email: body.email ?? undefined,
       dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : undefined,
-      targetDate: body.targetDate ? new Date(body.targetDate) : undefined,
       initialWeight: body.initialWeight ? parseFloat(body.initialWeight) : undefined,
       currentWeight: body.currentWeight ? parseFloat(body.currentWeight) : undefined,
       targetWeight: body.targetWeight ? parseFloat(body.targetWeight) : undefined,
       height: body.height ? parseFloat(body.height) : undefined,
-      initialWaist: body.initialWaist ? parseFloat(body.initialWaist) : undefined,
-      initialHip: body.initialHip ? parseFloat(body.initialHip) : undefined,
+      initialWaist: body.initialWaist != null ? parseFloat(body.initialWaist) || null : undefined,
+      initialHip: body.initialHip != null ? parseFloat(body.initialHip) || null : undefined,
+      healthConditions: body.healthConditions ?? undefined,
+      injuries: body.injuries ?? undefined,
+      targetDate: body.targetDate ? new Date(body.targetDate) : undefined,
+      goalNote: body.goalNote ?? undefined,
+      assignedPTId: body.assignedPTId ?? undefined,
+      branchId: body.branchId ?? undefined,
+      status: body.status ?? undefined,
+      avatarUrl: "avatarUrl" in body ? (body.avatarUrl ?? null) : undefined,
     },
   });
 

@@ -66,6 +66,7 @@ type ClientDetail = {
   goalNote: string | null;
   myPlateImageUrl: string | null;
   myPlateNote: string | null;
+  avatarUrl: string | null;
   status: "ACTIVE" | "PAUSED" | "RESERVED";
   createdAt: string;
   assignedPT: PT;
@@ -253,6 +254,8 @@ export function ClientDetailPage({
   const [accountEmail, setAccountEmail] = useState(client.email ?? "");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [savedPassword, setSavedPassword] = useState("");
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(client.avatarUrl ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState(false);
@@ -803,6 +806,26 @@ export function ClientDetailPage({
     }
   }
 
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setPendingAvatarUrl(dataUrl);
+    } catch {
+      // silently ignore read errors
+    } finally {
+      setAvatarUploading(false);
+      e.target.value = "";
+    }
+  }
+
   async function handleEditSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -810,6 +833,7 @@ export function ClientDetailPage({
     const body: Record<string, unknown> = Object.fromEntries(new FormData(e.currentTarget).entries());
     if (body.dateOfBirth) body.dateOfBirth = dmyToISO(body.dateOfBirth as string) || "";
     if (body.targetDate) body.targetDate = dmyToISO(body.targetDate as string) || "";
+    body.avatarUrl = pendingAvatarUrl ?? null;
     try {
       const res = await fetch(`/api/clients/${client.id}`, {
         method: "PUT",
@@ -839,10 +863,14 @@ export function ClientDetailPage({
             Khách hàng
           </Link>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="w-9 h-9 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-extrabold text-[#f15b5c]">
-                {client.fullName[0].toUpperCase()}
-              </span>
+            <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 bg-[#f15b5c]/10 flex items-center justify-center">
+              {client.avatarUrl ? (
+                <img src={client.avatarUrl} alt={client.fullName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-sm font-extrabold text-[#f15b5c]">
+                  {client.fullName[0].toUpperCase()}
+                </span>
+              )}
             </div>
             <h1 className="text-xl font-extrabold text-gray-900">{client.fullName}</h1>
             <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap", STATUS_STYLE[client.status])}>
@@ -899,6 +927,7 @@ export function ClientDetailPage({
             onClick={() => {
               setEditError("");
               setEditGeneration((g) => g + 1);
+              setPendingAvatarUrl(client.avatarUrl ?? null);
               setEditOpen(true);
             }}
             variant="outline"
@@ -1966,6 +1995,43 @@ export function ClientDetailPage({
         width="lg"
       >
         <form key={editGeneration} onSubmit={handleEditSubmit} className="px-6 py-5 space-y-4">
+          {/* ── Ảnh đại diện ── */}
+          <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-100">
+            <div className="w-20 h-20 rounded-full overflow-hidden bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+              {pendingAvatarUrl ? (
+                <img src={pendingAvatarUrl} alt={client.fullName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl font-extrabold text-[#f15b5c]">
+                  {client.fullName[0].toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className={cn(
+                "cursor-pointer px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors",
+                avatarUploading && "opacity-50 cursor-not-allowed"
+              )}>
+                {avatarUploading ? "Đang xử lý..." : "Tải ảnh lên"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={avatarUploading}
+                  onChange={handleAvatarChange}
+                />
+              </label>
+              {pendingAvatarUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPendingAvatarUrl(null)}
+                  className="px-4 py-2 rounded-xl border border-red-200 text-sm font-semibold text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  Xóa ảnh
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">Ảnh đại diện khách hàng (JPG, PNG)</p>
+          </div>
           {client.clientCode && (
             <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 rounded-xl">
               <span className="text-xs text-gray-400 font-semibold">Mã khách hàng</span>

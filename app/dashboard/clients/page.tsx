@@ -115,6 +115,7 @@ export default async function ClientsPage() {
           }
         : null,
       packageNames: Array.from(new Set(c.packageEnrollments.map((p) => p.packageName))),
+      avatarUrl: c.avatarUrl ?? null,
       foodLogToday:       latestScan != null && latestScan >= todayStart,
       foodLogStale:       latestScan == null || latestScan < threeDaysAgo,
       selfMeasuredThisWeek: selfMeasuredSet.has(c.id),

@@ -143,6 +143,7 @@ model Client {
   goalNote         String?      @db.Text
   myPlateImageUrl  String?      @db.Text
   myPlateNote      String?
+  avatarUrl        String?      @db.Text
   assignedPTId     String
   branchId         String
   status           ClientStatus @default(ACTIVE)

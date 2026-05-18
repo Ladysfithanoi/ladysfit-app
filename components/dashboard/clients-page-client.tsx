@@ -31,6 +31,7 @@ type ClientRow = {
   branch: Branch;
   activePackage: ActivePackage | null;
   packageNames: string[];
+  avatarUrl: string | null;
   foodLogToday: boolean;
   foodLogStale: boolean;
   selfMeasuredThisWeek: boolean;
@@ -411,10 +412,14 @@ export function ClientsPageClient({
                   >
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-extrabold text-[#f15b5c]">
-                            {c.fullName[0].toUpperCase()}
-                          </span>
+                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-[#f15b5c]/10 flex items-center justify-center">
+                          {c.avatarUrl ? (
+                            <img src={c.avatarUrl} alt={c.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xs font-extrabold text-[#f15b5c]">
+                              {c.fullName[0].toUpperCase()}
+                            </span>
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-800">{c.fullName}</p>

@@ -146,6 +146,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     goalNote: client.goalNote,
     myPlateImageUrl: client.myPlateImageUrl ?? null,
     myPlateNote: client.myPlateNote ?? null,
+    avatarUrl: client.avatarUrl ?? null,
     status: client.status,
     createdAt: client.createdAt.toISOString(),
     assignedPT: client.assignedPT,
