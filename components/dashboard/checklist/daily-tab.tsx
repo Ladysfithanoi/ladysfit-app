@@ -11,8 +11,7 @@ type Row = {
   time: string;
   task: string;
   kpi: string;
-  status: boolean;
-  hasEvent: boolean;
+  actualResult: number;
   note: string;
 };
 
@@ -95,8 +94,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           time: item.time ?? "",
           task: item.task,
           kpi: item.kpi ?? "",
-          status: item.status,
-          hasEvent: item.hasEvent,
+          actualResult: (item as unknown as Record<string, unknown>).actualResult != null ? Number((item as unknown as Record<string, unknown>).actualResult) : 0,
           note: item.note ?? "",
         })));
       } else {
@@ -117,7 +115,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
 
   function addRow() {
-    setRows((prev) => [...prev, { order: prev.length + 1, time: "", task: "", kpi: "", status: false, hasEvent: false, note: "" }]);
+    setRows((prev) => [...prev, { order: prev.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
   }
 
   function removeRow(i: number) {
@@ -157,8 +155,10 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
     }
   }
 
-  const doneCount = rows.filter((r) => r.status).length;
-  const pct = rows.length > 0 ? Math.round((doneCount / rows.length) * 100) : 0;
+  const rowsWithKpi = rows.filter((r) => { const k = parseFloat(r.kpi); return !isNaN(k) && k > 0; });
+  const pct = rowsWithKpi.length > 0
+    ? Math.round(rowsWithKpi.reduce((sum, r) => sum + Math.min((r.actualResult / parseFloat(r.kpi)) * 100, 100), 0) / rowsWithKpi.length)
+    : 0;
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -247,7 +247,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-gray-500">Tiến độ ngày {fmtDate(date)}</span>
-              <span className="text-xs font-bold text-gray-700">{doneCount}/{rows.length} việc ({pct}%)</span>
+              <span className="text-xs font-bold text-gray-700">{rows.length} công việc · {pct}% hoàn thành</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -281,7 +281,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  {["STT", "Giờ", "Công việc", "KPIs", "Tình trạng", "Tạo sự kiện", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
+                  {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0">
                       {h}
                     </th>
@@ -328,29 +328,28 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                         />
                       ) : <span className="text-gray-600">{row.kpi || "—"}</span>}
                     </td>
-                    <td className="px-3 py-2 w-24">
-                      <button
-                        onClick={() => canEdit && updateRow(i, "status", !row.status)}
-                        disabled={!canEdit}
-                        className={cn(
-                          "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all",
-                          row.status
-                            ? "bg-[#10b981] border-[#10b981] text-white"
-                            : "bg-white border-gray-300 text-gray-300",
-                          canEdit && "hover:border-[#10b981] cursor-pointer"
-                        )}
-                      >
-                        {row.status && <span className="text-xs font-bold">✓</span>}
-                      </button>
+                    <td className="px-2 py-2 w-28">
+                      {canEdit ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={row.actualResult === 0 ? "" : row.actualResult}
+                          onChange={(e) => updateRow(i, "actualResult", e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                          className={inputCls}
+                          placeholder="0"
+                        />
+                      ) : <span className="text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>}
                     </td>
-                    <td className="px-3 py-2 w-24">
-                      <input
-                        type="checkbox"
-                        checked={row.hasEvent}
-                        onChange={(e) => canEdit && updateRow(i, "hasEvent", e.target.checked)}
-                        disabled={!canEdit}
-                        className="w-4 h-4 accent-[#f15b5c] cursor-pointer"
-                      />
+                    <td className="px-3 py-2 w-20 text-center">
+                      {(() => {
+                        const kpiNum = parseFloat(row.kpi);
+                        const hasKpi = !isNaN(kpiNum) && kpiNum > 0;
+                        if (!hasKpi) return <span className="text-gray-300 font-semibold">—</span>;
+                        const pctVal = (row.actualResult / kpiNum) * 100;
+                        const color = pctVal >= 100 ? "text-green-600" : pctVal >= 70 ? "text-yellow-500" : "text-red-500";
+                        return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
+                      })()}
                     </td>
                     <td className="px-2 py-2 min-w-[140px]">
                       {canEdit ? (

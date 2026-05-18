@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     dailyCompleted?: string;
     dailyIncomplete?: string;
     dailyNextPlan?: string;
-    items: { order: number; time?: string; task: string; kpi?: string; status: boolean; hasEvent: boolean; note?: string }[];
+    items: { order: number; time?: string; task: string; kpi?: string; actualResult?: number; note?: string }[];
   };
 
   // PT can only save their own
@@ -121,8 +121,7 @@ export async function POST(req: Request) {
             time: item.time ?? null,
             task: item.task,
             kpi: item.kpi ?? null,
-            status: item.status,
-            hasEvent: item.hasEvent,
+            actualResult: item.actualResult ?? null,
             note: item.note ?? null,
           })),
         },
@@ -147,8 +146,7 @@ export async function POST(req: Request) {
             time: item.time ?? null,
             task: item.task,
             kpi: item.kpi ?? null,
-            status: item.status,
-            hasEvent: item.hasEvent,
+            actualResult: item.actualResult ?? null,
             note: item.note ?? null,
           })),
         },

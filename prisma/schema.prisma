@@ -929,8 +929,7 @@ model ChecklistItem {
   time        String?
   task        String
   kpi         String?
-  status      Boolean  @default(false)
-  hasEvent    Boolean  @default(false)
+  actualResult Float?
   note        String?
   createdAt   DateTime @default(now())
 
