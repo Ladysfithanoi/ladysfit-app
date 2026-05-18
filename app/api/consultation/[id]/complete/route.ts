@@ -33,7 +33,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   // Generate clientCode based on MAX existing code (not count) to survive gaps from deletions.
   // Find the highest numeric suffix among all clientCodes and increment it.
-  async function nextClientCode(): Promise<string> {
+  const nextClientCode = async (): Promise<string> => {
     const last = await prisma.client.findFirst({
       where: { clientCode: { not: null } },
       orderBy: { clientCode: "desc" },
@@ -42,7 +42,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     const match = last?.clientCode?.match(/(\d+)$/);
     const nextNum = match ? parseInt(match[1]) + 1 : 1;
     return `LDF${String(nextNum).padStart(4, "0")}`;
-  }
+  };
 
   let client: { id: string } | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
