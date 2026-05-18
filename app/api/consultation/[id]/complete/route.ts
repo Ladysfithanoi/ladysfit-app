@@ -31,11 +31,26 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const info = c.info;
 
-  // Generate clientCode with retry to handle race conditions on concurrent completions
+  // Generate clientCode based on MAX existing code (not count) to survive gaps from deletions.
+  // Find the highest numeric suffix among all clientCodes and increment it.
+  async function nextClientCode(): Promise<string> {
+    const last = await prisma.client.findFirst({
+      where: { clientCode: { not: null } },
+      orderBy: { clientCode: "desc" },
+      select: { clientCode: true },
+    });
+    const match = last?.clientCode?.match(/(\d+)$/);
+    const nextNum = match ? parseInt(match[1]) + 1 : 1;
+    return `LDF${String(nextNum).padStart(4, "0")}`;
+  }
+
   let client: { id: string } | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const count = await prisma.client.count();
-    const clientCode = `LDF${String(count + 1 + attempt).padStart(4, "0")}`;
+    // Re-query max each retry in case another concurrent request just inserted
+    const baseCode = await nextClientCode();
+    // For retries past the first, bump the number further to avoid repeated collision
+    const baseNum = parseInt(baseCode.replace("LDF", "")) + attempt;
+    const clientCode = `LDF${String(baseNum).padStart(4, "0")}`;
     try {
       client = await prisma.client.create({
         data: {
