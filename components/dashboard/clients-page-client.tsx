@@ -410,7 +410,7 @@ export function ClientsPageClient({
                     key={c.id}
                     className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle"
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 min-w-[180px]">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-[#f15b5c]/10 flex items-center justify-center">
                           {c.avatarUrl ? (

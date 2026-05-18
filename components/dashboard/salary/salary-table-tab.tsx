@@ -470,7 +470,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {ptRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary)}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             {r.seniorityBonus > 0 ? (
@@ -559,7 +559,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {adminRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Admin</span>
                           </td>
@@ -644,7 +644,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   <tbody>
                     <React.Fragment key={fmRecord.id}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                        <td className="px-3 py-2.5 font-semibold text-gray-800 break-words min-w-[180px]">{fmRecord.user.name ?? fmRecord.user.email}</td>
+                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{fmRecord.user.name ?? fmRecord.user.email}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.baseSalary + fmRecord.fixedAllowances)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {fmRecord.seniorityBonus > 0 ? (

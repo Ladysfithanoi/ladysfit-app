@@ -414,7 +414,7 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
     <tr className="border-b border-gray-50 hover:bg-white/80 divide-x divide-gray-50">
       <td className={cn(TD, "text-gray-400 text-center")}>{row.stt}</td>
       <td className={cn(TD, "font-mono text-gray-600 whitespace-nowrap")}>{row.contractCode ?? "—"}</td>
-      <td className={cn(TD, "font-semibold text-gray-800 break-words min-w-[180px]")}>{row.clientName}</td>
+      <td className={cn(TD, "font-semibold text-gray-800 whitespace-nowrap min-w-[180px]")}>{row.clientName}</td>
       <td className={TD}>
         <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap",
           ["L1","L2","Loyalfit"].includes(row.packageName) ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700")}>
@@ -467,7 +467,7 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
     <tr className="border-b border-amber-50 hover:bg-white/80 divide-x divide-amber-50">
       <td className={cn(TD, "text-gray-400 text-center")}>{row.stt}</td>
       <td className={cn(TD, "font-mono text-gray-600 whitespace-nowrap")}>{row.contractCode ?? "—"}</td>
-      <td className={cn(TD, "font-semibold text-gray-800 break-words min-w-[180px]")}>{row.clientName}</td>
+      <td className={cn(TD, "font-semibold text-gray-800 whitespace-nowrap min-w-[180px]")}>{row.clientName}</td>
       <td className={TD}>
         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">KOC</span>
       </td>
@@ -518,7 +518,7 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
     <tr className="border-b border-blue-50 hover:bg-white/80 divide-x divide-blue-50">
       <td className={cn(TD, "text-gray-400 text-center")}>{row.stt}</td>
       <td className={cn(TD, "font-mono text-gray-600 whitespace-nowrap")}>{row.contractCode ?? "—"}</td>
-      <td className={cn(TD, "font-semibold text-gray-800 break-words min-w-[180px]")}>{row.clientName}</td>
+      <td className={cn(TD, "font-semibold text-gray-800 whitespace-nowrap min-w-[180px]")}>{row.clientName}</td>
       <td className={TD}>
         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">KOL</span>
       </td>

@@ -350,7 +350,7 @@ export function ConsultationListClient({
               <tbody>
                 {displayed.map((c) => (
                   <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle">
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 min-w-[180px]">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
                           <span className="text-xs font-extrabold text-[#f15b5c]">

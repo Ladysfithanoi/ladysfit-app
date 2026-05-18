@@ -241,7 +241,7 @@ export function PTDashboard({
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 break-words">
+                      <p className="text-sm font-semibold text-gray-800 whitespace-nowrap">
                         {log.clientName}
                       </p>
                       <p className="text-xs text-gray-400">{timeAgo(log.logDate)}</p>
