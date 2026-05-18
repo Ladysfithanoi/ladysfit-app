@@ -260,7 +260,7 @@ export function LeadsTab({
     try {
       const entries = Object.values(visibleGrouped)
         .flat()
-        .filter(l => l.assignedPTId !== currentUserId && needsReminder(l.notes))
+        .filter(l => l.assignedPTId !== currentUserId && l.status !== "PIF" && l.status !== "PB" && needsReminder(l.notes))
         .map(l => ({ assignedPTId: l.assignedPTId, customerName: l.customerName }));
 
       const res = await fetch("/api/notifications/lead-reminder", {
@@ -329,7 +329,9 @@ export function LeadsTab({
   // Leads that need a reminder (FM can send) — excludes FM's own leads
   const reminderLeads = isFM
     ? Object.values(visibleGrouped).flat().filter(l =>
-        l.assignedPTId !== currentUserId && needsReminder(l.notes)
+        l.assignedPTId !== currentUserId &&
+        l.status !== "PIF" && l.status !== "PB" &&
+        needsReminder(l.notes)
       )
     : [];
 
@@ -458,8 +460,9 @@ export function LeadsTab({
                       <tbody>
                         {ptLeads.map((l, idx) => {
                           const isOwnLead  = l.assignedPTId === currentUserId;
-                          const warnRow    = isPT && isOwnLead && !l.notes?.trim();
-                          const warnBanner = needsReminder(l.notes);
+                          const isPaid     = l.status === "PIF" || l.status === "PB";
+                          const warnRow    = isPT && isOwnLead && !isPaid && !l.notes?.trim();
+                          const warnBanner = !isPaid && needsReminder(l.notes);
 
                           return (
                             <tr
