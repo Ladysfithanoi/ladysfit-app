@@ -12,7 +12,7 @@ export default async function ActivityPage() {
   const clientId = session.user.id;
 
   const [client, activityLogs, program, rawWorkoutLogs] = await Promise.all([
-    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true } }),
+    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, avatarUrl: true } }),
     prisma.activityLog.findMany({ where: { clientId }, orderBy: { date: "desc" }, take: 30 }),
     prisma.workoutProgram.findFirst({
       where: { clientId, status: "ACTIVE" },
@@ -145,7 +145,7 @@ export default async function ActivityPage() {
     : null;
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <ActivityTab
         activityLogs={serializedLogs}
         workoutProgram={portalProgram}

@@ -26,7 +26,7 @@ export default async function MyPage() {
   if (!client) redirect("/my/login");
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <OverviewTab
         clientName={client.fullName}
         initialWeight={client.initialWeight}

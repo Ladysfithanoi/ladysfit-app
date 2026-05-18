@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
 import { Home, Scale, Dumbbell, Salad, Ruler, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutNotificationPopup } from "./workout-notification-popup";
@@ -18,15 +18,15 @@ const NAV = [
 
 export function PortalLayoutClient({
   clientName,
+  avatarUrl,
   children,
 }: {
   clientName: string;
+  avatarUrl?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = useSession();
-  const avatarUrl = session?.user?.image;
 
   async function handleLogout() {
     await signOut({ redirect: false, callbackUrl: "/my/login" });

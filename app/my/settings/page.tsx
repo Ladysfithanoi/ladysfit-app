@@ -11,12 +11,12 @@ export default async function SettingsPage() {
 
   const client = await prisma.client.findUnique({
     where: { id: session.user.id },
-    select: { fullName: true },
+    select: { fullName: true, avatarUrl: true },
   });
   if (!client) redirect("/my/login");
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <SettingsTab />
     </PortalLayoutClient>
   );

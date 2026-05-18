@@ -12,7 +12,7 @@ export default async function WeightPage() {
   const clientId = session.user.id;
 
   const [client, weightLogs] = await Promise.all([
-    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, targetWeight: true } }),
+    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, targetWeight: true, avatarUrl: true } }),
     prisma.weightLog.findMany({ where: { clientId }, orderBy: { date: "asc" } }),
   ]);
 
@@ -26,7 +26,7 @@ export default async function WeightPage() {
   }));
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <WeightTab weightLogs={serializedLogs} targetWeight={client.targetWeight} />
     </PortalLayoutClient>
   );

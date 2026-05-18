@@ -10,7 +10,7 @@ export default async function MyMeasurementsPage() {
   if (!session) redirect("/my/login");
 
   const [client, logs] = await Promise.all([
-    prisma.client.findUnique({ where: { id: session.user.id }, select: { fullName: true } }),
+    prisma.client.findUnique({ where: { id: session.user.id }, select: { fullName: true, avatarUrl: true } }),
     prisma.bodyMeasurementLog.findMany({
       where: { clientId: session.user.id },
       include: { measuredBy: { select: { id: true, name: true } } },
@@ -36,7 +36,7 @@ export default async function MyMeasurementsPage() {
   }));
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <MeasurementsTab initialLogs={serialized} />
     </PortalLayoutClient>
   );

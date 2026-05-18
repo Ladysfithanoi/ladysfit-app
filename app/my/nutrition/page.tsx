@@ -12,7 +12,7 @@ export default async function NutritionPage() {
   const clientId = session.user.id;
 
   const [client, mealPlan, todayLogs] = await Promise.all([
-    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, myPlateImageUrl: true, myPlateNote: true } }),
+    prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, myPlateImageUrl: true, myPlateNote: true, avatarUrl: true } }),
     prisma.mealPlan.findFirst({
       where: { clientId, status: "ACTIVE" },
       include: { days: { orderBy: { createdAt: "asc" } } },
@@ -57,7 +57,7 @@ export default async function NutritionPage() {
     : null;
 
   return (
-    <PortalLayoutClient clientName={client.fullName}>
+    <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <NutritionTab
         mealPlan={serializedPlan}
         myPlateImageUrl={client.myPlateImageUrl ?? null}
