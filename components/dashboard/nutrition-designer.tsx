@@ -317,22 +317,26 @@ export function NutritionDesigner({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-500">Thích ăn gì</label>
+              <label className="text-xs font-semibold text-gray-500">
+                Thích ăn gì <span className="text-gray-300 font-normal">(Tùy chọn)</span>
+              </label>
               <input
                 type="text"
                 value={likes}
                 onChange={(e) => setLikes(e.target.value)}
-                placeholder="VD: cơm, gà, rau..."
+                placeholder="Bỏ trống = AI tự chọn ngẫu nhiên"
                 className={inputCls}
               />
             </div>
             <div className="space-y-1 col-span-2">
-              <label className="text-xs font-semibold text-gray-500">Không thích / dị ứng</label>
+              <label className="text-xs font-semibold text-gray-500">
+                Không thích / dị ứng <span className="text-gray-300 font-normal">(Tùy chọn)</span>
+              </label>
               <input
                 type="text"
                 value={dislikes}
                 onChange={(e) => setDislikes(e.target.value)}
-                placeholder="VD: hải sản, đậu phộng..."
+                placeholder="Bỏ trống = không có kiêng kị"
                 className={inputCls}
               />
             </div>

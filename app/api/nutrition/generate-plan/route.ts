@@ -65,13 +65,25 @@ export async function POST(req: Request) {
   const likesStr    = typeof likes    === "string" ? likes.trim()    : "";
   const dislikesStr = typeof dislikes === "string" ? dislikes.trim() : "";
 
+  const likesContext = likesStr
+    ? `Ưu tiên sử dụng các thực phẩm sau (không bắt buộc 100%): ${likesStr}`
+    : "Không có yêu cầu đặc biệt — hãy TỰ ĐỘNG chọn ngẫu nhiên các thực phẩm lành mạnh, đa dạng, phổ biến trong ẩm thực Việt Nam";
+
+  const dislikesContext = dislikesStr
+    ? `Tuyệt đối KHÔNG sử dụng các thực phẩm sau: ${dislikesStr}`
+    : "Không có dị ứng hoặc kiêng kị — được sử dụng linh hoạt mọi loại thực phẩm lành mạnh";
+
+  const randomNote = !likesStr && !dislikesStr
+    ? "Vì không có yêu cầu cụ thể, hãy tự thiết kế thực đơn ngẫu nhiên đa dạng, cân bằng dinh dưỡng theo phong cách ẩm thực Việt Nam.\n"
+    : "";
+
   const prompt = `Tạo thực đơn ${mealsNum} bữa cho 1 ngày theo yêu cầu:
 - Calories mục tiêu: ${Math.round(derNum)} kcal
 - Protein: ${Math.round(proteinNum)}g | Fat: ${Math.round(fatNum)}g | Carbs: ${Math.round(carbsNum)}g
-- Thích: ${likesStr    || "không có yêu cầu"}
-- Không ăn: ${dislikesStr || "không có"}
+- Thực phẩm yêu thích: ${likesContext}
+- Thực phẩm kiêng/dị ứng: ${dislikesContext}
 
-Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
+${randomNote}Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
 
 TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không thêm text nào khác:
 [
