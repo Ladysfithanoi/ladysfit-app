@@ -85,25 +85,6 @@ type FoodScanLogItem = {
   carbs: number;
 };
 
-function compressImage(file: File, maxPx = 400, quality = 0.82): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { reject(new Error("canvas unavailable")); return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("image load failed")); };
-    img.src = objectUrl;
-  });
-}
 
 const STATUS_STYLE = {
   ACTIVE: "bg-green-100 text-green-700",
@@ -831,10 +812,14 @@ export function ClientDetailPage({
     if (!file) return;
     setAvatarUploading(true);
     try {
-      const compressed = await compressImage(file, 400, 0.82);
-      setPendingAvatarUrl(compressed);
-    } catch {
-      // silently ignore
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload thất bại");
+      setPendingAvatarUrl(data.url);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Upload ảnh thất bại");
     } finally {
       setAvatarUploading(false);
       e.target.value = "";

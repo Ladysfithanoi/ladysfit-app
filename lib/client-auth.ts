@@ -61,7 +61,6 @@ export const clientAuthOptions: NextAuthOptions = {
           id: client.id,
           name: client.fullName,
           email: client.email ?? "",
-          image: client.avatarUrl ?? null,
           role: Role.PT,
         };
       },
@@ -69,20 +68,13 @@ export const clientAuthOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.sub = user.id;
-        token.picture = user.image ?? null;
-      }
+      if (user) token.sub = user.id;
       return token;
     },
     async session({ session, token }) {
       return {
         ...session,
-        user: {
-          ...session.user,
-          id: token.sub ?? "",
-          image: token.picture ?? null,
-        },
+        user: { ...session.user, id: token.sub ?? "" },
       };
     },
   },
