@@ -54,28 +54,55 @@ export async function PUT(
   });
   if (!week) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Delete all existing sessions for this week
-  await prisma.workoutSession.deleteMany({ where: { weekId: params.weekId } });
+  // Update sessions in-place (matched by `order`) to preserve session IDs.
+  // Deleting and recreating sessions would cascade-delete all WorkoutLogs for
+  // those sessions, wiping every recorded set/note from previous training dates.
+  await prisma.$transaction(async (tx) => {
+    const incomingOrders = new Set(body.sessions.map((s) => s.order));
 
-  // Recreate sessions
-  for (const s of body.sessions) {
-    await prisma.workoutSession.create({
-      data: {
-        programId: params.programId,
-        weekId: params.weekId,
-        sessionName: s.sessionName,
-        order: s.order,
-        movements: { create: s.movements },
-      },
-    });
-  }
+    // Remove sessions that are no longer in the payload
+    const toDelete = week.sessions.filter((ws) => !incomingOrders.has(ws.order));
+    if (toDelete.length > 0) {
+      await tx.workoutSession.deleteMany({
+        where: { id: { in: toDelete.map((ws) => ws.id) } },
+      });
+    }
 
-  if (body.notes !== undefined) {
-    await prisma.workoutWeek.update({
-      where: { id: params.weekId },
-      data: { notes: body.notes },
-    });
-  }
+    for (const s of body.sessions) {
+      const existing = week.sessions.find((ws) => ws.order === s.order);
+
+      if (existing) {
+        // Keep the same session ID → WorkoutLogs stay intact
+        await tx.workoutSession.update({
+          where: { id: existing.id },
+          data: { sessionName: s.sessionName },
+        });
+        // Replace only the movement list (movements carry no log history of their own)
+        await tx.workoutMovement.deleteMany({ where: { sessionId: existing.id } });
+        await tx.workoutMovement.createMany({
+          data: s.movements.map((m) => ({ ...m, sessionId: existing.id })),
+        });
+      } else {
+        // Brand-new session — safe to create from scratch
+        await tx.workoutSession.create({
+          data: {
+            programId: params.programId,
+            weekId: params.weekId,
+            sessionName: s.sessionName,
+            order: s.order,
+            movements: { create: s.movements },
+          },
+        });
+      }
+    }
+
+    if (body.notes !== undefined) {
+      await tx.workoutWeek.update({
+        where: { id: params.weekId },
+        data: { notes: body.notes },
+      });
+    }
+  });
 
   const updated = await prisma.workoutWeek.findUnique({
     where: { id: params.weekId },
