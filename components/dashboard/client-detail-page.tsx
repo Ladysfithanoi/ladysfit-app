@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { Label } from "@/components/ui/label";
 import { SlideOver } from "@/components/ui/slide-over";
 import { Popover } from "@/components/ui/popover";
@@ -1951,9 +1952,8 @@ export function ClientDetailPage({
       <SlideOver open={weightOpen} onClose={() => setWeightOpen(false)} title="Cập nhật cân nặng">
         <form onSubmit={handleWeightSubmit} className="px-6 py-5 space-y-4">
           <Field label="Ngày *">
-            <Input
+            <DateMaskInput
               name="date"
-              type="date"
               required
               defaultValue={new Date().toISOString().split("T")[0]}
               className={inputCls}

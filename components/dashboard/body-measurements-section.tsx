@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { Ruler, Plus, Trash2, X } from "lucide-react";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { cn } from "@/lib/utils";
 
 export type MeasurementLog = {
@@ -121,11 +122,10 @@ function AddMeasurementModal({
         <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4 flex-1">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Ngày đo *</label>
-            <input
-              type="date"
-              required
+            <DateMaskInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
+              required
               className={inputCls}
             />
           </div>

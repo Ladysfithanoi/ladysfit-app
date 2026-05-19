@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { StaffMember } from "./checklist-page";
 
 type Row = {
@@ -205,10 +206,9 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Ngày báo cáo</label>
-            <input
-              type="date"
+            <DateMaskInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
               disabled={!canEdit}
               className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full disabled:bg-gray-50"
             />

@@ -7,6 +7,7 @@ import {
   SalesLead, LeadStatus, LEAD_STATUS_LABEL, LEAD_STATUS_STYLE, SOURCES, PTUser,
 } from "./types";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { fmtDate } from "@/lib/format-date";
 
 type Props = {
@@ -850,10 +851,9 @@ export function LeadsTab({
                 </FormRow>
               )}
               <FormRow label="Ngày ký">
-                <input
-                  type="date"
+                <DateMaskInput
                   value={(form as { signDateStr?: string }).signDateStr ?? ""}
-                  onChange={e => setForm(f => ({ ...f, signDateStr: e.target.value }))}
+                  onChange={v => setForm(f => ({ ...f, signDateStr: v }))}
                   className={inputCls}
                 />
               </FormRow>
@@ -992,10 +992,9 @@ function CareNotesPopup({
             <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-gray-50/60">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Thêm ghi chú</p>
               <div className="flex gap-2 items-start">
-                <input
-                  type="date"
+                <DateMaskInput
                   value={newDate}
-                  onChange={e => setNewDate(e.target.value)}
+                  onChange={setNewDate}
                   className="h-9 w-36 flex-shrink-0 rounded-xl border border-gray-200 px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                 />
                 <textarea

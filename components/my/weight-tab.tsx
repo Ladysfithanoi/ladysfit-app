@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { TrendingDown, TrendingUp, Plus } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { cn } from "@/lib/utils";
 
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
@@ -187,7 +188,7 @@ export function WeightTab({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-gray-700">Ngày *</label>
-            <input name="date" type="date" required defaultValue={new Date().toISOString().split("T")[0]}
+            <DateMaskInput name="date" required defaultValue={new Date().toISOString().split("T")[0]}
               className="w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50" />
           </div>
           <div className="space-y-1.5">

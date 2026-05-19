@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { Ruler, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { cn } from "@/lib/utils";
 
 export type MeasurementLog = {
@@ -356,10 +357,9 @@ export function MeasurementsTab({ initialLogs }: { initialLogs: MeasurementLog[]
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Ngày đo</label>
-            <input
-              type="date"
+            <DateMaskInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
               className={inputCls}
             />
           </div>

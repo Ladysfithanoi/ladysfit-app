@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 
 const COMPLAINT_CATEGORIES = [
   "Chất lượng PT",
@@ -248,9 +249,8 @@ export function OverviewTab({
         <form onSubmit={handleWeightSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-gray-700">Ngày *</label>
-            <input
+            <DateMaskInput
               name="date"
-              type="date"
               required
               defaultValue={new Date().toISOString().split("T")[0]}
               className="w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50"

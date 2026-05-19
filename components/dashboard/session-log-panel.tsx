@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, ChevronDown, ChevronUp, Loader2, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { WorkoutSession, WorkoutLogRow, SetLogRow } from "./workout-tab";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -237,10 +238,9 @@ export function SessionLogForm({
         <div className="flex flex-wrap gap-3 items-start">
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Ngày tập</label>
-            <input
-              type="date"
+            <DateMaskInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
               className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
             />
           </div>
