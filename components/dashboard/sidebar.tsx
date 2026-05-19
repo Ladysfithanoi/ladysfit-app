@@ -73,7 +73,7 @@ const NAV_SECTIONS: NavSection[] = [
     // standalone — no section header
     items: [
       { href: "/dashboard/complaints", icon: MessageSquareWarning, label: "Khiếu nại",        show: isFM },
-      { href: "/dashboard/settings",   icon: Settings,             label: "Cài đặt",          show: forAdminFM },
+      { href: "/dashboard/settings",   icon: Settings,             label: "Cài đặt",          show: forAdminOnly },
     ],
   },
 ];
