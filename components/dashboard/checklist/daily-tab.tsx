@@ -31,7 +31,7 @@ function fmtDate(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-const inputCls = "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full";
+const inputCls = "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full min-w-0";
 
 export function DailyTab({ currentUserId, currentUserName, currentUserRole, staffList }: Props) {
   const isFM = currentUserRole === "FM";
@@ -278,7 +278,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           <div className="py-10 text-center text-sm text-gray-400">Đang tải...</div>
         ) : (
           <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <table className="w-full text-xs border-collapse">
+            <table className="w-full min-w-[540px] text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
                   {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
@@ -308,7 +308,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                         />
                       ) : <span className="text-gray-600">{row.time || "—"}</span>}
                     </td>
-                    <td className="px-2 py-2 min-w-[200px]">
+                    <td className="px-2 py-2 w-full">
                       {canEdit ? (
                         <input
                           value={row.task}
@@ -351,7 +351,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                         return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
                       })()}
                     </td>
-                    <td className="px-2 py-2 min-w-[140px]">
+                    <td className="px-2 py-2 w-28">
                       {canEdit ? (
                         <input
                           value={row.note}

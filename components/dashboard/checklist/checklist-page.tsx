@@ -57,7 +57,7 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
   return (
     <div className="min-h-screen bg-[#fafafa]">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-8 py-5">
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-8 py-5">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[#f15b5c]/10">
@@ -108,7 +108,7 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
       </div>
 
       {/* Tab content */}
-      <div className="px-8 py-6">
+      <div className="px-3 sm:px-8 py-6">
         {tab === "daily" && (
           <DailyTab
             currentUserId={currentUserId}
