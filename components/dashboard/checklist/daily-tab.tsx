@@ -155,10 +155,11 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
     }
   }
 
-  const rowsWithKpi = rows.filter((r) => { const k = parseFloat(r.kpi); return !isNaN(k) && k > 0; });
-  const pct = rowsWithKpi.length > 0
-    ? Math.round(rowsWithKpi.reduce((sum, r) => sum + Math.min((r.actualResult / parseFloat(r.kpi)) * 100, 100), 0) / rowsWithKpi.length)
-    : 0;
+  const completedTasks = rows.filter((r) => {
+    const k = parseFloat(r.kpi);
+    return !isNaN(k) && k > 0 && (r.actualResult / k) * 100 >= 80;
+  }).length;
+  const pct = rows.length > 0 ? Math.round((completedTasks / rows.length) * 100) : 0;
 
   return (
     <div className="space-y-5 max-w-6xl">
@@ -247,11 +248,11 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-gray-500">Tiến độ ngày {fmtDate(date)}</span>
-              <span className="text-xs font-bold text-gray-700">{rows.length} công việc · {pct}% hoàn thành</span>
+              <span className="text-xs font-bold text-gray-700">{completedTasks}/{rows.length} công việc · {pct}% hoàn thành</span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all", pct >= 100 ? "bg-green-500" : pct >= 70 ? "bg-yellow-400" : "bg-[#f15b5c]")}
+                className={cn("h-full rounded-full transition-all", pct >= 100 ? "bg-green-500" : pct >= 60 ? "bg-yellow-400" : "bg-[#f15b5c]")}
                 style={{ width: `${pct}%` }}
               />
             </div>
