@@ -45,6 +45,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   };
 
   let client: { id: string } | null = null;
+  let emailConflict = false;
+
   for (let attempt = 0; attempt < 5; attempt++) {
     // Re-query max each retry in case another concurrent request just inserted
     const baseCode = await nextClientCode();
@@ -74,11 +76,31 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       });
       break; // success
     } catch (err: unknown) {
-      const e = err as { code?: string };
-      if (e.code === "P2002" && attempt < 4) continue; // unique constraint → retry
+      const e = err as { code?: string; meta?: { target?: string[] | string } };
+      if (e.code === "P2002") {
+        // Determine which unique field conflicted
+        const target = Array.isArray(e.meta?.target)
+          ? (e.meta.target as string[])
+          : [String(e.meta?.target ?? "")];
+        const isEmailConflict = target.some((t) => t.includes("email"));
+        if (isEmailConflict) {
+          emailConflict = true;
+          break; // Do not retry — email belongs to another client record
+        }
+        // clientCode conflict → retry with a different code
+        if (attempt < 4) continue;
+      }
       throw err;
     }
   }
+
+  if (emailConflict) {
+    return NextResponse.json(
+      { error: "Email này đã tồn tại trên hệ thống. Vui lòng kiểm tra lại hoặc dùng email khác!" },
+      { status: 409 }
+    );
+  }
+
   if (!client) throw new Error("Không thể tạo mã khách hàng sau 5 lần thử");
 
   await prisma.consultation.update({

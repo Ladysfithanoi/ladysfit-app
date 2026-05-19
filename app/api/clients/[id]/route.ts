@@ -48,9 +48,20 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.client.delete({ where: { id: params.id } });
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Release the FK reference before deleting the client so no constraint blocks us.
+      // Consultation.convertedClientId has no onDelete clause — must be nulled manually.
+      await tx.consultation.updateMany({
+        where: { convertedClientId: params.id },
+        data: { convertedClientId: null },
+      });
+      await tx.client.delete({ where: { id: params.id } });
+    });
+  } catch (err) {
+    console.error("[DELETE /api/clients/[id]]", err);
+    return NextResponse.json({ error: "Không thể xóa khách hàng. Vui lòng thử lại." }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }
