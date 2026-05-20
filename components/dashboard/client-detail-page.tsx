@@ -287,6 +287,21 @@ export function ClientDetailPage({
   const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  // Weight logs local state — allows optimistic updates after add/edit/delete
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>(client.weightLogs);
+
+  // Edit weight log modal
+  const [editingWeightLog, setEditingWeightLog] = useState<WeightLog | null>(null);
+  const [editWeightDate, setEditWeightDate] = useState("");
+  const [editWeightValue, setEditWeightValue] = useState("");
+  const [editWeightNote, setEditWeightNote] = useState("");
+  const [editWeightLoading, setEditWeightLoading] = useState(false);
+  const [editWeightError, setEditWeightError] = useState("");
+
+  // Delete weight log confirm
+  const [deletingWeightLogId, setDeletingWeightLogId] = useState<string | null>(null);
+  const [deleteWeightLoading, setDeleteWeightLoading] = useState(false);
+
   // Local workout programs state so new programs appear without page reload
   const [workoutProgs, setWorkoutProgs] = useState<WorkoutProgram[]>(initialWorkoutPrograms);
 
@@ -421,8 +436,8 @@ export function ClientDetailPage({
     }
   }, [view, foodLogsLoaded, foodLogsLoading, client.id]);
 
-  // Sort logs
-  const sortedLogsAsc = [...client.weightLogs].sort(
+  // Sort logs (uses local state so updates immediately on edit/delete)
+  const sortedLogsAsc = [...weightLogs].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
   const sortedLogsDesc = [...sortedLogsAsc].reverse();
@@ -798,13 +813,75 @@ export function ClientDetailPage({
           note: fd.get("note") || null,
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Có lỗi xảy ra");
+      const newLog = data as WeightLog;
+      setWeightLogs((prev) => [...prev, { id: newLog.id, date: newLog.date, weight: newLog.weight, note: newLog.note }]);
       setWeightOpen(false);
       router.refresh();
     } catch (err) {
       setWeightError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openEditWeightLog(log: WeightLog) {
+    setEditingWeightLog(log);
+    setEditWeightDate(log.date.split("T")[0]);
+    setEditWeightValue(String(log.weight));
+    setEditWeightNote(log.note ?? "");
+    setEditWeightError("");
+  }
+
+  async function handleEditWeightLog() {
+    if (!editingWeightLog) return;
+    const w = parseFloat(editWeightValue);
+    if (isNaN(w) || w <= 0) { setEditWeightError("Cân nặng không hợp lệ"); return; }
+    setEditWeightLoading(true);
+    setEditWeightError("");
+    try {
+      const res = await fetch(`/api/clients/${client.id}/weight-logs/${editingWeightLog.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: editWeightDate, weight: w, note: editWeightNote || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Có lỗi xảy ra");
+      const updated = data as WeightLog;
+      setWeightLogs((prev) => prev.map((l) => l.id === updated.id
+        ? { ...l, date: updated.date, weight: updated.weight, note: updated.note }
+        : l
+      ));
+      setEditingWeightLog(null);
+      setToastMsg("Đã cập nhật cân nặng ✓");
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch (err) {
+      setEditWeightError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setEditWeightLoading(false);
+    }
+  }
+
+  async function handleDeleteWeightLog() {
+    if (!deletingWeightLogId) return;
+    setDeleteWeightLoading(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/weight-logs/${deletingWeightLogId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error((d as { error?: string }).error ?? "Có lỗi xảy ra");
+      }
+      setWeightLogs((prev) => prev.filter((l) => l.id !== deletingWeightLogId));
+      setDeletingWeightLogId(null);
+      setToastMsg("Đã xóa bản ghi ✓");
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch {
+      // silent — keep dialog open so user sees it failed
+    } finally {
+      setDeleteWeightLoading(false);
     }
   }
 
@@ -1780,7 +1857,7 @@ export function ClientDetailPage({
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {["Ngày", "Cân nặng", "Thay đổi", "Ghi chú"].map((h) => (
+                      {["Ngày", "Cân nặng", "Thay đổi", "Ghi chú", "Thao tác"].map((h) => (
                         <th key={h} className="pb-2 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
                           {h}
                         </th>
@@ -1794,7 +1871,7 @@ export function ClientDetailPage({
                       return (
                         <tr key={log.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
                           <td className="py-2.5 text-sm text-gray-600 font-medium">{formatDate(log.date)}</td>
-                          <td className="py-2.5 text-sm font-bold text-gray-800">{log.weight} kg</td>
+                          <td className="py-2.5 text-sm font-bold text-gray-800">{parseFloat(log.weight.toFixed(2))} kg</td>
                           <td className="py-2.5">
                             {change !== null ? (
                               <span className={cn(
@@ -1802,13 +1879,31 @@ export function ClientDetailPage({
                                 change < 0 ? "text-emerald-500" : change > 0 ? "text-red-400" : "text-gray-400"
                               )}>
                                 {change < 0 ? "▼" : change > 0 ? "▲" : ""}
-                                {change !== 0 ? ` ${Math.abs(change).toFixed(1)} kg` : " 0"}
+                                {change !== 0 ? ` ${Math.abs(change).toFixed(2)} kg` : " 0"}
                               </span>
                             ) : (
                               <span className="text-sm text-gray-300">—</span>
                             )}
                           </td>
                           <td className="py-2.5 text-sm text-gray-400">{log.note ?? "—"}</td>
+                          <td className="py-2.5">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openEditWeightLog(log)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                                title="Sửa"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDeletingWeightLogId(log.id)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Xóa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1960,7 +2055,7 @@ export function ClientDetailPage({
             />
           </Field>
           <Field label="Cân nặng (kg) *">
-            <Input name="weight" type="number" step="0.1" required placeholder="65.5" onFocus={(e) => e.target.select()} className={inputCls} />
+            <Input name="weight" type="number" step="0.01" required placeholder="65.50" onFocus={(e) => e.target.select()} className={inputCls} />
           </Field>
           <Field label="Ghi chú">
             <textarea
@@ -2614,6 +2709,81 @@ export function ClientDetailPage({
         onConfirm={handleDeletePackage}
         loading={deletePkgLoading}
       />
+
+      <AlertDialog
+        open={!!deletingWeightLogId}
+        onClose={() => { if (!deleteWeightLoading) setDeletingWeightLogId(null); }}
+        title="Xóa bản ghi cân nặng"
+        description="Bạn có chắc muốn xóa bản ghi cân nặng này?\nHành động này không thể hoàn tác."
+        confirmLabel="Xóa"
+        cancelLabel="Hủy"
+        variant="danger"
+        onConfirm={handleDeleteWeightLog}
+        loading={deleteWeightLoading}
+      />
+
+      {/* ── Edit Weight Log Modal ── */}
+      {editingWeightLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!editWeightLoading) setEditingWeightLog(null); }} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+            <h2 className="text-base font-extrabold text-gray-900">Sửa bản ghi cân nặng</h2>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600">Ngày</label>
+                <input
+                  type="date"
+                  value={editWeightDate}
+                  onChange={(e) => setEditWeightDate(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600">Cân nặng (kg)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editWeightValue}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setEditWeightValue(e.target.value)}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600">Ghi chú</label>
+                <textarea
+                  rows={2}
+                  value={editWeightNote}
+                  onChange={(e) => setEditWeightNote(e.target.value)}
+                  placeholder="Ghi chú thêm..."
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none"
+                />
+              </div>
+            </div>
+            {editWeightError && (
+              <p className="text-xs text-[#f15b5c] font-medium">{editWeightError}</p>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={handleEditWeightLog}
+                disabled={editWeightLoading}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {editWeightLoading ? "Đang lưu..." : "Lưu"}
+              </button>
+              <button
+                onClick={() => setEditingWeightLog(null)}
+                disabled={editWeightLoading}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-green-500 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-2">
