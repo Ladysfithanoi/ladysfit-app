@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -44,64 +45,60 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return `LDF${String(nextNum).padStart(4, "0")}`;
   };
 
+  const emailToUse: string | null = info.email?.trim() || null;
   let client: { id: string } | null = null;
-  let emailConflict = false;
 
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // Re-query max each retry in case another concurrent request just inserted
-    const baseCode = await nextClientCode();
-    // For retries past the first, bump the number further to avoid repeated collision
-    const baseNum = parseInt(baseCode.replace("LDF", "")) + attempt;
-    const clientCode = `LDF${String(baseNum).padStart(4, "0")}`;
-    try {
-      client = await prisma.client.create({
-        data: {
-          clientCode,
-          fullName: info.fullName,
-          phone: info.phone,
-          email: info.email || null,
-          dateOfBirth: info.dateOfBirth || null,
-          initialWeight: info.currentWeight || 0,
-          currentWeight: info.currentWeight || 0,
-          targetWeight: info.targetWeight || 0,
-          height: info.height || 0,
-          initialWaist: c.assessment?.waist || null,
-          initialHip: c.assessment?.hip || null,
-          healthConditions: info.healthConditions || null,
-          injuries: info.injuries || null,
-          assignedPTId: c.createdById,
-          branchId: c.branchId,
-          status: "ACTIVE",
-        },
-      });
-      break; // success
-    } catch (err: unknown) {
-      const e = err as { code?: string; meta?: { target?: string[] | string } };
-      if (e.code === "P2002") {
-        // Determine which unique field conflicted
-        const target = Array.isArray(e.meta?.target)
-          ? (e.meta.target as string[])
-          : [String(e.meta?.target ?? "")];
-        const isEmailConflict = target.some((t) => t.includes("email"));
-        if (isEmailConflict) {
-          emailConflict = true;
-          break; // Do not retry — email belongs to another client record
-        }
-        // clientCode conflict → retry with a different code
-        if (attempt < 4) continue;
+  const makeClientData = (clientCode: string, email: string | null) => ({
+    clientCode,
+    fullName: info.fullName,
+    phone: info.phone,
+    email,
+    dateOfBirth: info.dateOfBirth || null,
+    initialWeight: info.currentWeight || 0,
+    currentWeight: info.currentWeight || 0,
+    targetWeight: info.targetWeight || 0,
+    height: info.height || 0,
+    initialWaist: c.assessment?.waist || null,
+    initialHip: c.assessment?.hip || null,
+    healthConditions: info.healthConditions || null,
+    injuries: info.injuries || null,
+    assignedPTId: c.createdById,
+    branchId: c.branchId,
+    status: "ACTIVE" as const,
+  });
+
+  // Try with email first; if email conflicts, retry without email so the client is always created.
+  // Two passes: pass 0 = with email, pass 1 = without email (only reached on email conflict).
+  const emailCandidates: Array<string | null> = emailToUse ? [emailToUse, null] : [null];
+
+  for (const candidateEmail of emailCandidates) {
+    let created = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const baseCode = await nextClientCode();
+      const baseNum = parseInt(baseCode.replace("LDF", "")) + attempt;
+      const clientCode = `LDF${String(baseNum).padStart(4, "0")}`;
+      try {
+        client = await prisma.client.create({ data: makeClientData(clientCode, candidateEmail) });
+        created = true;
+        break;
+      } catch (err: unknown) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
+
+        const rawTarget = err.meta?.target;
+        const targets: string[] = Array.isArray(rawTarget)
+          ? (rawTarget as string[])
+          : typeof rawTarget === "string" ? [rawTarget] : [];
+        const onClientCode = targets.some((t) => /clientcode|client_code/i.test(t));
+
+        if (!onClientCode && candidateEmail) break; // email conflict → outer loop will retry without email
+        if (onClientCode && attempt < 4) continue;  // clientCode collision → bump and retry
+        throw err; // exhausted retries or unknown field
       }
-      throw err;
     }
+    if (created) break;
   }
 
-  if (emailConflict) {
-    return NextResponse.json(
-      { error: "Email này đã tồn tại trên hệ thống. Vui lòng kiểm tra lại hoặc dùng email khác!" },
-      { status: 409 }
-    );
-  }
-
-  if (!client) throw new Error("Không thể tạo mã khách hàng sau 5 lần thử");
+  if (!client) throw new Error("Không thể tạo mã khách hàng sau nhiều lần thử");
 
   await prisma.consultation.update({
     where: { id: params.id },

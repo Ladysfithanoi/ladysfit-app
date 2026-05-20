@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
+  if (existing && !existing.deletedAt) {
     return NextResponse.json({ error: "Email đã tồn tại" }, { status: 400 });
   }
 
@@ -103,8 +103,20 @@ export async function POST(req: Request) {
   try {
     const parsedDOB = dateOfBirth ? new Date(dateOfBirth) : undefined;
 
-    const user = await prisma.user.create({
-      data: {
+    // Use upsert so that a previously soft-deleted account with the same email
+    // is reactivated instead of triggering a P2002 unique constraint error.
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {
+        name,
+        password: hashed,
+        branchId: noBranchRole ? null : (branchId || null),
+        role,
+        deletedAt: null,
+        ptLevelId: ptLevelId || null,
+        ...(parsedDOB && !isNaN(parsedDOB.getTime()) ? { dateOfBirth: parsedDOB } : {}),
+      },
+      create: {
         name,
         email,
         password: hashed,
@@ -123,6 +135,8 @@ export async function POST(req: Request) {
       },
     });
 
+    // Sync FM branch assignments — clear stale ones before recreating
+    await prisma.fMBranchAssignment.deleteMany({ where: { userId: user.id } });
     if (role === "FM" && managedBranchIds?.length) {
       await prisma.fMBranchAssignment.createMany({
         data: (managedBranchIds as string[]).map((bid) => ({ userId: user.id, branchId: bid })),
