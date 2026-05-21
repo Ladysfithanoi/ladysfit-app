@@ -141,6 +141,14 @@ function dmyToISO(dmy: string): string {
   return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
+function maskDate(value: string): string {
+  let clean = value.replace(/\D/g, "");
+  if (clean.length > 8) clean = clean.slice(0, 8);
+  if (clean.length > 4) return clean.slice(0, 2) + "/" + clean.slice(2, 4) + "/" + clean.slice(4);
+  if (clean.length > 2) return clean.slice(0, 2) + "/" + clean.slice(2);
+  return clean;
+}
+
 function isoToDmy(iso: string | null): string {
   if (!iso) return "";
   const date = iso.split("T")[0];
@@ -558,7 +566,7 @@ export function ClientDetailPage({
   }
 
   async function handlePkgStartDate(pkgId: string) {
-    if (!pkgStartDate) return;
+    if (!pkgStartDate || pkgStartDate.length < 10) return;
     const iso = dmyToISO(pkgStartDate);
     if (!iso) return;
     setPkgUpdateLoading(true);
@@ -609,7 +617,7 @@ export function ClientDetailPage({
 
   async function handleSaveStartDate(pkgId: string) {
     const raw = pkgStartDateInputs[pkgId] ?? isoToDmy(packages.find((p) => p.id === pkgId)?.startDate ?? null);
-    if (!raw) return;
+    if (!raw || raw.length < 10) return;
     const iso = dmyToISO(raw);
     if (!iso) return;
     setSavingStartDateId(pkgId);
@@ -1724,7 +1732,8 @@ export function ClientDetailPage({
                                   type="text"
                                   placeholder="dd/mm/yyyy"
                                   value={pkgStartDate}
-                                  onChange={(e) => setPkgStartDate(e.target.value)}
+                                  maxLength={10}
+                                  onChange={(e) => setPkgStartDate(maskDate(e.target.value))}
                                   className="w-28 h-8 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                                 />
                                 <button
@@ -2443,7 +2452,8 @@ export function ClientDetailPage({
                         type="text"
                         placeholder="dd/mm/yyyy"
                         value={pkgStartDateInputs[pkg.id] ?? isoToDmy(pkg.startDate)}
-                        onChange={(e) => setPkgStartDateInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                        maxLength={10}
+                        onChange={(e) => setPkgStartDateInputs((prev) => ({ ...prev, [pkg.id]: maskDate(e.target.value) }))}
                         className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                       />
                       <button
