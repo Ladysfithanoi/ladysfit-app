@@ -75,13 +75,13 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
   return (
     <div className="p-6 max-w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-5 gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900">Setup Doanh số</h1>
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap gap-2 w-full">
           {!isPT && branches.length > 1 && (
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={selectCls}>
               {branches.map((b) => (
@@ -130,8 +130,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
       </div>
 
       {/* Tabs */}
-      <style>{`.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
-      <div className="flex flex-row items-center gap-2 overflow-x-auto whitespace-nowrap pb-2 w-full no-scrollbar bg-gray-100 p-1 rounded-xl mb-5">
+      <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1 w-full bg-gray-100 p-1 rounded-xl mb-5 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
