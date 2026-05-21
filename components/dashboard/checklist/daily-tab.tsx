@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
+import { TimeMaskInput } from "@/components/ui/time-mask-input";
 import type { StaffMember } from "./checklist-page";
 
 type Row = {
@@ -312,24 +313,22 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                     <td className="px-2 py-2 w-48">
                       {canEdit ? (
                         <div className="flex items-center gap-1">
-                          <input
-                            type="time"
+                          <TimeMaskInput
                             value={row.startTime}
-                            onChange={(e) => updateRow(i, "startTime", e.target.value)}
+                            onChange={(v) => updateRow(i, "startTime", v)}
                             className={inputCls}
                           />
                           <span className="text-gray-400 text-xs shrink-0">–</span>
-                          <input
-                            type="time"
+                          <TimeMaskInput
                             value={row.endTime}
-                            onChange={(e) => updateRow(i, "endTime", e.target.value)}
+                            onChange={(v) => updateRow(i, "endTime", v)}
                             className={inputCls}
                           />
                         </div>
                       ) : (
                         <span className="text-gray-600 whitespace-nowrap font-medium">
                           {row.startTime || row.endTime
-                            ? `${row.startTime || "?"}–${row.endTime || "?"}`
+                            ? `⏱ ${row.startTime || "?"}–${row.endTime || "?"}`
                             : "—"}
                         </span>
                       )}
