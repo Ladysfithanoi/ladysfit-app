@@ -210,56 +210,60 @@ export function ConsultationListClient({
 
       {/* Filter bar */}
       <div className="mb-4 space-y-2">
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-col gap-2 w-full md:flex-row md:items-center md:flex-wrap">
           {/* Phone search */}
-          <div className="relative">
+          <div className="relative w-full md:w-auto md:min-w-[160px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
             <input
               type="text"
               placeholder="Tìm theo số điện thoại..."
               value={phoneSearch}
               onChange={(e) => setPhoneSearch(e.target.value)}
-              className={cn(inputCls, "pl-9 w-52")}
+              className={cn(inputCls, "pl-9 w-full")}
             />
           </div>
 
           {/* Branch filter — admin & FM only */}
           {showBranchFilter && (
-            <select
-              value={branchFilter}
-              onChange={(e) => handleBranchChange(e.target.value)}
-              className={cn(inputCls, "min-w-[180px]")}
-            >
-              <option value="">Tất cả cơ sở</option>
-              {visibleBranches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            <div className="w-full md:w-auto md:min-w-[160px]">
+              <select
+                value={branchFilter}
+                onChange={(e) => handleBranchChange(e.target.value)}
+                className={cn(inputCls, "w-full")}
+              >
+                <option value="">Tất cả cơ sở</option>
+                {visibleBranches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
           )}
 
           {/* PT filter — admin & FM only; cascades from branch selection */}
           {showPtFilter && (
-            <select
-              value={ptFilter}
-              onChange={(e) => setPtFilter(e.target.value)}
-              className={cn(inputCls, "min-w-[160px]")}
-            >
-              <option value="">Tất cả PT</option>
-              {staffForBranch.map((s) => (
-                <option key={s.id} value={s.id}>{s.name ?? s.email}</option>
-              ))}
-            </select>
+            <div className="w-full md:w-auto md:min-w-[160px]">
+              <select
+                value={ptFilter}
+                onChange={(e) => setPtFilter(e.target.value)}
+                className={cn(inputCls, "w-full")}
+              >
+                <option value="">Tất cả PT</option>
+                {staffForBranch.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name ?? s.email}</option>
+                ))}
+              </select>
+            </div>
           )}
 
           {/* Date range — dd/mm/yyyy */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-row items-center gap-2 w-full md:w-auto">
             <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Từ ngày</span>
             <input
               type="text"
               placeholder="dd/mm/yyyy"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className={cn(inputCls, "w-32")}
+              className={cn(inputCls, "w-full md:w-[140px]")}
             />
             <span className="text-xs text-gray-400 font-semibold">→</span>
             <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Đến ngày</span>
@@ -268,7 +272,7 @@ export function ConsultationListClient({
               placeholder="dd/mm/yyyy"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className={cn(inputCls, "w-32")}
+              className={cn(inputCls, "w-full md:w-[140px]")}
             />
           </div>
 
@@ -276,7 +280,7 @@ export function ConsultationListClient({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors whitespace-nowrap"
             >
               <X className="w-3.5 h-3.5" />
               Xóa bộ lọc
@@ -294,13 +298,13 @@ export function ConsultationListClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit">
+      <div className="flex flex-row items-center gap-2 overflow-x-auto whitespace-nowrap pb-2 w-full bg-gray-100 rounded-xl p-1 mb-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {(["DRAFT", "COMPLETED"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+              "flex-shrink-0 whitespace-nowrap text-sm font-medium px-4 py-2.5 rounded-xl transition-all",
               tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             )}
           >
