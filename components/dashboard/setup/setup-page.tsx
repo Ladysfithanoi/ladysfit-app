@@ -81,7 +81,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap gap-2 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full">
           {!isPT && branches.length > 1 && (
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={selectCls}>
               {branches.map((b) => (
