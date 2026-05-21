@@ -78,6 +78,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-5 gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900">Setup Doanh số</h1>
+          <p className="text-2xl font-bold text-red-600 bg-yellow-300 p-4 block z-50">CLAUDE CODE ĐANG SỬA FILE NÀY !!! LÀM ƠN HIỆN LÊN ĐI !!!</p>
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
