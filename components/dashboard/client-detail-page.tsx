@@ -148,6 +148,11 @@ function isoToDmy(iso: string | null): string {
   return d && m && y ? `${d}/${m}/${y}` : "";
 }
 
+function isoToYMD(iso: string | null): string {
+  if (!iso) return "";
+  return iso.split("T")[0]; // "YYYY-MM-DD" for type="date"
+}
+
 function getMonday(d: Date): Date {
   const day = d.getDay();
   const mon = new Date(d);
@@ -909,7 +914,7 @@ export function ClientDetailPage({
     setLoading(true);
     setEditError("");
     const body: Record<string, unknown> = Object.fromEntries(new FormData(e.currentTarget).entries());
-    if (body.dateOfBirth) body.dateOfBirth = dmyToISO(body.dateOfBirth as string) || "";
+    // dateOfBirth comes as "YYYY-MM-DD" from type="date" — no conversion needed
     if (body.targetDate) body.targetDate = dmyToISO(body.targetDate as string) || "";
     body.avatarUrl = pendingAvatarUrl ?? null;
     try {
@@ -2151,7 +2156,7 @@ export function ClientDetailPage({
               <Input name="phone" required defaultValue={client.phone} className={inputCls} />
             </Field>
             <Field label="Ngày sinh" half>
-              <Input name="dateOfBirth" type="text" placeholder="dd/mm/yyyy" defaultValue={isoToDmy(client.dateOfBirth)} className={inputCls} />
+              <Input name="dateOfBirth" type="date" defaultValue={isoToYMD(client.dateOfBirth)} className={inputCls} />
             </Field>
           </div>
 

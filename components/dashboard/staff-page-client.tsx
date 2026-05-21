@@ -199,21 +199,10 @@ export function StaffPageClient({
     });
   }, [initialStaff, branchFilter, search]);
 
-  function isoToDmy(iso: Date | string | null): string {
+  function isoToYMD(iso: Date | string | null): string {
     if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  }
-
-  function dmyToIso(dmy: string): string | null {
-    if (!dmy) return null;
-    const parts = dmy.split("/");
-    if (parts.length !== 3) return null;
-    const [dd, mm, yyyy] = parts;
-    if (!dd || !mm || !yyyy || yyyy.length !== 4) return null;
-    const d = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}T00:00:00.000Z`);
-    return isNaN(d.getTime()) ? null : d.toISOString();
+    const s = typeof iso === "string" ? iso : iso.toISOString();
+    return s.split("T")[0]; // "YYYY-MM-DD" for type="date"
   }
 
   function openAdd() {
@@ -233,7 +222,7 @@ export function StaffPageClient({
     setSelectedRole(uiRole);
     setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
     setSelectedPtLevelId(s.ptLevelId ?? "");
-    setBirthDateVal(isoToDmy(s.dateOfBirth));
+    setBirthDateVal(isoToYMD(s.dateOfBirth));
     setShowPassword(false);
     setOpen(true);
   }
@@ -302,7 +291,7 @@ export function StaffPageClient({
       name: fd.get("name") as string,
       email: fd.get("email") as string,
       role: actualRole,
-      dateOfBirth: dmyToIso(birthDateVal),
+      dateOfBirth: birthDateVal ? new Date(birthDateVal + "T00:00:00.000Z").toISOString() : null,
     };
 
     if (selectedRole === "FM") {
@@ -707,14 +696,12 @@ export function StaffPageClient({
               className="h-11 rounded-xl"
             />
           </Field>
-          <Field label="Ngày sinh (dd/mm/yyyy)">
+          <Field label="Ngày sinh">
             <input
-              type="text"
+              type="date"
               value={birthDateVal}
               onChange={(e) => setBirthDateVal(e.target.value)}
-              placeholder="vd: 15/08/1995"
-              maxLength={10}
-              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
             />
           </Field>
           <Field label={editing ? "Mật khẩu mới (bỏ trống để giữ nguyên)" : "Mật khẩu *"}>

@@ -71,6 +71,11 @@ function dmyToISO(dmy: string): string | null {
   return isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function isoToYMD(iso: string | undefined): string {
+  if (!iso) return "";
+  return iso.split("T")[0]; // "YYYY-MM-DD" for type="date"
+}
+
 export function Step1Info({
   consultation, branches, staff, isAdmin, isFM = false, isReadOnly, onDraft, onNext,
 }: {
@@ -113,7 +118,7 @@ export function Step1Info({
         phone: g("phone"),
         address: g("address"),
         email: g("email"),
-        dateOfBirth: dmyToISO(g("dateOfBirth")),
+        dateOfBirth: g("dateOfBirth") ? new Date(g("dateOfBirth") + "T00:00:00.000Z").toISOString() : null,
         consultDate: dmyToISO(g("consultDate")) || new Date().toISOString(),
         knowLDFVia: g("knowLDFVia"),
         familyStatus: g("familyStatus"),
@@ -216,8 +221,8 @@ export function Step1Info({
             </Field>
           </Row>
           <Row half>
-            <Field label="Ngày sinh (dd/mm/yyyy)">
-              <input name="dateOfBirth" defaultValue={isoToDMY(info?.dateOfBirth as string | undefined)} disabled={isReadOnly} placeholder="dd/mm/yyyy" className={inputCls} />
+            <Field label="Ngày sinh">
+              <input type="date" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={isReadOnly} className={inputCls} />
             </Field>
             <Field label="Ngày tư vấn (dd/mm/yyyy)">
               <input name="consultDate" defaultValue={defaultConsultDate} disabled={isReadOnly} placeholder="dd/mm/yyyy" className={inputCls} />
