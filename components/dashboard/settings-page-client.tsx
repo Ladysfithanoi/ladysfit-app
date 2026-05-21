@@ -121,57 +121,59 @@ export function SettingsPageClient({
             <p className="text-sm text-gray-300 font-semibold">Chưa có cơ sở nào</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                {["STT", "Tên cơ sở", "Địa chỉ", "Số PT", "Số KH", "Hành động"].map((h, i) => (
-                  <th
-                    key={h}
-                    className={`px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide ${
-                      i < 2 ? "text-left" : i < 4 ? "text-center" : "text-left"
-                    } ${i === 5 ? "text-right" : ""}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {initialBranches.map((b, idx) => (
-                <tr key={b.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
-                  <td className="px-5 py-3.5 text-sm text-gray-400 font-semibold">{idx + 1}</td>
-                  <td className="px-5 py-3.5">
-                    <p className="text-sm font-semibold text-gray-800">{b.name}</p>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-500">{b.address ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-center">
-                    <span className="text-sm font-bold text-gray-800">{b._count.users}</span>
-                  </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <span className="text-sm font-bold text-gray-800">{b._count.clients}</span>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => openEdit(b)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> Sửa
-                      </button>
-                      {canDeleteBranch && (
-                        <button
-                          onClick={() => openDelete(b)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Xóa
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="w-full overflow-x-auto pb-4 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <table className="w-full min-w-[700px] md:min-w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  {["STT", "Tên cơ sở", "Địa chỉ", "Số PT", "Số KH", "Hành động"].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap ${
+                        i < 2 ? "text-left" : i < 4 ? "text-center" : "text-left"
+                      } ${i === 5 ? "text-right" : ""}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {initialBranches.map((b, idx) => (
+                  <tr key={b.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
+                    <td className="px-5 py-3.5 text-sm text-gray-400 font-semibold whitespace-nowrap">{idx + 1}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <p className="text-sm font-semibold text-gray-800">{b.name}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-500">{b.address ?? "—"}</td>
+                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                      <span className="text-sm font-bold text-gray-800">{b._count.users}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                      <span className="text-sm font-bold text-gray-800">{b._count.clients}</span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => openEdit(b)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Sửa
+                        </button>
+                        {canDeleteBranch && (
+                          <button
+                            onClick={() => openDelete(b)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Xóa
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
