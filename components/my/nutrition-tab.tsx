@@ -213,34 +213,34 @@ export function NutritionTab({
                 </div>
                 <p className="text-sm font-extrabold text-gray-700">Chế độ ăn của bạn</p>
               </div>
-              {/* TỔNG CẢ NGÀY — 4 ô macro responsive */}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-3">
-                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-2.5 border border-gray-100 shadow-sm md:p-4">
-                  <span className="text-[11px] text-gray-400 md:text-xs">Calo</span>
-                  <div className="flex flex-col items-center mt-0.5 md:flex-row md:items-baseline md:gap-0.5">
-                    <span className="text-base font-bold text-[#f15b5c] md:text-xl">{Math.round(mealPlan.der)}</span>
-                    <span className="text-[10px] text-[#f15b5c] font-medium md:text-xs">kcal</span>
+              {/* TỔNG CẢ NGÀY — 4 ô macro chống tràn tuyệt đối */}
+              <div className="grid grid-cols-2 gap-2 w-full px-2 md:grid-cols-4 md:gap-4 md:px-0 mb-3">
+                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-1.5 shadow-sm border border-gray-100 min-w-0 w-full">
+                  <span className="text-[10px] text-gray-400 block">Calo</span>
+                  <div className="flex items-baseline justify-center flex-wrap gap-0.5 mt-0.5 max-w-full">
+                    <span className="text-sm font-bold text-[#f15b5c] leading-none">{Math.round(mealPlan.der)}</span>
+                    <span className="text-[9px] text-[#f15b5c] font-medium leading-none">kcal</span>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-2.5 border border-gray-100 shadow-sm md:p-4">
-                  <span className="text-[11px] text-gray-400 md:text-xs">Protein</span>
-                  <div className="flex flex-col items-center mt-0.5 md:flex-row md:items-baseline md:gap-0.5">
-                    <span className="text-base font-bold text-blue-600 md:text-xl">{Math.round(mealPlan.protein)}</span>
-                    <span className="text-[10px] text-blue-400 font-medium md:text-xs">g</span>
+                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-1.5 shadow-sm border border-gray-100 min-w-0 w-full">
+                  <span className="text-[10px] text-gray-400 block">Protein</span>
+                  <div className="flex items-baseline justify-center flex-wrap gap-0.5 mt-0.5 max-w-full">
+                    <span className="text-sm font-bold text-blue-600 leading-none">{Math.round(mealPlan.protein)}</span>
+                    <span className="text-[9px] text-blue-500 font-medium leading-none">g</span>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-2.5 border border-gray-100 shadow-sm md:p-4">
-                  <span className="text-[11px] text-gray-400 md:text-xs">Fat</span>
-                  <div className="flex flex-col items-center mt-0.5 md:flex-row md:items-baseline md:gap-0.5">
-                    <span className="text-base font-bold text-yellow-600 md:text-xl">{Math.round(mealPlan.fat)}</span>
-                    <span className="text-[10px] text-yellow-500 font-medium md:text-xs">g</span>
+                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-1.5 shadow-sm border border-gray-100 min-w-0 w-full">
+                  <span className="text-[10px] text-gray-400 block">Fat</span>
+                  <div className="flex items-baseline justify-center flex-wrap gap-0.5 mt-0.5 max-w-full">
+                    <span className="text-sm font-bold text-yellow-600 leading-none">{Math.round(mealPlan.fat)}</span>
+                    <span className="text-[9px] text-yellow-500 font-medium leading-none">g</span>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-2.5 border border-gray-100 shadow-sm md:p-4">
-                  <span className="text-[11px] text-gray-400 md:text-xs">Carbs</span>
-                  <div className="flex flex-col items-center mt-0.5 md:flex-row md:items-baseline md:gap-0.5">
-                    <span className="text-base font-bold text-green-600 md:text-xl">{Math.round(mealPlan.carbs)}</span>
-                    <span className="text-[10px] text-green-500 font-medium md:text-xs">g</span>
+                <div className="bg-white rounded-xl flex flex-col items-center justify-center p-1.5 shadow-sm border border-gray-100 min-w-0 w-full">
+                  <span className="text-[10px] text-gray-400 block">Carbs</span>
+                  <div className="flex items-baseline justify-center flex-wrap gap-0.5 mt-0.5 max-w-full">
+                    <span className="text-sm font-bold text-green-600 leading-none">{Math.round(mealPlan.carbs)}</span>
+                    <span className="text-[9px] text-green-500 font-medium leading-none">g</span>
                   </div>
                 </div>
               </div>
