@@ -213,18 +213,27 @@ export function NutritionTab({
                 </div>
                 <p className="text-sm font-extrabold text-gray-700">Chế độ ăn của bạn</p>
               </div>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="bg-gray-50 rounded-2xl px-3 py-2.5">
-                  <p className="text-[10px] text-gray-400 font-semibold">Mục tiêu/ngày</p>
-                  <p className="text-base font-extrabold text-[#f15b5c] mt-0.5">{Math.round(mealPlan.der)} kcal</p>
+              {/* TỔNG CẢ NGÀY — 4 ô macro responsive */}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 mb-3">
+                <div className="bg-white rounded-2xl px-3 py-2.5 border border-gray-100 text-center">
+                  <p className="text-[10px] text-gray-400 font-semibold">Calo</p>
+                  <p className="text-lg md:text-xl font-bold text-[#f15b5c] mt-0.5">{Math.round(mealPlan.der)}</p>
+                  <p className="text-xs md:text-sm text-gray-400">kcal</p>
                 </div>
-                <div className="bg-gray-50 rounded-2xl px-3 py-2.5">
-                  <p className="text-[10px] text-gray-400 font-semibold">Macro</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    <MacroBadge label="P" value={mealPlan.protein} color="bg-blue-50 text-blue-700" />
-                    <MacroBadge label="F" value={mealPlan.fat} color="bg-yellow-50 text-yellow-700" />
-                    <MacroBadge label="C" value={mealPlan.carbs} color="bg-green-50 text-green-700" />
-                  </div>
+                <div className="bg-white rounded-2xl px-3 py-2.5 border border-gray-100 text-center">
+                  <p className="text-[10px] text-gray-400 font-semibold">Protein</p>
+                  <p className="text-lg md:text-xl font-bold text-blue-600 mt-0.5">{Math.round(mealPlan.protein)}</p>
+                  <p className="text-xs md:text-sm text-gray-400">g</p>
+                </div>
+                <div className="bg-white rounded-2xl px-3 py-2.5 border border-gray-100 text-center">
+                  <p className="text-[10px] text-gray-400 font-semibold">Fat</p>
+                  <p className="text-lg md:text-xl font-bold text-yellow-600 mt-0.5">{Math.round(mealPlan.fat)}</p>
+                  <p className="text-xs md:text-sm text-gray-400">g</p>
+                </div>
+                <div className="bg-white rounded-2xl px-3 py-2.5 border border-gray-100 text-center">
+                  <p className="text-[10px] text-gray-400 font-semibold">Carbs</p>
+                  <p className="text-lg md:text-xl font-bold text-green-600 mt-0.5">{Math.round(mealPlan.carbs)}</p>
+                  <p className="text-xs md:text-sm text-gray-400">g</p>
                 </div>
               </div>
 
