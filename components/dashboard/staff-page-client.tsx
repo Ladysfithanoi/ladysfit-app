@@ -699,6 +699,7 @@ export function StaffPageClient({
           <Field label="Ngày sinh">
             <input
               type="date"
+              lang="vi"
               value={birthDateVal}
               onChange={(e) => setBirthDateVal(e.target.value)}
               className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"

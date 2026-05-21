@@ -222,7 +222,7 @@ export function Step1Info({
           </Row>
           <Row half>
             <Field label="Ngày sinh">
-              <input type="date" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={isReadOnly} className={inputCls} />
+              <input type="date" lang="vi" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={isReadOnly} className={inputCls} />
             </Field>
             <Field label="Ngày tư vấn (dd/mm/yyyy)">
               <input name="consultDate" defaultValue={defaultConsultDate} disabled={isReadOnly} placeholder="dd/mm/yyyy" className={inputCls} />

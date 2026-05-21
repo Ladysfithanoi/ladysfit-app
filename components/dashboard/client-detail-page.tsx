@@ -2156,7 +2156,7 @@ export function ClientDetailPage({
               <Input name="phone" required defaultValue={client.phone} className={inputCls} />
             </Field>
             <Field label="Ngày sinh" half>
-              <Input name="dateOfBirth" type="date" defaultValue={isoToYMD(client.dateOfBirth)} className={inputCls} />
+              <Input name="dateOfBirth" type="date" lang="vi" defaultValue={isoToYMD(client.dateOfBirth)} className={inputCls} />
             </Field>
           </div>
 
