@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus, Settings2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -278,6 +278,8 @@ function ProgramView({
   const [showPhaseChange, setShowPhaseChange] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addingWeek, setAddingWeek] = useState(false);
+  const [deletingWeek, setDeletingWeek] = useState(false);
+  const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState("");
 
@@ -428,6 +430,29 @@ function ProgramView({
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setAddingWeek(false);
+    }
+  }
+
+  async function handleDeleteWeek() {
+    if (!currentWeekData) return;
+    setDeletingWeek(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/clients/${clientId}/programs/${program.id}/weeks/${currentWeekData.id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      const { newCurrentWeek } = await res.json() as { newCurrentWeek: number };
+      const newWeeks = program.weeks.filter((w) => w.id !== currentWeekData.id);
+      onUpdate({ id: program.id, currentWeek: newCurrentWeek, weeks: newWeeks });
+      setActiveWeekIdx(Math.max(0, activeWeekIdx - 1));
+      setActiveSessionIdx(0);
+      setConfirmDeleteWeek(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setDeletingWeek(false);
     }
   }
 
@@ -613,14 +638,27 @@ function ProgramView({
               ))}
             </div>
             {!editMode && (
-              <button
-                onClick={handleAddWeek}
-                disabled={addingWeek}
-                className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                {addingWeek ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                Thêm tuần mới
-              </button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {program.weeks.length > 1 && currentWeekData && currentWeekData.id === program.weeks[program.weeks.length - 1].id && (
+                  <button
+                    onClick={() => setConfirmDeleteWeek(true)}
+                    disabled={deletingWeek}
+                    title={`Xóa Tuần ${currentWeekData.weekNumber}`}
+                    className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Xóa tuần
+                  </button>
+                )}
+                <button
+                  onClick={handleAddWeek}
+                  disabled={addingWeek}
+                  className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {addingWeek ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                  Thêm tuần mới
+                </button>
+              </div>
             )}
           </div>
 
@@ -955,6 +993,42 @@ function ProgramView({
               </button>
               <button
                 onClick={() => setEditProgOpen(false)}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm delete week modal ── */}
+      {confirmDeleteWeek && currentWeekData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">Xóa Tuần {currentWeekData.weekNumber}?</p>
+                <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              Toàn bộ dữ liệu ghi chép bài tập của <span className="font-bold text-red-600">Tuần {currentWeekData.weekNumber}</span> sẽ bị xóa vĩnh viễn!
+            </p>
+            {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteWeek}
+                disabled={deletingWeek}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-colors"
+              >
+                {deletingWeek ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xóa...</> : "Xóa tuần này"}
+              </button>
+              <button
+                onClick={() => { setConfirmDeleteWeek(false); setError(""); }}
                 className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
               >
                 Hủy
