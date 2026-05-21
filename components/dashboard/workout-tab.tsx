@@ -749,13 +749,16 @@ function ProgramView({
                   const lastLog = sessionLogs[0] ?? null;
                   const isLogging = loggingSessionId === activeSession.id;
 
-                  // Previous week data for progressive overload suggestions
+                  // Previous week data for progressive overload suggestions.
+                  // Each week has its own session IDs, so we match by position index
+                  // (same slot = "Buổi B" in week 1 vs "Buổi B" in week 2).
                   const prevWeek = program.weeks.find(
                     (w) => w.weekNumber === currentWeekData.weekNumber - 1
                   );
-                  const prevWeekLogs = prevWeek
+                  const prevWeekSession = prevWeek?.sessions[activeSessionIdx];
+                  const prevWeekLogs = prevWeek && prevWeekSession
                     ? workoutLogs.filter(
-                        (l) => l.weekId === prevWeek.id && l.sessionId === activeSession.id
+                        (l) => l.weekId === prevWeek.id && l.sessionId === prevWeekSession.id
                       )
                     : [];
 
