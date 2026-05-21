@@ -1245,3 +1245,22 @@ model UserGuide {
 
   @@map("user_guides")
 }
+
+// ── Cơ sở dữ liệu thực phẩm (thay thế USDA) ────────────────────────────────
+
+model Food {
+  id        Int      @id @default(autoincrement())
+  name      String
+  calories  Float
+  protein   Float
+  carbs     Float
+  fat       Float
+  weight_g  Float    @default(100)
+  category  String?
+  meal_type String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@map("foods")
+}

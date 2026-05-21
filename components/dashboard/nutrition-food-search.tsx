@@ -92,7 +92,7 @@ export function NutritionFoodSearch({
       } catch {
         updateIngredient(id, { loading: false });
       }
-    }, 500);
+    }, 100);
   }
 
   function handleSelect(id: number, food: FoodResult) {
@@ -160,7 +160,7 @@ export function NutritionFoodSearch({
         Thêm bữa ăn thủ công
       </p>
       <p className="text-xs text-gray-400 italic mt-1">
-        * Toàn bộ dữ liệu dinh dưỡng đều được trích xuất từ tài liệu của USDA (Bộ Nông Nghiệp Hoa Kỳ)
+        * Dữ liệu dinh dưỡng từ cơ sở dữ liệu Ladysfit (VTN_FCT_2007 + thực phẩm Việt Nam)
       </p>
 
       {/* Slot + meal name */}
