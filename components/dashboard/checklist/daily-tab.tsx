@@ -292,7 +292,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
             <table className="w-full min-w-[540px] text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  {["STT", "Giờ bắt đầu", "Giờ kết thúc", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
+                  {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0">
                       {h}
                     </th>
@@ -302,32 +302,37 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEdit ? 9 : 8} className="px-3 py-8 text-center text-gray-300 italic">
+                    <td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-gray-300 italic">
                       {canEdit ? 'Nhấn "+ Thêm công việc" để bắt đầu' : "Chưa có công việc nào"}
                     </td>
                   </tr>
                 ) : rows.map((row, i) => (
                   <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
                     <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
-                    <td className="px-2 py-2 w-24">
+                    <td className="px-2 py-2 w-48">
                       {canEdit ? (
-                        <input
-                          type="time"
-                          value={row.startTime}
-                          onChange={(e) => updateRow(i, "startTime", e.target.value)}
-                          className={inputCls}
-                        />
-                      ) : <span className="text-gray-600">{row.startTime || "—"}</span>}
-                    </td>
-                    <td className="px-2 py-2 w-24">
-                      {canEdit ? (
-                        <input
-                          type="time"
-                          value={row.endTime}
-                          onChange={(e) => updateRow(i, "endTime", e.target.value)}
-                          className={inputCls}
-                        />
-                      ) : <span className="text-gray-600">{row.endTime || "—"}</span>}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="time"
+                            value={row.startTime}
+                            onChange={(e) => updateRow(i, "startTime", e.target.value)}
+                            className={inputCls}
+                          />
+                          <span className="text-gray-400 text-xs shrink-0">–</span>
+                          <input
+                            type="time"
+                            value={row.endTime}
+                            onChange={(e) => updateRow(i, "endTime", e.target.value)}
+                            className={inputCls}
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 whitespace-nowrap font-medium">
+                          {row.startTime || row.endTime
+                            ? `${row.startTime || "?"}–${row.endTime || "?"}`
+                            : "—"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-2 w-full">
                       {canEdit ? (
