@@ -81,51 +81,70 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full">
-          {!isPT && branches.length > 1 && (
-            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={selectCls}>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          )}
-          {/* Nhân sự filter — Tab 1 only, FM/CEO/ADMIN only */}
-          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT" || u.role === "ADMIN") && (
-            <select value={selectedPTId} onChange={(e) => setSelectedPTId(e.target.value)} className={selectCls}>
-              <option value="">Tất cả nhân sự</option>
-              {ptList.filter((u) => u.role === "PT" || u.role === "ADMIN").map((pt) => (
-                <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
-              ))}
-            </select>
-          )}
-          {/* Source filter — Tab 1 only */}
-          {tab === "leads" && (
-            <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className={selectCls}>
-              <option value="">Tất cả nguồn</option>
-              {SOURCES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          )}
-          {/* Status filter — Tab 1 only */}
-          {tab === "leads" && (
-            <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className={selectCls}>
-              <option value="">Tất cả tình trạng</option>
-              {(["TAKECARE", "FAIL", "DE", "PIF", "PB"] as LeadStatus[]).map((s) => (
-                <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          )}
-          <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
-            {months.map((m) => (
-              <option key={m} value={m}>Tháng {m}</option>
-            ))}
-          </select>
-          <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className={selectCls}>
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+        <div className="w-full max-w-full block">
+          {/* Zone 1: Cơ sở / Nhân sự / Nguồn / Tình trạng — mỗi ô 1 dòng mobile, hàng ngang desktop */}
+          <div className="flex flex-col gap-2 w-full md:flex-row md:items-center">
+            {!isPT && branches.length > 1 && (
+              <div className="w-full">
+                <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={selectCls}>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Nhân sự filter — Tab 1 only, FM/CEO/ADMIN only */}
+            {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT" || u.role === "ADMIN") && (
+              <div className="w-full">
+                <select value={selectedPTId} onChange={(e) => setSelectedPTId(e.target.value)} className={selectCls}>
+                  <option value="">Tất cả nhân sự</option>
+                  {ptList.filter((u) => u.role === "PT" || u.role === "ADMIN").map((pt) => (
+                    <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Source filter — Tab 1 only */}
+            {tab === "leads" && (
+              <div className="w-full">
+                <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className={selectCls}>
+                  <option value="">Tất cả nguồn</option>
+                  {SOURCES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Status filter — Tab 1 only */}
+            {tab === "leads" && (
+              <div className="w-full">
+                <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className={selectCls}>
+                  <option value="">Tất cả tình trạng</option>
+                  {(["TAKECARE", "FAIL", "DE", "PIF", "PB"] as LeadStatus[]).map((s) => (
+                    <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Zone 2: Tháng & Năm — chia đôi 50/50 cùng 1 dòng mobile */}
+          <div className="grid grid-cols-2 gap-2 w-full mt-2 md:flex md:w-auto md:mt-0">
+            <div className="w-full">
+              <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
+                {months.map((m) => (
+                  <option key={m} value={m}>Tháng {m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="w-full">
+              <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className={selectCls}>
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
