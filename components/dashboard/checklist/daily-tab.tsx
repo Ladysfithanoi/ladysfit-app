@@ -9,7 +9,8 @@ import type { StaffMember } from "./checklist-page";
 type Row = {
   id?: string;
   order: number;
-  time: string;
+  startTime: string;
+  endTime: string;
   task: string;
   kpi: string;
   actualResult: number;
@@ -92,7 +93,8 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         setRows(data.checklist.items.map((item) => ({
           id: item.id,
           order: item.order,
-          time: item.time ?? "",
+          startTime: (item as unknown as Record<string, unknown>).startTime as string ?? "",
+          endTime: (item as unknown as Record<string, unknown>).endTime as string ?? "",
           task: item.task,
           kpi: item.kpi ?? "",
           actualResult: (item as unknown as Record<string, unknown>).actualResult != null ? Number((item as unknown as Record<string, unknown>).actualResult) : 0,
@@ -116,7 +118,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
 
   function addRow() {
-    setRows((prev) => [...prev, { order: prev.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
+    setRows((prev) => [...prev, { order: prev.length + 1, startTime: "", endTime: "", task: "", kpi: "", actualResult: 0, note: "" }]);
   }
 
   function removeRow(i: number) {
@@ -143,7 +145,15 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           dailyCompleted: dailyCompleted || undefined,
           dailyIncomplete: dailyIncomplete || undefined,
           dailyNextPlan: dailyNextPlan || undefined,
-          items: rows,
+          items: rows.map((r) => ({
+            order: r.order,
+            startTime: r.startTime || undefined,
+            endTime: r.endTime || undefined,
+            task: r.task,
+            kpi: r.kpi || undefined,
+            actualResult: r.actualResult || undefined,
+            note: r.note || undefined,
+          })),
         }),
       });
       if (res.ok) {
@@ -282,7 +292,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
             <table className="w-full min-w-[540px] text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
+                  {["STT", "Giờ bắt đầu", "Giờ kết thúc", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0">
                       {h}
                     </th>
@@ -292,22 +302,32 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-gray-300 italic">
+                    <td colSpan={canEdit ? 9 : 8} className="px-3 py-8 text-center text-gray-300 italic">
                       {canEdit ? 'Nhấn "+ Thêm công việc" để bắt đầu' : "Chưa có công việc nào"}
                     </td>
                   </tr>
                 ) : rows.map((row, i) => (
                   <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
                     <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
-                    <td className="px-2 py-2 w-20">
+                    <td className="px-2 py-2 w-24">
                       {canEdit ? (
                         <input
                           type="time"
-                          value={row.time}
-                          onChange={(e) => updateRow(i, "time", e.target.value)}
+                          value={row.startTime}
+                          onChange={(e) => updateRow(i, "startTime", e.target.value)}
                           className={inputCls}
                         />
-                      ) : <span className="text-gray-600">{row.time || "—"}</span>}
+                      ) : <span className="text-gray-600">{row.startTime || "—"}</span>}
+                    </td>
+                    <td className="px-2 py-2 w-24">
+                      {canEdit ? (
+                        <input
+                          type="time"
+                          value={row.endTime}
+                          onChange={(e) => updateRow(i, "endTime", e.target.value)}
+                          className={inputCls}
+                        />
+                      ) : <span className="text-gray-600">{row.endTime || "—"}</span>}
                     </td>
                     <td className="px-2 py-2 w-full">
                       {canEdit ? (
