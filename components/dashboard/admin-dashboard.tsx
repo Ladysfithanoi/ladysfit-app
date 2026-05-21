@@ -117,7 +117,7 @@ export function AdminDashboard({
               <div className={cn("p-2.5 rounded-xl", iconBg)}>
                 <Icon className={cn("w-5 h-5", iconColor)} />
               </div>
-              <span className={cn("flex flex-row items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-full whitespace-nowrap", badge)}>
+              <span className={cn("flex flex-row items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap", badge)}>
                 {label}
               </span>
             </div>
