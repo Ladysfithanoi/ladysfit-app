@@ -239,6 +239,7 @@ function ProgramView({
   onUpdate,
   onArchive,
   onLogAdded,
+  onLogUpdated,
   userRole,
   isSubstitute,
   enableLevelSystem = true,
@@ -249,6 +250,7 @@ function ProgramView({
   onUpdate: (updated: Partial<WorkoutProgram> & { id: string }) => void;
   onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  onLogUpdated: (updated: WorkoutLogRow) => void;
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
@@ -810,6 +812,8 @@ function ProgramView({
                           sessionName={activeSession.sessionName}
                           logs={sessionLogs}
                           phase={program.phase}
+                          clientId={clientId}
+                          onLogUpdated={onLogUpdated}
                           onClose={() => setHistorySessionId(null)}
                         />
                       )}
@@ -1048,6 +1052,10 @@ export function WorkoutTab({
     if (pkg) onPackageUpdated?.(pkg);
   }, [onPackageUpdated]);
 
+  const handleLogUpdated = useCallback((updated: WorkoutLogRow) => {
+    setWorkoutLogs((prev) => prev.map((l) => l.id === updated.id ? updated : l));
+  }, []);
+
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
   }
@@ -1087,6 +1095,7 @@ export function WorkoutTab({
           onUpdate={handleUpdate}
           onArchive={handleArchive}
           onLogAdded={handleLogAdded}
+          onLogUpdated={handleLogUpdated}
           userRole={userRole}
           isSubstitute={isSubstitute}
           enableLevelSystem={enableLevelSystem}
@@ -1114,6 +1123,7 @@ export function WorkoutTab({
                   onUpdate={handleUpdate}
                   onArchive={handleArchive}
                   onLogAdded={handleLogAdded}
+                  onLogUpdated={handleLogUpdated}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
                   enableLevelSystem={enableLevelSystem}

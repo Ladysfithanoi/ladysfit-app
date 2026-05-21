@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { WorkoutSession, WorkoutLogRow, SetLogRow } from "./workout-tab";
@@ -66,11 +66,28 @@ function getSuggestionFromSetLog(sl: SetLogRow, phase: string): Suggestion {
   return calcSuggestion(avg, range);
 }
 
+// Build "Lần trước" reference summary for a SetLogRow
+function buildPrevRef(sl: SetLogRow): string | null {
+  const sets = [
+    { load: sl.set1Load, reps: sl.set1Reps },
+    { load: sl.set2Load, reps: sl.set2Reps },
+    { load: sl.set3Load, reps: sl.set3Reps },
+    { load: sl.set4Load, reps: sl.set4Reps },
+    { load: sl.set5Load, reps: sl.set5Reps },
+    { load: sl.set6Load, reps: sl.set6Reps },
+  ].filter((s) => s.load != null || s.reps != null);
+  if (sets.length === 0) return null;
+  const first = sets[0];
+  const parts: string[] = [];
+  if (first.load) parts.push(`${first.load}kg`);
+  if (first.reps) parts.push(`×${first.reps} reps`);
+  return parts.join(" ") || null;
+}
+
 // ── SuggestionBadge ────────────────────────────────────────────────────────
 
 function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
   if (!suggestion) return null;
-
   if (suggestion.type === "increase_weight") {
     return (
       <span
@@ -81,7 +98,6 @@ function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
       </span>
     );
   }
-
   return (
     <span
       title={`Trung bình ${suggestion.avgReps.toFixed(1)} reps/set - hãy cố đạt ${suggestion.targetReps} reps/set trước khi tăng tạ`}
@@ -98,6 +114,14 @@ type SetDraft = { load: string; reps: string };
 
 type SetLogDraft = {
   movementId: string | null;
+  movementName: string;
+  exerciseName: string;
+  sets: SetDraft[];
+  exerciseNotes: string;
+};
+
+type EditSetLogDraft = {
+  id: string;
   movementName: string;
   exerciseName: string;
   sets: SetDraft[];
@@ -146,14 +170,18 @@ export function SessionLogForm({
   const repRange = isCardio ? null : getRepRange(phase);
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
 
-  // Build lookup: movementName → suggestion (from previous week's most recent log)
+  // Build lookup: movementName → suggestion + "Lần trước" reference
   const prevSuggestions = new Map<string, Suggestion>();
-  if (showSuggestions && prevWeekLogs.length > 0) {
-    const prevLog = prevWeekLogs[0]; // most recent first
+  const prevRefs = new Map<string, string>(); // movementName → "30kg × 12 reps"
+
+  if (prevWeekLogs.length > 0) {
+    const prevLog = prevWeekLogs[0];
     for (const sl of prevLog.setLogs) {
-      const avg = avgRepsFromSetLog(sl);
-      if (avg != null && repRange) {
-        prevSuggestions.set(sl.movementName, calcSuggestion(avg, repRange));
+      const ref = buildPrevRef(sl);
+      if (ref) prevRefs.set(sl.movementName, ref);
+      if (showSuggestions && repRange) {
+        const avg = avgRepsFromSetLog(sl);
+        if (avg != null) prevSuggestions.set(sl.movementName, calcSuggestion(avg, repRange));
       }
     }
   }
@@ -186,18 +214,12 @@ export function SessionLogForm({
           movementId: sl.movementId,
           movementName: sl.movementName,
           exerciseName: sl.exerciseName,
-          set1Load: sl.sets[0].load || null,
-          set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
-          set2Load: sl.sets[1].load || null,
-          set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
-          set3Load: sl.sets[2].load || null,
-          set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
-          set4Load: sl.sets[3].load || null,
-          set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
-          set5Load: sl.sets[4].load || null,
-          set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
-          set6Load: sl.sets[5].load || null,
-          set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
+          set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
+          set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
+          set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
+          set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
+          set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
+          set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
           exerciseNotes: sl.exerciseNotes || null,
         })),
       };
@@ -278,10 +300,20 @@ export function SessionLogForm({
             <tbody>
               {setLogs.map((sl, mi) => {
                 const suggestion = showSuggestions ? (prevSuggestions.get(sl.movementName) ?? null) : null;
+                const prevRef = prevRefs.get(sl.movementName);
                 return (
                   <tr key={mi} className={cn("border-b border-gray-50 last:border-0", mi % 2 === 1 && "bg-gray-50/30")}>
-                    <td className="px-3 py-2 font-semibold text-gray-700 align-top pt-3">{sl.movementName}</td>
-                    <td className="px-3 py-2 text-gray-600 align-top pt-3">{sl.exerciseName || <span className="text-gray-300 italic">—</span>}</td>
+                    <td className="px-3 py-2 font-semibold text-gray-700 align-top pt-3">
+                      {sl.movementName}
+                    </td>
+                    <td className="px-3 py-2 align-top pt-2">
+                      <span className="text-gray-600 block">{sl.exerciseName || <span className="text-gray-300 italic">—</span>}</span>
+                      {prevRef && (
+                        <span className="text-[10px] text-gray-400 mt-0.5 block">
+                          📅 Lần trước: {prevRef}
+                        </span>
+                      )}
+                    </td>
                     {SETS.map((_, si) => {
                       const s = sl.sets[si];
                       const hasData = s.load || s.reps;
@@ -325,11 +357,7 @@ export function SessionLogForm({
                     </td>
                     {showSuggestions && (
                       <td className="px-3 py-2 align-top pt-3">
-                        {suggestion ? (
-                          <SuggestionBadge suggestion={suggestion} />
-                        ) : (
-                          <span className="text-gray-200 text-[10px]">—</span>
-                        )}
+                        {suggestion ? <SuggestionBadge suggestion={suggestion} /> : <span className="text-gray-200 text-[10px]">—</span>}
                       </td>
                     )}
                   </tr>
@@ -367,28 +395,211 @@ export function SessionLogForm({
   );
 }
 
+// ── EditLogPanel (inline edit inside history) ──────────────────────────────
+
+function EditLogPanel({
+  log,
+  clientId,
+  onSaved,
+  onClose,
+}: {
+  log: WorkoutLogRow;
+  clientId: string;
+  onSaved: (updated: WorkoutLogRow) => void;
+  onClose: () => void;
+}) {
+  const [notes, setNotes] = useState(log.notes ?? "");
+  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
+    log.setLogs.map((sl) => ({
+      id: sl.id,
+      movementName: sl.movementName,
+      exerciseName: sl.exerciseName,
+      exerciseNotes: sl.exerciseNotes ?? "",
+      sets: [
+        { load: sl.set1Load ?? "", reps: sl.set1Reps?.toString() ?? "" },
+        { load: sl.set2Load ?? "", reps: sl.set2Reps?.toString() ?? "" },
+        { load: sl.set3Load ?? "", reps: sl.set3Reps?.toString() ?? "" },
+        { load: sl.set4Load ?? "", reps: sl.set4Reps?.toString() ?? "" },
+        { load: sl.set5Load ?? "", reps: sl.set5Reps?.toString() ?? "" },
+        { load: sl.set6Load ?? "", reps: sl.set6Reps?.toString() ?? "" },
+      ],
+    }))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function updateSet(slIdx: number, setIdx: number, field: "load" | "reps", value: string) {
+    setSetLogs((prev) =>
+      prev.map((sl, i) =>
+        i === slIdx ? { ...sl, sets: sl.sets.map((s, j) => (j === setIdx ? { ...s, [field]: value } : s)) } : sl
+      )
+    );
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: notes || null,
+          setLogs: setLogs.map((sl) => ({
+            id: sl.id,
+            set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
+            set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
+            set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
+            set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
+            set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
+            set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
+            exerciseNotes: sl.exerciseNotes || null,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error("Có lỗi khi cập nhật");
+      const updated = await res.json() as WorkoutLogRow;
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-blue-50 bg-blue-50/30 px-4 pb-4 pt-3 space-y-3">
+      {/* Notes */}
+      <div className="space-y-1">
+        <label className="text-xs font-semibold text-gray-500">Ghi chú buổi tập</label>
+        <textarea
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none bg-white"
+          placeholder="Ghi chú..."
+        />
+      </div>
+
+      {/* Set table */}
+      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
+        <table className="w-full text-xs" style={{ minWidth: 540 }}>
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="px-3 py-2 text-left font-bold text-gray-400">Bài tập</th>
+              {SETS.map((n) => (
+                <th key={n} className="px-1 py-2 text-center font-bold text-gray-400 w-[90px]">
+                  Set {n}
+                  <div className="text-[9px] text-gray-300 font-normal">kg / reps</div>
+                </th>
+              ))}
+              <th className="px-2 py-2 text-left font-bold text-gray-400 w-24">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            {setLogs.map((sl, si) => (
+              <tr key={si} className={cn("border-b border-gray-50 last:border-0", si % 2 === 1 && "bg-gray-50/30")}>
+                <td className="px-3 py-2">
+                  <p className="font-semibold text-gray-700">{sl.movementName}</p>
+                  <p className="text-gray-400">{sl.exerciseName}</p>
+                </td>
+                {SETS.map((_, setIdx) => {
+                  const s = sl.sets[setIdx];
+                  return (
+                    <td key={setIdx} className="px-1 py-1.5 align-top">
+                      <div className="flex flex-col gap-0.5 items-center">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={s.load}
+                          onChange={(e) => updateSet(si, setIdx, "load", e.target.value)}
+                          placeholder="—"
+                          className="w-14 h-7 rounded-lg border border-blue-200 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white text-gray-800"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={s.reps}
+                          onChange={(e) => updateSet(si, setIdx, "reps", e.target.value)}
+                          placeholder="—"
+                          className="w-14 h-7 rounded-lg border border-blue-200 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white text-gray-800"
+                        />
+                      </div>
+                    </td>
+                  );
+                })}
+                <td className="px-2 py-1.5 align-top">
+                  <textarea
+                    rows={2}
+                    value={sl.exerciseNotes}
+                    onChange={(e) =>
+                      setSetLogs((prev) => prev.map((r, i) => i === si ? { ...r, exerciseNotes: e.target.value } : r))
+                    }
+                    className="w-full rounded-lg border border-blue-200 px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-300 resize-none bg-white"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 h-8 px-4 rounded-xl text-white text-xs font-bold disabled:opacity-60 bg-blue-500 hover:bg-blue-600"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+          {saving ? "Đang lưu..." : "Lưu chỉnh sửa"}
+        </button>
+        <button
+          onClick={onClose}
+          className="h-8 px-4 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+        >
+          Hủy
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── SessionLogHistory ──────────────────────────────────────────────────────
 
 export function SessionLogHistory({
   sessionName,
-  logs,
+  logs: initialLogs,
   phase,
+  clientId,
+  onLogUpdated,
   onClose,
 }: {
   sessionName: string;
   logs: WorkoutLogRow[];
   phase: string;
+  clientId: string;
+  onLogUpdated: (updated: WorkoutLogRow) => void;
   onClose: () => void;
 }) {
+  const [logs, setLogs] = useState(initialLogs);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
   const isCardio = isCardioSession(sessionName);
   const showSuggestions = !isCardio && getRepRange(phase) != null;
 
+  function handleLogSaved(updated: WorkoutLogRow) {
+    setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    onLogUpdated(updated);
+    setEditingLogId(null);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
@@ -410,104 +621,132 @@ export function SessionLogHistory({
           ) : (
             logs.map((log) => {
               const isOpen = expanded === log.id;
-              const hasAnyData = log.setLogs.some((sl) =>
-                sl.set1Load || sl.set1Reps || sl.set2Load || sl.set2Reps || sl.set3Load || sl.set3Reps
+              const isEditing = editingLogId === log.id;
+              const hasAnyData = log.setLogs.some(
+                (sl) => sl.set1Load || sl.set1Reps || sl.set2Load || sl.set2Reps || sl.set3Load || sl.set3Reps
               );
               return (
                 <div key={log.id} className="border border-gray-100 rounded-xl overflow-hidden">
-                  <button
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50/60 transition-colors text-left"
-                    onClick={() => setExpanded(isOpen ? null : log.id)}
-                  >
-                    <div className="flex items-center gap-3">
+                  {/* Row header */}
+                  <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/60 transition-colors">
+                    <button
+                      className="flex-1 flex items-center gap-3 text-left"
+                      onClick={() => { setExpanded(isOpen ? null : log.id); setEditingLogId(null); }}
+                    >
                       <span className="text-sm font-bold text-gray-800">{fmtDate(log.sessionDate)}</span>
                       {log.notes && (
-                        <span className="text-xs text-gray-500 truncate max-w-[200px]">{'"'}{log.notes}{'"'}</span>
+                        <span className="text-xs text-gray-500 truncate max-w-[160px]">{'"'}{log.notes}{'"'}</span>
                       )}
                       {!hasAnyData && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400">Chưa ghi số liệu</span>
                       )}
-                    </div>
+                    </button>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs text-gray-400">{log.createdBy.name ?? "PT"}</span>
-                      {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                      {/* Edit button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isEditing) {
+                            setEditingLogId(null);
+                          } else {
+                            setExpanded(log.id);
+                            setEditingLogId(log.id);
+                          }
+                        }}
+                        title="Chỉnh sửa buổi tập này"
+                        className={cn(
+                          "p-1.5 rounded-lg transition-colors",
+                          isEditing
+                            ? "bg-blue-100 text-blue-600"
+                            : "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                        )}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => { setExpanded(isOpen ? null : log.id); setEditingLogId(null); }}
+                        className="text-gray-400"
+                      >
+                        {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
                     </div>
-                  </button>
+                  </div>
 
+                  {/* Expanded content */}
                   {isOpen && (
-                    <div className="border-t border-gray-50 px-4 pb-4 pt-3">
-                      {log.notes && (
-                        <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 mb-3">
-                          {log.notes}
-                        </p>
-                      )}
-                      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
-                        <table className="w-full text-xs" style={{ minWidth: 520 }}>
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-100">
-                              <th className="px-3 py-2 text-left font-bold text-gray-400">Bài tập</th>
-                              {SETS.map((n) => (
-                                <th key={n} className="px-2 py-2 text-center font-bold text-gray-400">Set {n}</th>
-                              ))}
-                              {showSuggestions && (
-                                <th className="px-3 py-2 text-left font-bold text-gray-400">Gợi ý</th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {log.setLogs.map((sl, i) => {
-                              const setValues = [
-                                { load: sl.set1Load, reps: sl.set1Reps },
-                                { load: sl.set2Load, reps: sl.set2Reps },
-                                { load: sl.set3Load, reps: sl.set3Reps },
-                                { load: sl.set4Load, reps: sl.set4Reps },
-                                { load: sl.set5Load, reps: sl.set5Reps },
-                                { load: sl.set6Load, reps: sl.set6Reps },
-                              ];
-                              const suggestion = showSuggestions
-                                ? getSuggestionFromSetLog(sl, phase)
-                                : null;
-                              return (
-                                <tr key={i} className={cn("border-b border-gray-50 last:border-0", i % 2 === 1 && "bg-gray-50/30")}>
-                                  <td className="px-3 py-2">
-                                    <p className="font-semibold text-gray-700">{sl.movementName}</p>
-                                    <p className="text-gray-400">{sl.exerciseName}</p>
-                                    {sl.exerciseNotes && (
-                                      <p className="text-gray-400 italic mt-0.5">{'"'}{sl.exerciseNotes}{'"'}</p>
+                    isEditing ? (
+                      <EditLogPanel
+                        log={log}
+                        clientId={clientId}
+                        onSaved={handleLogSaved}
+                        onClose={() => setEditingLogId(null)}
+                      />
+                    ) : (
+                      <div className="border-t border-gray-50 px-4 pb-4 pt-3">
+                        {log.notes && (
+                          <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 mb-3">
+                            {log.notes}
+                          </p>
+                        )}
+                        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
+                          <table className="w-full text-xs" style={{ minWidth: 520 }}>
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-3 py-2 text-left font-bold text-gray-400">Bài tập</th>
+                                {SETS.map((n) => (
+                                  <th key={n} className="px-2 py-2 text-center font-bold text-gray-400">Set {n}</th>
+                                ))}
+                                {showSuggestions && (
+                                  <th className="px-3 py-2 text-left font-bold text-gray-400">Gợi ý</th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {log.setLogs.map((sl, i) => {
+                                const setValues = [
+                                  { load: sl.set1Load, reps: sl.set1Reps },
+                                  { load: sl.set2Load, reps: sl.set2Reps },
+                                  { load: sl.set3Load, reps: sl.set3Reps },
+                                  { load: sl.set4Load, reps: sl.set4Reps },
+                                  { load: sl.set5Load, reps: sl.set5Reps },
+                                  { load: sl.set6Load, reps: sl.set6Reps },
+                                ];
+                                const suggestion = showSuggestions ? getSuggestionFromSetLog(sl, phase) : null;
+                                return (
+                                  <tr key={i} className={cn("border-b border-gray-50 last:border-0", i % 2 === 1 && "bg-gray-50/30")}>
+                                    <td className="px-3 py-2">
+                                      <p className="font-semibold text-gray-700">{sl.movementName}</p>
+                                      <p className="text-gray-400">{sl.exerciseName}</p>
+                                      {sl.exerciseNotes && (
+                                        <p className="text-gray-400 italic mt-0.5">{'"'}{sl.exerciseNotes}{'"'}</p>
+                                      )}
+                                    </td>
+                                    {setValues.map((sv, si) => (
+                                      <td key={si} className="px-2 py-2 text-center">
+                                        {sv.load != null || sv.reps != null ? (
+                                          <div className="space-y-0.5">
+                                            {sv.load != null && <div className="font-bold text-[#f15b5c]">{sv.load}</div>}
+                                            {sv.reps != null && <div className="text-gray-600">×{sv.reps}</div>}
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-200">—</span>
+                                        )}
+                                      </td>
+                                    ))}
+                                    {showSuggestions && (
+                                      <td className="px-3 py-2 align-top">
+                                        {suggestion ? <SuggestionBadge suggestion={suggestion} /> : <span className="text-gray-200">—</span>}
+                                      </td>
                                     )}
-                                  </td>
-                                  {setValues.map((sv, si) => (
-                                    <td key={si} className="px-2 py-2 text-center">
-                                      {sv.load != null || sv.reps != null ? (
-                                        <div className="space-y-0.5">
-                                          {sv.load != null && (
-                                            <div className="font-bold text-[#f15b5c]">{sv.load}</div>
-                                          )}
-                                          {sv.reps != null && (
-                                            <div className="text-gray-600">×{sv.reps}</div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-gray-200">—</span>
-                                      )}
-                                    </td>
-                                  ))}
-                                  {showSuggestions && (
-                                    <td className="px-3 py-2 align-top">
-                                      {suggestion ? (
-                                        <SuggestionBadge suggestion={suggestion} />
-                                      ) : (
-                                        <span className="text-gray-200">—</span>
-                                      )}
-                                    </td>
-                                  )}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
+                    )
                   )}
                 </div>
               );
