@@ -4,8 +4,21 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
-import { TimeMaskInput } from "@/components/ui/time-mask-input";
 import type { StaffMember } from "./checklist-page";
+
+// Strip non-digits, cap at 4, auto-insert ":" → "HH:mm"
+function maskTime(raw: string): string {
+  let clean = raw.replace(/\D/g, "");
+  if (clean.length > 4) clean = clean.slice(0, 4);
+  if (clean.length >= 3) return clean.slice(0, 2) + ":" + clean.slice(2);
+  return clean;
+}
+
+function isValidTime(t: string): boolean {
+  const m = t.match(/^(\d{2}):(\d{2})$/);
+  if (!m) return false;
+  return parseInt(m[1]) <= 23 && parseInt(m[2]) <= 59;
+}
 
 type Row = {
   id?: string;
@@ -131,6 +144,16 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   }
 
   async function handleSave() {
+    // Validate all time fields before saving
+    const badRows = rows.filter(
+      (r) => (r.startTime && !isValidTime(r.startTime)) || (r.endTime && !isValidTime(r.endTime))
+    );
+    if (badRows.length > 0) {
+      setToast(`⚠️ Kiểm tra lại giờ ở dòng ${badRows.map((r) => r.order).join(", ")} — định dạng phải là HH:mm (00:00–23:59)`);
+      setTimeout(() => setToast(""), 4000);
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/checklist/daily", {
@@ -313,16 +336,24 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                     <td className="px-2 py-2 w-48">
                       {canEdit ? (
                         <div className="flex items-center gap-1">
-                          <TimeMaskInput
+                          <input
+                            type="text"
+                            inputMode="numeric"
                             value={row.startTime}
-                            onChange={(v) => updateRow(i, "startTime", v)}
-                            className={inputCls}
+                            onChange={(e) => updateRow(i, "startTime", maskTime(e.target.value))}
+                            placeholder="HH:mm"
+                            maxLength={5}
+                            className={cn(inputCls, row.startTime && !isValidTime(row.startTime) && "!border-red-400")}
                           />
                           <span className="text-gray-400 text-xs shrink-0">–</span>
-                          <TimeMaskInput
+                          <input
+                            type="text"
+                            inputMode="numeric"
                             value={row.endTime}
-                            onChange={(v) => updateRow(i, "endTime", v)}
-                            className={inputCls}
+                            onChange={(e) => updateRow(i, "endTime", maskTime(e.target.value))}
+                            placeholder="HH:mm"
+                            maxLength={5}
+                            className={cn(inputCls, row.endTime && !isValidTime(row.endTime) && "!border-red-400")}
                           />
                         </div>
                       ) : (
