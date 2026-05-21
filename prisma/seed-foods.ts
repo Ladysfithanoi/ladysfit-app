@@ -1,170 +1,10 @@
 import { PrismaClient } from "@prisma/client";
+import { FOODS } from "../lib/foods-data";
 
 const prisma = new PrismaClient();
 
-const FOODS_DATA = [
-  { name: 'Gạo nếp cái', calories: 344, protein: 8.61, fat: 1.51, carbs: 74.51 },
-  { name: 'Gạo nếp máy (loại thường)', calories: 346, protein: 8.42, fat: 1.62, carbs: 74.92 },
-  { name: 'Gạo tẻ giã', calories: 344, protein: 8.11, fat: 1.31, carbs: 75.01 },
-  { name: 'Gạo tẻ máy', calories: 344, protein: 7.91, fat: 1.01, carbs: 75.91 },
-  { name: 'Gạo lứt', calories: 345, protein: 7.53, fat: 2.73, carbs: 72.83 },
-  { name: 'Kê', calories: 331, protein: 7.01, fat: 3.01, carbs: 69.01 },
-  { name: 'Ngô bắp tươi', calories: 196, protein: 4.11, fat: 2.31, carbs: 39.61 },
-  { name: 'Ngô vàng hạt khô', calories: 354, protein: 8.61, fat: 4.71, carbs: 69.41 },
-  { name: 'Bánh bao', calories: 219, protein: 6.11, fat: 0.51, carbs: 47.51, meal_type: 'Bữa sáng' },
-  { name: 'Bánh đúc', calories: 52, protein: 0.91, fat: 0.31, carbs: 11.31 },
-  { name: 'Bánh mỳ', calories: 249, protein: 7.91, fat: 0.81, carbs: 52.61, meal_type: 'Bữa sáng' },
-  { name: 'Bánh phở', calories: 143, protein: 3.21, fat: 0.43, carbs: 31.71 },
-  { name: 'Bún', calories: 110, protein: 1.71, fat: 0, carbs: 25.71 },
-  { name: 'Mỳ sợi', calories: 349, protein: 11.01, fat: 0.91, carbs: 74.21 },
-  { name: 'Ngô nếp luộc', calories: 167, protein: 3.91, fat: 2.21, carbs: 32.91 },
-  { name: 'Khoai lang', calories: 119, protein: 0.81, fat: 0.21, carbs: 28.51 },
-  { name: 'Khoai lang nghệ', calories: 116, protein: 1.21, fat: 0.31, carbs: 27.11 },
-  { name: 'Khoai môn', calories: 109, protein: 1.51, fat: 0.21, carbs: 25.21 },
-  { name: 'Khoai tây', calories: 93, protein: 2.01, fat: 0.13, carbs: 20.91 },
-  { name: 'Khoai lang khô', calories: 333, protein: 2.21, fat: 0.53, carbs: 80.01 },
-  { name: 'Khoai tây lát chiên', calories: 525, protein: 2.21, fat: 35.41, carbs: 49.31 },
-  { name: 'Cùi dừa già', calories: 368, protein: 4.81, fat: 36.01, carbs: 6.21 },
-  { name: 'Đậu cô ve (hạt)', calories: 321, protein: 21.81, fat: 1.61, carbs: 54.91 },
-  { name: 'Đậu đen (hạt)', calories: 325, protein: 24.21, fat: 1.71, carbs: 53.31 },
-  { name: 'Đậu Hà Lan (hạt)', calories: 318, protein: 22.21, fat: 1.41, carbs: 54.11 },
-  { name: 'Đậu tương (đậu nành)', calories: 400, protein: 34.01, fat: 18.41, carbs: 24.61 },
-  { name: 'Đậu xanh (đậu tắt)', calories: 328, protein: 23.41, fat: 2.41, carbs: 53.11 },
-  { name: 'Hạt điều', calories: 605, protein: 18.41, fat: 46.31, carbs: 28.71 },
-  { name: 'Lạc hạt', calories: 573, protein: 27.51, fat: 44.51, carbs: 15.51 },
-  { name: 'Vừng (đen, trắng)', calories: 568, protein: 20.11, fat: 46.41, carbs: 17.61 },
-  { name: 'Đậu phụ', calories: 95, protein: 10.91, fat: 5.41, carbs: 0.71 },
-  { name: 'Đậu phụ nướng', calories: 114, protein: 13.41, fat: 6.41, carbs: 0.81 },
-  { name: 'Sữa đậu nành (100g đậu/lít)', calories: 28, protein: 3.11, fat: 1.61, carbs: 0.41 },
-  { name: 'Bầu', calories: 14, protein: 0.61, fat: 0.02, carbs: 2.91 },
-  { name: 'Bí đao (bí xanh)', calories: 12, protein: 0.61, fat: 0, carbs: 2.41 },
-  { name: 'Bí ngô', calories: 27, protein: 0.31, fat: 0.13, carbs: 6.11 },
-  { name: 'Cà chua', calories: 20, protein: 0.61, fat: 0.23, carbs: 4.01 },
-  { name: 'Cà rốt', calories: 39, protein: 1.51, fat: 0.23, carbs: 7.81 },
-  { name: 'Cà tím', calories: 22, protein: 1.01, fat: 0, carbs: 4.51 },
-  { name: 'Cải bắp', calories: 29, protein: 1.81, fat: 0.13, carbs: 5.31 },
-  { name: 'Cải soong', calories: 15, protein: 2.11, fat: 0.13, carbs: 1.31 },
-  { name: 'Cải thìa (cải trắng)', calories: 17, protein: 1.41, fat: 0.23, carbs: 2.41 },
-  { name: 'Cải xanh', calories: 16, protein: 1.71, fat: 0.23, carbs: 1.91 },
-  { name: 'Cần tây', calories: 48, protein: 3.71, fat: 0.23, carbs: 7.91 },
-  { name: 'Dưa chuột', calories: 16, protein: 0.81, fat: 0.13, carbs: 2.91 },
-  { name: 'Đậu cô ve', calories: 73, protein: 5.01, fat: 0, carbs: 13.31 },
-  { name: 'Đậu Hà Lan', calories: 72, protein: 6.51, fat: 0.43, carbs: 10.61 },
-  { name: 'Đu đủ xanh', calories: 22, protein: 0.81, fat: 0, carbs: 4.61 },
-  { name: 'Giá đậu xanh', calories: 44, protein: 5.51, fat: 0.23, carbs: 5.11 },
-  { name: 'Hành củ tươi', calories: 26, protein: 1.31, fat: 0.43, carbs: 4.41 },
-  { name: 'Hành lá', calories: 22, protein: 1.31, fat: 0, carbs: 4.31 },
-  { name: 'Hành tây', calories: 41, protein: 1.81, fat: 0.13, carbs: 8.21 },
-  { name: 'Hạt sen tươi', calories: 161, protein: 9.51, fat: 0.53, carbs: 29.51 },
-  { name: 'Khế', calories: 16, protein: 0.61, fat: 0.33, carbs: 2.81 },
-  { name: 'Măng tươi', calories: 15, protein: 1.71, fat: 0.33, carbs: 1.41 },
-  { name: 'Mướp', calories: 17, protein: 0.91, fat: 0.23, carbs: 2.81 },
-  { name: 'Mướp đắng', calories: 16, protein: 0.91, fat: 0.23, carbs: 2.81 },
-  { name: 'Ngô bao tử', calories: 40, protein: 2.21, fat: 0.21, carbs: 7.41 },
-  { name: 'Rau bí', calories: 18, protein: 2.71, fat: 0, carbs: 1.71 },
-  { name: 'Rau diếp', calories: 14, protein: 1.21, fat: 0.23, carbs: 1.81 },
-  { name: 'Rau đay', calories: 25, protein: 2.81, fat: 0.33, carbs: 3.01 },
-  { name: 'Rau mồng tơi', calories: 14, protein: 2.01, fat: 0, carbs: 1.41 },
-  { name: 'Rau muống', calories: 25, protein: 3.21, fat: 0.43, carbs: 2.11 },
-  { name: 'Rau ngót', calories: 35, protein: 5.31, fat: 0, carbs: 3.41 },
-  { name: 'Súp lơ trắng', calories: 30, protein: 2.51, fat: 0.13, carbs: 4.81 },
-  { name: 'Súp lơ xanh', calories: 26, protein: 3.03, fat: 0.33, carbs: 2.93 },
-  { name: 'Su hào', calories: 37, protein: 2.81, fat: 0.13, carbs: 6.21 },
-  { name: 'Tỏi ta', calories: 121, protein: 6.01, fat: 0.53, carbs: 23.01 },
-  { name: 'Nấm hương tươi', calories: 39, protein: 5.51, fat: 0.51, carbs: 3.11 },
-  { name: 'Nấm mỡ (Nấm tây)', calories: 32, protein: 4.01, fat: 0.31, carbs: 3.41 },
-  { name: 'Nấm rơm', calories: 57, protein: 3.61, fat: 3.21, carbs: 3.41 },
-  { name: 'Bưởi', calories: 30, protein: 0.21, fat: 0.03, carbs: 7.31 },
-  { name: 'Cam', calories: 38, protein: 0.91, fat: 0.13, carbs: 8.31 },
-  { name: 'Chuối tây', calories: 56, protein: 0.91, fat: 0.31, carbs: 12.41 },
-  { name: 'Chuối tiêu', calories: 97, protein: 1.51, fat: 0.21, carbs: 22.21 },
-  { name: 'Dâu tây', calories: 43, protein: 1.81, fat: 0.41, carbs: 8.11 },
-  { name: 'Dưa hấu', calories: 16, protein: 1.21, fat: 0.21, carbs: 2.31 },
-  { name: 'Dứa tây (Thơm)', calories: 38, protein: 0.51, fat: 0.13, carbs: 8.81 },
-  { name: 'Đào', calories: 31, protein: 0.91, fat: 0.21, carbs: 6.31 },
-  { name: 'Đu đủ chín', calories: 36, protein: 1.01, fat: 0.13, carbs: 7.61 },
-  { name: 'Lê', calories: 45, protein: 0.71, fat: 0.21, carbs: 10.21 },
-  { name: 'Mận', calories: 20, protein: 0.61, fat: 0.21, carbs: 3.91 },
-  { name: 'Mít dai', calories: 50, protein: 0.61, fat: 0.33, carbs: 11.11 },
-  { name: 'Na (Mãng cầu)', calories: 66, protein: 1.61, fat: 0.33, carbs: 14.21 },
-  { name: 'Nhãn', calories: 48, protein: 0.91, fat: 0.13, carbs: 10.91 },
-  { name: 'Nho ngọt', calories: 68, protein: 0.41, fat: 0.23, carbs: 16.31 },
-  { name: 'Ổi', calories: 38, protein: 0.61, fat: 1.03, carbs: 6.81 },
-  { name: 'Quả bơ', calories: 101, protein: 1.91, fat: 9.41, carbs: 2.31 },
-  { name: 'Quả thanh long', calories: 40, protein: 1.31, fat: 0, carbs: 8.71 },
-  { name: 'Sầu riêng', calories: 132, protein: 2.51, fat: 1.61, carbs: 26.91 },
-  { name: 'Táo tây', calories: 48, protein: 0.51, fat: 0.23, carbs: 11.01 },
-  { name: 'Vải', calories: 45, protein: 0.71, fat: 0.43, carbs: 9.61 },
-  { name: 'Xoài chín', calories: 62, protein: 0.61, fat: 0.31, carbs: 14.11 },
-  { name: 'Quả kiwi', calories: 56, protein: 1.13, fat: 0.53, carbs: 11.73 },
-  { name: 'Dầu thực vật (lạc, vừng)', calories: 897, protein: 0.01, fat: 99.71, carbs: 0.01 },
-  { name: 'Dầu oliu', calories: 900, protein: 0.03, fat: 100.03, carbs: 0.03 },
-  { name: 'Dầu dừa', calories: 900, protein: 0.03, fat: 100.03, carbs: 0.03 },
-  { name: 'Thịt bê nạc', calories: 85, protein: 20.01, fat: 0.51, carbs: 0.01 },
-  { name: 'Thịt bò loại I (nạc)', calories: 118, protein: 21.01, fat: 3.81, carbs: 0.01 },
-  { name: 'Thịt bò loại II (nạc mỡ)', calories: 167, protein: 18.01, fat: 10.51, carbs: 0.01 },
-  { name: 'Thịt bò, lưng, nạc', calories: 127, protein: 23.13, fat: 3.93, carbs: 0.03 },
-  { name: 'Đùi gà không da, không xương', calories: 130, protein: 20, fat: 5, carbs: 0 },
-  { name: 'Đùi gà có da, không xương', calories: 170, protein: 18, fat: 10, carbs: 0 },
-  { name: 'Ức gà không da, không xương', calories: 120, protein: 23.6, fat: 1.9, carbs: 0 },
-  { name: 'Ức gà có da, không xương', calories: 157, protein: 21.5, fat: 7.3, carbs: 0 },
-  { name: 'Thịt lợn vai giòn', calories: 145, protein: 20.0, fat: 6.5, carbs: 0 },
-  { name: 'Ba chỉ lợn', calories: 285, protein: 15.8, fat: 24.0, carbs: 0 },
-  { name: 'Thịt mông lợn', calories: 125, protein: 21.0, fat: 4.2, carbs: 0 },
-  { name: 'Ba chỉ bò', calories: 260, protein: 16.0, fat: 21.5, carbs: 0 },
-  { name: 'Bắp bò', calories: 135, protein: 21.4, fat: 4.8, carbs: 0 },
-  { name: 'Thăn bò', calories: 136, protein: 22.3, fat: 4.6, carbs: 0 },
-  { name: 'Gầu bò', calories: 254, protein: 16.2, fat: 20.5, carbs: 0 },
-  { name: 'Nạm bò', calories: 192, protein: 18.5, fat: 12.4, carbs: 0 },
-  { name: 'Thịt gà ta', calories: 199, protein: 20.31, fat: 13.11, carbs: 0.01 },
-  { name: 'Thịt dê nạc', calories: 122, protein: 20.71, fat: 4.31, carbs: 0.01 },
-  { name: 'Thịt lợn nạc', calories: 139, protein: 19.01, fat: 7.01, carbs: 0.01 },
-  { name: 'Thịt lợn nửa nạc nửa mỡ', calories: 260, protein: 16.51, fat: 21.51, carbs: 0.01 },
-  { name: 'Thịt vịt', calories: 267, protein: 17.81, fat: 21.81, carbs: 0.01 },
-  { name: 'Gan bò', calories: 109, protein: 17.41, fat: 3.11, carbs: 3.01 },
-  { name: 'Gan gà', calories: 111, protein: 18.21, fat: 3.41, carbs: 2.01 },
-  { name: 'Gan lợn', calories: 116, protein: 18.81, fat: 3.61, carbs: 2.01 },
-  { name: 'Giò lụa', calories: 136, protein: 21.51, fat: 5.51, carbs: 0.03 },
-  { name: 'Nem chua', calories: 137, protein: 21.71, fat: 3.71, carbs: 4.31 },
-  { name: 'Chả lụa (chả lợn)', calories: 517, protein: 10.81, fat: 50.41, carbs: 5.11 },
-  { name: 'Sườn lợn', calories: 187, protein: 17.91, fat: 12.81, carbs: 0.01 },
-  { name: 'Cá bống', calories: 70, protein: 15.81, fat: 0.81, carbs: 0.01 },
-  { name: 'Cá chép', calories: 96, protein: 16.01, fat: 3.61, carbs: 0.01 },
-  { name: 'Cá hồi', calories: 136, protein: 22.01, fat: 5.31, carbs: 0.01 },
-  { name: 'Cá ngừ', calories: 87, protein: 21.01, fat: 0.31, carbs: 0.01 },
-  { name: 'Cá rô phi', calories: 100, protein: 19.71, fat: 2.31, carbs: 0.01 },
-  { name: 'Cá thu', calories: 166, protein: 18.21, fat: 10.31, carbs: 0.01 },
-  { name: 'Cá trắm cỏ', calories: 91, protein: 17.01, fat: 2.61, carbs: 0.01 },
-  { name: 'Cua bể', calories: 103, protein: 17.51, fat: 0.61, carbs: 7.01 },
-  { name: 'Cua đồng', calories: 87, protein: 12.31, fat: 3.31, carbs: 2.01 },
-  { name: 'Lươn', calories: 180, protein: 18.43, fat: 11.73, carbs: 0.23 },
-  { name: 'Mực tươi', calories: 73, protein: 16.31, fat: 0.91, carbs: 0.03 },
-  { name: 'Ốc bươu', calories: 84, protein: 11.11, fat: 0.71, carbs: 8.31 },
-  { name: 'Tôm biển', calories: 82, protein: 17.61, fat: 0.91, carbs: 0.91 },
-  { name: 'Tôm sú', calories: 90, protein: 18.41, fat: 1.81, carbs: 0.03 },
-  { name: 'Tôm khô', calories: 347, protein: 75.61, fat: 3.81, carbs: 2.51 },
-  { name: 'Trứng gà (cả quả)', calories: 166, protein: 14.81, fat: 11.61, carbs: 0.51 },
-  { name: 'Lòng đỏ trứng gà', calories: 327, protein: 13.61, fat: 29.81, carbs: 1.01 },
-  { name: 'Lòng trắng trứng gà', calories: 46, protein: 10.31, fat: 0.11, carbs: 1.01 },
-  { name: 'Trứng vịt', calories: 184, protein: 13.01, fat: 14.21, carbs: 1.01 },
-  { name: 'Trứng chim cút', calories: 154, protein: 13.13, fat: 11.13, carbs: 0.43 },
-  { name: 'Sữa bò tươi', calories: 74, protein: 3.91, fat: 4.41, carbs: 4.81 },
-  { name: 'Sữa chua không đường', calories: 61, protein: 3.31, fat: 3.71, carbs: 3.61 },
-  { name: 'Sữa bột toàn phần', calories: 494, protein: 27.01, fat: 26.01, carbs: 38.01 },
-  { name: 'Pho mát', calories: 380, protein: 25.51, fat: 30.91, carbs: 0.01 },
-  { name: 'Cá thu hộp', calories: 207, protein: 24.81, fat: 12.01, carbs: 0.01 },
-  { name: 'Cá ngừ đóng hộp', calories: 116, protein: 26, fat: 1, carbs: 0 },
-  { name: 'Thịt gà hộp', calories: 273, protein: 17.01, fat: 22.81, carbs: 0.01 },
-  { name: 'Đường cát', calories: 390, protein: 0.01, fat: 0.01, carbs: 97.41 },
-  { name: 'Mật ong', calories: 327, protein: 0.41, fat: 0.01, carbs: 81.31 },
-  { name: 'Gừng tươi', calories: 29, protein: 0.41, fat: 0.83, carbs: 5.11 },
-  { name: 'Hạt tiêu', calories: 231, protein: 7.01, fat: 7.41, carbs: 34.11 },
-  { name: 'Muối', calories: 0, protein: 0.01, fat: 0.01, carbs: 0.01 },
-  { name: 'Tương ớt', calories: 37, protein: 0.51, fat: 0.51, carbs: 7.61 },
-  { name: 'Xì dầu (nước tương)', calories: 65, protein: 10.51, fat: 0.13, carbs: 5.63 },
-  { name: 'Nước mắm cá', calories: 35, protein: 5.11, fat: 0.01, carbs: 3.61 },
-  { name: 'Sốt mayonnaise', calories: 701, protein: 0.03, fat: 77.83, carbs: 0.13 },
-  // Thức ăn bữa sáng Việt Nam phổ biến
+// Các món ăn chế biến (thực đơn hoàn chỉnh) — có weight_g, meal_type, category
+const PREPARED_MEALS = [
   { name: 'Phở bò (tô)', calories: 430, protein: 28, fat: 12, carbs: 52, weight_g: 500, meal_type: 'Bữa sáng', category: 'Giảm mỡ' },
   { name: 'Phở gà (tô)', calories: 380, protein: 26, fat: 8, carbs: 50, weight_g: 500, meal_type: 'Bữa sáng', category: 'Giảm mỡ' },
   { name: 'Bún bò Huế (tô)', calories: 480, protein: 30, fat: 14, carbs: 58, weight_g: 500, meal_type: 'Bữa sáng', category: 'Giữ cân' },
@@ -209,33 +49,67 @@ const FOODS_DATA = [
   { name: 'Canh chua cá (tô)', calories: 180, protein: 18, fat: 5, carbs: 16, weight_g: 400, meal_type: 'Bữa tối', category: 'Giảm mỡ' },
   { name: 'Tôm rang muối (100g)', calories: 120, protein: 20, fat: 3, carbs: 4, weight_g: 100, meal_type: 'Bữa tối', category: 'Giảm mỡ' },
   { name: 'Thịt heo kho trứng (1 phần)', calories: 320, protein: 26, fat: 20, carbs: 8, weight_g: 250, meal_type: 'Bữa tối', category: 'Tăng cơ' },
+  // Bổ sung thêm Cá ngừ đóng hộp
+  { name: 'Cá ngừ đóng hộp', calories: 116, protein: 26, fat: 1, carbs: 0, weight_g: 100, meal_type: 'Bữa trưa', category: 'Giảm mỡ' },
 ];
 
 async function main() {
-  console.log("Bắt đầu seed dữ liệu thực phẩm...");
+  console.log("=== WIPE & RESEED toàn bộ bảng foods ===");
 
-  const existing = await prisma.food.count();
-  if (existing > 0) {
-    console.log(`Bảng foods đã có ${existing} bản ghi. Bỏ qua seed.`);
-    console.log("Nếu muốn seed lại, hãy xóa bảng trước: prisma.food.deleteMany()");
-    return;
+  // 1. Xoá sạch toàn bộ
+  const deleted = await prisma.food.deleteMany();
+  console.log(`🗑️  Đã xoá ${deleted.count} bản ghi cũ`);
+
+  // 2. Chuyển đổi FOODS (526 nguyên liệu từ VTN_FCT_2007) sang Food records
+  const rawIngredients = FOODS.map((f) => ({
+    name: f.name,
+    calories: Number(f.calories) || 0,
+    protein: Number(f.protein) || 0,
+    carbs: Number(f.carbs) || 0,
+    fat: Number(f.fat) || 0,
+    weight_g: 100,
+    category: null as string | null,
+    meal_type: null as string | null,
+  }));
+
+  // 3. Kết hợp: nguyên liệu thô + món ăn chế biến
+  const allFoods = [
+    ...rawIngredients,
+    ...PREPARED_MEALS.map((f) => ({
+      name: f.name,
+      calories: Number(f.calories) || 0,
+      protein: Number(f.protein) || 0,
+      carbs: Number(f.carbs) || 0,
+      fat: Number(f.fat) || 0,
+      weight_g: f.weight_g,
+      category: f.category,
+      meal_type: f.meal_type,
+    })),
+  ];
+
+  console.log(`📋 Tổng số món cần seed: ${allFoods.length}`);
+  console.log(`   → ${rawIngredients.length} nguyên liệu thô (VTN_FCT_2007)`);
+  console.log(`   → ${PREPARED_MEALS.length} món ăn chế biến (có meal_type/category)`);
+
+  // 4. Chunk 100 mỗi lần để tránh timeout
+  const CHUNK_SIZE = 100;
+  let totalInserted = 0;
+
+  for (let i = 0; i < allFoods.length; i += CHUNK_SIZE) {
+    const chunk = allFoods.slice(i, i + CHUNK_SIZE);
+    const result = await prisma.food.createMany({
+      data: chunk,
+      skipDuplicates: false, // đã xoá sạch rồi nên không cần skip
+    });
+    totalInserted += result.count;
+    console.log(`   ✓ Chunk ${Math.floor(i / CHUNK_SIZE) + 1}: +${result.count} món (tổng: ${totalInserted})`);
   }
 
-  const result = await prisma.food.createMany({
-    data: FOODS_DATA.map((f) => ({
-      name: f.name,
-      calories: f.calories,
-      protein: f.protein,
-      carbs: f.carbs,
-      fat: f.fat,
-      weight_g: (f as { weight_g?: number }).weight_g ?? 100,
-      category: (f as { category?: string }).category ?? null,
-      meal_type: (f as { meal_type?: string }).meal_type ?? null,
-    })),
-    skipDuplicates: true,
-  });
+  console.log(`\n✅ SEED HOÀN TẤT: ${totalInserted}/${allFoods.length} món đã được nạp vào Supabase`);
 
-  console.log(`✅ Đã seed ${result.count} món ăn vào bảng foods`);
+  // 5. Nghiệm thu
+  const finalCount = await prisma.food.count();
+  console.log(`📊 SỐ MÓN THỰC TẾ TRONG DATABASE: ${finalCount}`);
 }
 
 main()
