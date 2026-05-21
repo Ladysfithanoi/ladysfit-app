@@ -926,8 +926,7 @@ model ChecklistItem {
   id           String   @id @default(cuid())
   checklistId  String
   order        Int
-  startTime    String?
-  endTime      String?
+  time         String?
   task         String
   kpi          String?
   actualResult Float?

@@ -6,25 +6,10 @@ import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { StaffMember } from "./checklist-page";
 
-// Strip non-digits, cap at 4, auto-insert ":" → "HH:mm"
-function maskTime(raw: string): string {
-  let clean = raw.replace(/\D/g, "");
-  if (clean.length > 4) clean = clean.slice(0, 4);
-  if (clean.length >= 3) return clean.slice(0, 2) + ":" + clean.slice(2);
-  return clean;
-}
-
-function isValidTime(t: string): boolean {
-  const m = t.match(/^(\d{2}):(\d{2})$/);
-  if (!m) return false;
-  return parseInt(m[1]) <= 23 && parseInt(m[2]) <= 59;
-}
-
 type Row = {
   id?: string;
   order: number;
-  startTime: string;
-  endTime: string;
+  time: string;
   task: string;
   kpi: string;
   actualResult: number;
@@ -55,7 +40,6 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   const [selectedUserId, setSelectedUserId] = useState(currentUserId);
   const [date, setDate] = useState(todayISO());
 
-  // Header fields
   const [position, setPosition] = useState("");
   const [targetNote, setTargetNote] = useState("");
   const [totalTarget, setTotalTarget] = useState("");
@@ -91,7 +75,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           dailyCompleted: string | null;
           dailyIncomplete: string | null;
           dailyNextPlan: string | null;
-          items: Row[];
+          items: Array<Record<string, unknown>>;
         } | null;
         totalActual: number;
       };
@@ -105,14 +89,13 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         setDailyIncomplete(data.checklist.dailyIncomplete ?? "");
         setDailyNextPlan(data.checklist.dailyNextPlan ?? "");
         setRows(data.checklist.items.map((item) => ({
-          id: item.id,
-          order: item.order,
-          startTime: (item as unknown as Record<string, unknown>).startTime as string ?? "",
-          endTime: (item as unknown as Record<string, unknown>).endTime as string ?? "",
-          task: item.task,
-          kpi: item.kpi ?? "",
-          actualResult: (item as unknown as Record<string, unknown>).actualResult != null ? Number((item as unknown as Record<string, unknown>).actualResult) : 0,
-          note: item.note ?? "",
+          id: item.id as string | undefined,
+          order: item.order as number,
+          time: (item.time as string) ?? "",
+          task: (item.task as string) ?? "",
+          kpi: (item.kpi as string) ?? "",
+          actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
+          note: (item.note as string) ?? "",
         })));
       } else {
         setPosition("");
@@ -132,7 +115,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
 
   function addRow() {
-    setRows((prev) => [...prev, { order: prev.length + 1, startTime: "", endTime: "", task: "", kpi: "", actualResult: 0, note: "" }]);
+    setRows((prev) => [...prev, { order: prev.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
   }
 
   function removeRow(i: number) {
@@ -144,16 +127,6 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
   }
 
   async function handleSave() {
-    // Validate all time fields before saving
-    const badRows = rows.filter(
-      (r) => (r.startTime && !isValidTime(r.startTime)) || (r.endTime && !isValidTime(r.endTime))
-    );
-    if (badRows.length > 0) {
-      setToast(`⚠️ Kiểm tra lại giờ ở dòng ${badRows.map((r) => r.order).join(", ")} — định dạng phải là HH:mm (00:00–23:59)`);
-      setTimeout(() => setToast(""), 4000);
-      return;
-    }
-
     setSaving(true);
     try {
       const res = await fetch("/api/checklist/daily", {
@@ -171,8 +144,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           dailyNextPlan: dailyNextPlan || undefined,
           items: rows.map((r) => ({
             order: r.order,
-            startTime: r.startTime || undefined,
-            endTime: r.endTime || undefined,
+            time: r.time || undefined,
             task: r.task,
             kpi: r.kpi || undefined,
             actualResult: r.actualResult || undefined,
@@ -333,34 +305,18 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
                 ) : rows.map((row, i) => (
                   <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
                     <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
-                    <td className="px-2 py-2 w-48">
+                    <td className="px-2 py-2 w-24">
                       {canEdit ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={row.startTime}
-                            onChange={(e) => updateRow(i, "startTime", maskTime(e.target.value))}
-                            placeholder="HH:mm"
-                            maxLength={5}
-                            className={cn(inputCls, row.startTime && !isValidTime(row.startTime) && "!border-red-400")}
-                          />
-                          <span className="text-gray-400 text-xs shrink-0">–</span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={row.endTime}
-                            onChange={(e) => updateRow(i, "endTime", maskTime(e.target.value))}
-                            placeholder="HH:mm"
-                            maxLength={5}
-                            className={cn(inputCls, row.endTime && !isValidTime(row.endTime) && "!border-red-400")}
-                          />
-                        </div>
+                        <input
+                          type="time"
+                          step="60"
+                          value={row.time}
+                          onChange={(e) => updateRow(i, "time", e.target.value)}
+                          className={inputCls}
+                        />
                       ) : (
-                        <span className="text-gray-600 whitespace-nowrap font-medium">
-                          {row.startTime || row.endTime
-                            ? `⏱ ${row.startTime || "?"}–${row.endTime || "?"}`
-                            : "—"}
+                        <span className="text-gray-600 whitespace-nowrap">
+                          {row.time ? `⏱️ ${row.time}` : "—"}
                         </span>
                       )}
                     </td>
