@@ -78,7 +78,6 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-5 gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900">Setup Doanh số</h1>
-          <p className="text-2xl font-bold text-red-600 bg-yellow-300 p-4 block z-50">CLAUDE CODE ĐANG SỬA FILE NÀY !!! LÀM ƠN HIỆN LÊN ĐI !!!</p>
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
@@ -150,13 +149,13 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1 w-full bg-gray-100 p-1 rounded-xl mb-5 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+      <div className="flex flex-row items-center gap-2 overflow-x-auto whitespace-nowrap pb-2 w-full bg-gray-100 p-1 rounded-xl mb-5 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium flex-shrink-0 text-center whitespace-nowrap rounded-xl transition-all",
+              "px-4 py-2.5 text-sm font-medium flex-shrink-0 whitespace-nowrap text-center rounded-xl transition-all",
               tab === key ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"
             )}
           >
