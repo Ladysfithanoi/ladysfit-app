@@ -4,6 +4,45 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientsPageClient } from "@/components/dashboard/clients-page-client";
 
+type PkgRow = {
+  packageName: string;
+  status: string;
+  sessions: number;
+  sessionsUsed: number;
+  startDate: Date | null;
+  endDate: Date | null;
+};
+
+/**
+ * Picks the most relevant ACTIVE package to display in the client list.
+ * Priority (highest score first):
+ *   3 = not expired + has sessions remaining  ← ideal, currently usable
+ *   2 = not expired + no sessions left        ← valid but fully used
+ *   1 = expired + has sessions remaining      ← stale, edge case
+ *   0 = expired + no sessions                 ← worst, last resort
+ * Within the same score, pick the one expiring soonest (motivates usage).
+ */
+function pickBestPackage(enrollments: PkgRow[]): PkgRow | null {
+  const now = new Date();
+  const active = enrollments.filter((p) => p.status === "ACTIVE");
+  if (active.length === 0) return null;
+  if (active.length === 1) return active[0];
+
+  return active.slice().sort((a, b) => {
+    const aNotExpired = a.endDate ? a.endDate >= now : true;
+    const bNotExpired = b.endDate ? b.endDate >= now : true;
+    const aHasSessions = a.sessionsUsed < a.sessions;
+    const bHasSessions = b.sessionsUsed < b.sessions;
+    const aScore = (aNotExpired ? 2 : 0) + (aHasSessions ? 1 : 0);
+    const bScore = (bNotExpired ? 2 : 0) + (bHasSessions ? 1 : 0);
+    if (bScore !== aScore) return bScore - aScore;
+    // Tiebreak: soonest expiring first (use it before it's gone)
+    const aEnd = a.endDate?.getTime() ?? Infinity;
+    const bEnd = b.endDate?.getTime() ?? Infinity;
+    return aEnd - bEnd;
+  })[0];
+}
+
 export default async function ClientsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
@@ -91,7 +130,7 @@ export default async function ClientsPage() {
   const selfMeasuredSet = new Set(selfMeasurements.map((m) => m.clientId));
 
   const serialized = clients.map((c) => {
-    const activePkg   = c.packageEnrollments.find((p) => p.status === "ACTIVE");
+    const activePkg   = pickBestPackage(c.packageEnrollments);
     const latestScan  = scanMap.get(c.id) ?? null;
     return {
       id: c.id,
