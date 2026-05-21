@@ -248,16 +248,16 @@ export function ClientsPageClient({
 
       {/* Filter bar */}
       <div className="mb-4 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 items-stretch sm:items-center">
+        <div className="flex flex-col gap-2 w-full md:flex-row md:items-center md:flex-wrap">
           {/* Name / phone search */}
-          <div className="relative">
+          <div className="relative w-full md:w-auto md:min-w-[160px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
             <input
               type="text"
               placeholder="Tìm tên hoặc số điện thoại..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className={cn(inputCls, "pl-9 w-full sm:w-56")}
+              className={cn(inputCls, "pl-9 w-full")}
             />
           </div>
 
@@ -266,7 +266,7 @@ export function ClientsPageClient({
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className={cn(inputCls, "w-full sm:min-w-[180px] sm:w-auto")}
+              className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
             >
               <option value="">Tất cả cơ sở</option>
               {visibleBranches.map((b) => (
@@ -280,7 +280,7 @@ export function ClientsPageClient({
             <select
               value={ptFilter}
               onChange={(e) => setPtFilter(e.target.value)}
-              className={cn(inputCls, "w-full sm:min-w-[160px] sm:w-auto")}
+              className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
             >
               <option value="">Tất cả PT</option>
               {branchFilter ? (
@@ -311,7 +311,7 @@ export function ClientsPageClient({
           <select
             value={pkgFilter}
             onChange={(e) => setPkgFilter(e.target.value)}
-            className={cn(inputCls, "w-full sm:min-w-[160px] sm:w-auto")}
+            className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
           >
             {PACKAGE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -319,14 +319,14 @@ export function ClientsPageClient({
           </select>
 
           {/* Date range — dd/mm/yyyy */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-row items-center gap-2 w-full md:w-auto">
             <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Từ ngày</span>
             <input
               type="text"
               placeholder="dd/mm/yyyy"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className={cn(inputCls, "w-32")}
+              className={cn(inputCls, "w-full md:w-[140px]")}
             />
             <span className="text-xs text-gray-400 font-semibold">→</span>
             <span className="text-xs text-gray-400 font-semibold whitespace-nowrap">Đến ngày</span>
@@ -335,7 +335,7 @@ export function ClientsPageClient({
               placeholder="dd/mm/yyyy"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className={cn(inputCls, "w-32")}
+              className={cn(inputCls, "w-full md:w-[140px]")}
             />
           </div>
 
@@ -343,7 +343,7 @@ export function ClientsPageClient({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors whitespace-nowrap"
             >
               <X className="w-3.5 h-3.5" />
               Xóa bộ lọc
@@ -361,23 +361,21 @@ export function ClientsPageClient({
       </div>
 
       {/* Status tabs */}
-      <div className="mb-4 overflow-x-auto -mx-1 px-1">
-        <div className="flex gap-1 min-w-max">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "px-4 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap",
-                activeTab === tab.key
-                  ? "bg-[#f15b5c] text-white"
-                  : "text-gray-500 hover:bg-gray-100"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-row items-center gap-2 overflow-x-auto whitespace-nowrap pb-2 w-full mb-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              "flex-shrink-0 whitespace-nowrap text-sm font-medium px-4 py-2.5 rounded-xl transition-colors",
+              activeTab === tab.key
+                ? "bg-[#f15b5c] text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Table */}
@@ -389,8 +387,8 @@ export function ClientsPageClient({
             </p>
           </div>
         ) : (
-          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <table className="w-full min-w-[700px]">
+          <div className="w-full overflow-x-auto pb-4 scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <table className="w-full min-w-[800px] md:min-w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   {["Họ tên", "Nhân sự phụ trách", "Cơ sở", "Chiều cao", "Lộ trình", "Cân nặng", "Tình trạng", "Trạng thái", ""].map((h) => (
@@ -444,8 +442,8 @@ export function ClientsPageClient({
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">{c.assignedPT.name ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-sm text-gray-600">{c.branch.name}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">{c.assignedPT.name ?? "—"}</td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">{c.branch.name}</td>
                     <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">{c.height} cm</td>
                     <td className="px-5 py-3.5">
                       {c.activePackage ? (
