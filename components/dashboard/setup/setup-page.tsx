@@ -70,7 +70,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
     setSelectedStatus("");
   }, [branchId, month, year]);
 
-  const selectCls = "h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+  const selectCls = "w-full h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
   return (
     <div className="p-6 max-w-full">
@@ -81,7 +81,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           <p className="text-sm text-gray-400 mt-0.5">Quản lý lead, KPI và báo cáo doanh số</p>
         </div>
         {/* Filters */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full mb-4">
           {!isPT && branches.length > 1 && (
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={selectCls}>
               {branches.map((b) => (
@@ -130,13 +130,14 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-5 w-fit">
+      <style>{`.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
+      <div className="flex flex-row items-center gap-2 overflow-x-auto whitespace-nowrap pb-2 w-full no-scrollbar bg-gray-100 p-1 rounded-xl mb-5">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
-              "px-5 py-2 rounded-lg text-sm font-semibold transition-all",
+              "px-4 py-2.5 text-sm font-medium flex-shrink-0 text-center whitespace-nowrap rounded-xl transition-all",
               tab === key ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"
             )}
           >
