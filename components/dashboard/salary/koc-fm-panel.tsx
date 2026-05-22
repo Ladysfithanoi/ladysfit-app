@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/format-date";
 
 type KOCContract = {
   id: string;
@@ -181,7 +182,7 @@ export function KOCFMPanel() {
               <div className="flex items-center gap-2 flex-wrap">
                 {!canConfirmEnd && (
                   <p className="text-[10px] text-gray-400 italic">
-                    Còn {daysLeft} ngày đến {endDate.toLocaleDateString("vi-VN")} mới xác nhận kết quả
+                    Còn {daysLeft} ngày đến {fmtDate(endDate)} mới xác nhận kết quả
                   </p>
                 )}
                 {(canConfirmEnd || true) && (

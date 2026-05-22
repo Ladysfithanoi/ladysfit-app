@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { fmtDate } from "@/lib/format-date";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -108,7 +109,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   // Append completion note to linked SalesLead
   const linkedLead = await prisma.salesLead.findUnique({ where: { consultationId: params.id } });
   if (linkedLead) {
-    const dateStr = new Date().toLocaleDateString("vi-VN");
+    const dateStr = fmtDate(new Date());
     const suffix = `\nĐã hoàn thành tư vấn - ${dateStr}`;
     await prisma.salesLead.update({
       where: { id: linkedLead.id },

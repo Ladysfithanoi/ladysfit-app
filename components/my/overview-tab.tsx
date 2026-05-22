@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
+import { fmtDate } from "@/lib/format-date";
 
 const COMPLAINT_CATEGORIES = [
   "Chất lượng PT",
@@ -216,7 +217,7 @@ export function OverviewTab({
             </Link>
           </div>
           <p className="text-[10px] text-gray-400 font-semibold mb-3">
-            {new Date(latestMeasurement.measuredDate).toLocaleDateString("vi-VN")}
+            {fmtDate(latestMeasurement.measuredDate)}
           </p>
           <div className="grid grid-cols-3 gap-2">
             {[

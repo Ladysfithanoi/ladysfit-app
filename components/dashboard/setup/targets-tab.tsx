@@ -215,7 +215,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
 
   const weeklyModal = weeklyEdit && (() => {
     const { weekStart, weekEnd } = computeWeekDates(year, month, weeklyEdit.weekNumber);
-    const dateLabel = `${weekStart.getDate()}/${weekStart.getMonth() + 1} - ${weekEnd.getDate()}/${weekEnd.getMonth() + 1}`;
+    const _p = (n: number) => String(n).padStart(2, "0");
+    const dateLabel = `${_p(weekStart.getDate())}/${_p(weekStart.getMonth() + 1)} - ${_p(weekEnd.getDate())}/${_p(weekEnd.getMonth() + 1)}`;
     return (
       <>
         <div className="fixed inset-0 bg-black/25 z-40" onClick={() => setWeeklyEdit(null)} />
@@ -329,7 +330,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     style={targetModalWeek === w ? { backgroundColor: "#f15b5c" } : {}}
                   >
                     <div>Tuần {w}</div>
-                    <div className="text-[9px] opacity-80">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                    <div className="text-[9px] opacity-80">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
                   </button>
                 );
               })}
@@ -411,7 +412,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                       return (
                         <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
                           <div>W{w} ĐẠT</div>
-                          <div className="text-[10px] font-normal text-gray-400 normal-case">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                          <div className="text-[10px] font-normal text-gray-400 normal-case">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
                           <button onClick={() => openWeeklyEdit(myTarget.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
                         </th>
                       );
@@ -632,7 +633,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     return (
                       <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
                         <div>W{w} ĐẠT</div>
-                        <div className="text-[10px] font-normal text-gray-400 normal-case">{ws.getDate()}/{ws.getMonth()+1} - {we.getDate()}/{we.getMonth()+1}</div>
+                        <div className="text-[10px] font-normal text-gray-400 normal-case">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
                         {!isReadOnly && (
                           <button onClick={() => openWeeklyEdit(t.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
                         )}

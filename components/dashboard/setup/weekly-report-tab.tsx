@@ -79,7 +79,8 @@ function getCurrentWeek(month: number, year: number): number {
 function formatDateRange(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
-  return `${s.getDate()}/${s.getMonth() + 1} - ${e.getDate()}/${e.getMonth() + 1}`;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(s.getDate())}/${p(s.getMonth() + 1)} - ${p(e.getDate())}/${p(e.getMonth() + 1)}`;
 }
 
 function pctColor(pct: number): string {

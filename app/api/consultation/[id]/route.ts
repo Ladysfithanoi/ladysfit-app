@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { fmtDate } from "@/lib/format-date";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -189,7 +190,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             yearOfBirth,
             phone,
             source,
-            notes: `[Từ tư vấn ${now.toLocaleDateString("vi-VN")}]`,
+            notes: `[Từ tư vấn ${fmtDate(now)}]`,
             status: "TAKECARE",
             month: currentMonth,
             year: currentYear,
