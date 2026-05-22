@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Save, CalendarDays, User, Users } from "lucide-react";
+import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
 
@@ -20,6 +20,19 @@ function fmtDate(iso: string) {
 function currentMonthLabel() {
   const d = new Date();
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+function defaultImportDate(ownDate: string): string {
+  // Default to yesterday, clamped to first day of current month
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toISOString().split("T")[0];
+  const first = firstDayOfMonthISO();
+  // If yesterday is in current month and different from ownDate, use it
+  if (yesterday >= first && yesterday !== ownDate) return yesterday;
+  // Otherwise use first day of month if different from ownDate
+  if (first !== ownDate) return first;
+  // Edge case: ownDate is the only day in range (shouldn't happen in practice)
+  return first;
 }
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -85,12 +98,12 @@ export function DailyTab({
   const date = isTeamView ? teamDate : ownDate;
 
   // Form state
-  const [position, setPosition]           = useState("");
-  const [targetNote, setTargetNote]       = useState("");
-  const [totalTarget, setTotalTarget]     = useState("");
-  const [totalActual, setTotalActual]     = useState(0);
-  const [rows, setRows]                   = useState<Row[]>([]);
-  const [dailyResults, setDailyResults]   = useState("");
+  const [position, setPosition]               = useState("");
+  const [targetNote, setTargetNote]           = useState("");
+  const [totalTarget, setTotalTarget]         = useState("");
+  const [totalActual, setTotalActual]         = useState(0);
+  const [rows, setRows]                       = useState<Row[]>([]);
+  const [dailyResults, setDailyResults]       = useState("");
   const [dailyCompleted, setDailyCompleted]   = useState("");
   const [dailyIncomplete, setDailyIncomplete] = useState("");
   const [dailyNextPlan, setDailyNextPlan]     = useState("");
@@ -98,10 +111,14 @@ export function DailyTab({
   const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Import-from-another-day modal state
+  const [importOpen, setImportOpen]       = useState(false);
+  const [importDate, setImportDate]       = useState(() => defaultImportDate(todayISO()));
+  const [importRows, setImportRows]       = useState<Row[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importHasData, setImportHasData] = useState(false);
+
   // Permissions
-  // canEdit = true  → can add/remove rows and edit fields
-  // canEditReflection = true → can write "tự luận cuối ngày"
-  // FM in "own" tab has FULL edit (including reflection)
   const canEdit           = !isTeamView;
   const canEditReflection = !isTeamView;
 
@@ -111,7 +128,7 @@ export function DailyTab({
 
   const minDate = firstDayOfMonthISO();
 
-  // ── fetch ──────────────────────────────────────────────────────────────────
+  // ── fetch main ─────────────────────────────────────────────────────────────
   const fetchChecklist = useCallback(async () => {
     setLoading(true);
     try {
@@ -149,6 +166,55 @@ export function DailyTab({
   }, [date, selectedUserId]);
 
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
+
+  // ── fetch import preview ───────────────────────────────────────────────────
+  const fetchImportPreview = useCallback(async (d: string) => {
+    if (d === ownDate) { setImportRows([]); setImportHasData(false); return; }
+    setImportLoading(true);
+    setImportRows([]);
+    setImportHasData(false);
+    try {
+      const res = await fetch(`/api/checklist/daily?date=${d}&userId=${currentUserId}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as ChecklistData;
+      if (data.checklist && data.checklist.items.length > 0) {
+        setImportHasData(true);
+        setImportRows(
+          data.checklist.items.map((item) => ({
+            id: undefined,
+            order: item.order as number,
+            time: (item.time as string) ?? "",
+            task: (item.task as string) ?? "",
+            kpi: (item.kpi as string) ?? "",
+            actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
+            note: (item.note as string) ?? "",
+          }))
+        );
+      }
+    } finally {
+      setImportLoading(false);
+    }
+  }, [currentUserId, ownDate]);
+
+  // Auto-fetch preview whenever importDate changes while modal is open
+  useEffect(() => {
+    if (importOpen) fetchImportPreview(importDate);
+  }, [importDate, importOpen, fetchImportPreview]);
+
+  function openImportModal() {
+    const d = defaultImportDate(ownDate);
+    setImportDate(d);
+    setImportRows([]);
+    setImportHasData(false);
+    setImportOpen(true);
+  }
+
+  function handleImportConfirm() {
+    setRows(importRows.map((r, i) => ({ ...r, id: undefined, order: i + 1 })));
+    setImportOpen(false);
+    setToast("Đã nhập danh sách công việc ✓");
+    setTimeout(() => setToast(""), 3000);
+  }
 
   // ── row helpers ────────────────────────────────────────────────────────────
   function addRow() {
@@ -292,8 +358,6 @@ export function DailyTab({
         </div>
       )}
 
-      {/* ── PT: date picker trong header (giới hạn tháng hiện tại) ─────────── */}
-
       {/* ── Header card ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -322,12 +386,10 @@ export function DailyTab({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Ngày báo cáo</label>
             {isManager ? (
-              // FM/Admin: shown from top picker, read-only here
               <div className="h-9 rounded-xl border border-gray-100 bg-gray-50 px-3 flex items-center text-sm text-gray-600 font-medium">
                 {fmtDate(date)}
               </div>
             ) : (
-              // PT: editable, clamped to current month
               <input
                 type="date"
                 value={date}
@@ -547,9 +609,17 @@ export function DailyTab({
         </div>
       </div>
 
-      {/* ── Lưu ──────────────────────────────────────────────────────────── */}
+      {/* ── Lưu + Nhập từ ngày khác ───────────────────────────────────────── */}
       {canEdit && (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={openImportModal}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors bg-white"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Nhập từ ngày khác</span>
+            <span className="sm:hidden">Nhập</span>
+          </button>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -559,6 +629,138 @@ export function DailyTab({
             <Save className="w-4 h-4" />
             {saving ? "Đang lưu..." : "Lưu check-list"}
           </button>
+        </div>
+      )}
+
+      {/* ── Modal: Nhập từ ngày khác ──────────────────────────────────────── */}
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          onClick={(e) => { if (e.target === e.currentTarget) setImportOpen(false); }}
+        >
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <p className="text-sm font-extrabold text-gray-800">Nhập từ ngày khác</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Chọn ngày trong tháng để xem trước và nhập danh sách</p>
+              </div>
+              <button
+                onClick={() => setImportOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Date picker */}
+            <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Chọn ngày:</label>
+                <input
+                  type="date"
+                  value={importDate}
+                  min={minDate}
+                  max={todayISO()}
+                  onChange={(e) => { if (e.target.value) setImportDate(e.target.value); }}
+                  className={cn(dateCls, "flex-1")}
+                />
+                {importDate === ownDate && (
+                  <span className="text-[11px] text-amber-500 font-medium whitespace-nowrap">
+                    Đang xem ngày này
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Preview area */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
+              {importDate === ownDate ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <span className="text-3xl">📅</span>
+                  <p className="text-sm text-gray-400 text-center">
+                    Hãy chọn một ngày khác với ngày đang xem ({fmtDate(ownDate)})
+                  </p>
+                </div>
+              ) : importLoading ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-[#f15b5c]/30 border-t-[#f15b5c] animate-spin" />
+                  <p className="text-xs text-gray-400">Đang tải dữ liệu...</p>
+                </div>
+              ) : !importHasData ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <span className="text-3xl">📋</span>
+                  <p className="text-sm font-semibold text-gray-400">Chưa có Check-list nào được ghi nhận</p>
+                  <p className="text-[11px] text-gray-300">cho ngày {fmtDate(importDate)}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    Danh sách {importRows.length} công việc — {fmtDate(importDate)}
+                  </p>
+                  {importRows.map((row, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-gray-50"
+                    >
+                      {/* Checkbox disabled */}
+                      <input
+                        type="checkbox"
+                        disabled
+                        className="mt-0.5 w-3.5 h-3.5 rounded border-gray-300 flex-shrink-0 cursor-not-allowed opacity-40"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-gray-700 leading-snug">{row.task || "—"}</span>
+                          {row.time && (
+                            <span className="text-[10px] text-gray-400 bg-white border border-gray-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              ⏱ {row.time}
+                            </span>
+                          )}
+                          {row.kpi && (
+                            <span className="text-[10px] text-blue-500 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              KPI: {row.kpi}
+                            </span>
+                          )}
+                        </div>
+                        {row.note && (
+                          <p className="text-[11px] text-gray-400 mt-0.5 truncate">{row.note}</p>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-300 flex-shrink-0">#{row.order}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0 bg-gray-50/50">
+              <p className="text-[11px] text-gray-400 leading-tight">
+                {importHasData && importDate !== ownDate
+                  ? "Dữ liệu sẽ ghi đè danh sách công việc hiện tại"
+                  : "Chọn ngày có dữ liệu để kích hoạt nhập"}
+              </p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setImportOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-500 font-semibold hover:bg-gray-100 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleImportConfirm}
+                  disabled={!importHasData || importDate === ownDate}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Xác nhận nhập
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
