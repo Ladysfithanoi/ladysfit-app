@@ -21,6 +21,26 @@ function currentMonthLabel() {
   const d = new Date();
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
 }
+// Normalize arbitrary time input → "HH:MM" (24h), returns "" if invalid
+function normalizeTime(raw: string): string {
+  const s = raw.trim().replace(/[^\d:]/g, "");
+  if (!s) return "";
+  let h: number, m: number;
+  if (s.includes(":")) {
+    const [hStr, mStr] = s.split(":");
+    h = parseInt(hStr, 10);
+    m = parseInt(mStr ?? "0", 10);
+  } else if (s.length <= 2) {
+    h = parseInt(s, 10); m = 0;
+  } else if (s.length === 3) {
+    h = parseInt(s[0], 10); m = parseInt(s.slice(1), 10);
+  } else {
+    h = parseInt(s.slice(0, 2), 10); m = parseInt(s.slice(2, 4), 10);
+  }
+  if (isNaN(h) || isNaN(m) || h > 23 || m > 59) return "";
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 // Sort rows by time ascending; rows without time go to the end
 function sortRowsByTime(rows: Row[]): Row[] {
   const withTime = [...rows.filter((r) => r.time)].sort((a, b) => a.time.localeCompare(b.time));
@@ -468,7 +488,8 @@ export function DailyTab({
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
-    const sortedRows = sortRowsByTime(rows);
+    const normalizedRows = rows.map((r) => ({ ...r, time: r.time ? normalizeTime(r.time) : "" }));
+    const sortedRows = sortRowsByTime(normalizedRows);
     setRows(sortedRows);
     try {
       const res = await fetch("/api/checklist/daily", {
@@ -752,10 +773,20 @@ export function DailyTab({
                       <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input
-                            type="time" step="60"
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={5}
+                            placeholder="HH:MM"
                             value={row.time}
                             onChange={(e) => updateRow(i, "time", e.target.value)}
-                            onBlur={(e) => { if (e.target.value) setRows((prev) => sortRowsByTime(prev)); }}
+                            onBlur={() => {
+                              setRows((prev) => {
+                                const updated = prev.map((r, idx) =>
+                                  idx === i ? { ...r, time: normalizeTime(r.time) } : r
+                                );
+                                return updated[i].time ? sortRowsByTime(updated) : updated;
+                              });
+                            }}
                             className={inputCls}
                           />
                         ) : (
