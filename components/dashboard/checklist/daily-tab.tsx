@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
@@ -102,7 +102,7 @@ const dateCls =
 // ── Calendar Grid sub-component ───────────────────────────────────────────────
 function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
   const hours = Array.from({ length: CAL_END - CAL_START }, (_, i) => CAL_START + i);
-  const totalPx = (CAL_END - CAL_START) * HOUR_PX;
+  const timelineHeight = (CAL_END - CAL_START) * HOUR_PX;
 
   // Partition rows
   const scheduled: (Row & { startMins: number })[] = [];
@@ -142,11 +142,11 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
 
   const { dayName, dayNum } = getDayHeader(date);
 
+  // Rendered as a fragment — the modal body div handles scrolling
   return (
-    <div className="flex flex-col h-full">
-
-      {/* Calendar header — Google Calendar style */}
-      <div className="flex items-end gap-3 px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+    <>
+      {/* Sticky header — stays visible while scrolling */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 flex items-end gap-3 px-5 pt-4 pb-3">
         <div className="flex items-center gap-3">
           <div className="text-center">
             <p className="text-[10px] font-bold text-gray-400 tracking-widest leading-none">{dayName}</p>
@@ -164,13 +164,13 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
         </div>
         <div className="self-end mb-1 ml-auto text-right">
           <p className="text-[10px] text-gray-300 font-medium">GMT+07</p>
-          <p className="text-xs text-gray-400 font-semibold">{scheduled.length} công việc</p>
+          <p className="text-xs text-gray-400 font-semibold">{scheduled.length} công việc xếp lịch</p>
         </div>
       </div>
 
-      {/* Unscheduled chips */}
+      {/* Unscheduled chips — sticky below header */}
       {unscheduled.length > 0 && (
-        <div className="px-5 py-2.5 border-b border-gray-100 flex-shrink-0 bg-gray-50/60">
+        <div className="sticky top-[73px] z-10 bg-gray-50 border-b border-gray-100 px-5 py-2.5">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Chưa xếp giờ</p>
           <div className="flex flex-wrap gap-1.5">
             {unscheduled.map((r, i) => (
@@ -183,101 +183,83 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-        <div className="flex">
+      {/* Timeline — explicit fixed height so parent can scroll over it */}
+      <div className="flex" style={{ height: timelineHeight + 16 }}>
 
-          {/* Hour labels column */}
-          <div className="w-14 flex-shrink-0 select-none">
-            {hours.map((h) => (
-              <div key={h} style={{ height: HOUR_PX }}
-                   className="relative flex items-start justify-end pr-3 pt-0.5">
-                <span className="text-[10px] font-semibold text-gray-300 -translate-y-1/2">
-                  {String(h).padStart(2, "0")}:00
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Grid + event blocks */}
-          <div className="flex-1 relative border-l border-gray-100">
-
-            {/* Hour grid lines */}
-            {hours.map((h) => (
-              <div key={h} style={{ height: HOUR_PX }}
-                   className="border-t border-gray-100 first:border-t-0" />
-            ))}
-            {/* Bottom border */}
-            <div className="border-t border-gray-100" />
-
-            {/* Task blocks — absolutely positioned */}
-            <div className="absolute inset-0 pointer-events-none px-1.5">
-              {scheduled.length === 0 && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
-                  <p className="text-[11px] text-gray-200 font-semibold italic">Chưa có công việc nào được xếp lịch</p>
-                </div>
-              )}
-              {scheduled.map((r, idx) => {
-                const top    = minutesToPx(r.startMins);
-                const height = Math.max(HOUR_PX - 4, 36);
-                const col    = colMap.get(idx) ?? 0;
-                const wPct   = colCount > 1 ? `${Math.floor(100 / colCount) - 1}%` : "calc(100% - 4px)";
-                const leftPct = colCount > 1 ? `${col * Math.floor(100 / colCount)}%` : "2px";
-
-                // Color palette: rotate through blues/purples/teals for variety
-                const COLORS = [
-                  { bg: "#1a73e8", hover: "#1558b0" },
-                  { bg: "#0b8043", hover: "#0a6838" },
-                  { bg: "#7b1ea2", hover: "#6a1b8a" },
-                  { bg: "#e67c00", hover: "#c96900" },
-                ];
-                const { bg } = COLORS[r.order % COLORS.length];
-
-                return (
-                  <div
-                    key={idx}
-                    className="absolute rounded-lg px-2.5 py-1.5 overflow-hidden pointer-events-auto cursor-default shadow-sm"
-                    style={{
-                      top: top + 2,
-                      height,
-                      width: wPct,
-                      left: leftPct,
-                      backgroundColor: bg,
-                    }}
-                    title={`${r.task} — ${fmtMin(r.startMins)} – ${fmtMin(r.startMins + 60)}${r.kpi ? ` · KPI: ${r.kpi}` : ""}`}
-                  >
-                    <p className="text-white text-[11px] font-bold leading-tight truncate">{r.task || "—"}</p>
-                    <p className="text-white/75 text-[10px] leading-tight mt-0.5">
-                      {fmtMin(r.startMins)} – {fmtMin(r.startMins + 60)}
-                    </p>
-                    {r.kpi && (
-                      <p className="text-white/60 text-[9px] leading-tight truncate">KPI: {r.kpi}</p>
-                    )}
-                  </div>
-                );
-              })}
+        {/* Hour labels column */}
+        <div className="w-14 flex-shrink-0 select-none">
+          {hours.map((h) => (
+            <div key={h} style={{ height: HOUR_PX }}
+                 className="relative flex items-start justify-end pr-3 pt-0.5">
+              <span className="text-[10px] font-semibold text-gray-300 -translate-y-1/2">
+                {String(h).padStart(2, "0")}:00
+              </span>
             </div>
-
-            {/* Current time indicator */}
-            {showNowLine && (
-              <div
-                className="absolute left-0 right-0 pointer-events-none z-10"
-                style={{ top: minutesToPx(nowMins) }}
-              >
-                <div className="flex items-center gap-1">
-                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 -ml-1.5"
-                       style={{ backgroundColor: "#f15b5c" }} />
-                  <div className="flex-1 h-px" style={{ backgroundColor: "#f15b5c" }} />
-                </div>
-              </div>
-            )}
-          </div>
+          ))}
         </div>
 
-        {/* Bottom padding */}
-        <div style={{ height: 16 }} />
+        {/* Grid + event blocks */}
+        <div className="flex-1 relative border-l border-gray-100">
+
+          {/* Hour grid lines */}
+          {hours.map((h) => (
+            <div key={h} style={{ height: HOUR_PX }}
+                 className="border-t border-gray-100 first:border-t-0" />
+          ))}
+          <div className="border-t border-gray-100" />
+
+          {/* Task blocks — absolutely positioned */}
+          <div className="absolute inset-0 px-1.5">
+            {scheduled.length === 0 && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                <p className="text-[11px] text-gray-200 font-semibold italic">Chưa có công việc nào được xếp lịch</p>
+              </div>
+            )}
+            {scheduled.map((r, idx) => {
+              const top    = minutesToPx(r.startMins);
+              const height = Math.max(HOUR_PX - 4, 40);
+              const col    = colMap.get(idx) ?? 0;
+              const wPct   = colCount > 1 ? `${Math.floor(100 / colCount) - 1}%` : "calc(100% - 4px)";
+              const leftPct = colCount > 1 ? `${col * Math.floor(100 / colCount)}%` : "2px";
+
+              const COLORS = ["#1a73e8", "#0b8043", "#7b1ea2", "#e67c00"];
+              const bg = COLORS[r.order % COLORS.length];
+
+              return (
+                <div
+                  key={idx}
+                  className="absolute rounded-lg px-2.5 py-1.5 overflow-hidden shadow-sm"
+                  style={{ top: top + 2, height, width: wPct, left: leftPct, backgroundColor: bg }}
+                  title={`${r.task} — ${fmtMin(r.startMins)} – ${fmtMin(r.startMins + 60)}${r.kpi ? ` · KPI: ${r.kpi}` : ""}`}
+                >
+                  <p className="text-white text-[11px] font-bold leading-tight truncate">{r.task || "—"}</p>
+                  <p className="text-white/75 text-[10px] leading-tight mt-0.5">
+                    {fmtMin(r.startMins)} – {fmtMin(r.startMins + 60)}
+                  </p>
+                  {r.kpi && (
+                    <p className="text-white/60 text-[9px] leading-tight truncate">KPI: {r.kpi}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Current time indicator */}
+          {showNowLine && (
+            <div
+              className="absolute left-0 right-0 pointer-events-none z-10"
+              style={{ top: minutesToPx(nowMins) }}
+            >
+              <div className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 -ml-1.5"
+                     style={{ backgroundColor: "#f15b5c" }} />
+                <div className="flex-1 h-px" style={{ backgroundColor: "#f15b5c" }} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -826,10 +808,9 @@ export function DailyTab({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-4"
           onClick={(e) => { if (e.target === e.currentTarget) setCalendarOpen(false); }}
         >
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col"
-               style={{ maxHeight: "90vh" }}>
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
 
-            {/* Modal toolbar */}
+            {/* Modal toolbar — fixed, never scrolls */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Tổng quan lịch ngày</span>
               <button
@@ -840,8 +821,11 @@ export function DailyTab({
               </button>
             </div>
 
-            {/* Calendar body — scrollable */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Calendar body — this div scrolls, CalendarGrid renders flat content */}
+            <div
+              className="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
+              style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}
+            >
               <CalendarGrid rows={rows} date={date} />
             </div>
           </div>
