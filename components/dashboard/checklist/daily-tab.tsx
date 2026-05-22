@@ -1,11 +1,28 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Save, CalendarDays } from "lucide-react";
+import { Plus, Trash2, Save, CalendarDays, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { StaffMember } from "./checklist-page";
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+function todayISO() {
+  return new Date().toISOString().split("T")[0];
+}
+function firstDayOfMonthISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+function fmtDate(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+function currentMonthLabel() {
+  const d = new Date();
+  return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
+// ── types ─────────────────────────────────────────────────────────────────────
 type Row = {
   id?: string;
   order: number;
@@ -16,6 +33,20 @@ type Row = {
   note: string;
 };
 
+type ChecklistData = {
+  checklist: {
+    position: string;
+    targetNote: string | null;
+    totalTarget: number | null;
+    dailyResults: string | null;
+    dailyCompleted: string | null;
+    dailyIncomplete: string | null;
+    dailyNextPlan: string | null;
+    items: Array<Record<string, unknown>>;
+  } | null;
+  totalActual: number;
+};
+
 type Props = {
   currentUserId: string;
   currentUserName: string;
@@ -23,62 +54,70 @@ type Props = {
   staffList: StaffMember[];
 };
 
-function todayISO() {
-  return new Date().toISOString().split("T")[0];
-}
+const inputCls =
+  "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full min-w-0";
+const dateCls =
+  "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
-function fmtDate(iso: string) {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-const inputCls = "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full min-w-0";
-
-export function DailyTab({ currentUserId, currentUserName, currentUserRole, staffList }: Props) {
+// ── component ─────────────────────────────────────────────────────────────────
+export function DailyTab({
+  currentUserId,
+  currentUserName,
+  currentUserRole,
+  staffList,
+}: Props) {
   const isManager = currentUserRole === "FM" || currentUserRole === "ADMIN";
 
-  const [selectedUserId, setSelectedUserId] = useState(currentUserId);
-  const [date, setDate] = useState(todayISO());
+  // FM/Admin: 2 sub-tabs — "own" (fill own CL) | "team" (view PT CL)
+  const [fmSubTab, setFmSubTab] = useState<"own" | "team">("own");
+  const isTeamView = isManager && fmSubTab === "team";
 
-  const [position, setPosition] = useState("");
-  const [targetNote, setTargetNote] = useState("");
-  const [totalTarget, setTotalTarget] = useState("");
-  const [totalActual, setTotalActual] = useState(0);
+  // Separate dates so each tab remembers its own selection
+  const [ownDate, setOwnDate]   = useState(todayISO());
+  const [teamDate, setTeamDate] = useState(todayISO());
 
-  const [rows, setRows] = useState<Row[]>([]);
-  const [dailyResults, setDailyResults] = useState("");
-  const [dailyCompleted, setDailyCompleted] = useState("");
+  // Team view: default to first PT in list (exclude self)
+  const firstPTId = staffList.find((s) => s.id !== currentUserId)?.id ?? currentUserId;
+  const [teamSelectedId, setTeamSelectedId] = useState(firstPTId);
+
+  // Active userId / date (derived from current sub-tab)
+  const selectedUserId = isTeamView ? teamSelectedId : currentUserId;
+  const date = isTeamView ? teamDate : ownDate;
+
+  // Form state
+  const [position, setPosition]           = useState("");
+  const [targetNote, setTargetNote]       = useState("");
+  const [totalTarget, setTotalTarget]     = useState("");
+  const [totalActual, setTotalActual]     = useState(0);
+  const [rows, setRows]                   = useState<Row[]>([]);
+  const [dailyResults, setDailyResults]   = useState("");
+  const [dailyCompleted, setDailyCompleted]   = useState("");
   const [dailyIncomplete, setDailyIncomplete] = useState("");
-  const [dailyNextPlan, setDailyNextPlan] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState("");
+  const [dailyNextPlan, setDailyNextPlan]     = useState("");
+  const [saving, setSaving]   = useState(false);
+  const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isOwnChecklist = selectedUserId === currentUserId;
-  const canEdit = isOwnChecklist;
-  const canEditReflection = !isManager && isOwnChecklist;
+  // Permissions
+  // canEdit = true  → can add/remove rows and edit fields
+  // canEditReflection = true → can write "tự luận cuối ngày"
+  // FM in "own" tab has FULL edit (including reflection)
+  const canEdit           = !isTeamView;
+  const canEditReflection = !isTeamView;
 
+  // Display name in header
   const selectedUser = staffList.find((s) => s.id === selectedUserId);
-  const displayName = selectedUser?.name ?? selectedUser?.email ?? "";
+  const displayName  = selectedUser?.name ?? selectedUser?.email ?? currentUserName;
 
+  const minDate = firstDayOfMonthISO();
+
+  // ── fetch ──────────────────────────────────────────────────────────────────
   const fetchChecklist = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/checklist/daily?date=${date}&userId=${selectedUserId}`);
       if (!res.ok) return;
-      const data = await res.json() as {
-        checklist: {
-          position: string;
-          targetNote: string | null;
-          totalTarget: number | null;
-          dailyResults: string | null;
-          dailyCompleted: string | null;
-          dailyIncomplete: string | null;
-          dailyNextPlan: string | null;
-          items: Array<Record<string, unknown>>;
-        } | null;
-        totalActual: number;
-      };
+      const data = (await res.json()) as ChecklistData;
       setTotalActual(data.totalActual);
       if (data.checklist) {
         setPosition(data.checklist.position ?? "");
@@ -88,23 +127,20 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         setDailyCompleted(data.checklist.dailyCompleted ?? "");
         setDailyIncomplete(data.checklist.dailyIncomplete ?? "");
         setDailyNextPlan(data.checklist.dailyNextPlan ?? "");
-        setRows(data.checklist.items.map((item) => ({
-          id: item.id as string | undefined,
-          order: item.order as number,
-          time: (item.time as string) ?? "",
-          task: (item.task as string) ?? "",
-          kpi: (item.kpi as string) ?? "",
-          actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
-          note: (item.note as string) ?? "",
-        })));
+        setRows(
+          data.checklist.items.map((item) => ({
+            id: item.id as string | undefined,
+            order: item.order as number,
+            time: (item.time as string) ?? "",
+            task: (item.task as string) ?? "",
+            kpi: (item.kpi as string) ?? "",
+            actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
+            note: (item.note as string) ?? "",
+          }))
+        );
       } else {
-        setPosition("");
-        setTargetNote("");
-        setTotalTarget("");
-        setDailyResults("");
-        setDailyCompleted("");
-        setDailyIncomplete("");
-        setDailyNextPlan("");
+        setPosition(""); setTargetNote(""); setTotalTarget("");
+        setDailyResults(""); setDailyCompleted(""); setDailyIncomplete(""); setDailyNextPlan("");
         setRows([]);
       }
     } finally {
@@ -114,18 +150,18 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
 
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
 
+  // ── row helpers ────────────────────────────────────────────────────────────
   function addRow() {
-    setRows((prev) => [...prev, { order: prev.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
+    setRows((p) => [...p, { order: p.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
   }
-
   function removeRow(i: number) {
-    setRows((prev) => prev.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, order: idx + 1 })));
+    setRows((p) => p.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, order: idx + 1 })));
   }
-
   function updateRow<K extends keyof Row>(i: number, key: K, value: Row[K]) {
-    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, [key]: value } : r));
+    setRows((p) => p.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
 
+  // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
     try {
@@ -136,12 +172,12 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
           date,
           userId: currentUserId,
           position,
-          targetNote: targetNote || undefined,
-          totalTarget: totalTarget ? parseFloat(totalTarget) : undefined,
-          dailyResults: dailyResults || undefined,
-          dailyCompleted: dailyCompleted || undefined,
+          targetNote:      targetNote || undefined,
+          totalTarget:     totalTarget ? parseFloat(totalTarget) : undefined,
+          dailyResults:    dailyResults || undefined,
+          dailyCompleted:  dailyCompleted || undefined,
           dailyIncomplete: dailyIncomplete || undefined,
-          dailyNextPlan: dailyNextPlan || undefined,
+          dailyNextPlan:   dailyNextPlan || undefined,
           items: rows.map((r) => ({
             order: r.order,
             time: r.time || undefined,
@@ -162,66 +198,115 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
     }
   }
 
+  // ── progress ───────────────────────────────────────────────────────────────
   const completedTasks = rows.filter((r) => {
     const k = parseFloat(r.kpi);
     return !isNaN(k) && k > 0 && (r.actualResult / k) * 100 >= 80;
   }).length;
   const pct = rows.length > 0 ? Math.round((completedTasks / rows.length) * 100) : 0;
 
+  // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5 max-w-6xl">
-      {/* FM/Admin: bộ lọc nhân sự + ngày xem lịch sử */}
-      {isManager && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-            {/* Chọn nhân sự */}
-            <div className="flex items-center gap-2 min-w-0">
-              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Nhân sự:</label>
-              <select
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 max-w-[200px] sm:max-w-none"
-              >
-                {staffList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name ?? s.email}{s.id === currentUserId ? " (bạn)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            {/* Chọn ngày xem lịch sử */}
+      {/* ── FM/Admin: 2 sub-tabs ──────────────────────────────────────────── */}
+      {isManager && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+          {/* Tab switcher */}
+          <div className="grid grid-cols-2 border-b border-gray-100">
+            {(["own", "team"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setFmSubTab(tab)}
+                className={cn(
+                  "flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-all",
+                  fmSubTab === tab
+                    ? "text-[#f15b5c] border-b-2 border-[#f15b5c] bg-[#f15b5c]/5"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50/60"
+                )}
+              >
+                {tab === "own" ? <User className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                <span className="hidden xs:inline">
+                  {tab === "own" ? "Check-list của tôi" : "Quản lý PT"}
+                </span>
+                <span className="xs:hidden">
+                  {tab === "own" ? "Của tôi" : "Quản lý PT"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Controls row */}
+          <div className="px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-2.5">
+
+            {/* Team tab: nhân sự selector */}
+            {fmSubTab === "team" && (
+              <div className="flex items-center gap-2 min-w-0">
+                <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Nhân sự:</label>
+                <select
+                  value={teamSelectedId}
+                  onChange={(e) => setTeamSelectedId(e.target.value)}
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 max-w-[200px] sm:max-w-none"
+                >
+                  {staffList.filter((s) => s.id !== currentUserId).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name ?? s.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Date picker — both tabs */}
             <div className="flex items-center gap-2">
               <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày xem:</label>
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày:</label>
               <input
                 type="date"
-                value={date}
+                value={fmSubTab === "team" ? teamDate : ownDate}
+                min={minDate}
                 max={todayISO()}
-                onChange={(e) => e.target.value && setDate(e.target.value)}
-                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  fmSubTab === "team" ? setTeamDate(e.target.value) : setOwnDate(e.target.value);
+                }}
+                className={dateCls}
               />
             </div>
 
-            {/* Badge chỉ xem */}
-            {!isOwnChecklist && (
-              <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                👁 Chỉ xem — {fmtDate(date)}
-              </span>
-            )}
+            {/* Badge trạng thái */}
+            <span
+              className={cn(
+                "text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap border",
+                fmSubTab === "own"
+                  ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                  : "bg-amber-50 text-amber-600 border-amber-200"
+              )}
+            >
+              {fmSubTab === "own"
+                ? `✏️ Của bạn · ${currentMonthLabel()}`
+                : `👁 Chỉ xem · ${currentMonthLabel()}`}
+            </span>
           </div>
         </div>
       )}
 
-      {/* Header card */}
+      {/* ── PT: date picker trong header (giới hạn tháng hiện tại) ─────────── */}
+
+      {/* ── Header card ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+
+          {/* Họ tên */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Họ tên</label>
             <div className="h-9 rounded-xl border border-gray-100 bg-gray-50 px-3 flex items-center text-sm text-gray-600">
-              {displayName || currentUserName}
+              {displayName}
             </div>
           </div>
+
+          {/* Vị trí */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Vị trí</label>
             <input
@@ -232,15 +317,29 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               placeholder="VD: PT, FM..."
             />
           </div>
+
+          {/* Ngày báo cáo */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Ngày báo cáo</label>
-            <DateMaskInput
-              value={date}
-              onChange={setDate}
-              disabled={!canEdit}
-              className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full disabled:bg-gray-50"
-            />
+            {isManager ? (
+              // FM/Admin: shown from top picker, read-only here
+              <div className="h-9 rounded-xl border border-gray-100 bg-gray-50 px-3 flex items-center text-sm text-gray-600 font-medium">
+                {fmtDate(date)}
+              </div>
+            ) : (
+              // PT: editable, clamped to current month
+              <input
+                type="date"
+                value={date}
+                min={minDate}
+                max={todayISO()}
+                onChange={(e) => e.target.value && setOwnDate(e.target.value)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full"
+              />
+            )}
           </div>
+
+          {/* Target tháng */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Target tháng (triệu)</label>
             <input
@@ -253,12 +352,16 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               placeholder="50"
             />
           </div>
+
+          {/* Thực đạt tháng */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Thực đạt tháng (triệu)</label>
             <div className="h-9 rounded-xl border border-gray-100 bg-gray-50 px-3 flex items-center text-sm font-semibold text-emerald-600">
               {totalActual.toFixed(1)}
             </div>
           </div>
+
+          {/* Mục tiêu ngày */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Mục tiêu ngày</label>
             <input
@@ -275,12 +378,17 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         {rows.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold text-gray-500">Tiến độ ngày {fmtDate(date)}</span>
-              <span className="text-xs font-bold text-gray-700">{completedTasks}/{rows.length} công việc · {pct}% hoàn thành</span>
+              <span className="text-xs font-semibold text-gray-500">Tiến độ — {fmtDate(date)}</span>
+              <span className="text-xs font-bold text-gray-700">
+                {completedTasks}/{rows.length} việc · {pct}%
+              </span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all", pct >= 100 ? "bg-green-500" : pct >= 60 ? "bg-yellow-400" : "bg-[#f15b5c]")}
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  pct >= 100 ? "bg-green-500" : pct >= 60 ? "bg-yellow-400" : "bg-[#f15b5c]"
+                )}
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -288,7 +396,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         )}
       </div>
 
-      {/* Checklist table */}
+      {/* ── Bảng công việc ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-700">Danh sách công việc</p>
@@ -311,7 +419,10 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
                   {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0">
+                    <th
+                      key={h}
+                      className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0"
+                    >
                       {h}
                     </th>
                   ))}
@@ -320,114 +431,103 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEdit ? 8 : 7} className="px-3 py-8 text-center text-gray-300 italic">
-                      {canEdit ? 'Nhấn "+ Thêm công việc" để bắt đầu' : "Chưa có công việc nào"}
+                    <td colSpan={canEdit ? 8 : 7} className="px-3 py-10 text-center text-gray-300 italic text-sm">
+                      {canEdit
+                        ? 'Nhấn "+ Thêm công việc" để bắt đầu'
+                        : `Không có dữ liệu cho ngày ${fmtDate(date)}`}
                     </td>
                   </tr>
-                ) : rows.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
-                    <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
-                    <td className="px-2 py-2 w-24">
-                      {canEdit ? (
-                        <input
-                          type="time"
-                          step="60"
-                          value={row.time}
-                          onChange={(e) => updateRow(i, "time", e.target.value)}
-                          className={inputCls}
-                        />
-                      ) : (
-                        <span className="text-gray-600 whitespace-nowrap">
-                          {row.time ? `⏱️ ${row.time}` : "—"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 w-full">
-                      {canEdit ? (
-                        <input
-                          value={row.task}
-                          onChange={(e) => updateRow(i, "task", e.target.value)}
-                          className={inputCls}
-                          placeholder="Tên công việc..."
-                        />
-                      ) : <span className="font-semibold text-gray-800">{row.task || "—"}</span>}
-                    </td>
-                    <td className="px-2 py-2 w-32">
-                      {canEdit ? (
-                        <input
-                          value={row.kpi}
-                          onChange={(e) => updateRow(i, "kpi", e.target.value)}
-                          className={inputCls}
-                          placeholder="KPI..."
-                        />
-                      ) : <span className="text-gray-600">{row.kpi || "—"}</span>}
-                    </td>
-                    <td className="px-2 py-2 w-28">
-                      {canEdit ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={row.actualResult === 0 ? "" : row.actualResult}
-                          onChange={(e) => updateRow(i, "actualResult", e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
-                          className={inputCls}
-                          placeholder="0"
-                        />
-                      ) : <span className="text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>}
-                    </td>
-                    <td className="px-3 py-2 w-20 text-center">
-                      {(() => {
-                        const kpiNum = parseFloat(row.kpi);
-                        const hasKpi = !isNaN(kpiNum) && kpiNum > 0;
-                        if (!hasKpi) return <span className="text-gray-300 font-semibold">—</span>;
-                        const pctVal = (row.actualResult / kpiNum) * 100;
-                        const color = pctVal >= 100 ? "text-green-600" : pctVal >= 70 ? "text-yellow-500" : "text-red-500";
-                        return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
-                      })()}
-                    </td>
-                    <td className="px-2 py-2 w-28">
-                      {canEdit ? (
-                        <input
-                          value={row.note}
-                          onChange={(e) => updateRow(i, "note", e.target.value)}
-                          className={inputCls}
-                          placeholder="Ghi chú..."
-                        />
-                      ) : <span className="text-gray-500">{row.note || "—"}</span>}
-                    </td>
-                    {canEdit && (
-                      <td className="px-3 py-2 w-10">
-                        <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                ) : (
+                  rows.map((row, i) => (
+                    <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
+                      <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
+                      <td className="px-2 py-2 w-24">
+                        {canEdit ? (
+                          <input type="time" step="60" value={row.time} onChange={(e) => updateRow(i, "time", e.target.value)} className={inputCls} />
+                        ) : (
+                          <span className="text-gray-600 whitespace-nowrap">{row.time ? `⏱️ ${row.time}` : "—"}</span>
+                        )}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="px-2 py-2 w-full">
+                        {canEdit ? (
+                          <input value={row.task} onChange={(e) => updateRow(i, "task", e.target.value)} className={inputCls} placeholder="Tên công việc..." />
+                        ) : (
+                          <span className="font-semibold text-gray-800">{row.task || "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 w-32">
+                        {canEdit ? (
+                          <input value={row.kpi} onChange={(e) => updateRow(i, "kpi", e.target.value)} className={inputCls} placeholder="KPI..." />
+                        ) : (
+                          <span className="text-gray-600">{row.kpi || "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 w-28">
+                        {canEdit ? (
+                          <input
+                            type="number" min="0" step="any"
+                            value={row.actualResult === 0 ? "" : row.actualResult}
+                            onChange={(e) => updateRow(i, "actualResult", e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                            className={inputCls}
+                            placeholder="0"
+                          />
+                        ) : (
+                          <span className="text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 w-20 text-center">
+                        {(() => {
+                          const kpiNum = parseFloat(row.kpi);
+                          const hasKpi = !isNaN(kpiNum) && kpiNum > 0;
+                          if (!hasKpi) return <span className="text-gray-300 font-semibold">—</span>;
+                          const pctVal = (row.actualResult / kpiNum) * 100;
+                          const color = pctVal >= 100 ? "text-green-600" : pctVal >= 70 ? "text-yellow-500" : "text-red-500";
+                          return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
+                        })()}
+                      </td>
+                      <td className="px-2 py-2 w-28">
+                        {canEdit ? (
+                          <input value={row.note} onChange={(e) => updateRow(i, "note", e.target.value)} className={inputCls} placeholder="Ghi chú..." />
+                        ) : (
+                          <span className="text-gray-500">{row.note || "—"}</span>
+                        )}
+                      </td>
+                      {canEdit && (
+                        <td className="px-3 py-2 w-10">
+                          <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Tự luận cuối ngày */}
+      {/* ── Tự luận cuối ngày ─────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: "#f15b5c" }}>
           <p className="text-sm font-extrabold text-white tracking-wide uppercase">Tự luận cuối ngày</p>
-          {isManager && (
+          {isTeamView && (
             <span className="text-xs text-white/80 italic flex items-center gap-1.5">
-              <span>👁️</span> Chế độ xem — chỉ PT mới có thể chỉnh sửa
+              <span>👁️</span> Chế độ xem
             </span>
           )}
         </div>
         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {([
-            { label: "Kết quả ngày hôm nay", value: dailyResults, set: setDailyResults, placeholder: "Tổng kết kết quả đạt được trong ngày..." },
-            { label: "Đã hoàn thành", value: dailyCompleted, set: setDailyCompleted, placeholder: "Liệt kê các công việc đã hoàn thành trong ngày..." },
-            { label: "Chưa hoàn thành", value: dailyIncomplete, set: setDailyIncomplete, placeholder: "Liệt kê công việc chưa hoàn thành và lý do..." },
-            { label: "Kế hoạch tiếp theo", value: dailyNextPlan, set: setDailyNextPlan, placeholder: "Kế hoạch cho ngày/buổi làm việc tiếp theo..." },
-          ] as { label: string; value: string; set: (v: string) => void; placeholder: string }[]).map(({ label, value, set, placeholder }) => (
-            <div key={label} className="space-y-1.5">
+          {(
+            [
+              { label: "Kết quả ngày hôm nay",  key: "r", value: dailyResults,    set: setDailyResults,    placeholder: "Tổng kết kết quả đạt được trong ngày..." },
+              { label: "Đã hoàn thành",          key: "c", value: dailyCompleted,  set: setDailyCompleted,  placeholder: "Liệt kê các công việc đã hoàn thành..." },
+              { label: "Chưa hoàn thành",        key: "i", value: dailyIncomplete, set: setDailyIncomplete, placeholder: "Liệt kê công việc chưa hoàn thành và lý do..." },
+              { label: "Kế hoạch tiếp theo",     key: "n", value: dailyNextPlan,   set: setDailyNextPlan,   placeholder: "Kế hoạch cho ngày/buổi làm việc tiếp theo..." },
+            ] as { label: string; key: string; value: string; set: (v: string) => void; placeholder: string }[]
+          ).map(({ label, key, value, set, placeholder }) => (
+            <div key={key} className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-500">{label}</label>
               <textarea
                 value={value}
@@ -447,7 +547,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         </div>
       </div>
 
-      {/* Save */}
+      {/* ── Lưu ──────────────────────────────────────────────────────────── */}
       {canEdit && (
         <div className="flex justify-end">
           <button
@@ -462,7 +562,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
         </div>
       )}
 
-      {/* Toast */}
+      {/* ── Toast ─────────────────────────────────────────────────────────── */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
           {toast}

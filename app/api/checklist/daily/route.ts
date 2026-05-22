@@ -36,6 +36,20 @@ export async function GET(req: Request) {
   }
   // ADMIN: có thể xem bất kỳ user nào — không cần kiểm tra thêm
 
+  // PT and FM: only allowed to query dates within the current month (UTC+7)
+  if (!isAdmin) {
+    const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000); // UTC+7
+    const currentMonth = nowVN.getUTCMonth();
+    const currentYear = nowVN.getUTCFullYear();
+    const [reqYear, reqMonth] = date.split("-").map(Number);
+    if (reqYear !== currentYear || reqMonth - 1 !== currentMonth) {
+      return NextResponse.json(
+        { error: "Chỉ được xem dữ liệu trong tháng hiện tại" },
+        { status: 403 }
+      );
+    }
+  }
+
   const reportDate = toDateOnly(date);
   const nextDay = new Date(reportDate);
   nextDay.setDate(nextDay.getDate() + 1);
