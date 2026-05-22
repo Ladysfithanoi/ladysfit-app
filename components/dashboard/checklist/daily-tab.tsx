@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
-import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid } from "lucide-react";
+import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
 
@@ -21,6 +21,13 @@ function currentMonthLabel() {
   const d = new Date();
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
 }
+// Sort rows by time ascending; rows without time go to the end
+function sortRowsByTime(rows: Row[]): Row[] {
+  const withTime = [...rows.filter((r) => r.time)].sort((a, b) => a.time.localeCompare(b.time));
+  const withoutTime = rows.filter((r) => !r.time);
+  return [...withTime, ...withoutTime].map((r, i) => ({ ...r, order: i + 1 }));
+}
+
 function defaultImportDate(ownDate: string): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -442,13 +449,27 @@ export function DailyTab({
   function removeRow(i: number) {
     setRows((p) => p.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, order: idx + 1 })));
   }
+  function insertRowAfter(i: number) {
+    setRows((prev) => {
+      const next = [...prev];
+      next.splice(i + 1, 0, { order: 0, time: "", task: "", kpi: "", actualResult: 0, note: "" });
+      return next.map((r, idx) => ({ ...r, order: idx + 1 }));
+    });
+  }
   function updateRow<K extends keyof Row>(i: number, key: K, value: Row[K]) {
     setRows((p) => p.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+  }
+  function handleSortRows() {
+    setRows((prev) => sortRowsByTime(prev));
+    setToast("Đã sắp xếp theo thời gian ↑");
+    setTimeout(() => setToast(""), 2000);
   }
 
   // ── save ───────────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
+    const sortedRows = sortRowsByTime(rows);
+    setRows(sortedRows);
     try {
       const res = await fetch("/api/checklist/daily", {
         method: "POST",
@@ -463,7 +484,7 @@ export function DailyTab({
           dailyCompleted:  dailyCompleted || undefined,
           dailyIncomplete: dailyIncomplete || undefined,
           dailyNextPlan:   dailyNextPlan || undefined,
-          items: rows.map((r) => ({
+          items: sortedRows.map((r) => ({
             order: r.order,
             time: r.time || undefined,
             task: r.task,
@@ -661,6 +682,16 @@ export function DailyTab({
               <LayoutGrid className="w-3.5 h-3.5 flex-shrink-0" />
               <span>Xem lịch</span>
             </button>
+            {canEdit && rows.some((r) => r.time) && (
+              <button
+                onClick={handleSortRows}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 text-xs font-bold transition-colors whitespace-nowrap"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="hidden sm:inline">Sắp xếp giờ</span>
+                <span className="sm:hidden">↕</span>
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={addRow}
@@ -689,9 +720,9 @@ export function DailyTab({
                 <col style={{ width: canEdit ? 192 : 232 }} />
                 <col style={{ width: 76 }} />
                 <col style={{ width: 76 }} />
-                <col style={{ width: 56 }} />
+                <col style={{ width: 48 }} />
                 <col style={{ width: 92 }} />
-                {canEdit && <col style={{ width: 40 }} />}
+                {canEdit && <col style={{ width: 52 }} />}
               </colgroup>
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
@@ -700,9 +731,9 @@ export function DailyTab({
                   <th style={{ width: canEdit ? 192 : 232, minWidth: 140 }} className="px-1.5 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Công việc</th>
                   <th style={{ width: 76, minWidth: 60 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">KPI</th>
                   <th style={{ width: 76, minWidth: 60 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">T.Đạt</th>
-                  <th style={{ width: 56, minWidth: 48 }}   className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
+                  <th style={{ width: 48, minWidth: 40 }}   className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
                   <th style={{ width: 92, minWidth: 72 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Note</th>
-                  {canEdit && <th style={{ width: 40, minWidth: 40 }} className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
+                  {canEdit && <th style={{ width: 52, minWidth: 44 }} className="px-1 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -720,7 +751,13 @@ export function DailyTab({
                       <td className="px-1.5 py-1.5 text-gray-400 text-center overflow-hidden">{row.order}</td>
                       <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
-                          <input type="time" step="60" value={row.time} onChange={(e) => updateRow(i, "time", e.target.value)} className={inputCls} />
+                          <input
+                            type="time" step="60"
+                            value={row.time}
+                            onChange={(e) => updateRow(i, "time", e.target.value)}
+                            onBlur={(e) => { if (e.target.value) setRows((prev) => sortRowsByTime(prev)); }}
+                            className={inputCls}
+                          />
                         ) : (
                           <span className="block truncate text-gray-600">{row.time ? `⏱ ${row.time}` : "—"}</span>
                         )}
@@ -769,10 +806,23 @@ export function DailyTab({
                         )}
                       </td>
                       {canEdit && (
-                        <td className="px-1.5 py-1.5 text-center overflow-hidden">
-                          <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <td className="px-1 py-1.5 text-center overflow-hidden">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <button
+                              onClick={() => insertRowAfter(i)}
+                              className="p-0.5 text-gray-300 hover:text-emerald-500 transition-colors"
+                              title="Chèn dòng phía dưới"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => removeRow(i)}
+                              className="p-0.5 text-gray-300 hover:text-red-500 transition-colors"
+                              title="Xóa dòng này"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
