@@ -623,25 +623,26 @@ export function DailyTab({
 
       {/* ── Bảng công việc ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-          <p className="text-sm font-extrabold text-gray-700">Danh sách công việc</p>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3 border-b border-gray-100">
+          <p className="text-sm font-extrabold text-gray-700 whitespace-nowrap">Danh sách công việc</p>
+          <div className="flex items-center flex-wrap gap-2">
             {/* Xem tổng quan — luôn hiển thị */}
             <button
               onClick={() => setCalendarOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 text-xs font-bold transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 text-xs font-bold transition-colors whitespace-nowrap"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Xem tổng quan</span>
-              <span className="sm:hidden">Lịch</span>
+              <LayoutGrid className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Xem lịch</span>
             </button>
             {canEdit && (
               <button
                 onClick={addRow}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-bold"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-white text-xs font-bold whitespace-nowrap"
                 style={{ backgroundColor: "#f15b5c" }}
               >
-                <Plus className="w-3.5 h-3.5" /> Thêm công việc
+                <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="hidden xs:inline">Thêm công việc</span>
+                <span className="xs:hidden">Thêm</span>
               </button>
             )}
           </div>
@@ -650,15 +651,28 @@ export function DailyTab({
         {loading ? (
           <div className="py-10 text-center text-sm text-gray-400">Đang tải...</div>
         ) : (
-          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <table className="w-full min-w-[540px] text-xs border-collapse">
+          <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}>
+            <table className="w-full text-xs border-collapse" style={{ minWidth: 680 }}>
+              <colgroup>
+                <col style={{ width: 44 }} />           {/* STT */}
+                <col style={{ width: 96 }} />           {/* Giờ */}
+                <col style={{ minWidth: 180 }} />       {/* Công việc */}
+                <col style={{ width: 80 }} />           {/* KPI */}
+                <col style={{ width: 80 }} />           {/* Thực đạt */}
+                <col style={{ width: 60 }} />           {/* % */}
+                <col style={{ width: 96 }} />           {/* Note */}
+                {canEdit && <col style={{ width: 40 }} />}  {/* Xóa */}
+              </colgroup>
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  {["STT", "Giờ", "Công việc", "KPI", "Thực đạt", "%", "Note", ...(canEdit ? ["Xóa"] : [])].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200 last:border-r-0">
-                      {h}
-                    </th>
-                  ))}
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">STT</th>
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Giờ</th>
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Công việc</th>
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">KPI</th>
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Thực đạt</th>
+                  <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
+                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Note</th>
+                  {canEdit && <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
                 </tr>
               </thead>
               <tbody>
@@ -666,36 +680,36 @@ export function DailyTab({
                   <tr>
                     <td colSpan={canEdit ? 8 : 7} className="px-3 py-10 text-center text-gray-300 italic text-sm">
                       {canEdit
-                        ? 'Nhấn "+ Thêm công việc" để bắt đầu'
+                        ? 'Nhấn "+ Thêm" để bắt đầu'
                         : `Không có dữ liệu cho ngày ${fmtDate(date)}`}
                     </td>
                   </tr>
                 ) : (
                   rows.map((row, i) => (
                     <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
-                      <td className="px-3 py-2 text-gray-400 w-10">{row.order}</td>
-                      <td className="px-2 py-2 w-24">
+                      <td className="px-2 py-2 text-gray-400 text-center">{row.order}</td>
+                      <td className="px-2 py-2">
                         {canEdit ? (
                           <input type="time" step="60" value={row.time} onChange={(e) => updateRow(i, "time", e.target.value)} className={inputCls} />
                         ) : (
                           <span className="text-gray-600 whitespace-nowrap">{row.time ? `⏱️ ${row.time}` : "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 w-full">
+                      <td className="px-2 py-2">
                         {canEdit ? (
                           <input value={row.task} onChange={(e) => updateRow(i, "task", e.target.value)} className={inputCls} placeholder="Tên công việc..." />
                         ) : (
-                          <span className="font-semibold text-gray-800">{row.task || "—"}</span>
+                          <span className="font-semibold text-gray-800 break-words">{row.task || "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 w-32">
+                      <td className="px-2 py-2">
                         {canEdit ? (
                           <input value={row.kpi} onChange={(e) => updateRow(i, "kpi", e.target.value)} className={inputCls} placeholder="KPI..." />
                         ) : (
-                          <span className="text-gray-600">{row.kpi || "—"}</span>
+                          <span className="text-gray-600 break-words">{row.kpi || "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 w-28">
+                      <td className="px-2 py-2">
                         {canEdit ? (
                           <input
                             type="number" min="0" step="any"
@@ -707,7 +721,7 @@ export function DailyTab({
                           <span className="text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 w-20 text-center">
+                      <td className="px-2 py-2 text-center">
                         {(() => {
                           const kpiNum = parseFloat(row.kpi);
                           const hasKpi = !isNaN(kpiNum) && kpiNum > 0;
@@ -717,15 +731,15 @@ export function DailyTab({
                           return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
                         })()}
                       </td>
-                      <td className="px-2 py-2 w-28">
+                      <td className="px-2 py-2">
                         {canEdit ? (
                           <input value={row.note} onChange={(e) => updateRow(i, "note", e.target.value)} className={inputCls} placeholder="Ghi chú..." />
                         ) : (
-                          <span className="text-gray-500">{row.note || "—"}</span>
+                          <span className="text-gray-500 break-words">{row.note || "—"}</span>
                         )}
                       </td>
                       {canEdit && (
-                        <td className="px-3 py-2 w-10">
+                        <td className="px-2 py-2 text-center">
                           <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
