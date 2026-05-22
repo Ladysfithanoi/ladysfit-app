@@ -94,6 +94,36 @@ type Props = {
   staffList: StaffMember[];
 };
 
+// ── DateInput — iOS Safari locale fix ────────────────────────────────────────
+// Safari on iOS renders <input type="date"> in device locale ("ngày 22 thg 05, 2026").
+// Solution: display fmtDate() text ourselves; a transparent native input sits on top
+// to capture taps and open the system date picker.
+function DateInput({
+  value, min, max, onChange, className,
+}: {
+  value: string; min?: string; max?: string;
+  onChange: (v: string) => void; className?: string;
+}) {
+  return (
+    <div className={cn(
+      "relative h-9 rounded-xl border border-gray-200 bg-white flex items-center px-3 cursor-pointer overflow-hidden",
+      className
+    )}>
+      <span className="text-sm text-gray-700 whitespace-nowrap pointer-events-none select-none">
+        {fmtDate(value)}
+      </span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => e.target.value && onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      />
+    </div>
+  );
+}
+
 // appearance-none + m-0: strips iOS Safari default input chrome (inner shadow, padding, border-radius)
 // box-border: padding counted inward so input stays within column boundary
 // text-[16px]: prevents iOS Safari auto-zoom (zoom triggers when font-size < 16px)
@@ -509,16 +539,11 @@ export function DailyTab({
             <div className="flex items-center gap-2">
               <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày:</label>
-              <input
-                type="date"
+              <DateInput
                 value={fmSubTab === "team" ? teamDate : ownDate}
                 min={minDate}
                 max={todayISO()}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  fmSubTab === "team" ? setTeamDate(e.target.value) : setOwnDate(e.target.value);
-                }}
-                className={dateCls}
+                onChange={(v) => fmSubTab === "team" ? setTeamDate(v) : setOwnDate(v)}
               />
             </div>
 
@@ -562,13 +587,12 @@ export function DailyTab({
                 {fmtDate(date)}
               </div>
             ) : (
-              <input
-                type="date"
+              <DateInput
                 value={date}
                 min={minDate}
                 max={todayISO()}
-                onChange={(e) => e.target.value && setOwnDate(e.target.value)}
-                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full"
+                onChange={(v) => setOwnDate(v)}
+                className="w-full focus-within:ring-2 focus-within:ring-[#f15b5c]/30"
               />
             )}
           </div>
@@ -872,13 +896,12 @@ export function DailyTab({
             <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Chọn ngày:</label>
-                <input
-                  type="date"
+                <DateInput
                   value={importDate}
                   min={minDate}
                   max={todayISO()}
-                  onChange={(e) => { if (e.target.value) setImportDate(e.target.value); }}
-                  className={cn(dateCls, "flex-1")}
+                  onChange={(v) => setImportDate(v)}
+                  className="flex-1"
                 />
                 {importDate === ownDate && (
                   <span className="text-[11px] text-amber-500 font-medium whitespace-nowrap">Đang xem ngày này</span>
