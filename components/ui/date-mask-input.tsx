@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useLayoutEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -13,18 +13,25 @@ function isoToDisplay(iso: string): string {
   return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
 }
 
-/** Strip non-digits, cap at 8 digits, then re-insert slashes. */
-function applyMask(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 8);
+/**
+ * Format from cleaned digits only.
+ * Slashes are inserted purely based on digit count — NOT on raw input position.
+ * This means Backspace always shortens the digit string naturally,
+ * and the slash disappears automatically when the digit count drops below the
+ * threshold, eliminating all "jump-back" glitches on both desktop and mobile.
+ */
+function formatFromDigits(cleaned: string): string {
+  const digits = cleaned.slice(0, 8);           // cap at 8 digits (ddmmyyyy)
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
 /**
- * Parse dd/mm/yyyy → ISO yyyy-mm-dd.
- * Returns null for any invalid or out-of-range date.
- * Year must be 4 digits, 1900–2100; month 1–12; day must exist in that month.
+ * Parse dd/mm/yyyy → ISO yyyy-mm-dd with strict validation:
+ *   - year 4 digits, 1900–2100
+ *   - month 01–12
+ *   - day must actually exist in that month (rejects 31/02, etc.)
  */
 function displayToISO(display: string): string | null {
   if (display.length !== 10) return null;
@@ -42,7 +49,7 @@ function displayToISO(display: string): string | null {
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
 
-  // Strict calendar validation (e.g. 31/02 is rejected)
+  // Calendar validation: catches invalid combos like 31/02, 29/02 on non-leap
   const date = new Date(year, month - 1, day);
   if (
     date.getFullYear() !== year ||
@@ -51,27 +58,6 @@ function displayToISO(display: string): string | null {
   ) return null;
 
   return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-}
-
-/**
- * Given the masked string and the number of digits that were before the
- * cursor in the raw (pre-mask) value, compute where the cursor should
- * land in the masked string — jumping over any auto-inserted slash.
- */
-function computeCursorPos(masked: string, digitsBeforeCursor: number): number {
-  if (digitsBeforeCursor === 0) return 0;
-  let digitsSeen = 0;
-  for (let i = 0; i < masked.length; i++) {
-    if (masked[i] !== "/") {
-      digitsSeen++;
-      if (digitsSeen === digitsBeforeCursor) {
-        const next = i + 1;
-        // Skip over an auto-inserted slash so cursor lands after it
-        return masked[next] === "/" ? next + 1 : next;
-      }
-    }
-  }
-  return masked.length;
 }
 
 // ─── component ──────────────────────────────────────────────────────────────
@@ -102,66 +88,48 @@ export function DateMaskInput({
 }: Props) {
   const initISO = value ?? defaultValue ?? "";
 
-  // Single source of truth: the raw display string the user sees
   const [dateInput, setDateInput] = useState(() => isoToDisplay(initISO));
-  // ISO value sent to the server via hidden input / onChange callback
   const [isoValue, setIsoValue] = useState(initISO);
-  // Inline error shown on blur
   const [error, setError] = useState("");
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  // Desired cursor position set during onChange, consumed by useLayoutEffect
-  const nextCursor = useRef<number | null>(null);
+  // Guard: never overwrite the field with external data while the user is typing
+  const isFocused = useRef(false);
 
-  // ── Sync from parent (controlled mode) ────────────────────────────────────
-  // Using a ref-comparison avoids an effect-cycle while staying safe.
-  const prevValueRef = useRef<string | undefined>(value);
-  if (value !== undefined && value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    setDateInput(isoToDisplay(value));
-    setIsoValue(value);
-    setError("");
-  }
-
-  // ── Cursor restoration ────────────────────────────────────────────────────
-  // useLayoutEffect fires synchronously after DOM mutations, before paint,
-  // so the cursor is placed before the user sees any flicker.
-  useLayoutEffect(() => {
-    if (
-      nextCursor.current !== null &&
-      inputRef.current &&
-      document.activeElement === inputRef.current
-    ) {
-      const pos = nextCursor.current;
-      inputRef.current.setSelectionRange(pos, pos);
-      nextCursor.current = null;
+  // Sync from parent (controlled mode) — only when the field is not active
+  useEffect(() => {
+    if (value !== undefined && !isFocused.current) {
+      setDateInput(isoToDisplay(value));
+      setIsoValue(value);
+      setError("");
     }
-  });
+  }, [value]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value;
-    // selectionStart reflects cursor position AFTER the browser applied the keystroke
-    const cursorBefore = e.target.selectionStart ?? raw.length;
+    // 1. Strip everything that isn't a digit — this is the core of the algorithm.
+    //    Whether the user typed a digit, deleted a digit, or deleted a slash,
+    //    we always reformat from the clean digit string, so there is nothing
+    //    to "jump back" to. No cursor-position arithmetic required.
+    const cleaned = e.target.value.replace(/\D/g, "");
+    const formatted = formatFromDigits(cleaned);
 
-    // How many digit characters were to the left of the cursor in the raw string?
-    const digitsBeforeCursor = raw.slice(0, cursorBefore).replace(/\D/g, "").length;
-
-    const masked = applyMask(raw);
-
-    // Schedule cursor restoration (runs in useLayoutEffect after re-render)
-    nextCursor.current = computeCursorPos(masked, digitsBeforeCursor);
-
-    setDateInput(masked);
+    setDateInput(formatted);
     setError("");
 
-    const iso = displayToISO(masked);
+    // Fire onChange only when we have a fully valid date
+    const iso = displayToISO(formatted);
     setIsoValue(iso ?? "");
     if (iso) onChange?.(iso);
   }
 
+  function handleFocus() {
+    isFocused.current = true;
+  }
+
   function handleBlur() {
+    isFocused.current = false;
+
     if (!dateInput) {
       setError("");
       setIsoValue("");
@@ -187,11 +155,11 @@ export function DateMaskInput({
   return (
     <>
       <input
-        ref={inputRef}
         type="text"
         inputMode="numeric"
         value={dateInput}
         onChange={handleChange}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         disabled={disabled}
         placeholder={placeholder}
@@ -203,7 +171,7 @@ export function DateMaskInput({
       {error && (
         <p className="text-xs text-red-500 mt-1 font-medium">{error}</p>
       )}
-      {/* Hidden input carries the ISO date value for native form submission */}
+      {/* Hidden input carries the ISO value for native form submission */}
       {name && <input type="hidden" name={name} value={isoValue} />}
     </>
   );
