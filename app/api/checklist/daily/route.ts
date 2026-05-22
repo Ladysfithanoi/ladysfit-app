@@ -12,9 +12,10 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  const isFM = role === "FM";
-  const isPT = role === "PT";
-  if (!isFM && !isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const isAdmin = role === "ADMIN";
+  const isFM    = role === "FM";
+  const isPT    = role === "PT";
+  if (!isAdmin && !isFM && !isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") ?? new Date().toISOString().split("T")[0];
@@ -26,15 +27,14 @@ export async function GET(req: Request) {
   }
 
   // FM can only view staff in managed branches
-  if (isFM) {
+  if (isFM && requestedUserId !== session.user.id) {
     const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
-    if (requestedUserId !== session.user.id) {
-      const targetUser = await prisma.user.findUnique({ where: { id: requestedUserId }, select: { branchId: true } });
-      if (!targetUser?.branchId || !managedBranchIds.includes(targetUser.branchId)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
+    const targetUser = await prisma.user.findUnique({ where: { id: requestedUserId }, select: { branchId: true } });
+    if (!targetUser?.branchId || !managedBranchIds.includes(targetUser.branchId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
+  // ADMIN: có thể xem bất kỳ user nào — không cần kiểm tra thêm
 
   const reportDate = toDateOnly(date);
   const nextDay = new Date(reportDate);

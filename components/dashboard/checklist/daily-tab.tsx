@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Save } from "lucide-react";
+import { Plus, Trash2, Save, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { StaffMember } from "./checklist-page";
@@ -35,7 +35,7 @@ function fmtDate(iso: string) {
 const inputCls = "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full min-w-0";
 
 export function DailyTab({ currentUserId, currentUserName, currentUserRole, staffList }: Props) {
-  const isFM = currentUserRole === "FM";
+  const isManager = currentUserRole === "FM" || currentUserRole === "ADMIN";
 
   const [selectedUserId, setSelectedUserId] = useState(currentUserId);
   const [date, setDate] = useState(todayISO());
@@ -56,7 +56,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
 
   const isOwnChecklist = selectedUserId === currentUserId;
   const canEdit = isOwnChecklist;
-  const canEditReflection = !isFM && isOwnChecklist;
+  const canEditReflection = !isManager && isOwnChecklist;
 
   const selectedUser = staffList.find((s) => s.id === selectedUserId);
   const displayName = selectedUser?.name ?? selectedUser?.email ?? "";
@@ -170,24 +170,46 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
 
   return (
     <div className="space-y-5 max-w-6xl">
-      {/* FM staff selector */}
-      {isFM && (
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Xem nhân sự:</label>
-          <select
-            value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
-            className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-          >
-            {staffList.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name ?? s.email}{s.id === currentUserId ? " (bạn)" : ""}
-              </option>
-            ))}
-          </select>
-          {!isOwnChecklist && (
-            <span className="text-[10px] bg-gray-100 text-gray-500 font-semibold px-2 py-0.5 rounded-full">Chỉ xem</span>
-          )}
+      {/* FM/Admin: bộ lọc nhân sự + ngày xem lịch sử */}
+      {isManager && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+            {/* Chọn nhân sự */}
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Nhân sự:</label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 max-w-[200px] sm:max-w-none"
+              >
+                {staffList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name ?? s.email}{s.id === currentUserId ? " (bạn)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Chọn ngày xem lịch sử */}
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày xem:</label>
+              <input
+                type="date"
+                value={date}
+                max={todayISO()}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+              />
+            </div>
+
+            {/* Badge chỉ xem */}
+            {!isOwnChecklist && (
+              <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                👁 Chỉ xem — {fmtDate(date)}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -392,7 +414,7 @@ export function DailyTab({ currentUserId, currentUserName, currentUserRole, staf
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: "#f15b5c" }}>
           <p className="text-sm font-extrabold text-white tracking-wide uppercase">Tự luận cuối ngày</p>
-          {isFM && (
+          {isManager && (
             <span className="text-xs text-white/80 italic flex items-center gap-1.5">
               <span>👁️</span> Chế độ xem — chỉ PT mới có thể chỉnh sửa
             </span>
