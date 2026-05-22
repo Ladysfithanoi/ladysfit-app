@@ -94,9 +94,11 @@ type Props = {
   staffList: StaffMember[];
 };
 
-// box-border ensures padding never pushes input outside its column in table-fixed layout
+// appearance-none + m-0: strips iOS Safari default input chrome (inner shadow, padding, border-radius)
+// box-border: padding counted inward so input stays within column boundary
+// text-[16px]: prevents iOS Safari auto-zoom (zoom triggers when font-size < 16px)
 const inputCls =
-  "h-7 w-full min-w-0 box-border rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+  "h-7 w-full min-w-0 box-border m-0 appearance-none rounded-lg border border-gray-200 bg-white px-1.5 text-[16px] sm:text-xs leading-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 const dateCls =
   "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
@@ -669,15 +671,14 @@ export function DailyTab({
               </colgroup>
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  {/* th padding nhỏ lại để nhường không gian cho nội dung */}
-                  <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">STT</th>
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Giờ</th>
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Công việc</th>
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">KPI</th>
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Thực đạt</th>
-                  <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Note</th>
-                  {canEdit && <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
+                  <th style={{ width: 40, minWidth: 40 }}   className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">STT</th>
+                  <th style={{ width: 88, minWidth: 80 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Giờ</th>
+                  <th style={{ width: canEdit ? 192 : 232, minWidth: 140 }} className="px-1.5 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Công việc</th>
+                  <th style={{ width: 76, minWidth: 60 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">KPI</th>
+                  <th style={{ width: 76, minWidth: 60 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">T.Đạt</th>
+                  <th style={{ width: 56, minWidth: 48 }}   className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
+                  <th style={{ width: 92, minWidth: 72 }}   className="px-1.5 py-2.5 text-left  font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Note</th>
+                  {canEdit && <th style={{ width: 40, minWidth: 40 }} className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
                 </tr>
               </thead>
               <tbody>
