@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
   const { der, protein, fat, carbs, mealsPerDay, likes, dislikes } = body as Record<string, unknown>;
 
-  if (!der || !protein || !fat || !carbs || !mealsPerDay) {
+  if (der == null || protein == null || fat == null || carbs == null || mealsPerDay == null) {
     return NextResponse.json({ error: "Thiếu thông tin dinh dưỡng" }, { status: 400 });
   }
 
