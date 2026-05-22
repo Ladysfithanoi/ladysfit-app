@@ -65,11 +65,17 @@ export function WeightTab({
     setLoading(true);
     setError("");
     const fd = new FormData(e.currentTarget);
+    const dateStr = fd.get("date") as string;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      setError("Vui lòng nhập ngày hợp lệ (dd/mm/yyyy) trước khi lưu");
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch("/api/my/weight-logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: fd.get("date"), weight: fd.get("weight"), note: fd.get("note") || null }),
+        body: JSON.stringify({ date: dateStr, weight: fd.get("weight"), note: fd.get("note") || null }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       setSheetOpen(false);

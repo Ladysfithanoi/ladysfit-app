@@ -816,12 +816,18 @@ export function ClientDetailPage({
     setLoading(true);
     setWeightError("");
     const fd = new FormData(e.currentTarget);
+    const dateStr = fd.get("date") as string;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      setWeightError("Vui lòng nhập ngày hợp lệ (dd/mm/yyyy) trước khi lưu");
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/clients/${client.id}/weight-logs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: fd.get("date"),
+          date: dateStr,
           weight: fd.get("weight"),
           note: fd.get("note") || null,
         }),
