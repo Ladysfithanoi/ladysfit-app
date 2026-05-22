@@ -94,8 +94,9 @@ type Props = {
   staffList: StaffMember[];
 };
 
+// box-border ensures padding never pushes input outside its column in table-fixed layout
 const inputCls =
-  "h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full min-w-0";
+  "h-7 w-full min-w-0 box-border rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 const dateCls =
   "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
@@ -651,28 +652,32 @@ export function DailyTab({
         {loading ? (
           <div className="py-10 text-center text-sm text-gray-400">Đang tải...</div>
         ) : (
-          <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}>
-            <table className="w-full text-xs border-collapse" style={{ minWidth: 680 }}>
+          <div
+            className="w-full overflow-x-auto [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
+            style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}
+          >
+            <table className="w-full table-fixed text-xs border-collapse" style={{ minWidth: 680 }}>
               <colgroup>
-                <col style={{ width: 44 }} />           {/* STT */}
-                <col style={{ width: 96 }} />           {/* Giờ */}
-                <col style={{ minWidth: 180 }} />       {/* Công việc */}
-                <col style={{ width: 80 }} />           {/* KPI */}
-                <col style={{ width: 80 }} />           {/* Thực đạt */}
-                <col style={{ width: 60 }} />           {/* % */}
-                <col style={{ width: 96 }} />           {/* Note */}
-                {canEdit && <col style={{ width: 40 }} />}  {/* Xóa */}
+                <col style={{ width: 40 }} />
+                <col style={{ width: 88 }} />
+                <col style={{ width: canEdit ? 192 : 232 }} />
+                <col style={{ width: 76 }} />
+                <col style={{ width: 76 }} />
+                <col style={{ width: 56 }} />
+                <col style={{ width: 92 }} />
+                {canEdit && <col style={{ width: 40 }} />}
               </colgroup>
               <thead>
                 <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                  <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">STT</th>
+                  {/* th padding nhỏ lại để nhường không gian cho nội dung */}
+                  <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">STT</th>
                   <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Giờ</th>
                   <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Công việc</th>
                   <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">KPI</th>
                   <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Thực đạt</th>
-                  <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
+                  <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">%</th>
                   <th className="px-2 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap border-r border-gray-200">Note</th>
-                  {canEdit && <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
+                  {canEdit && <th className="px-1.5 py-2.5 text-center font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Xóa</th>}
                 </tr>
               </thead>
               <tbody>
@@ -687,29 +692,29 @@ export function DailyTab({
                 ) : (
                   rows.map((row, i) => (
                     <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 divide-x divide-gray-100">
-                      <td className="px-2 py-2 text-gray-400 text-center">{row.order}</td>
-                      <td className="px-2 py-2">
+                      <td className="px-1.5 py-1.5 text-gray-400 text-center overflow-hidden">{row.order}</td>
+                      <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input type="time" step="60" value={row.time} onChange={(e) => updateRow(i, "time", e.target.value)} className={inputCls} />
                         ) : (
-                          <span className="text-gray-600 whitespace-nowrap">{row.time ? `⏱️ ${row.time}` : "—"}</span>
+                          <span className="block truncate text-gray-600">{row.time ? `⏱ ${row.time}` : "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input value={row.task} onChange={(e) => updateRow(i, "task", e.target.value)} className={inputCls} placeholder="Tên công việc..." />
                         ) : (
-                          <span className="font-semibold text-gray-800 break-words">{row.task || "—"}</span>
+                          <span className="block truncate font-semibold text-gray-800" title={row.task}>{row.task || "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input value={row.kpi} onChange={(e) => updateRow(i, "kpi", e.target.value)} className={inputCls} placeholder="KPI..." />
                         ) : (
-                          <span className="text-gray-600 break-words">{row.kpi || "—"}</span>
+                          <span className="block truncate text-gray-600" title={row.kpi}>{row.kpi || "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input
                             type="number" min="0" step="any"
@@ -718,28 +723,28 @@ export function DailyTab({
                             className={inputCls} placeholder="0"
                           />
                         ) : (
-                          <span className="text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>
+                          <span className="block truncate text-gray-600">{row.actualResult > 0 ? row.actualResult : "—"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-center">
+                      <td className="px-1.5 py-1.5 text-center overflow-hidden">
                         {(() => {
                           const kpiNum = parseFloat(row.kpi);
                           const hasKpi = !isNaN(kpiNum) && kpiNum > 0;
                           if (!hasKpi) return <span className="text-gray-300 font-semibold">—</span>;
                           const pctVal = (row.actualResult / kpiNum) * 100;
                           const color = pctVal >= 100 ? "text-green-600" : pctVal >= 70 ? "text-yellow-500" : "text-red-500";
-                          return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(1)}%</span>;
+                          return <span className={cn("font-bold text-xs", color)}>{pctVal.toFixed(0)}%</span>;
                         })()}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
                           <input value={row.note} onChange={(e) => updateRow(i, "note", e.target.value)} className={inputCls} placeholder="Ghi chú..." />
                         ) : (
-                          <span className="text-gray-500 break-words">{row.note || "—"}</span>
+                          <span className="block truncate text-gray-500" title={row.note}>{row.note || "—"}</span>
                         )}
                       </td>
                       {canEdit && (
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-1.5 py-1.5 text-center overflow-hidden">
                           <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
