@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Salad, Archive, Plus, Camera, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Salad, Archive, Plus, Camera, Loader2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NutritionDesigner, type MealPlanRow, type MealItem } from "./nutrition-designer";
+import { NutritionDesigner, type MealPlanRow, type MealItem, calculateNutrition, phaseToStage } from "./nutrition-designer";
 import { fmtDate } from "@/lib/format-date";
 
 // ── MacroBadge ─────────────────────────────────────────────────────────────
@@ -114,7 +114,6 @@ function MyPlateSection({
         </div>
       )}
 
-      {/* Note */}
       {canEdit ? (
         editingNote ? (
           <div className="space-y-2">
@@ -157,6 +156,63 @@ function MyPlateSection({
   );
 }
 
+// ── PhaseSelector ───────────────────────────────────────────────────────────
+
+const PHASES = ["Giai đoạn 1", "Giai đoạn 2", "Giai đoạn 3"] as const;
+
+function PhaseSelector({
+  phase,
+  loading,
+  onSelect,
+}: {
+  phase: string;
+  loading: boolean;
+  onSelect: (p: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={loading}
+        className="flex items-center gap-1.5 text-sm font-bold text-gray-700 hover:text-[#f15b5c] transition-colors disabled:opacity-50"
+      >
+        {loading && <Loader2 className="w-3 h-3 animate-spin" />}
+        {phase}
+        <Pencil className="w-3 h-3 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden min-w-[130px]">
+          {PHASES.map((p) => (
+            <button
+              key={p}
+              onClick={() => { setOpen(false); onSelect(p); }}
+              className={cn(
+                "w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-gray-50 transition-colors",
+                p === phase ? "text-[#f15b5c] bg-red-50/40" : "text-gray-700"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── NutritionTab ───────────────────────────────────────────────────────────
 
 export function NutritionTab({
@@ -164,6 +220,7 @@ export function NutritionTab({
   initialPlans,
   clientWeight,
   clientHeight,
+  clientPhase,
   myPlateImageUrl,
   myPlateNote,
   userRole,
@@ -172,6 +229,7 @@ export function NutritionTab({
   initialPlans: MealPlanRow[];
   clientWeight: number;
   clientHeight: number;
+  clientPhase?: string;
   myPlateImageUrl?: string | null;
   myPlateNote?: string | null;
   userRole?: string;
@@ -179,6 +237,9 @@ export function NutritionTab({
   const [plans, setPlans] = useState<MealPlanRow[]>(initialPlans);
   const [showDesigner, setShowDesigner] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [phase, setPhase] = useState(clientPhase ?? "Giai đoạn 1");
+  const [phaseLoading, setPhaseLoading] = useState(false);
+  const [phaseError, setPhaseError] = useState("");
 
   const activePlan = plans.find((p) => p.status === "ACTIVE") ?? null;
   const canEdit = ["ADMIN", "FM", "PT"].includes(userRole ?? "");
@@ -198,6 +259,48 @@ export function NutritionTab({
     }
   }
 
+  async function handlePhaseChange(newPhase: string) {
+    if (newPhase === phase) return;
+    setPhaseLoading(true);
+    setPhaseError("");
+    try {
+      const stage = phaseToStage(newPhase);
+      const metrics = calculateNutrition(clientWeight, clientHeight, false, stage);
+
+      // 1. Persist new phase on client
+      const clientRes = await fetch(`/api/clients/${clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dietPhase: newPhase }),
+      });
+      if (!clientRes.ok) throw new Error("Không thể cập nhật giai đoạn");
+
+      // 2. Update active plan targets if one exists
+      if (activePlan) {
+        const planRes = await fetch(`/api/clients/${clientId}/meal-plans/${activePlan.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(metrics),
+        });
+        if (!planRes.ok) throw new Error("Không thể cập nhật chế độ ăn");
+
+        setPlans((prev) =>
+          prev.map((p) =>
+            p.id === activePlan.id
+              ? { ...p, tdee: metrics.tdee, der: metrics.der, protein: metrics.protein, fat: metrics.fat, carbs: metrics.carbs }
+              : p
+          )
+        );
+      }
+
+      setPhase(newPhase);
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setPhaseLoading(false);
+    }
+  }
+
   if (showDesigner) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
@@ -214,6 +317,7 @@ export function NutritionTab({
           clientId={clientId}
           initialWeight={clientWeight}
           initialHeight={clientHeight}
+          initialPhase={phase}
           existingPlan={null}
           onSaved={handleSaved}
           saveLabel="Lưu chế độ ăn"
@@ -224,7 +328,7 @@ export function NutritionTab({
 
   return (
     <div className="space-y-4">
-      {/* MyPlate section — always shown */}
+      {/* MyPlate section */}
       <MyPlateSection
         clientId={clientId}
         initialImageUrl={myPlateImageUrl ?? null}
@@ -281,6 +385,7 @@ export function NutritionTab({
 
           {/* Macro targets */}
           <div className="grid grid-cols-2 gap-3">
+            {/* TDEE / DER / Phase card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 font-semibold mb-2">Chỉ số mục tiêu</p>
               <div className="space-y-2">
@@ -292,8 +397,25 @@ export function NutritionTab({
                   <span className="text-xs text-gray-500">DER (mục tiêu)</span>
                   <span className="text-sm font-extrabold text-[#f15b5c]">{Math.round(activePlan.der)} kcal</span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Giai đoạn</span>
+                  {canEdit ? (
+                    <PhaseSelector
+                      phase={phase}
+                      loading={phaseLoading}
+                      onSelect={handlePhaseChange}
+                    />
+                  ) : (
+                    <span className="text-sm font-bold text-gray-700">{phase}</span>
+                  )}
+                </div>
               </div>
+              {phaseError && (
+                <p className="text-[10px] text-red-500 font-medium mt-2">{phaseError}</p>
+              )}
             </div>
+
+            {/* Macro card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 font-semibold mb-2">Macro/ngày</p>
               <div className="flex flex-wrap gap-1.5">

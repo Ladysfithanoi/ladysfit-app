@@ -101,6 +101,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       goalNote: body.goalNote ?? undefined,
       assignedPTId: body.assignedPTId ?? undefined,
       branchId: body.branchId ?? undefined,
+      dietPhase: body.dietPhase ?? undefined,
       status: body.status ?? undefined,
       avatarUrl: "avatarUrl" in body ? (body.avatarUrl ?? null) : undefined,
     },

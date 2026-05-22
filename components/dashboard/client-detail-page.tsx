@@ -68,6 +68,7 @@ type ClientDetail = {
   myPlateImageUrl: string | null;
   myPlateNote: string | null;
   avatarUrl: string | null;
+  dietPhase: string;
   status: "ACTIVE" | "PAUSED" | "RESERVED";
   createdAt: string;
   assignedPT: PT;
@@ -2057,6 +2058,7 @@ export function ClientDetailPage({
           initialPlans={initialMealPlans ?? []}
           clientWeight={client.currentWeight}
           clientHeight={client.height}
+          clientPhase={client.dietPhase}
           myPlateImageUrl={client.myPlateImageUrl}
           myPlateNote={client.myPlateNote}
           userRole={userRole}

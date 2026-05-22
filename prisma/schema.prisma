@@ -146,6 +146,7 @@ model Client {
   avatarUrl        String?      @db.Text
   assignedPTId     String
   branchId         String
+  dietPhase        String       @default("Giai đoạn 1")
   status           ClientStatus @default(ACTIVE)
   hasTransformed   Boolean      @default(false)
   createdAt        DateTime     @default(now())

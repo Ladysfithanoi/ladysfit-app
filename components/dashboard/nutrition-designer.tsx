@@ -7,14 +7,14 @@ import { NutritionFoodSearch } from "./nutrition-food-search";
 
 // ── Nutrition calculation ──────────────────────────────────────────────────
 
-function phaseToStage(phase: string): number {
+export function phaseToStage(phase: string): number {
   if (phase.startsWith("Giai đoạn 1")) return 1;
   if (phase.startsWith("Giai đoạn 2")) return 2;
   if (phase.startsWith("Giai đoạn 3")) return 3;
   return 1;
 }
 
-function calculateNutrition(weight: number, height: number, hasDieted: boolean, stage: number) {
+export function calculateNutrition(weight: number, height: number, hasDieted: boolean, stage: number) {
   const pal = stage === 1 ? 1.2 : stage === 2 ? 1.4 : 1.6;
   let tdee = weight * 22 * pal;
   if (hasDieted) tdee *= 0.9;
@@ -25,8 +25,31 @@ function calculateNutrition(weight: number, height: number, hasDieted: boolean, 
 
   const idealWeight = (height - 100) * 0.9;
   const protein = idealWeight * 2;
-  const fat = 50;
-  const carbs = Math.max(0, (der - protein * 4 - fat * 9) / 4);
+
+  // Floor values to prevent 0g Carb when DER is very low
+  const MIN_CARBS = 30; // g
+  const MIN_FAT   = 20; // g
+
+  const remainAfterProtein = der - protein * 4;
+
+  let fat: number;
+  let carbs: number;
+
+  if (remainAfterProtein <= MIN_CARBS * 4 + MIN_FAT * 9) {
+    // DER critically low — preserve minimum carbs and fat
+    fat   = MIN_FAT;
+    carbs = MIN_CARBS;
+  } else {
+    const carbsAtStdFat = (remainAfterProtein - 50 * 9) / 4;
+    if (carbsAtStdFat >= MIN_CARBS) {
+      fat   = 50;
+      carbs = carbsAtStdFat;
+    } else {
+      // Reduce fat to guarantee MIN_CARBS floor
+      fat   = (remainAfterProtein - MIN_CARBS * 4) / 9;
+      carbs = MIN_CARBS;
+    }
+  }
 
   return { tdee, der, protein, fat, carbs };
 }

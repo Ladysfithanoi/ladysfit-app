@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN IF NOT EXISTS "dietPhase" TEXT NOT NULL DEFAULT 'Giai đoạn 1';
