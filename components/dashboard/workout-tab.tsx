@@ -552,10 +552,11 @@ function ProgramView({
   return (
     <div className={cn("bg-white rounded-2xl border shadow-sm overflow-hidden", isArchived ? "border-gray-100 opacity-70" : "border-gray-100")}>
       {/* ── Program header ── */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-gray-50">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-extrabold text-gray-900">{program.phase}</span>
+      <div className="flex flex-col gap-3 px-5 py-4 border-b border-gray-50 sm:flex-row sm:items-start sm:justify-between">
+        {/* Left: title + badges */}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-extrabold text-gray-900 w-full">{program.phase}</p>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600">
               {program.sessionsPerWeek} buổi/tuần
             </span>
@@ -569,7 +570,7 @@ function ProgramView({
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Đang áp dụng</span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             {program.packageEnrollment && (
               <span className="text-xs text-gray-400">
                 Lộ trình: <span className="font-semibold text-gray-600">{program.packageEnrollment.packageName}</span>
@@ -580,7 +581,8 @@ function ProgramView({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Right: buttons */}
+        <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-shrink-0">
           {!isArchived && !editMode && (
             <button
               onClick={openProgModal}
@@ -603,7 +605,7 @@ function ProgramView({
             onClick={handleArchive}
             disabled={archiving}
             title={isArchived ? "Kích hoạt lại" : "Lưu trữ"}
-            className="p-2 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 ml-auto sm:ml-0"
           >
             <Archive className="w-4 h-4" />
           </button>
