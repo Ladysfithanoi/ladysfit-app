@@ -462,7 +462,10 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
 
   // ─── FM / CEO / ADMIN VIEW ───
   // Merge ptList with targets so all PTs are shown even without targets
-  const allPTs = ptList.length > 0 ? ptList : targets.map((t) => t.user);
+  const EXCLUDED_ROLES = ["CEO_FITPARTNER", "COO"];
+  const allPTs = ptList.length > 0
+    ? ptList
+    : targets.map((t) => t.user).filter((u) => !EXCLUDED_ROLES.includes(u.role));
 
   const filteredPTs = filterRole === "all"
     ? allPTs

@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     branchId,
     month,
     year,
-    user: { deletedAt: null }, // never surface targets for soft-deleted staff
+    user: { deletedAt: null, role: { notIn: ["CEO_FITPARTNER", "COO"] } },
   };
   if (isPT) where.userId = session.user.id;
 

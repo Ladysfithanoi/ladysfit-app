@@ -30,6 +30,7 @@ export async function GET(req: Request) {
   } else if (branchId) {
     staffWhere = {
       deletedAt: null,
+      role: { notIn: ["CEO_FITPARTNER", "COO"] },
       OR: [
         { branchId },
         { role: "FM", managedBranches: { some: { branchId } } },
