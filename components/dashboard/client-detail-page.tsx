@@ -11,7 +11,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { Popover } from "@/components/ui/popover";
 import { MiniWeightChart, DetailWeightChart, ChartPoint } from "@/components/dashboard/weight-log-charts";
 import {
-  ChevronLeft, Star, Pencil, Plus, Scale,
+  ChevronLeft, ChevronDown, Star, Pencil, Plus, Scale,
   Salad, User, Heart, BarChart2, Info,
   TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw, Loader2,
 } from "lucide-react";
@@ -989,7 +989,22 @@ export function ClientDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 flex-shrink-0 sm:pt-7 w-full sm:w-auto">
-          <div className="overflow-x-auto -mx-1 px-1 flex-1 sm:flex-none">
+          {/* Mobile: dropdown */}
+          <div className="relative block sm:hidden w-full">
+            <select
+              value={view}
+              onChange={(e) => setView(e.target.value as "overview" | "detail" | "workout" | "nutrition")}
+              className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-700 appearance-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+            >
+              <option value="overview">Tổng quan</option>
+              <option value="detail">Chi tiết</option>
+              <option value="workout">CT Tập</option>
+              <option value="nutrition">Chế độ ăn</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          </div>
+          {/* Desktop: tab bar */}
+          <div className="hidden sm:block overflow-x-auto -mx-1 px-1 flex-none">
             <div className="flex bg-gray-100 rounded-xl p-1 gap-1 min-w-max">
               {(["overview", "detail", "workout", "nutrition"] as const).map((v) => (
                 <button
