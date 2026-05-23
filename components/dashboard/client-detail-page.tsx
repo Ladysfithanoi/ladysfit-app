@@ -1043,7 +1043,7 @@ export function ClientDetailPage({
 
       {/* ── VIEW 1: OVERVIEW ── */}
       {view === "overview" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Card 1 */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
