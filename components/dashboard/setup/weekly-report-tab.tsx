@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, X, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 type ArisingTask = { id: string; content: string; kpi: string; actual: string };
 
@@ -115,6 +116,14 @@ export function WeeklyReportTab({
   const [modalTitle, setModalTitle] = useState("");
   const [modalContent, setModalContent] = useState("");
 
+  // ── Auto-save draft ────────────────────────────────────────────────────────
+  const draftKey = `ladysfit_draft_weekly_${branchId}_${year}_${month}_w${selectedWeek}_${currentUserId}`;
+  const { clearDraft: clearWeeklyDraft } = useFormAutoSave(
+    draftKey,
+    { arisingTasks, incompleteWork, solutions },
+    canEdit && !loading
+  );
+
   const fetchReport = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
@@ -131,14 +140,21 @@ export function WeeklyReportTab({
         setKpiRows(rows);
         setPerUserKpi(data.perUserKpi ?? []);
         const report = data.report;
-        setArisingTasks(report?.arisingTasks ? (JSON.parse(report.arisingTasks) as ArisingTask[]) : []);
-        setIncompleteWork(report?.incompleteWork ?? "");
-        setSolutions(report?.solutions ?? "");
+        const dbArisingTasks = report?.arisingTasks ? (JSON.parse(report.arisingTasks) as ArisingTask[]) : [];
+        const dbIncompleteWork = report?.incompleteWork ?? "";
+        const dbSolutions = report?.solutions ?? "";
+
+        // Restore draft if exists, otherwise use DB data
+        const key = `ladysfit_draft_weekly_${branchId}_${year}_${month}_w${selectedWeek}_${currentUserId}`;
+        const draft = loadDraft<{ arisingTasks: ArisingTask[]; incompleteWork: string; solutions: string }>(key);
+        setArisingTasks(draft?.arisingTasks ?? dbArisingTasks);
+        setIncompleteWork(draft?.incompleteWork ?? dbIncompleteWork);
+        setSolutions(draft?.solutions ?? dbSolutions);
       }
     } finally {
       setLoading(false);
     }
-  }, [branchId, month, year, selectedWeek, isFitpartner]);
+  }, [branchId, month, year, selectedWeek, isFitpartner, currentUserId]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -180,7 +196,7 @@ export function WeeklyReportTab({
   async function saveReport() {
     setSaving(true);
     try {
-      await fetch("/api/setup/weekly-report", {
+      const res = await fetch("/api/setup/weekly-report", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -193,6 +209,7 @@ export function WeeklyReportTab({
           solutions: solutions.trim() || null,
         }),
       });
+      if (res.ok) clearWeeklyDraft();
     } finally {
       setSaving(false);
     }

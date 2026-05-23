@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { MonthlyTarget } from "./types";
+import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 type Props = {
   branchId: string;
@@ -42,6 +43,14 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
   const [incompleteWork, setIncompleteWork] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // ── Auto-save draft ────────────────────────────────────────────────────────
+  const draftKey = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
+  const { clearDraft: clearMonthlyDraft } = useFormAutoSave(
+    draftKey,
+    { incompleteWork },
+    canEdit && !loading
+  );
+
   const fetchReport = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
@@ -56,7 +65,11 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
       if (targetsRes.ok) setTargets(await targetsRes.json());
       if (reportRes?.ok) {
         const r = await reportRes.json();
-        setIncompleteWork(r?.incompleteWork ?? "");
+        const dbIncomplete = r?.incompleteWork ?? "";
+        // Restore draft if exists
+        const key = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
+        const draft = loadDraft<{ incompleteWork: string }>(key);
+        setIncompleteWork(draft?.incompleteWork ?? dbIncomplete);
       }
     } finally {
       setLoading(false);
@@ -68,11 +81,12 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
   async function saveReport() {
     setSaving(true);
     try {
-      await fetch("/api/setup/monthly-report", {
+      const res = await fetch("/api/setup/monthly-report", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ branchId, month, year, incompleteWork: incompleteWork.trim() || null }),
       });
+      if (res.ok) clearMonthlyDraft();
     } finally {
       setSaving(false);
     }

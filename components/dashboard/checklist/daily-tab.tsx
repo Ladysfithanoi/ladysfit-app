@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
+import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -371,6 +372,14 @@ export function DailyTab({
   const canEdit           = !isTeamView;
   const canEditReflection = !isTeamView;
 
+  // ── Auto-save draft (own checklist only) ──────────────────────────────────
+  const draftKey = `ladysfit_draft_checklist_${currentUserId}_${ownDate}`;
+  const { clearDraft: clearChecklistDraft } = useFormAutoSave(
+    draftKey,
+    { position, targetNote, totalTarget, rows, dailyResults, dailyCompleted, dailyIncomplete, dailyNextPlan },
+    canEdit && !loading
+  );
+
   const selectedUser = staffList.find((s) => s.id === selectedUserId);
   const displayName  = selectedUser?.name ?? selectedUser?.email ?? currentUserName;
   const minDate = firstDayOfMonthISO();
@@ -383,15 +392,27 @@ export function DailyTab({
       if (!res.ok) return;
       const data = (await res.json()) as ChecklistData;
       setTotalActual(data.totalActual);
+      type ChecklistDraft = {
+        position: string; targetNote: string; totalTarget: string;
+        rows: Row[]; dailyResults: string; dailyCompleted: string;
+        dailyIncomplete: string; dailyNextPlan: string;
+      };
+      // Only restore draft for own checklist (not team-view)
+      const isOwn = selectedUserId === currentUserId;
+      const draft = isOwn
+        ? loadDraft<ChecklistDraft>(`ladysfit_draft_checklist_${currentUserId}_${date}`)
+        : null;
+
       if (data.checklist) {
-        setPosition(data.checklist.position ?? "");
-        setTargetNote(data.checklist.targetNote ?? "");
-        setTotalTarget(data.checklist.totalTarget != null ? String(data.checklist.totalTarget) : "");
-        setDailyResults(data.checklist.dailyResults ?? "");
-        setDailyCompleted(data.checklist.dailyCompleted ?? "");
-        setDailyIncomplete(data.checklist.dailyIncomplete ?? "");
-        setDailyNextPlan(data.checklist.dailyNextPlan ?? "");
+        setPosition(draft?.position ?? data.checklist.position ?? "");
+        setTargetNote(draft?.targetNote ?? data.checklist.targetNote ?? "");
+        setTotalTarget(draft?.totalTarget ?? (data.checklist.totalTarget != null ? String(data.checklist.totalTarget) : ""));
+        setDailyResults(draft?.dailyResults ?? data.checklist.dailyResults ?? "");
+        setDailyCompleted(draft?.dailyCompleted ?? data.checklist.dailyCompleted ?? "");
+        setDailyIncomplete(draft?.dailyIncomplete ?? data.checklist.dailyIncomplete ?? "");
+        setDailyNextPlan(draft?.dailyNextPlan ?? data.checklist.dailyNextPlan ?? "");
         setRows(
+          draft?.rows ??
           data.checklist.items.map((item) => ({
             id: item.id as string | undefined,
             order: item.order as number,
@@ -402,6 +423,11 @@ export function DailyTab({
             note: (item.note as string) ?? "",
           }))
         );
+      } else if (draft) {
+        setPosition(draft.position); setTargetNote(draft.targetNote);
+        setTotalTarget(draft.totalTarget); setDailyResults(draft.dailyResults);
+        setDailyCompleted(draft.dailyCompleted); setDailyIncomplete(draft.dailyIncomplete);
+        setDailyNextPlan(draft.dailyNextPlan); setRows(draft.rows);
       } else {
         setPosition(""); setTargetNote(""); setTotalTarget("");
         setDailyResults(""); setDailyCompleted(""); setDailyIncomplete(""); setDailyNextPlan("");
@@ -516,6 +542,7 @@ export function DailyTab({
         }),
       });
       if (res.ok) {
+        clearChecklistDraft();
         setToast("Đã lưu check-list ✓");
         setTimeout(() => setToast(""), 3000);
         fetchChecklist();

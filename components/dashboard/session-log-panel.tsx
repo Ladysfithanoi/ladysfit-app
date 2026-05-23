@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { WorkoutSession, WorkoutLogRow, SetLogRow } from "./workout-tab";
+import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,28 @@ export function SessionLogForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // ── Auto-save draft ────────────────────────────────────────────────────────
+  const draftKey = `ladysfit_draft_session_${clientId}_${programId}_${weekId}_${session.id}`;
+  const { clearDraft: clearSessionDraft } = useFormAutoSave(
+    draftKey,
+    { date, notes, setLogs },
+    !saving
+  );
+
+  // Restore draft on mount (no DB fetch here — state starts from session.movements)
+  useEffect(() => {
+    type SessionDraft = { date: string; notes: string; setLogs: SetLogDraft[] };
+    const draft = loadDraft<SessionDraft>(draftKey);
+    if (!draft) return;
+    if (draft.date) setDate(draft.date);
+    if (draft.notes !== undefined) setNotes(draft.notes);
+    // Only restore setLogs if structure matches current session
+    if (Array.isArray(draft.setLogs) && draft.setLogs.length === session.movements.length) {
+      setSetLogs(draft.setLogs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
   const isCardio = isCardioSession(session.sessionName);
   const repRange = isCardio ? null : getRepRange(phase);
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
@@ -237,6 +260,7 @@ export function SessionLogForm({
         setToast(`Đã lưu buổi tập! Tổng: ${packageUpdate.sessionsUsed}/${packageUpdate.sessions} buổi · ${packageUpdate.packageName}`);
         setTimeout(() => setToast(""), 4000);
       }
+      clearSessionDraft();
       onSaved(saved, packageUpdate ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
