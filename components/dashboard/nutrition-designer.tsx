@@ -265,7 +265,7 @@ export function NutritionDesigner({
         <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest">Tính toán chỉ số</p>
 
         {/* Client info row */}
-        <div className="grid grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="bg-white rounded-xl px-3 py-2.5 border border-gray-100">
             <p className="text-gray-400 font-semibold">Cân nặng</p>
             <p className="text-gray-800 font-extrabold mt-0.5">{weight} kg</p>
@@ -276,7 +276,7 @@ export function NutritionDesigner({
           </div>
           <div className="bg-white rounded-xl px-3 py-2.5 border border-gray-100">
             <p className="text-gray-400 font-semibold">Giai đoạn</p>
-            <p className="text-gray-800 font-extrabold mt-0.5 truncate">{phase}</p>
+            <p className="text-gray-800 font-extrabold mt-0.5 leading-tight break-words">{phase}</p>
           </div>
         </div>
 
@@ -299,7 +299,7 @@ export function NutritionDesigner({
         )}
 
         {/* Calculated values */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="bg-white rounded-xl px-4 py-3 border border-gray-100 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-400 font-semibold">TDEE (duy trì)</span>
@@ -312,7 +312,7 @@ export function NutritionDesigner({
           </div>
           <div className="bg-white rounded-xl px-4 py-3 border border-gray-100 space-y-1.5">
             <p className="text-xs text-gray-400 font-semibold mb-1">Macro mục tiêu</p>
-            <div className="flex flex-wrap gap-1">
+            <div className="grid grid-cols-3 gap-1.5">
               <MacroBadge label="P" value={metrics.protein} color="bg-blue-50 text-blue-700" />
               <MacroBadge label="F" value={metrics.fat} color="bg-yellow-50 text-yellow-700" />
               <MacroBadge label="C" value={metrics.carbs} color="bg-green-50 text-green-700" />
@@ -326,7 +326,7 @@ export function NutritionDesigner({
         <div className="space-y-3">
           <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest">Thiết kế thực đơn</p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500">Số bữa ăn/ngày</label>
               <select
@@ -351,7 +351,7 @@ export function NutritionDesigner({
                 className={inputCls}
               />
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="space-y-1 sm:col-span-2">
               <label className="text-xs font-semibold text-gray-500">
                 Không thích / dị ứng <span className="text-gray-300 font-normal">(Tùy chọn)</span>
               </label>
@@ -400,26 +400,20 @@ export function NutritionDesigner({
             />
           ))}
 
-          {/* Summary */}
-          <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500 font-semibold">Tổng thực đơn</span>
-              <div className="flex gap-1.5">
-                <MacroBadge label="🔥" value={totalMeals.calories} unit=" kcal" color="bg-red-50 text-red-600" />
-                <MacroBadge label="P" value={totalMeals.protein} color="bg-blue-50 text-blue-600" />
-                <MacroBadge label="F" value={totalMeals.fat} color="bg-yellow-50 text-yellow-700" />
-                <MacroBadge label="C" value={totalMeals.carbs} color="bg-green-50 text-green-700" />
+          {/* Summary — 4-col comparison grid */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
+            {[
+              { label: "🔥 Calo", actual: Math.round(totalMeals.calories), target: Math.round(metrics.der), unit: " kcal", bg: "bg-red-50", text: "text-red-600" },
+              { label: "P",       actual: Math.round(totalMeals.protein),  target: Math.round(metrics.protein), unit: "g", bg: "bg-blue-50", text: "text-blue-700" },
+              { label: "F",       actual: Math.round(totalMeals.fat),      target: Math.round(metrics.fat),     unit: "g", bg: "bg-yellow-50", text: "text-yellow-700" },
+              { label: "C",       actual: Math.round(totalMeals.carbs),    target: Math.round(metrics.carbs),   unit: "g", bg: "bg-green-50", text: "text-green-700" },
+            ].map(({ label, actual, target, unit, bg, text }) => (
+              <div key={label} className={cn("rounded-xl px-3 py-2.5 border border-gray-100", bg)}>
+                <p className={cn("text-[10px] font-extrabold mb-1", text)}>{label}</p>
+                <p className={cn("text-sm font-extrabold", text)}>{actual}{unit}</p>
+                <p className="text-[10px] text-gray-400 font-medium">Mục tiêu: {target}{unit}</p>
               </div>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-400 font-semibold">Mục tiêu</span>
-              <div className="flex gap-1.5">
-                <MacroBadge label="🎯" value={metrics.der} unit=" kcal" color="bg-gray-100 text-gray-500" />
-                <MacroBadge label="P" value={metrics.protein} color="bg-gray-100 text-gray-500" />
-                <MacroBadge label="F" value={metrics.fat} color="bg-gray-100 text-gray-500" />
-                <MacroBadge label="C" value={metrics.carbs} color="bg-gray-100 text-gray-500" />
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}

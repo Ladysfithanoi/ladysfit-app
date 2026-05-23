@@ -358,23 +358,23 @@ export function NutritionTab({
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 w-full sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-sm font-extrabold text-gray-800">Chế độ ăn hiện tại</h2>
               <p className="text-xs text-gray-400 mt-0.5">Cập nhật lần cuối {fmtDate(activePlan.createdAt)}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
               <button
                 onClick={() => handleArchive(activePlan.id)}
                 disabled={archiving}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
               >
                 <Archive className="w-3.5 h-3.5" />
                 Lưu trữ
               </button>
               <button
                 onClick={() => setShowDesigner(true)}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-white text-xs font-bold"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-xl text-white text-xs font-bold"
                 style={{ backgroundColor: "#f15b5c" }}
               >
                 <Plus className="w-3.5 h-3.5" />
