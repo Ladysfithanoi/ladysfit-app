@@ -384,7 +384,7 @@ export function NutritionTab({
           </div>
 
           {/* Macro targets */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* TDEE / DER / Phase card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 font-semibold mb-2">Chỉ số mục tiêu</p>
@@ -418,7 +418,7 @@ export function NutritionTab({
             {/* Macro card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 font-semibold mb-2">Macro/ngày</p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <MacroBadge label="P" value={activePlan.protein} color="bg-blue-50 text-blue-700" />
                 <MacroBadge label="F" value={activePlan.fat} color="bg-yellow-50 text-yellow-700" />
                 <MacroBadge label="C" value={activePlan.carbs} color="bg-green-50 text-green-700" />
