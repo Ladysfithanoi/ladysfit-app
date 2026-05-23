@@ -9,6 +9,7 @@ import {
   basePhase,
 } from "@/lib/workout-structure";
 import { SessionLogForm, SessionLogHistory } from "./session-log-panel";
+import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -294,6 +295,7 @@ function ProgramView({
   });
   const [progSaving, setProgSaving] = useState(false);
   const [progError, setProgError] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
 
   // Session logging
   const [loggingSessionId, setLoggingSessionId] = useState<string | null>(null);
@@ -304,32 +306,58 @@ function ProgramView({
   const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
   const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
 
+  // ── Auto-save draft for edit mode ─────────────────────────────────────────
+  const draftKey = `ladysfit_draft_workout_program_${clientId}`;
+  type WorkoutDraft = { programId: string; weekId: string; editPhaseId: string; draftSessions: DraftSession[] };
+  const { clearDraft: clearWorkoutDraft } = useFormAutoSave<WorkoutDraft>(
+    draftKey,
+    { programId: program.id, weekId: currentWeekData?.id ?? "", editPhaseId, draftSessions },
+    editMode && isDirty
+  );
+
   function enterEditMode() {
     if (!currentWeekData) return;
-    const resolvedPhaseId =
-      program.phaseId ??
-      phases.find((p) => p.name === program.phase)?.id ??
-      "";
-    setDraftSessions(currentWeekData.sessions.map(sessionToDraft));
-    setEditPhaseId(resolvedPhaseId);
+    const draft = loadDraft<WorkoutDraft>(draftKey);
+    if (draft && draft.programId === program.id && draft.weekId === currentWeekData.id) {
+      setDraftSessions(draft.draftSessions);
+      setEditPhaseId(draft.editPhaseId);
+    } else {
+      const resolvedPhaseId =
+        program.phaseId ??
+        phases.find((p) => p.name === program.phase)?.id ??
+        "";
+      setDraftSessions(currentWeekData.sessions.map(sessionToDraft));
+      setEditPhaseId(resolvedPhaseId);
+    }
     setShowPhaseChange(false);
     setError("");
+    setIsDirty(false);
     setEditMode(true);
   }
 
   function cancelEdit() {
+    clearWorkoutDraft();
+    setIsDirty(false);
+    setEditMode(false);
+    setDraftSessions([]);
+    setShowPhaseChange(false);
+  }
+
+  function exitEditModeOnly() {
     setEditMode(false);
     setDraftSessions([]);
     setShowPhaseChange(false);
   }
 
   function handleEditPhaseChange(newPhaseId: string) {
+    setIsDirty(true);
     setEditPhaseId(newPhaseId);
   }
 
   function applyPhaseChange() {
     if (!editSelectedPhase) return;
     const { sessionTypes, templateKey, defaultReps } = editSelectedPhase;
+    setIsDirty(true);
     setDraftSessions((prev) =>
       prev.map((s, i) => {
         const sessionType = sessionTypes[i % sessionTypes.length] ?? "";
@@ -342,6 +370,7 @@ function ProgramView({
   function handleSessionTypeChange(sessionIdx: number, newType: string) {
     const templateKey = editSelectedPhase?.templateKey ?? "";
     const defaultReps = editSelectedPhase?.defaultReps ?? "15-20";
+    setIsDirty(true);
     setDraftSessions((prev) =>
       prev.map((s, i) =>
         i === sessionIdx
@@ -352,6 +381,7 @@ function ProgramView({
   }
 
   function updateMovement(sessionIdx: number, movIdx: number, updated: DraftMovement) {
+    setIsDirty(true);
     setDraftSessions((prev) =>
       prev.map((s, si) =>
         si === sessionIdx
@@ -401,6 +431,8 @@ function ProgramView({
         workoutType: editSelectedPhase?.templateKey ?? program.workoutType,
         weeks: program.weeks.map((w) => (w.id === updatedWeek.id ? updatedWeek : w)),
       });
+      clearWorkoutDraft();
+      setIsDirty(false);
       setEditMode(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -622,7 +654,7 @@ function ProgramView({
               {program.weeks.map((w, wi) => (
                 <button
                   key={w.id}
-                  onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) cancelEdit(); }}
+                  onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
                   className={cn(
                     "flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
                     wi === activeWeekIdx
