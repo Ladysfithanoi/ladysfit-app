@@ -1205,7 +1205,7 @@ export function ClientDetailPage({
           </div>
 
           {/* Activity today card */}
-          <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <div className="md:col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-blue-50">
@@ -1251,7 +1251,7 @@ export function ClientDetailPage({
 
           {/* Package cards */}
           {packages.length > 0 && (
-            <div className="col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <div className="md:col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-2 rounded-xl bg-purple-50">
                   <Package className="w-4 h-4 text-purple-500" />
