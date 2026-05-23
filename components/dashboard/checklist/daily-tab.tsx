@@ -358,6 +358,7 @@ export function DailyTab({
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Import modal state
   const [importOpen, setImportOpen]       = useState(false);
@@ -377,7 +378,7 @@ export function DailyTab({
   const { clearDraft: clearChecklistDraft } = useFormAutoSave(
     draftKey,
     { position, targetNote, totalTarget, rows, dailyResults, dailyCompleted, dailyIncomplete, dailyNextPlan },
-    canEdit && !loading
+    canEdit && !loading && isDirty
   );
 
   const selectedUser = staffList.find((s) => s.id === selectedUserId);
@@ -403,17 +404,8 @@ export function DailyTab({
         ? loadDraft<ChecklistDraft>(`ladysfit_draft_checklist_${currentUserId}_${date}`)
         : null;
 
-      if (data.checklist) {
-        setPosition(draft?.position ?? data.checklist.position ?? "");
-        setTargetNote(draft?.targetNote ?? data.checklist.targetNote ?? "");
-        setTotalTarget(draft?.totalTarget ?? (data.checklist.totalTarget != null ? String(data.checklist.totalTarget) : ""));
-        setDailyResults(draft?.dailyResults ?? data.checklist.dailyResults ?? "");
-        setDailyCompleted(draft?.dailyCompleted ?? data.checklist.dailyCompleted ?? "");
-        setDailyIncomplete(draft?.dailyIncomplete ?? data.checklist.dailyIncomplete ?? "");
-        setDailyNextPlan(draft?.dailyNextPlan ?? data.checklist.dailyNextPlan ?? "");
-        setRows(
-          draft?.rows ??
-          data.checklist.items.map((item) => ({
+      const dbRows = data.checklist
+        ? data.checklist.items.map((item) => ({
             id: item.id as string | undefined,
             order: item.order as number,
             time: (item.time as string) ?? "",
@@ -422,17 +414,31 @@ export function DailyTab({
             actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
             note: (item.note as string) ?? "",
           }))
-        );
-      } else if (draft) {
-        setPosition(draft.position); setTargetNote(draft.targetNote);
-        setTotalTarget(draft.totalTarget); setDailyResults(draft.dailyResults);
-        setDailyCompleted(draft.dailyCompleted); setDailyIncomplete(draft.dailyIncomplete);
-        setDailyNextPlan(draft.dailyNextPlan); setRows(draft.rows);
+        : [];
+      if (draft) {
+        setPosition(draft.position ?? "");
+        setTargetNote(draft.targetNote ?? "");
+        setTotalTarget(draft.totalTarget ?? "");
+        setDailyResults(draft.dailyResults ?? "");
+        setDailyCompleted(draft.dailyCompleted ?? "");
+        setDailyIncomplete(draft.dailyIncomplete ?? "");
+        setDailyNextPlan(draft.dailyNextPlan ?? "");
+        setRows(draft.rows ?? dbRows);
+      } else if (data.checklist) {
+        setPosition(data.checklist.position ?? "");
+        setTargetNote(data.checklist.targetNote ?? "");
+        setTotalTarget(data.checklist.totalTarget != null ? String(data.checklist.totalTarget) : "");
+        setDailyResults(data.checklist.dailyResults ?? "");
+        setDailyCompleted(data.checklist.dailyCompleted ?? "");
+        setDailyIncomplete(data.checklist.dailyIncomplete ?? "");
+        setDailyNextPlan(data.checklist.dailyNextPlan ?? "");
+        setRows(dbRows);
       } else {
         setPosition(""); setTargetNote(""); setTotalTarget("");
         setDailyResults(""); setDailyCompleted(""); setDailyIncomplete(""); setDailyNextPlan("");
         setRows([]);
       }
+      setIsDirty(false);
     } finally {
       setLoading(false);
     }
@@ -482,6 +488,7 @@ export function DailyTab({
   }
 
   function handleImportConfirm() {
+    setIsDirty(true);
     setRows(importRows.map((r, i) => ({ ...r, id: undefined, order: i + 1 })));
     setImportOpen(false);
     setToast("Đã nhập danh sách công việc ✓");
@@ -490,12 +497,15 @@ export function DailyTab({
 
   // ── row helpers ────────────────────────────────────────────────────────────
   function addRow() {
+    setIsDirty(true);
     setRows((p) => [...p, { order: p.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
   }
   function removeRow(i: number) {
+    setIsDirty(true);
     setRows((p) => p.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, order: idx + 1 })));
   }
   function insertRowAfter(i: number) {
+    setIsDirty(true);
     setRows((prev) => {
       const next = [...prev];
       next.splice(i + 1, 0, { order: 0, time: "", task: "", kpi: "", actualResult: 0, note: "" });
@@ -503,9 +513,11 @@ export function DailyTab({
     });
   }
   function updateRow<K extends keyof Row>(i: number, key: K, value: Row[K]) {
+    setIsDirty(true);
     setRows((p) => p.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
   function handleSortRows() {
+    setIsDirty(true);
     setRows((prev) => sortRowsByTime(prev));
     setToast("Đã sắp xếp theo thời gian ↑");
     setTimeout(() => setToast(""), 2000);
@@ -543,6 +555,7 @@ export function DailyTab({
       });
       if (res.ok) {
         clearChecklistDraft();
+        setIsDirty(false);
         setToast("Đã lưu check-list ✓");
         setTimeout(() => setToast(""), 3000);
         fetchChecklist();
@@ -642,7 +655,7 @@ export function DailyTab({
             <label className="text-xs font-semibold text-gray-500">Vị trí</label>
             <input
               value={position}
-              onChange={(e) => setPosition(e.target.value)}
+              onChange={(e) => { setPosition(e.target.value); setIsDirty(true); }}
               disabled={!canEdit}
               className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full disabled:bg-gray-50 disabled:text-gray-500"
               placeholder="VD: PT, FM..."
@@ -671,7 +684,7 @@ export function DailyTab({
             <input
               type="number" step="0.1"
               value={totalTarget}
-              onChange={(e) => setTotalTarget(e.target.value)}
+              onChange={(e) => { setTotalTarget(e.target.value); setIsDirty(true); }}
               disabled={!canEdit}
               className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full disabled:bg-gray-50"
               placeholder="50"
@@ -689,7 +702,7 @@ export function DailyTab({
             <label className="text-xs font-semibold text-gray-500">Mục tiêu ngày</label>
             <input
               value={targetNote}
-              onChange={(e) => setTargetNote(e.target.value)}
+              onChange={(e) => { setTargetNote(e.target.value); setIsDirty(true); }}
               disabled={!canEdit}
               className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full disabled:bg-gray-50"
               placeholder="Mục tiêu hôm nay..."
@@ -915,7 +928,7 @@ export function DailyTab({
               <label className="text-xs font-semibold text-gray-500">{label}</label>
               <textarea
                 value={value}
-                onChange={(e) => set(e.target.value)}
+                onChange={(e) => { set(e.target.value); setIsDirty(true); }}
                 disabled={!canEditReflection}
                 rows={3}
                 placeholder={canEditReflection ? placeholder : ""}

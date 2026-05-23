@@ -165,6 +165,7 @@ export function SessionLogForm({
     }))
   );
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState("");
 
   // ── Auto-save draft ────────────────────────────────────────────────────────
@@ -172,7 +173,7 @@ export function SessionLogForm({
   const { clearDraft: clearSessionDraft } = useFormAutoSave(
     draftKey,
     { date, notes, setLogs },
-    !saving
+    !saving && isDirty
   );
 
   // Restore draft on mount (no DB fetch here — state starts from session.movements)
@@ -210,6 +211,7 @@ export function SessionLogForm({
   }
 
   function updateSet(movIdx: number, setIdx: number, field: "load" | "reps", value: string) {
+    setIsDirty(true);
     setSetLogs((prev) =>
       prev.map((sl, i) =>
         i === movIdx
@@ -220,6 +222,7 @@ export function SessionLogForm({
   }
 
   function updateNotes(movIdx: number, value: string) {
+    setIsDirty(true);
     setSetLogs((prev) => prev.map((sl, i) => (i === movIdx ? { ...sl, exerciseNotes: value } : sl)));
   }
 
@@ -261,6 +264,7 @@ export function SessionLogForm({
         setTimeout(() => setToast(""), 4000);
       }
       clearSessionDraft();
+      setIsDirty(false);
       onSaved(saved, packageUpdate ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -286,7 +290,7 @@ export function SessionLogForm({
             <label className="text-xs font-semibold text-gray-500">Ngày tập</label>
             <DateMaskInput
               value={date}
-              onChange={setDate}
+              onChange={(v) => { setDate(v); setIsDirty(true); }}
               className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
             />
           </div>
@@ -295,7 +299,7 @@ export function SessionLogForm({
             <textarea
               rows={2}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); setIsDirty(true); }}
               placeholder="Ghi chú chung buổi tập..."
               className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none bg-white"
             />

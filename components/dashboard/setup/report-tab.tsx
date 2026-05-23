@@ -42,13 +42,14 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
   const [loading, setLoading] = useState(true);
   const [incompleteWork, setIncompleteWork] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   // ── Auto-save draft ────────────────────────────────────────────────────────
   const draftKey = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
   const { clearDraft: clearMonthlyDraft } = useFormAutoSave(
     draftKey,
     { incompleteWork },
-    canEdit && !loading
+    canEdit && !loading && isDirty
   );
 
   const fetchReport = useCallback(async () => {
@@ -66,10 +67,14 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
       if (reportRes?.ok) {
         const r = await reportRes.json();
         const dbIncomplete = r?.incompleteWork ?? "";
-        // Restore draft if exists
         const key = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
         const draft = loadDraft<{ incompleteWork: string }>(key);
-        setIncompleteWork(draft?.incompleteWork ?? dbIncomplete);
+        if (draft) {
+          setIncompleteWork(draft.incompleteWork ?? dbIncomplete);
+        } else {
+          setIncompleteWork(dbIncomplete);
+        }
+        setIsDirty(false);
       }
     } finally {
       setLoading(false);
@@ -86,7 +91,7 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ branchId, month, year, incompleteWork: incompleteWork.trim() || null }),
       });
-      if (res.ok) clearMonthlyDraft();
+      if (res.ok) { clearMonthlyDraft(); setIsDirty(false); }
     } finally {
       setSaving(false);
     }
@@ -186,7 +191,7 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
             {canEdit ? (
               <textarea
                 value={incompleteWork}
-                onChange={(e) => setIncompleteWork(e.target.value)}
+                onChange={(e) => { setIncompleteWork(e.target.value); setIsDirty(true); }}
                 rows={6}
                 placeholder="Nhập nội dung việc chưa hoàn thành, nguyên nhân và giải pháp..."
                 className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"

@@ -111,6 +111,7 @@ export function WeeklyReportTab({
   const [solutions, setSolutions] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [savingActuals, setSavingActuals] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
@@ -121,7 +122,7 @@ export function WeeklyReportTab({
   const { clearDraft: clearWeeklyDraft } = useFormAutoSave(
     draftKey,
     { arisingTasks, incompleteWork, solutions },
-    canEdit && !loading
+    canEdit && !loading && isDirty
   );
 
   const fetchReport = useCallback(async () => {
@@ -144,12 +145,18 @@ export function WeeklyReportTab({
         const dbIncompleteWork = report?.incompleteWork ?? "";
         const dbSolutions = report?.solutions ?? "";
 
-        // Restore draft if exists, otherwise use DB data
         const key = `ladysfit_draft_weekly_${branchId}_${year}_${month}_w${selectedWeek}_${currentUserId}`;
         const draft = loadDraft<{ arisingTasks: ArisingTask[]; incompleteWork: string; solutions: string }>(key);
-        setArisingTasks(draft?.arisingTasks ?? dbArisingTasks);
-        setIncompleteWork(draft?.incompleteWork ?? dbIncompleteWork);
-        setSolutions(draft?.solutions ?? dbSolutions);
+        if (draft) {
+          setArisingTasks(draft.arisingTasks ?? dbArisingTasks);
+          setIncompleteWork(draft.incompleteWork ?? dbIncompleteWork);
+          setSolutions(draft.solutions ?? dbSolutions);
+        } else {
+          setArisingTasks(dbArisingTasks);
+          setIncompleteWork(dbIncompleteWork);
+          setSolutions(dbSolutions);
+        }
+        setIsDirty(false);
       }
     } finally {
       setLoading(false);
@@ -173,6 +180,7 @@ export function WeeklyReportTab({
   }, [month, year]);
 
   function addArisingTask() {
+    setIsDirty(true);
     setArisingTasks((prev) => [
       ...prev,
       { id: Date.now().toString(), content: "", kpi: "", actual: "" },
@@ -180,10 +188,12 @@ export function WeeklyReportTab({
   }
 
   function removeArisingTask(id: string) {
+    setIsDirty(true);
     setArisingTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
   function updateArisingTask(id: string, field: keyof ArisingTask, value: string) {
+    setIsDirty(true);
     setArisingTasks((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
   }
 
@@ -209,7 +219,7 @@ export function WeeklyReportTab({
           solutions: solutions.trim() || null,
         }),
       });
-      if (res.ok) clearWeeklyDraft();
+      if (res.ok) { clearWeeklyDraft(); setIsDirty(false); }
     } finally {
       setSaving(false);
     }
@@ -655,7 +665,7 @@ export function WeeklyReportTab({
                 {canEdit ? (
                   <textarea
                     value={incompleteWork}
-                    onChange={(e) => setIncompleteWork(e.target.value)}
+                    onChange={(e) => { setIncompleteWork(e.target.value); setIsDirty(true); }}
                     rows={4}
                     placeholder="Liệt kê từng công việc chưa hoàn thành, mỗi việc một dòng..."
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
@@ -699,7 +709,7 @@ export function WeeklyReportTab({
                 {canEdit ? (
                   <textarea
                     value={solutions}
-                    onChange={(e) => setSolutions(e.target.value)}
+                    onChange={(e) => { setSolutions(e.target.value); setIsDirty(true); }}
                     rows={4}
                     placeholder="Mô tả giải pháp cụ thể, kèm deadline và người phụ trách..."
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
