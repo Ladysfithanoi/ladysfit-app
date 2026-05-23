@@ -141,20 +141,20 @@ export function ReportsPage({ userRole }: { userRole: string }) {
 
       {/* Summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: "Tổng khách hàng", value: summary.totalClients, icon: Users, color: "text-[#f15b5c] bg-[#f15b5c]/10" },
             { label: "Đang hoạt động", value: summary.activeClients, icon: CheckCircle, color: "text-emerald-500 bg-emerald-50" },
             { label: "Gói tập active", value: summary.activePackages, icon: Package, color: "text-blue-500 bg-blue-50" },
             { label: "Cảnh báo chưa đọc", value: unreadAlerts.length, icon: AlertTriangle, color: "text-amber-500 bg-amber-50" },
           ].map((c) => (
-            <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-4">
-              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", c.color)}>
+            <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4">
+              <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", c.color)}>
                 <c.icon className="w-5 h-5" />
               </div>
-              <div>
-                <p className="text-2xl font-extrabold text-gray-900">{c.value}</p>
-                <p className="text-xs text-gray-400 font-semibold">{c.label}</p>
+              <div className="min-w-0">
+                <p className="text-3xl font-extrabold text-gray-900 tracking-tight">{c.value}</p>
+                <p className="text-sm text-gray-400 font-semibold mt-0.5 truncate">{c.label}</p>
               </div>
             </div>
           ))}
