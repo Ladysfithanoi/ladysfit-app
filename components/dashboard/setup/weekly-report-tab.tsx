@@ -111,6 +111,9 @@ export function WeeklyReportTab({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingActuals, setSavingActuals] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalContent, setModalContent] = useState("");
 
   const fetchReport = useCallback(async () => {
     if (!branchId) return;
@@ -166,6 +169,12 @@ export function WeeklyReportTab({
 
   function updateArisingTask(id: string, field: keyof ArisingTask, value: string) {
     setArisingTasks((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
+  }
+
+  function openModal(title: string, content: string) {
+    setModalTitle(title);
+    setModalContent(content);
+    setModalOpen(true);
   }
 
   async function saveReport() {
@@ -530,7 +539,13 @@ export function WeeklyReportTab({
                                 className="w-full bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
                               />
                             ) : (
-                              task.content
+                              <span
+                                className="line-clamp-2 cursor-pointer hover:text-[#f15b5c] transition-colors"
+                                title="Click để xem toàn bộ nội dung"
+                                onClick={() => task.content && openModal("Chi tiết công việc phát sinh", task.content)}
+                              >
+                                {task.content || <span className="text-gray-300 italic">—</span>}
+                              </span>
                             )}
                           </td>
                           <td className={cn(tdStyle, "text-center")}>
@@ -609,8 +624,18 @@ export function WeeklyReportTab({
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
                   />
                 ) : (
-                  <div className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] whitespace-pre-wrap bg-gray-50">
-                    {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                  <div
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors"
+                    onClick={() => incompleteWork && openModal("Chi tiết việc chưa hoàn thành", incompleteWork)}
+                  >
+                    <div className="line-clamp-3 whitespace-pre-wrap">
+                      {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                    </div>
+                    {incompleteWork && (
+                      <span className="absolute bottom-2 right-3 text-[10px] text-gray-400 group-hover:text-[#f15b5c] transition-colors select-none">
+                        Xem đầy đủ ↗
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -629,8 +654,18 @@ export function WeeklyReportTab({
                     className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-y focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-h-[96px]"
                   />
                 ) : (
-                  <div className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] whitespace-pre-wrap bg-gray-50">
-                    {solutions || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                  <div
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors"
+                    onClick={() => solutions && openModal("Chi tiết giải pháp khắc phục", solutions)}
+                  >
+                    <div className="line-clamp-3 whitespace-pre-wrap">
+                      {solutions || <span className="text-gray-300 italic">Chưa có nội dung</span>}
+                    </div>
+                    {solutions && (
+                      <span className="absolute bottom-2 right-3 text-[10px] text-gray-400 group-hover:text-[#f15b5c] transition-colors select-none">
+                        Xem đầy đủ ↗
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -649,6 +684,56 @@ export function WeeklyReportTab({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL XEM CHI TIẾT ──────────────────────────────────── */}
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          onMouseDown={() => setModalOpen(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
+
+          {/* Panel */}
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden border border-gray-100"
+            style={{ maxHeight: "80vh" }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-1 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: "#f15b5c" }} />
+                <h3 className="text-sm font-bold text-gray-800">{modalTitle}</h3>
+              </div>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-5 overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {modalContent}
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/60 flex justify-end">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="px-5 h-9 rounded-lg font-bold text-sm text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
