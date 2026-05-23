@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ArisingTask = { id: string; content: string; kpi: string; actual: string };
@@ -482,20 +482,8 @@ export function WeeklyReportTab({
 
             {/* ── PHẦN II: CÔNG VIỆC PHÁT SINH (BẢNG ĐIỀN TAY) ─────────── */}
             <div>
-              {/* Add button above table */}
-              {canEdit && (
-                <div className="flex justify-end mb-2">
-                  <button
-                    onClick={addArisingTask}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold border border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c] hover:text-white transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Thêm công việc phát sinh
-                  </button>
-                </div>
-              )}
               <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                <table className="w-full border-collapse border border-gray-300 text-xs">
+                <table className="w-full table-fixed border-collapse border border-gray-300 text-xs min-w-[480px]">
                   <thead>
                     <tr>
                       <th
@@ -509,8 +497,8 @@ export function WeeklyReportTab({
                     <tr style={{ backgroundColor: "#f15b5c" }}>
                       <th className={thStyle + " w-8"}>STT</th>
                       <th className={cn(thStyle, "sticky left-0 z-10 bg-[#f15b5c]")}>Nội dung công việc</th>
-                      <th className={cn(thStyle, "text-center w-28")}>KPI / Mục tiêu</th>
-                      <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
+                      <th className={cn(thStyle, "text-center w-32")}>KPI / Mục tiêu</th>
+                      <th className={cn(thStyle, "text-center w-28")}>Thực đạt</th>
                       {canEdit && <th className={cn(thStyle, "w-10")} />}
                     </tr>
                   </thead>
@@ -530,22 +518,41 @@ export function WeeklyReportTab({
                       arisingTasks.map((task, idx) => (
                         <tr key={task.id} className="even:bg-gray-50/50">
                           <td className={cn(tdStyle, "text-center text-gray-400 font-semibold")}>{idx + 1}</td>
-                          <td className={cn(tdStyle, "sticky left-0 z-10 bg-white")}>
+                          <td className={cn(tdStyle, "sticky left-0 z-10 bg-white overflow-hidden")}>
                             {canEdit ? (
-                              <input
-                                value={task.content}
-                                onChange={(e) => updateArisingTask(task.id, "content", e.target.value)}
-                                placeholder="Mô tả nội dung công việc..."
-                                className="w-full bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
-                              />
+                              <div className="flex items-center gap-1 min-w-0">
+                                <input
+                                  value={task.content}
+                                  onChange={(e) => updateArisingTask(task.id, "content", e.target.value)}
+                                  placeholder="Mô tả nội dung công việc..."
+                                  className="min-w-0 w-full bg-transparent focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 rounded px-1 py-0.5"
+                                />
+                                {task.content && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); openModal("Chi tiết công việc phát sinh", task.content); }}
+                                    className="flex-shrink-0 p-0.5 text-gray-300 hover:text-[#f15b5c] transition-colors rounded"
+                                    title="Xem toàn bộ nội dung"
+                                  >
+                                    <Eye className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
                             ) : (
-                              <span
-                                className="line-clamp-2 cursor-pointer hover:text-[#f15b5c] transition-colors"
-                                title="Click để xem toàn bộ nội dung"
+                              <div
+                                className="group cursor-pointer"
                                 onClick={() => task.content && openModal("Chi tiết công việc phát sinh", task.content)}
+                                title="Click để xem toàn bộ nội dung"
                               >
-                                {task.content || <span className="text-gray-300 italic">—</span>}
-                              </span>
+                                <div className="line-clamp-2 overflow-hidden text-gray-700 group-hover:text-[#f15b5c] transition-colors">
+                                  {task.content || <span className="text-gray-300 italic">—</span>}
+                                </div>
+                                {task.content && (
+                                  <span className="text-[10px] text-gray-400 group-hover:text-[#f15b5c] transition-colors select-none">
+                                    Xem đầy đủ ↗
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className={cn(tdStyle, "text-center")}>
@@ -612,9 +619,22 @@ export function WeeklyReportTab({
 
               {/* 3a: Danh sách việc chưa hoàn thành */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Danh sách công việc chưa hoàn thành trong tuần
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Danh sách công việc chưa hoàn thành trong tuần
+                  </label>
+                  {incompleteWork && (
+                    <button
+                      type="button"
+                      onClick={() => openModal("Chi tiết việc chưa hoàn thành", incompleteWork)}
+                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[#f15b5c] transition-colors"
+                      title="Xem toàn bộ nội dung"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Xem đầy đủ
+                    </button>
+                  )}
+                </div>
                 {canEdit ? (
                   <textarea
                     value={incompleteWork}
@@ -625,10 +645,11 @@ export function WeeklyReportTab({
                   />
                 ) : (
                   <div
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors overflow-hidden"
+                    style={{ minHeight: "80px", maxHeight: "120px" }}
                     onClick={() => incompleteWork && openModal("Chi tiết việc chưa hoàn thành", incompleteWork)}
                   >
-                    <div className="line-clamp-3 whitespace-pre-wrap">
+                    <div className="line-clamp-3 overflow-hidden whitespace-pre-wrap">
                       {incompleteWork || <span className="text-gray-300 italic">Chưa có nội dung</span>}
                     </div>
                     {incompleteWork && (
@@ -642,9 +663,22 @@ export function WeeklyReportTab({
 
               {/* 3b: Giải pháp khắc phục */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Giải pháp khắc phục / Kế hoạch xử lý tiếp theo
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Giải pháp khắc phục / Kế hoạch xử lý tiếp theo
+                  </label>
+                  {solutions && (
+                    <button
+                      type="button"
+                      onClick={() => openModal("Chi tiết giải pháp khắc phục", solutions)}
+                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[#f15b5c] transition-colors"
+                      title="Xem toàn bộ nội dung"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Xem đầy đủ
+                    </button>
+                  )}
+                </div>
                 {canEdit ? (
                   <textarea
                     value={solutions}
@@ -655,10 +689,11 @@ export function WeeklyReportTab({
                   />
                 ) : (
                   <div
-                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 min-h-[80px] bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 bg-gray-50 relative group cursor-pointer hover:border-[#f15b5c]/40 hover:bg-rose-50/30 transition-colors overflow-hidden"
+                    style={{ minHeight: "80px", maxHeight: "120px" }}
                     onClick={() => solutions && openModal("Chi tiết giải pháp khắc phục", solutions)}
                   >
-                    <div className="line-clamp-3 whitespace-pre-wrap">
+                    <div className="line-clamp-3 overflow-hidden whitespace-pre-wrap">
                       {solutions || <span className="text-gray-300 italic">Chưa có nội dung</span>}
                     </div>
                     {solutions && (
