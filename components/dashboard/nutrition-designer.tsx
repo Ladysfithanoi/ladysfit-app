@@ -92,7 +92,7 @@ export type MealPlanRow = {
 
 function MacroBadge({ label, value, unit = "g", color }: { label: string; value: number; unit?: string; color: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold", color)}>
+    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap", color)}>
       {label} {Math.round(value)}{unit}
     </span>
   );
@@ -104,13 +104,13 @@ function MealCard({ meal, onDelete }: { meal: MealItem; onDelete?: () => void })
   const [open, setOpen] = useState(true);
   return (
     <div className="border border-gray-100 rounded-xl overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: "#f15b5c" }}>
-      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/60">
-        <button onClick={() => setOpen((v) => !v)} className="flex-1 flex items-center gap-2 text-left">
-          <span className="text-xs font-extrabold text-gray-800">{meal.mealName}</span>
-          {open ? <ChevronUp className="w-3 h-3 text-gray-400" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+      <div className="flex flex-col gap-2 px-4 py-2.5 bg-gray-50/60 sm:flex-row sm:items-center sm:justify-between">
+        <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-left min-w-0">
+          <span className="text-xs font-extrabold text-gray-800 whitespace-nowrap flex-shrink-0">{meal.mealName}</span>
+          {open ? <ChevronUp className="w-3 h-3 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />}
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1">
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:gap-1">
             <MacroBadge label="🔥" value={meal.calories} unit=" kcal" color="bg-red-50 text-red-600" />
             <MacroBadge label="P" value={meal.protein} color="bg-blue-50 text-blue-600" />
             <MacroBadge label="F" value={meal.fat} color="bg-yellow-50 text-yellow-700" />

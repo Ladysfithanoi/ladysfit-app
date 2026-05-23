@@ -121,22 +121,18 @@ QUY TẮC BẮT BUỘC:
 - Thực phẩm yêu thích: ${likesContext}
 - Thực phẩm kiêng/dị ứng: ${dislikesContext}
 
+BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần tử (${mealsNum} bữa riêng biệt).
+Không được gộp bữa, không được bỏ sót bữa cuối. Ưu tiên hoàn thành đủ ${mealsNum} bữa hơn là chi tiết quá kỹ từng bữa.
 Chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
 
 QUY TẮC TRẢ VỀ JSON BẮT BUỘC:
-Trả về DUY NHẤT một mảng JSON, mỗi phần tử CÓ ĐỦ 6 trường:
+Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗi phần tử có 6 trường:
 - "mealName": tên bữa (string, ví dụ "Bữa 1 - Sáng")
 - "name": mô tả món ăn và định lượng cụ thể (string)
 - "calories": tổng calo của bữa (number)
 - "protein": lượng đạm tính bằng gam (number)
 - "fat": lượng chất béo tính bằng gam (number)
-- "carbs": lượng tinh bột tính bằng gam (number)
-
-Ví dụ:
-[
-  {"mealName":"Bữa 1 - Sáng","name":"Phở bò tái 1 tô (500g)","calories":430,"protein":28,"fat":12,"carbs":52},
-  {"mealName":"Bữa 2 - Trưa","name":"Cơm gạo lứt 200g + Ức gà không da 150g + Rau muống 200g","calories":480,"protein":38,"fat":8,"carbs":56}
-]`;
+- "carbs": lượng tinh bột tính bằng gam (number)`;
 
   const geminiPayload = {
     systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -159,11 +155,12 @@ Ví dụ:
   }
 
   const data = await geminiRes.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const rawText: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const finishReason: string = data?.candidates?.[0]?.finishReason ?? "STOP";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function normalize(parsed: any[]): any[] {
-    return parsed.map((item) => {
+  function normalize(arr: any[]): any[] {
+    return arr.map((item) => {
       const protein  = Number(item.protein  ?? item.proteins  ?? 0) || 0;
       const fat      = Number(item.fat      ?? item.fats      ?? item.lipid ?? 0) || 0;
       const carbs    = Number(item.carbs    ?? item.carb      ?? item.carbohydrate ?? item.carbohydrates ?? 0) || 0;
@@ -172,45 +169,61 @@ Ví dụ:
       return {
         mealName: item.mealName || item.meal_name || item.meal || "Bữa",
         name:     item.name     || item.description || item.foods || item.food || "",
-        calories,
-        protein,
-        fat,
-        carbs,
+        calories, protein, fat, carbs,
       };
     });
   }
 
-  let text = rawText || "";
-  text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-  text = text.replace(/\\n/g, "\n");
-
-  const trimmed = text.trim();
-  if (!trimmed.endsWith("]")) {
-    const lastBrace = trimmed.lastIndexOf("}");
-    if (lastBrace !== -1) text = trimmed.substring(0, lastBrace + 1) + "]";
-  }
-
-  try {
-    const direct = JSON.parse(text);
-    if (Array.isArray(direct)) return NextResponse.json(normalize(direct));
-  } catch {
-    // fall through
-  }
-
-  const start = text.indexOf("[");
-  const end   = text.lastIndexOf("]");
-  if (start !== -1 && end > start) {
-    try {
-      const parsed = JSON.parse(text.substring(start, end + 1));
-      return NextResponse.json(normalize(parsed));
-    } catch (e) {
-      console.error("JSON parse error:", e);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function parseRaw(raw: string): any[] | null {
+    let text = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+    text = text.replace(/\\n/g, "\n");
+    const trimmed = text.trim();
+    if (!trimmed.endsWith("]")) {
+      const lastBrace = trimmed.lastIndexOf("}");
+      if (lastBrace !== -1) text = trimmed.substring(0, lastBrace + 1) + "]";
     }
+    try {
+      const direct = JSON.parse(text);
+      if (Array.isArray(direct)) return normalize(direct);
+    } catch {}
+    const s = text.indexOf("[");
+    const e = text.lastIndexOf("]");
+    if (s !== -1 && e > s) {
+      try { return normalize(JSON.parse(text.substring(s, e + 1))); } catch {}
+    }
+    return null;
   }
 
-  return NextResponse.json({
-    error: "Cannot parse JSON",
-    rawText,
-    rawTextLength: rawText?.length,
-  }, { status: 500 });
+  let meals = parseRaw(rawText);
+
+  // Retry once if Gemini truncated the response or returned fewer meals than requested
+  if (!meals || meals.length < mealsNum || finishReason === "MAX_TOKENS") {
+    const rescuePrompt = `Tạo thực đơn ${mealsNum} bữa dựa trên món ăn Việt Nam phổ thông.
+Mục tiêu: ${Math.round(derNum)} kcal | P:${Math.round(proteinNum)}g F:${Math.round(fatNum)}g C:${Math.round(carbsNum)}g
+Kiêng/dị ứng: ${dislikesStr || "không có"}
+BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum} objects). Không thiếu bữa. Chỉ trả về JSON thuần.`;
+    const rescuePayload = {
+      contents: [{ role: "user", parts: [{ text: rescuePrompt }] }],
+      generationConfig: { temperature: 0.6, maxOutputTokens: 2048, responseMimeType: "application/json" },
+    };
+    try {
+      const rescueRes = await callGeminiWithKeyRotation(apiKeys, rescuePayload);
+      if (rescueRes.ok) {
+        const rescueData = await rescueRes.json();
+        const rescueMeals = parseRaw(rescueData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
+        if (rescueMeals && rescueMeals.length >= mealsNum) {
+          meals = rescueMeals;
+        } else if (rescueMeals && rescueMeals.length > (meals?.length ?? 0)) {
+          meals = rescueMeals;
+        }
+      }
+    } catch { /* ignore retry error, return best result we have */ }
+  }
+
+  if (!meals || meals.length === 0) {
+    return NextResponse.json({ error: "Cannot parse AI response", rawText, rawTextLength: rawText.length }, { status: 500 });
+  }
+
+  return NextResponse.json(meals);
 }
