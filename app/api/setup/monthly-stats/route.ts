@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const SOURCES = ["Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân", "Khác"];
+const SOURCES = ["Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân"];
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -50,24 +50,28 @@ export async function GET(req: Request) {
   // ── By source ────────────────────────────────────────────────────────────
   const sourceMap = new Map<string, { contracts: number; revenue: number }>();
   for (const lead of leads) {
-    const raw = lead.source?.trim() ?? "";
-    const key = SOURCES.includes(raw) ? raw : "Khác";
+    const key = lead.source?.trim() || "Không rõ nguồn";
     const cur = sourceMap.get(key) ?? { contracts: 0, revenue: 0 };
     sourceMap.set(key, { contracts: cur.contracts + 1, revenue: cur.revenue + (lead.actualRevenue ?? 0) });
   }
 
-  const bySource = SOURCES
-    .map((s) => {
-      const stat = sourceMap.get(s) ?? { contracts: 0, revenue: 0 };
-      return {
-        source: s,
-        contracts: stat.contracts,
-        revenue: stat.revenue,
-        contractPct: totalContracts > 0 ? Math.round((stat.contracts / totalContracts) * 1000) / 10 : 0,
-        revenuePct: totalRevenue > 0 ? Math.round((stat.revenue / totalRevenue) * 1000) / 10 : 0,
-      };
-    })
-    .filter((s) => s.contracts > 0);
+  const bySource = Array.from(sourceMap.entries())
+    .filter(([, stat]) => stat.contracts > 0)
+    .map(([source, stat]) => ({
+      source,
+      contracts: stat.contracts,
+      revenue: stat.revenue,
+      contractPct: totalContracts > 0 ? Math.round((stat.contracts / totalContracts) * 1000) / 10 : 0,
+      revenuePct: totalRevenue > 0 ? Math.round((stat.revenue / totalRevenue) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => {
+      const ai = SOURCES.indexOf(a.source);
+      const bi = SOURCES.indexOf(b.source);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.source.localeCompare(b.source);
+    });
 
   // ── By PT ────────────────────────────────────────────────────────────────
   const ptMap = new Map<string, {
@@ -81,8 +85,7 @@ export async function GET(req: Request) {
     const ptId = lead.assignedPTId;
     const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? { name: ptName, contracts: 0, revenue: 0, sources: new Map() };
-    const raw = lead.source?.trim() ?? "";
-    const src = SOURCES.includes(raw) ? raw : "Khác";
+    const src = lead.source?.trim() || "Không rõ nguồn";
     cur.contracts += 1;
     cur.revenue += lead.actualRevenue ?? 0;
     cur.sources.set(src, (cur.sources.get(src) ?? 0) + 1);

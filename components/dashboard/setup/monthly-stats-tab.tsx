@@ -36,14 +36,16 @@ type Props = {
 };
 
 const SOURCE_COLORS: Record<string, string> = {
-  "Facebook Page": "#3b82f6",
-  "Referral":      "#10b981",
-  "Tiktok":        "#8b5cf6",
-  "Zalo":          "#06b6d4",
-  "Outdoor":       "#f59e0b",
-  "Website":       "#6366f1",
-  "Renew":         "#f43f5e",
-  "Referral.PT":   "#9ca3af",
+  "Facebook Page":        "#3b82f6",
+  "Referral":             "#06b6d4",
+  "Tiktok":               "#a855f7",
+  "Zalo":                 "#14b8a6",
+  "Outdoor":              "#f97316",
+  "Website":              "#eab308",
+  "Renew":                "#f43f5e",
+  "Referral.PT":          "#10b981",
+  "Walk-in":              "#ec4899",
+  "Thương hiệu cá nhân":  "#6366f1",
 };
 
 function fmtRevenue(v: number) {
