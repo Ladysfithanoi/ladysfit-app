@@ -62,15 +62,36 @@ function computePricing(pkgs: SelectedPkg[]): PricingInfo[] {
   });
 }
 
-// ─── Budget ───────────────────────────────────────────────────────────────────
+// ─── Duration estimator ───────────────────────────────────────────────────────
+// Estimates total days to reach targetWeight using the system's calorie-deficit rates:
+// Stage 1: 1% body weight / week | Stage 2: 0.5% body weight / week
 
-function parseBudget(budget: string | undefined): number {
-  if (!budget) return 0;
-  if (budget.includes("Trên 50")) return 60_000_000;
-  if (budget.includes("30–50") || budget.includes("30-50")) return 40_000_000;
-  if (budget.includes("20–30") || budget.includes("20-30")) return 25_000_000;
-  if (budget.includes("10–20") || budget.includes("10-20")) return 15_000_000;
-  return 8_000_000;
+function estimateDaysToGoal(
+  currentWeight: number,
+  targetWeight: number,
+  phase1Key: string | null
+): number {
+  const weightToLose = Math.max(currentWeight - targetWeight, 0);
+  if (weightToLose <= 0) return 0;
+
+  let remaining = weightToLose;
+  let curW = currentWeight;
+  let days = 0;
+
+  if (phase1Key) {
+    const p1Days = phase1Key === "L2" ? 80 : 30;
+    const lostInPhase1 = Math.min(curW * 0.01 * (p1Days / 7), remaining);
+    remaining -= lostInPhase1;
+    curW -= lostInPhase1;
+    days += p1Days;
+  }
+
+  if (remaining > 0) {
+    const kgPerWeek = curW * 0.005;
+    days += Math.ceil(remaining / kgPerWeek) * 7;
+  }
+
+  return days;
 }
 
 // ─── Roadmap builder ──────────────────────────────────────────────────────────
@@ -92,9 +113,9 @@ function makePkg(key: string, order: number, isBuffer = false): SelectedPkg {
 }
 
 function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
-  const weight = Number(info.currentWeight) || 0;
-  const height = Number(info.height) || 0;
-  const budget = parseBudget(info.budget as string);
+  const weight       = Number(info.currentWeight) || 0;
+  const height       = Number(info.height) || 0;
+  const targetWeight = Number(info.targetWeight) || 0;
 
   // Stage 1: L1 or L2 based on weight-height delta
   const phase1Key: string | null = (() => {
@@ -106,9 +127,15 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
     return null;
   })();
 
-  // Stage 3: Loyalfit requires a prior contract — only if phase1 exists and budget is lower
+  // Stage 3: choose based on estimated journey duration (calorie-deficit science).
+  // Journey >= 365 days → L5 (comprehensive 6-month maintenance for long haul).
+  // Journey < 365 days  → Loyalfit (lighter 3-month maintenance).
+  // Loyalfit requires a prior LDF contract — only eligible when phase1 is present in this roadmap.
   const hasPhase1 = phase1Key !== null;
-  const phase3Key = (budget >= 30_000_000 || !hasPhase1) ? "L5" : "Loyalfit";
+  const estDays   = (weight > 0 && targetWeight > 0)
+    ? estimateDaysToGoal(weight, targetWeight, phase1Key)
+    : 0;
+  const phase3Key = (!hasPhase1 || estDays >= 365) ? "L5" : "Loyalfit";
 
   // Build chain: [Stage1?] → [Stage2 L4] → [Stage2 extra L4 buffers] → [Stage3 — always last]
   function buildChain(extraL4Count: number): SelectedPkg[] {
