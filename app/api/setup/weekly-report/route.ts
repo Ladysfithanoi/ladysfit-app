@@ -66,11 +66,8 @@ type MonthlyTargetRow = {
   }[];
 };
 
-function getWeekTarget(target: MonthlyTargetRow, wa: MonthlyTargetRow["weeklyActuals"][0] | undefined, weekTargetKey: keyof MonthlyTargetRow["weeklyActuals"][0]): number {
-  const perWeek = wa ? (wa[weekTargetKey] as number) : 0;
-  if (perWeek > 0) return perWeek;
-  // fallback: monthly target / 5
-  return (target[weekTargetKey as keyof MonthlyTargetRow] as number) / 5;
+function getWeekTarget(_target: MonthlyTargetRow, wa: MonthlyTargetRow["weeklyActuals"][0] | undefined, weekTargetKey: keyof MonthlyTargetRow["weeklyActuals"][0]): number {
+  return wa ? (wa[weekTargetKey] as number) : 0;
 }
 
 export async function GET(req: Request) {
@@ -180,6 +177,43 @@ export async function GET(req: Request) {
         isFloat: k.isFloat, actualKey: k.actualKey,
       })),
     });
+  }
+
+  // Compute revenueActual from SalesLead.actualRevenue where signDate falls in the selected week
+  const selectedBound = weekBounds.find((b) => b.weekNumber === weekNumber);
+  if (selectedBound) {
+    const leads = await prisma.salesLead.findMany({
+      where: {
+        branchId,
+        signDate: {
+          gte: new Date(selectedBound.weekStart),
+          lte: new Date(selectedBound.weekEnd),
+        },
+      },
+      select: { assignedPTId: true, actualRevenue: true },
+    });
+
+    const leadRevenueByUser: Record<string, number> = {};
+    for (const lead of leads) {
+      if (lead.assignedPTId && lead.actualRevenue !== null) {
+        leadRevenueByUser[lead.assignedPTId] =
+          (leadRevenueByUser[lead.assignedPTId] ?? 0) + lead.actualRevenue;
+      }
+    }
+
+    for (const pu of perUserKpi) {
+      const revRow = pu.kpi.find((k) => k.actualKey === "revenueActual");
+      if (revRow) {
+        revRow.weekActual = leadRevenueByUser[pu.userId] ?? 0;
+        revRow.pct = revRow.weekTarget > 0 ? Math.round((revRow.weekActual / revRow.weekTarget) * 100) : 0;
+      }
+    }
+
+    const aggRevRow = kpi.find((k) => k.label === "Doanh số (triệu)");
+    if (aggRevRow) {
+      aggRevRow.weekActual = Object.values(leadRevenueByUser).reduce((s, v) => s + v, 0);
+      aggRevRow.pct = aggRevRow.weekTarget > 0 ? Math.round((aggRevRow.weekActual / aggRevRow.weekTarget) * 100) : 0;
+    }
   }
 
   // Only expose aggregate to privileged roles; PT/Admin see only their own row

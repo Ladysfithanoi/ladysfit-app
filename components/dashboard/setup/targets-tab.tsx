@@ -253,14 +253,21 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                 {KPI_KEYS.map((k) => (
                   <div key={k.key}>
                     <label className="text-xs font-semibold text-gray-600">{k.label}</label>
-                    <input
-                      type="number"
-                      step={k.isFloat ? "0.1" : "1"}
-                      value={weeklyForm[k.actualKey] ?? 0}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.actualKey]: parseFloat(e.target.value) || 0 }))}
-                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
-                    />
+                    {k.actualKey === "revenueActual" ? (
+                      <div className="w-full h-10 rounded-xl border border-gray-100 px-3 text-sm bg-gray-100 mt-1 flex items-center gap-2 text-gray-500">
+                        <span className="font-semibold">{Number(weeklyForm[k.actualKey] ?? 0).toFixed(1)}</span>
+                        <span className="text-xs text-gray-400">(tự động từ Sales Lead)</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        step={k.isFloat ? "0.1" : "1"}
+                        value={weeklyForm[k.actualKey] ?? 0}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setWeeklyForm((f) => ({ ...f, [k.actualKey]: parseFloat(e.target.value) || 0 }))}
+                        className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 mt-1"
+                      />
+                    )}
                   </div>
                 ))}
               </div>

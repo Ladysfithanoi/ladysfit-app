@@ -369,7 +369,7 @@ export function WeeklyReportTab({
                                 {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
                               </td>
                               <td className={cn(tdStyle, "text-center p-1")}>
-                                {canEditOwn ? (
+                                {canEditOwn && row.actualKey !== "revenueActual" ? (
                                   <input
                                     type="number"
                                     step={row.isFloat ? "0.1" : "1"}
@@ -624,7 +624,7 @@ export function WeeklyReportTab({
                 </table>
               </div>
               {/* Add button below table too for convenience */}
-              {canEdit && arisingTasks.length > 0 && (
+              {canEdit && (
                 <button
                   onClick={addArisingTask}
                   className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#f15b5c] hover:opacity-80 transition-opacity"

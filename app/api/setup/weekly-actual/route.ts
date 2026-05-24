@@ -12,8 +12,8 @@ export async function PUT(req: Request) {
   const body = await req.json() as {
     monthlyTargetId: string; weekNumber: number;
     weekStart: string; weekEnd: string;
-    // actuals
-    revenueActual?: number; fitpartnerRevenueActual?: number;
+    // actuals (revenueActual is computed from SalesLead, never sent by client)
+    fitpartnerRevenueActual?: number;
     fitActual?: number; cooperationActual?: number;
     transformActual?: number; googleReviewActual?: number; cvActual?: number;
     weeklyTaskNotes?: string;
@@ -49,7 +49,6 @@ export async function PUT(req: Request) {
 
   // Build partial update — only include fields that were explicitly sent
   const updateFields: Record<string, unknown> = {};
-  if (body.revenueActual !== undefined) updateFields.revenueActual = body.revenueActual;
   if (body.fitpartnerRevenueActual !== undefined) updateFields.fitpartnerRevenueActual = body.fitpartnerRevenueActual;
   if (body.fitActual !== undefined) updateFields.fitActual = body.fitActual;
   if (body.cooperationActual !== undefined) updateFields.cooperationActual = body.cooperationActual;
@@ -71,7 +70,7 @@ export async function PUT(req: Request) {
     create: {
       monthlyTargetId, weekNumber,
       weekStart: new Date(weekStart), weekEnd: new Date(weekEnd),
-      revenueActual: body.revenueActual ?? 0,
+      revenueActual: 0,
       fitpartnerRevenueActual: body.fitpartnerRevenueActual ?? 0,
       fitActual: body.fitActual ?? 0,
       cooperationActual: body.cooperationActual ?? 0,
