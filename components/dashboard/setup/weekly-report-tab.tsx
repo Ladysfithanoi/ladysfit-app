@@ -309,7 +309,7 @@ export function WeeklyReportTab({
         <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="p-6 space-y-6">
+          <div className="p-3 md:p-6 space-y-4 md:space-y-6">
             {/* Report header */}
             <div className="text-center space-y-1">
               <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-wide">
@@ -317,19 +317,19 @@ export function WeeklyReportTab({
               </h2>
             </div>
 
-            {/* Info row */}
-            <div className="grid grid-cols-3 gap-4 text-sm border border-gray-200 rounded-lg overflow-hidden">
-              <div className="px-4 py-2.5 border-r border-gray-200">
-                <span className="text-gray-400 text-xs font-semibold">Vị trí:</span>{" "}
-                <span className="font-semibold text-gray-700">{getRoleDisplay(currentUserRole)} {userName}</span>
+            {/* Info row — flex-col on mobile, 3-col grid on md+ */}
+            <div className="text-sm border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-200 md:divide-y-0 md:grid md:grid-cols-3 md:divide-x md:divide-gray-200">
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+                <span className="text-gray-400 text-xs font-semibold shrink-0">Vị trí:</span>
+                <span className="font-semibold text-gray-700 text-right">{getRoleDisplay(currentUserRole)} {userName}</span>
               </div>
-              <div className="px-4 py-2.5 border-r border-gray-200">
-                <span className="text-gray-400 text-xs font-semibold">Cơ sở:</span>{" "}
-                <span className="font-semibold text-gray-700">{branchName}</span>
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+                <span className="text-gray-400 text-xs font-semibold shrink-0">Cơ sở:</span>
+                <span className="font-semibold text-gray-700 text-right">{branchName}</span>
               </div>
-              <div className="px-4 py-2.5">
-                <span className="text-gray-400 text-xs font-semibold">Tuần:</span>{" "}
-                <span className="font-semibold text-gray-700">TUẦN {selectedWeek} {dateRange && `(${dateRange})`}</span>
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+                <span className="text-gray-400 text-xs font-semibold shrink-0">Tuần:</span>
+                <span className="font-semibold text-gray-700 text-right">Tuần {selectedWeek}{dateRange && ` (${dateRange})`}</span>
               </div>
             </div>
 
