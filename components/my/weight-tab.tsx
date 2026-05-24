@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
 
 function formatDate(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const [, m, d] = iso.split("T")[0].split("-");
+  return `${(d ?? "").padStart(2, "0")}/${(m ?? "").padStart(2, "0")}`;
 }
 
 function getMonday(d: Date): Date {

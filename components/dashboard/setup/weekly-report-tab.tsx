@@ -78,10 +78,11 @@ function getCurrentWeek(month: number, year: number): number {
 }
 
 function formatDateRange(start: string, end: string): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(s.getDate())}/${p(s.getMonth() + 1)} - ${p(e.getDate())}/${p(e.getMonth() + 1)}`;
+  function dateDMY(iso: string) {
+    const [, m, d] = iso.split("T")[0].split("-");
+    return `${(d ?? "").padStart(2, "0")}/${(m ?? "").padStart(2, "0")}`;
+  }
+  return `${dateDMY(start)} - ${dateDMY(end)}`;
 }
 
 function pctColor(pct: number): string {

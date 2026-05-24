@@ -7,8 +7,12 @@ import type { StaffMember } from "./checklist-page";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+// Use local-time methods to build YYYY-MM-DD — avoids UTC midnight crossing local-date boundary
+function localYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function todayISO() {
-  return new Date().toISOString().split("T")[0];
+  return localYMD(new Date());
 }
 function firstDayOfMonthISO() {
   const d = new Date();
@@ -52,7 +56,7 @@ function sortRowsByTime(rows: Row[]): Row[] {
 function defaultImportDate(ownDate: string): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  const yesterday = d.toISOString().split("T")[0];
+  const yesterday = localYMD(d);
   const first = firstDayOfMonthISO();
   if (yesterday >= first && yesterday !== ownDate) return yesterday;
   if (first !== ownDate) return first;

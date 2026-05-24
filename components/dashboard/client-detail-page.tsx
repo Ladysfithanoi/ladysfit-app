@@ -131,8 +131,12 @@ function getWHRInfo(whr: number) {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  // Parse date-only part directly to avoid UTC↔local timezone offset
+  const datePart = iso.split("T")[0];
+  const parts = datePart.split("-");
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return "—";
+  const [y, m, d] = parts;
+  return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
 }
 
 function dmyToISO(dmy: string): string {

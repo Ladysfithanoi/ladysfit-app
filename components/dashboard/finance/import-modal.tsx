@@ -31,15 +31,24 @@ type Props = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseVNDate(val: string): Date | null {
+// Returns YYYY-MM-DD string to avoid timezone offset when converting to ISO
+function parseVNDate(val: string): string | null {
   const s = val.trim();
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
   if (m) {
-    const d = new Date(+m[3], +m[2] - 1, +m[1]);
-    return isNaN(d.getTime()) ? null : d;
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const year = parseInt(m[3], 10);
+    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+    // Calendar validation only — local Date is fine here
+    const check = new Date(year, month - 1, day);
+    if (check.getFullYear() !== year || check.getMonth() !== month - 1 || check.getDate() !== day) return null;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
+  // Fallback: try ISO-style string, extract date part directly
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  return null;
 }
 
 function parseAmount(val: string): number | null {
@@ -68,9 +77,9 @@ function parseRow(type: "income" | "expense", cells: string[]): ImportRow {
     let transactionDate: string | null = null;
     if (!rawDate) errors.push("Thiếu ngày");
     else {
-      const d = parseVNDate(rawDate);
-      if (!d) errors.push("Ngày không hợp lệ");
-      else transactionDate = d.toISOString().split("T")[0];
+      const parsed = parseVNDate(rawDate);
+      if (!parsed) errors.push("Ngày không hợp lệ");
+      else transactionDate = parsed;
     }
 
     let amount: number | null = null;
@@ -101,9 +110,9 @@ function parseRow(type: "income" | "expense", cells: string[]): ImportRow {
     let transactionDate: string | null = null;
     if (!rawDate) errors.push("Thiếu ngày");
     else {
-      const d = parseVNDate(rawDate);
-      if (!d) errors.push("Ngày không hợp lệ");
-      else transactionDate = d.toISOString().split("T")[0];
+      const parsed = parseVNDate(rawDate);
+      if (!parsed) errors.push("Ngày không hợp lệ");
+      else transactionDate = parsed;
     }
 
     let amount: number | null = null;

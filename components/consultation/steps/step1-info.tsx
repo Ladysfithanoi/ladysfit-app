@@ -67,8 +67,15 @@ function dmyToISO(dmy: string): string | null {
   if (parts.length !== 3) return null;
   const [d, m, y] = parts;
   if (!d || !m || !y || y.length !== 4) return null;
-  const date = new Date(Number(y), Number(m) - 1, Number(d));
-  return isNaN(date.getTime()) ? null : date.toISOString();
+  const day = parseInt(d, 10);
+  const month = parseInt(m, 10);
+  const year = parseInt(y, 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  // Validate calendar date (local Date used for validation only, not for output)
+  const check = new Date(year, month - 1, day);
+  if (check.getFullYear() !== year || check.getMonth() !== month - 1 || check.getDate() !== day) return null;
+  // Build UTC-midnight ISO directly — no timezone offset applied
+  return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T00:00:00.000Z`;
 }
 
 function isoToYMD(iso: string | undefined): string {

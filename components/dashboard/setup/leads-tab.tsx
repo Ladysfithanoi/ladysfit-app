@@ -33,7 +33,10 @@ const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
 // ── Note helpers ──────────────────────────────────────────────────────────────
 
-function todayISO() { return new Date().toISOString().split("T")[0]; }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 type NoteEntry = { date: string; text: string };
 

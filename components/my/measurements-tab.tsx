@@ -54,12 +54,12 @@ const SUMMARY_FIELDS: { key: keyof MeasurementLog; label: string }[] = [
 ];
 
 function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const [y, m, d] = iso.split("T")[0].split("-");
+  return `${(d ?? "").padStart(2, "0")}/${(m ?? "").padStart(2, "0")}/${y ?? ""}`;
 }
 function formatShort(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const [, m, d] = iso.split("T")[0].split("-");
+  return `${(d ?? "").padStart(2, "0")}/${(m ?? "").padStart(2, "0")}`;
 }
 
 const inputCls = "w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
