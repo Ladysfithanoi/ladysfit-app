@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -34,21 +33,18 @@ export async function GET(req: Request) {
     },
   });
 
-  // Enrich all targets across all branches in one batch — same logic as Setup doanh số.
-  // Weeks without a stored WeeklyActual row get their revenue computed dynamically
-  // from SalesLead, keeping this screen in sync with the targets tab.
-  const allTargets = branches.flatMap((b) => b.monthlyTargets);
-  const enrichedTargets = await enrichTargetsWithDynamicActuals(allTargets, month, year);
-  const enrichedById = new Map(enrichedTargets.map((t) => [t.id, t]));
-
   const summary = branches.map((b) => {
-    const targets = b.monthlyTargets.map((t) => enrichedById.get(t.id) ?? t);
+    const targets = b.monthlyTargets;
 
-    const revenueTarget = targets.reduce((s, t) => s + (t.revenueTarget as number ?? 0), 0);
-    const fitTarget     = targets.reduce((s, t) => s + (t.fitTarget as number ?? 0), 0);
-    const transformTarget = targets.reduce((s, t) => s + (t.transformTarget as number ?? 0), 0);
-    const googleTarget  = targets.reduce((s, t) => s + (t.googleReviewTarget as number ?? 0), 0);
+    // Sum targets
+    const revenueTarget   = targets.reduce((s, t) => s + (t.revenueTarget ?? 0), 0);
+    const fitTarget       = targets.reduce((s, t) => s + (t.fitTarget ?? 0), 0);
+    const transformTarget = targets.reduce((s, t) => s + (t.transformTarget ?? 0), 0);
+    const googleTarget    = targets.reduce((s, t) => s + (t.googleReviewTarget ?? 0), 0);
 
+    // Read actuals directly from WeeklyActual — same stored source as Setup doanh số.
+    // WeeklyActual.revenueActual is kept in sync by syncLeadRevenueToWeeklyActuals
+    // (upserts all 5 weeks on every lead save), so this is the single source of truth.
     const allWeeks = targets.flatMap((t) => t.weeklyActuals);
     const revenueActual   = allWeeks.reduce((s, w) => s + (w.revenueActual ?? 0), 0);
     const fitActual       = allWeeks.reduce((s, w) => s + (w.fitActual ?? 0), 0);
