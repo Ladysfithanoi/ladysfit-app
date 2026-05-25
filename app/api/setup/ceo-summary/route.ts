@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -33,20 +35,40 @@ export async function GET(req: Request) {
     },
   });
 
+  const branchIds = branches.map((b) => b.id);
+
+  // Revenue: query SalesLead directly — identical logic to monthly-stats "Tổng doanh thu"
+  // so both screens always show the same number.
+  const leads = await prisma.salesLead.findMany({
+    where: {
+      branchId: { in: branchIds },
+      month,
+      year,
+      status: { in: ["PIF", "DE", "PB"] },
+      signDate: { not: null },
+    },
+    select: { branchId: true, actualRevenue: true },
+  });
+
+  const revenueByBranch = new Map<string, number>();
+  for (const lead of leads) {
+    const prev = revenueByBranch.get(lead.branchId) ?? 0;
+    revenueByBranch.set(lead.branchId, prev + (lead.actualRevenue ?? 0));
+  }
+
   const summary = branches.map((b) => {
     const targets = b.monthlyTargets;
 
-    // Sum targets
     const revenueTarget   = targets.reduce((s, t) => s + (t.revenueTarget ?? 0), 0);
     const fitTarget       = targets.reduce((s, t) => s + (t.fitTarget ?? 0), 0);
     const transformTarget = targets.reduce((s, t) => s + (t.transformTarget ?? 0), 0);
     const googleTarget    = targets.reduce((s, t) => s + (t.googleReviewTarget ?? 0), 0);
 
-    // Read actuals directly from WeeklyActual — same stored source as Setup doanh số.
-    // WeeklyActual.revenueActual is kept in sync by syncLeadRevenueToWeeklyActuals
-    // (upserts all 5 weeks on every lead save), so this is the single source of truth.
+    // revenueActual: fresh from SalesLead (same source as monthly-stats)
+    const revenueActual = revenueByBranch.get(b.id) ?? 0;
+
+    // Other KPIs: from WeeklyActual (manually entered by FM/PT)
     const allWeeks = targets.flatMap((t) => t.weeklyActuals);
-    const revenueActual   = allWeeks.reduce((s, w) => s + (w.revenueActual ?? 0), 0);
     const fitActual       = allWeeks.reduce((s, w) => s + (w.fitActual ?? 0), 0);
     const transformActual = allWeeks.reduce((s, w) => s + (w.transformActual ?? 0), 0);
     const googleActual    = allWeeks.reduce((s, w) => s + (w.googleReviewActual ?? 0), 0);
