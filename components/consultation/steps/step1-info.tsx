@@ -84,7 +84,7 @@ function isoToYMD(iso: string | undefined): string {
 }
 
 export function Step1Info({
-  consultation, branches, staff, isAdmin, isFM = false, isReadOnly, onDraft, onNext,
+  consultation, branches, staff, isAdmin, isFM = false, isReadOnly, onDraft, onNext, canSaveAndContinue,
 }: {
   consultation: ConsultationData;
   branches: Branch[];
@@ -94,6 +94,7 @@ export function Step1Info({
   isReadOnly: boolean;
   onDraft: (payload: Record<string, unknown>) => Promise<void>;
   onNext: (payload: Record<string, unknown>) => Promise<void>;
+  canSaveAndContinue: boolean;
 }) {
   const info = consultation.info as Record<string, unknown> | null;
   const formRef = useRef<HTMLFormElement>(null);
@@ -426,20 +427,20 @@ export function Step1Info({
 
       {/* Actions */}
       {!isReadOnly && (
-        <div className="p-5 flex gap-3">
+        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
           <button
             type="button"
             onClick={handleDraft}
             disabled={submitting}
-            className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 w-full sm:w-auto"
           >
             Lưu nháp
           </button>
           <button
             type="button"
             onClick={handleNext}
-            disabled={submitting}
-            className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50"
+            disabled={submitting || !canSaveAndContinue}
+            className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto"
             style={{ backgroundColor: "#f15b5c" }}
           >
             {submitting ? "Đang lưu..." : "Lưu & Tiếp tục →"}

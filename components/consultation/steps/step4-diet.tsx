@@ -9,11 +9,13 @@ export function Step4Diet({
   onNext,
   onPrev,
   isReadOnly,
+  canSaveAndContinue = true,
 }: {
   consultation: ConsultationData;
   onNext: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
   isReadOnly: boolean;
+  canSaveAndContinue?: boolean;
 }) {
   const [existingPlan, setExistingPlan] = useState<MealPlanRow | null | undefined>(undefined);
   const [savedPlan, setSavedPlan] = useState<MealPlanRow | null>(null);
@@ -87,17 +89,17 @@ export function Step4Diet({
       </div>
 
       {/* Back button only — forward actions are inside NutritionDesigner */}
-      <div className="p-5 flex gap-3">
+      <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
         <button
           onClick={onPrev}
-          className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+          className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto"
         >
           ← Quay lại
         </button>
         {isReadOnly && (
           <button
             onClick={handleSkip}
-            className="flex-1 h-10 rounded-xl text-white text-sm font-bold"
+            className="py-3 px-5 rounded-xl text-white text-sm font-bold w-full sm:w-auto"
             style={{ backgroundColor: "#f15b5c" }}
           >
             Tiếp tục →

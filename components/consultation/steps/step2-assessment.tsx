@@ -22,13 +22,14 @@ function getWHRInfo(whr: number): { label: string; color: string } {
 }
 
 export function Step2Assessment({
-  consultation, isReadOnly, onDraft, onNext, onPrev,
+  consultation, isReadOnly, onDraft, onNext, onPrev, canSaveAndContinue,
 }: {
   consultation: ConsultationData;
   isReadOnly: boolean;
   onDraft: (p: Record<string, unknown>) => Promise<void>;
   onNext: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
+  canSaveAndContinue: boolean;
 }) {
   const info = consultation.info as Record<string, unknown> | null;
   const assess = consultation.assessment as Record<string, unknown> | null;
@@ -151,17 +152,17 @@ export function Step2Assessment({
 
       {/* Actions */}
       {!isReadOnly && (
-        <div className="p-5 flex gap-3">
-          <button onClick={onPrev} className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">← Quay lại</button>
-          <button onClick={handleDraft} disabled={submitting} className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Lưu nháp</button>
-          <button onClick={handleNext} disabled={submitting} className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50" style={{ backgroundColor: "#f15b5c" }}>
+        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+          <button onClick={onPrev} className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto">← Quay lại</button>
+          <button onClick={handleDraft} disabled={submitting} className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 w-full sm:w-auto">Lưu nháp</button>
+          <button onClick={handleNext} disabled={submitting || !canSaveAndContinue} className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto" style={{ backgroundColor: "#f15b5c" }}>
             {submitting ? "Đang lưu..." : "Lưu & Tiếp tục →"}
           </button>
         </div>
       )}
       {isReadOnly && (
-        <div className="p-5 flex gap-3">
-          <button onClick={onPrev} className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">← Quay lại</button>
+        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+          <button onClick={onPrev} className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto">← Quay lại</button>
         </div>
       )}
     </div>

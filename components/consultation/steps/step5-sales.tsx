@@ -330,12 +330,14 @@ export function Step5Sales({
   isReadOnly,
   onDraft,
   onPrev,
+  canSaveAndContinue = true,
 }: {
   consultation: ConsultationData;
   isReadOnly: boolean;
   onDraft: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
   onComplete: () => void;
+  canSaveAndContinue?: boolean;
 }) {
   const router = useRouter();
   const info         = (consultation.info ?? {}) as Record<string, unknown>;
@@ -628,10 +630,10 @@ export function Step5Sales({
         )}
 
         {/* Actions */}
-        <div className="p-5 flex gap-3">
+        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
           <button
             onClick={onPrev}
-            className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto"
           >
             ← Quay lại
           </button>
@@ -640,14 +642,14 @@ export function Step5Sales({
               <button
                 onClick={handleDraft}
                 disabled={saving}
-                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 w-full sm:w-auto"
               >
                 {saving ? "Đang lưu..." : "Lưu nháp"}
               </button>
               <button
                 onClick={handleComplete}
-                disabled={completing || confirmedPkgs.length === 0 || loyalfitOnly}
-                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50"
+                disabled={completing || confirmedPkgs.length === 0 || loyalfitOnly || !canSaveAndContinue}
+                className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto"
                 style={{ backgroundColor: "#f15b5c" }}
               >
                 {completing ? "Đang xử lý..." : "✓ Hoàn thành tư vấn"}
@@ -658,7 +660,7 @@ export function Step5Sales({
             consultation.convertedClientId ? (
               <Link
                 href={`/dashboard/clients/${consultation.convertedClientId}`}
-                className="h-10 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center"
+                className="py-3 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center justify-center w-full sm:w-auto"
                 style={{ backgroundColor: "#f15b5c" }}
               >
                 Xem hồ sơ khách hàng

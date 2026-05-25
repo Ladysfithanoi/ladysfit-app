@@ -61,6 +61,7 @@ export function ConsultationWizard({
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   const isReadOnly = consultation.status === "COMPLETED";
+  const canSaveAndContinue = ['ADMIN', 'FM', 'PT'].includes(userRole ?? '');
 
   const save = useCallback(async (payload: Record<string, unknown>, nextStep?: number) => {
     setSaving(true);
@@ -189,6 +190,7 @@ export function ConsultationWizard({
             isReadOnly={isReadOnly}
             onDraft={handleDraft}
             onNext={handleNext}
+            canSaveAndContinue={canSaveAndContinue}
           />
         )}
         {step === 2 && (
@@ -198,6 +200,7 @@ export function ConsultationWizard({
             onDraft={handleDraft}
             onNext={handleNext}
             onPrev={handlePrev}
+            canSaveAndContinue={canSaveAndContinue}
           />
         )}
         {step === 3 && (
@@ -208,6 +211,7 @@ export function ConsultationWizard({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             workoutDesign={consultation.workoutDesign as any}
             userRole={userRole}
+            canSaveAndContinue={canSaveAndContinue}
             enableLevelSystem={enableLevelSystem}
           />
         )}
@@ -217,6 +221,7 @@ export function ConsultationWizard({
             onNext={handleNext}
             onPrev={handlePrev}
             isReadOnly={isReadOnly}
+            canSaveAndContinue={canSaveAndContinue}
           />
         )}
         {step === 5 && (
@@ -226,6 +231,7 @@ export function ConsultationWizard({
             onDraft={handleDraft}
             onPrev={handlePrev}
             onComplete={() => router.push("/dashboard/consultation")}
+            canSaveAndContinue={canSaveAndContinue}
           />
         )}
       </div>
