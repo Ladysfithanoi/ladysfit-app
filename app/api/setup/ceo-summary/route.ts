@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -33,18 +34,26 @@ export async function GET(req: Request) {
     },
   });
 
+  // Enrich all targets across all branches in one batch — same logic as Setup doanh số.
+  // Weeks without a stored WeeklyActual row get their revenue computed dynamically
+  // from SalesLead, keeping this screen in sync with the targets tab.
+  const allTargets = branches.flatMap((b) => b.monthlyTargets);
+  const enrichedTargets = await enrichTargetsWithDynamicActuals(allTargets, month, year);
+  const enrichedById = new Map(enrichedTargets.map((t) => [t.id, t]));
+
   const summary = branches.map((b) => {
-    const targets = b.monthlyTargets;
-    const revenueTarget = targets.reduce((s, t) => s + t.revenueTarget, 0);
-    const fitTarget = targets.reduce((s, t) => s + t.fitTarget, 0);
-    const transformTarget = targets.reduce((s, t) => s + t.transformTarget, 0);
-    const googleTarget = targets.reduce((s, t) => s + t.googleReviewTarget, 0);
+    const targets = b.monthlyTargets.map((t) => enrichedById.get(t.id) ?? t);
+
+    const revenueTarget = targets.reduce((s, t) => s + (t.revenueTarget as number ?? 0), 0);
+    const fitTarget     = targets.reduce((s, t) => s + (t.fitTarget as number ?? 0), 0);
+    const transformTarget = targets.reduce((s, t) => s + (t.transformTarget as number ?? 0), 0);
+    const googleTarget  = targets.reduce((s, t) => s + (t.googleReviewTarget as number ?? 0), 0);
 
     const allWeeks = targets.flatMap((t) => t.weeklyActuals);
-    const revenueActual = allWeeks.reduce((s, w) => s + w.revenueActual, 0);
-    const fitActual = allWeeks.reduce((s, w) => s + w.fitActual, 0);
-    const transformActual = allWeeks.reduce((s, w) => s + w.transformActual, 0);
-    const googleActual = allWeeks.reduce((s, w) => s + w.googleReviewActual, 0);
+    const revenueActual   = allWeeks.reduce((s, w) => s + (w.revenueActual ?? 0), 0);
+    const fitActual       = allWeeks.reduce((s, w) => s + (w.fitActual ?? 0), 0);
+    const transformActual = allWeeks.reduce((s, w) => s + (w.transformActual ?? 0), 0);
+    const googleActual    = allWeeks.reduce((s, w) => s + (w.googleReviewActual ?? 0), 0);
 
     return {
       branchId: b.id,
