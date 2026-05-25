@@ -21,7 +21,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function Row({ children, half }: { children: React.ReactNode; half?: boolean }) {
   return (
-    <div className={cn("grid gap-3", half ? "grid-cols-2" : "grid-cols-1")}>
+    <div className={cn("grid gap-3", half ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
       {children}
     </div>
   );
@@ -192,20 +192,24 @@ export function Step1Info({
       {/* PT + Branch selection */}
       <div className="p-5 space-y-3">
         <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest">Phân công</p>
-        <Row half>
-          <Field label="Cơ sở đăng ký" required>
-            <select value={branchId} onChange={(e) => { setBranchId(e.target.value); setCreatedById(""); }} disabled={isReadOnly} className={selectCls}>
-              <option value="">— Chọn cơ sở —</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Nhân sự phụ trách" required>
-            <select value={createdById} onChange={(e) => setCreatedById(e.target.value)} disabled={(!isAdmin && !isFM) || isReadOnly} className={selectCls}>
-              <option value="">— Chọn nhân sự —</option>
-              {filteredStaff.map((s) => <option key={s.id} value={s.id}>{s.name ?? s.email}</option>)}
-            </select>
-          </Field>
-        </Row>
+        <div className="flex flex-col sm:flex-row gap-4 w-full">
+          <div className="w-full sm:w-1/2">
+            <Field label="Cơ sở đăng ký" required>
+              <select value={branchId} onChange={(e) => { setBranchId(e.target.value); setCreatedById(""); }} disabled={isReadOnly} className={selectCls}>
+                <option value="">— Chọn cơ sở —</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="w-full sm:w-1/2">
+            <Field label="Nhân sự phụ trách" required>
+              <select value={createdById} onChange={(e) => setCreatedById(e.target.value)} disabled={(!isAdmin && !isFM) || isReadOnly} className={selectCls}>
+                <option value="">— Chọn nhân sự —</option>
+                {filteredStaff.map((s) => <option key={s.id} value={s.id}>{s.name ?? s.email}</option>)}
+              </select>
+            </Field>
+          </div>
+        </div>
       </div>
 
       {/* Section 1 */}
