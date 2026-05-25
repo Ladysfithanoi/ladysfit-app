@@ -62,6 +62,25 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     exerciseNotes?: string | null;
   };
 
+  // Guard: verify movementIds exist in DB to prevent FK violations from stale IDs
+  const rawSetLogs = (setLogs as SetLogInput[]) ?? [];
+  const candidateIds = rawSetLogs
+    .map((sl) => sl.movementId)
+    .filter((id): id is string => !!id && id !== "" && id !== "null");
+
+  const existingMovements = candidateIds.length > 0
+    ? await prisma.workoutMovement.findMany({
+        where: { id: { in: candidateIds } },
+        select: { id: true },
+      })
+    : [];
+  const validMovementIdSet = new Set(existingMovements.map((m) => m.id));
+
+  // Drop rows with no movementId or with a stale/deleted movementId
+  const validSetLogs = rawSetLogs.filter(
+    (sl) => sl.movementId && sl.movementId !== "" && sl.movementId !== "null" && validMovementIdSet.has(sl.movementId)
+  );
+
   const log = await prisma.workoutLog.create({
     data: {
       clientId: params.id,
@@ -72,7 +91,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       notes: notes || null,
       createdById: session.user.id,
       setLogs: {
-        create: (setLogs as SetLogInput[]).map((sl) => ({
+        create: validSetLogs.map((sl) => ({
           movementId: sl.movementId || null,
           movementName: sl.movementName,
           exerciseName: sl.exerciseName,

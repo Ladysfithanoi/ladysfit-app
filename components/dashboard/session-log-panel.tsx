@@ -183,9 +183,16 @@ export function SessionLogForm({
     if (!draft) return;
     if (draft.date) setDate(draft.date);
     if (draft.notes !== undefined) setNotes(draft.notes);
-    // Only restore setLogs if structure matches current session
+    // Only restore setLogs if structure matches current session.
+    // Always overwrite movementId/movementName/exerciseName with fresh session values
+    // to prevent stale FK references when the program was edited or phases were switched.
     if (Array.isArray(draft.setLogs) && draft.setLogs.length === session.movements.length) {
-      setSetLogs(draft.setLogs);
+      setSetLogs(draft.setLogs.map((sl, i) => ({
+        ...sl,
+        movementId: session.movements[i].id,
+        movementName: session.movements[i].movementName,
+        exerciseName: session.movements[i].selectedExercise,
+      })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
@@ -227,6 +234,16 @@ export function SessionLogForm({
   }
 
   async function handleSave() {
+    // Block submission if any row has data entered but no exercise assigned
+    const invalidRows = setLogs.filter((sl) => {
+      const hasData = sl.sets.some((s) => s.load.trim() !== "" || s.reps.trim() !== "");
+      const hasExercise = sl.movementId && sl.exerciseName && sl.exerciseName.trim() !== "" && sl.exerciseName !== "—";
+      return hasData && !hasExercise;
+    });
+    if (invalidRows.length > 0) {
+      setError("Vui lòng chọn bài tập cho các hàng có ghi nhận kết quả!");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
