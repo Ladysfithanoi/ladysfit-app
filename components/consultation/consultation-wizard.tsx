@@ -61,7 +61,7 @@ export function ConsultationWizard({
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   const isReadOnly = consultation.status === "COMPLETED";
-  const canSaveAndContinue = ['ADMIN', 'FM', 'PT'].includes(userRole ?? '');
+  const canSaveAndContinue = ['ADMIN', 'FM', 'PT'].includes(userRole ?? 'PT');
 
   const save = useCallback(async (payload: Record<string, unknown>, nextStep?: number) => {
     setSaving(true);
