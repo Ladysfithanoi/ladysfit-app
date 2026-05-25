@@ -82,14 +82,14 @@ export function Step2Assessment({
       {info && (
         <div className="p-5">
           <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-3">Thông tin từ bước 1</p>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="flex flex-col sm:flex-row gap-4 w-full">
             {[
               { label: "Họ tên", value: info.fullName as string },
               { label: "Chiều cao", value: height ? `${height} cm` : "—" },
               { label: "Cân nặng", value: weight ? `${weight} kg` : "—" },
               { label: "Mục tiêu", value: info.targetWeight ? `${info.targetWeight} kg` : "—" },
             ].map((r) => (
-              <div key={r.label} className="bg-gray-50 rounded-xl p-3">
+              <div key={r.label} className="bg-gray-50 rounded-xl p-3 w-full sm:flex-1">
                 <p className="text-[10px] text-gray-400 font-semibold mb-0.5">{r.label}</p>
                 <p className="text-sm font-bold text-gray-800">{r.value || "—"}</p>
               </div>
@@ -101,7 +101,7 @@ export function Step2Assessment({
       {/* Measurements */}
       <div className="p-5">
         <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-4">Bảng thẩm định chỉ số</p>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row gap-4 w-full mb-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-gray-600">Số đo vòng 2 - ngang rốn (cm)</label>
             <input type="number" step="0.1" value={waist} onChange={(e) => setWaist(e.target.value)} disabled={isReadOnly} placeholder="75" className={inputCls} />
@@ -125,15 +125,15 @@ export function Step2Assessment({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 rounded-xl p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="bg-green-50 rounded-xl p-4 w-full sm:flex-1">
               <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-1">Cân nặng lý tưởng</p>
               <p className="text-lg font-extrabold text-gray-900">
                 {idealLow ? `${idealLow} – ${idealHigh} kg` : "—"}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">(Chiều cao - 100) × 0.9 ± 5</p>
             </div>
-            <div className="bg-orange-50 rounded-xl p-4">
+            <div className="bg-orange-50 rounded-xl p-4 w-full sm:flex-1">
               <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-1">WHR (Eo/Hông)</p>
               <p className={cn("text-lg font-extrabold", whrInfo ? whrInfo.color : "text-gray-900")}>
                 {whr ? whr.toFixed(2) : "—"}
