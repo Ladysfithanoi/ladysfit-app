@@ -80,7 +80,12 @@ export async function generateMealPlan(params: {
 - Thích: ${likes || "không có yêu cầu"}
 - Không ăn: ${dislikes || "không có"}
 
-Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsPerDay} bữa, tổng macro sai số ≤10%.
+Yêu cầu: thực đơn Việt Nam, dễ nấu, chia đúng ${mealsPerDay} bữa, tổng macro sai số ≤5%.
+
+⛔ ANTI-DUPLICATE BẮT BUỘC:
+- Mỗi bữa PHẢI dùng nguồn đạm chính KHÁC NHAU (thịt bò / gà / cá / heo / hải sản / trứng / đậu hũ — không lặp lại cùng loại quá 1 lần trong ngày).
+- NGHIÊM CẤM 2 bữa có thực đơn trùng nhau trên 70%. Mỗi bữa là một tổ hợp thực phẩm độc lập.
+- Tổng macro sau khi cộng tất cả bữa: sai số ≤5% so với mục tiêu. Tính lại gram nếu cần.
 
 TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không thêm text nào khác:
 [
@@ -100,7 +105,7 @@ TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không th�
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.9,
         maxOutputTokens: 2048,
         responseMimeType: "application/json",
       },

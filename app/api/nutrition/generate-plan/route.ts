@@ -113,7 +113,15 @@ QUY TẮC BẮT BUỘC:
 2. ƯU TIÊN BỮA SÁNG VIỆT NAM: Nếu có từ 3 bữa trở lên, Bữa 1 (Bữa sáng) PHẢI ưu tiên cao nhất cho: phở, bún, xôi, bánh mì, bánh bao, cháo có trong database. Hạn chế cơm vào buổi sáng.
 3. XOAY TUA KHÔNG TRÙNG LẶP: Mỗi lần tạo phải cho ra tổ hợp món ăn khác nhau. Hãy xác suất hóa lựa chọn để mỗi lần bấm tạo ra kết quả mới.
 4. Tính toán macro CHính xác dựa trên định lượng gram và chỉ số dinh dưỡng per 100g từ database.
-5. Đầu ra PHẢI là JSON thuần (không markdown, không giải thích).`;
+5. Đầu ra PHẢI là JSON thuần (không markdown, không giải thích).
+
+⛔ QUY TẮC ĐA DẠNG BỮA ĂN — VI PHẠM = KẾT QUẢ SAI:
+6. NGHIÊM CẤM TUYỆT ĐỐI: Các bữa trong cùng một ngày KHÔNG được trùng lặp trên 70% danh sách thực phẩm. Copy-paste thực đơn giữa các bữa là lỗi nghiêm trọng.
+7. MỖI BỮA PHẢI DÙNG NGUỒN ĐẠM CHÍNH KHÁC NHAU:
+   - Nếu Bữa 1 đã dùng thịt bò → Bữa 2, 3 PHẢI chọn: cá, ức gà, thịt heo nạc, hải sản, tôm, trứng (nếu chưa dùng), đậu hũ...
+   - Không lặp lại cùng một loại đạm chủ lực quá 1 lần trong toàn bộ ngày.
+8. NGUỒN TINH BỘT và CHẤT BÉO cũng phải đa dạng: không dùng cùng một loại tinh bột (vd: cơm trắng) cho tất cả các bữa — hãy xen kẽ khoai lang, bún, bánh mì, cháo yến mạch...
+9. KỶ LUẬT TOÁN HỌC KHÔNG ĐỔI: Dù đổi món đa dạng, tổng (Protein × 4 + Carbs × 4 + Fat × 9) của tất cả bữa cộng lại vẫn phải sai số ≤5% so với mục tiêu Calo. Tính lại gram từng thực phẩm để đảm bảo con số khớp.`;
 
   const prompt = `Tạo thực đơn ${mealsNum} bữa cho 1 ngày:
 - Calories mục tiêu: ${Math.round(derNum)} kcal
@@ -123,7 +131,9 @@ QUY TẮC BẮT BUỘC:
 
 BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần tử (${mealsNum} bữa riêng biệt).
 Không được gộp bữa, không được bỏ sót bữa cuối. Ưu tiên hoàn thành đủ ${mealsNum} bữa hơn là chi tiết quá kỹ từng bữa.
-Chia đúng ${mealsNum} bữa, tổng macro sai số ≤10%.
+Chia đúng ${mealsNum} bữa, tổng macro sai số ≤5%.
+
+⛔ NHẮC LẠI ANTI-DUPLICATE: Mỗi bữa PHẢI dùng nguồn đạm khác nhau (không lặp thịt bò/gà/cá/heo liên tiếp). Kiểm tra lại trước khi trả về — nếu 2 bữa có >70% thực phẩm giống nhau, hãy thay thế ngay.
 
 QUY TẮC TRẢ VỀ JSON BẮT BUỘC:
 Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗi phần tử có 6 trường:
@@ -138,7 +148,7 @@ Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗ
     systemInstruction: { parts: [{ text: systemInstruction }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.75,
+      temperature: 0.9,
       maxOutputTokens: 8192,
       responseMimeType: "application/json",
     },
