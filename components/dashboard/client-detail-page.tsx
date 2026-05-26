@@ -840,7 +840,10 @@ export function ClientDetailPage({
       const data = await res.json();
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Có lỗi xảy ra");
       const newLog = data as WeightLog;
-      setWeightLogs((prev) => [...prev, { id: newLog.id, date: newLog.date, weight: newLog.weight, note: newLog.note }]);
+      setWeightLogs((prev) =>
+        [...prev, { id: newLog.id, date: newLog.date, weight: newLog.weight, note: newLog.note }]
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      );
       setWeightOpen(false);
       router.refresh();
     } catch (err) {
@@ -873,10 +876,11 @@ export function ClientDetailPage({
       const data = await res.json();
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Có lỗi xảy ra");
       const updated = data as WeightLog;
-      setWeightLogs((prev) => prev.map((l) => l.id === updated.id
-        ? { ...l, date: updated.date, weight: updated.weight, note: updated.note }
-        : l
-      ));
+      setWeightLogs((prev) =>
+        prev
+          .map((l) => l.id === updated.id ? { ...l, date: updated.date, weight: updated.weight, note: updated.note } : l)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      );
       setEditingWeightLog(null);
       setToastMsg("Đã cập nhật cân nặng ✓");
       setTimeout(() => setToastMsg(null), 3000);
