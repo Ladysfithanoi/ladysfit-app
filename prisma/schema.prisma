@@ -741,17 +741,17 @@ model WorkoutSetLog {
   movementName  String
   exerciseName  String
   set1Load      String?
-  set1Reps      Int?
+  set1Reps      String?
   set2Load      String?
-  set2Reps      Int?
+  set2Reps      String?
   set3Load      String?
-  set3Reps      Int?
+  set3Reps      String?
   set4Load      String?
-  set4Reps      Int?
+  set4Reps      String?
   set5Load      String?
-  set5Reps      Int?
+  set5Reps      String?
   set6Load      String?
-  set6Reps      Int?
+  set6Reps      String?
   exerciseNotes String? @db.Text
 
   workoutLog WorkoutLog       @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)

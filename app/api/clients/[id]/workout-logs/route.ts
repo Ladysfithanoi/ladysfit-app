@@ -53,12 +53,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     movementId?: string | null;
     movementName: string;
     exerciseName: string;
-    set1Load?: string | null; set1Reps?: number | null;
-    set2Load?: string | null; set2Reps?: number | null;
-    set3Load?: string | null; set3Reps?: number | null;
-    set4Load?: string | null; set4Reps?: number | null;
-    set5Load?: string | null; set5Reps?: number | null;
-    set6Load?: string | null; set6Reps?: number | null;
+    set1Load?: string | null; set1Reps?: string | null;
+    set2Load?: string | null; set2Reps?: string | null;
+    set3Load?: string | null; set3Reps?: string | null;
+    set4Load?: string | null; set4Reps?: string | null;
+    set5Load?: string | null; set5Reps?: string | null;
+    set6Load?: string | null; set6Reps?: string | null;
     exerciseNotes?: string | null;
   };
 

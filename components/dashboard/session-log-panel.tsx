@@ -46,9 +46,10 @@ type Suggestion =
   | null;
 
 function avgRepsFromSetLog(sl: SetLogRow): number | null {
-  const reps = [sl.set1Reps, sl.set2Reps, sl.set3Reps, sl.set4Reps, sl.set5Reps, sl.set6Reps].filter(
-    (r): r is number => r != null
-  );
+  const reps = [sl.set1Reps, sl.set2Reps, sl.set3Reps, sl.set4Reps, sl.set5Reps, sl.set6Reps]
+    .filter((r): r is string => r != null && r !== "")
+    .map((r) => parseFloat(r))
+    .filter((n) => !isNaN(n));
   if (reps.length === 0) return null;
   return reps.reduce((a, b) => a + b, 0) / reps.length;
 }
@@ -257,12 +258,12 @@ export function SessionLogForm({
           movementId: sl.movementId,
           movementName: sl.movementName,
           exerciseName: sl.exerciseName,
-          set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
-          set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
-          set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
-          set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
-          set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
-          set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
+          set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps || null,
+          set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps || null,
+          set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps || null,
+          set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps || null,
+          set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps || null,
+          set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps || null,
           exerciseNotes: sl.exerciseNotes || null,
         })),
       };
@@ -367,21 +368,19 @@ export function SessionLogForm({
                           <div className="flex flex-col gap-0.5 items-center">
                             <input
                               type="text"
-                              inputMode="numeric"
                               value={s.load}
                               onChange={(e) => updateSet(mi, si, "load", e.target.value)}
-                              placeholder="—"
+                              placeholder="Ví dụ: 12kg, BW, Dây xanh..."
                               className={cn(
                                 "w-14 h-7 rounded-lg border text-center text-xs focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40",
                                 hasData ? "border-[#f15b5c]/30 bg-white text-gray-800" : "border-gray-200 bg-white text-gray-400"
                               )}
                             />
                             <input
-                              type="number"
-                              min="0"
+                              type="text"
                               value={s.reps}
                               onChange={(e) => updateSet(mi, si, "reps", e.target.value)}
-                              placeholder="—"
+                              placeholder="Ví dụ: 12-10-8, 15, 12/bên..."
                               className={cn(
                                 "w-14 h-7 rounded-lg border text-center text-xs focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40",
                                 hasData ? "border-[#f15b5c]/30 bg-white text-gray-800" : "border-gray-200 bg-white text-gray-400"
@@ -461,12 +460,12 @@ function EditLogPanel({
       exerciseName: sl.exerciseName,
       exerciseNotes: sl.exerciseNotes ?? "",
       sets: [
-        { load: sl.set1Load ?? "", reps: sl.set1Reps?.toString() ?? "" },
-        { load: sl.set2Load ?? "", reps: sl.set2Reps?.toString() ?? "" },
-        { load: sl.set3Load ?? "", reps: sl.set3Reps?.toString() ?? "" },
-        { load: sl.set4Load ?? "", reps: sl.set4Reps?.toString() ?? "" },
-        { load: sl.set5Load ?? "", reps: sl.set5Reps?.toString() ?? "" },
-        { load: sl.set6Load ?? "", reps: sl.set6Reps?.toString() ?? "" },
+        { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
+        { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
+        { load: sl.set3Load ?? "", reps: sl.set3Reps ?? "" },
+        { load: sl.set4Load ?? "", reps: sl.set4Reps ?? "" },
+        { load: sl.set5Load ?? "", reps: sl.set5Reps ?? "" },
+        { load: sl.set6Load ?? "", reps: sl.set6Reps ?? "" },
       ],
     }))
   );
@@ -492,12 +491,12 @@ function EditLogPanel({
           notes: notes || null,
           setLogs: setLogs.map((sl) => ({
             id: sl.id,
-            set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps ? parseInt(sl.sets[0].reps) : null,
-            set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps ? parseInt(sl.sets[1].reps) : null,
-            set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps ? parseInt(sl.sets[2].reps) : null,
-            set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps ? parseInt(sl.sets[3].reps) : null,
-            set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps ? parseInt(sl.sets[4].reps) : null,
-            set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps ? parseInt(sl.sets[5].reps) : null,
+            set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps || null,
+            set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps || null,
+            set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps || null,
+            set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps || null,
+            set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps || null,
+            set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps || null,
             exerciseNotes: sl.exerciseNotes || null,
           })),
         }),
@@ -555,18 +554,16 @@ function EditLogPanel({
                       <div className="flex flex-col gap-0.5 items-center">
                         <input
                           type="text"
-                          inputMode="numeric"
                           value={s.load}
                           onChange={(e) => updateSet(si, setIdx, "load", e.target.value)}
-                          placeholder="—"
+                          placeholder="Ví dụ: 12kg, BW, Dây xanh..."
                           className="w-14 h-7 rounded-lg border border-blue-200 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white text-gray-800"
                         />
                         <input
-                          type="number"
-                          min="0"
+                          type="text"
                           value={s.reps}
                           onChange={(e) => updateSet(si, setIdx, "reps", e.target.value)}
-                          placeholder="—"
+                          placeholder="Ví dụ: 12-10-8, 15, 12/bên..."
                           className="w-14 h-7 rounded-lg border border-blue-200 text-center text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 bg-white text-gray-800"
                         />
                       </div>
