@@ -112,6 +112,14 @@ const PKG_STATUS_LABEL = {
   EXPIRED: "Hết hạn",
 };
 
+// Real-time status override: if DB says ACTIVE but endDate has passed → EXPIRED
+function getEffectiveStatus(pkg: PackageEnrollment): "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED" {
+  if (pkg.status === "ACTIVE" && pkg.endDate) {
+    if (Date.now() > new Date(pkg.endDate).getTime()) return "EXPIRED";
+  }
+  return pkg.status;
+}
+
 function formatPrice(n: number) {
   return (n / 1_000_000).toFixed(0) + " triệu";
 }
@@ -1300,8 +1308,8 @@ export function ClientDetailPage({
                             <span className="text-sm font-extrabold text-amber-800">KOC</span>
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-700">Lộ trình tặng</span>
                           </div>
-                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[pkg.status])}>
-                            {PKG_STATUS_LABEL[pkg.status]}
+                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
+                            {PKG_STATUS_LABEL[getEffectiveStatus(pkg)]}
                           </span>
                         </div>
                         <p className="text-[11px] text-amber-600 mb-2">60 buổi / 60 ngày · Miễn phí</p>
@@ -1363,8 +1371,8 @@ export function ClientDetailPage({
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">KOL</span>
                           )}
                         </div>
-                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[pkg.status])}>
-                          {PKG_STATUS_LABEL[pkg.status]}
+                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
+                          {PKG_STATUS_LABEL[getEffectiveStatus(pkg)]}
                         </span>
                       </div>
                       {isKOL
@@ -1815,8 +1823,8 @@ export function ClientDetailPage({
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap", PKG_STATUS_STYLE[pkg.status])}>
-                              {PKG_STATUS_LABEL[pkg.status]}
+                            <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
+                              {PKG_STATUS_LABEL[getEffectiveStatus(pkg)]}
                             </span>
                           </td>
                         </tr>
@@ -2373,8 +2381,8 @@ export function ClientDetailPage({
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-gray-800">{pkg.packageName}</span>
                     <div className="flex items-center gap-2">
-                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[pkg.status])}>
-                        {PKG_STATUS_LABEL[pkg.status]}
+                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
+                        {PKG_STATUS_LABEL[getEffectiveStatus(pkg)]}
                       </span>
                       <button
                         onClick={() => { setDeletePkgError(""); setDeletingPkgId(pkg.id); }}

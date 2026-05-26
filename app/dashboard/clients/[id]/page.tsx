@@ -167,24 +167,28 @@ export default async function ClientPage({ params }: { params: { id: string } })
     reservedDays: bigint; extensionDays: bigint; price: number;
     contractType: string; status: string; notes: string | null; createdAt: Date;
   };
-  const serializedPackages = (enrollments as EnrollmentRaw[]).map((p) => ({
-    id: p.id,
-    packageName: p.packageName,
-    packageStage: p.packageStage,
-    sessions: Number(p.sessions),
-    sessionsUsed: Number(p.sessionsUsed),
-    startDate: p.startDate?.toISOString() ?? null,
-    endDate: p.endDate?.toISOString() ?? null,
-    durationDays: Number(p.durationDays),
-    reservedDays: Number(p.reservedDays),
-    extensionDays: Number(p.extensionDays),
-    price: Number(p.price),
-    status: p.status as "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED",
-    notes: p.notes,
-    contractCode: p.contractCode ?? null,
-    createdAt: p.createdAt.toISOString(),
-    contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL",
-  }));
+  const now = new Date();
+  const serializedPackages = (enrollments as EnrollmentRaw[]).map((p) => {
+    const isAutoExpired = p.status === "ACTIVE" && p.endDate !== null && p.endDate < now;
+    return {
+      id: p.id,
+      packageName: p.packageName,
+      packageStage: p.packageStage,
+      sessions: Number(p.sessions),
+      sessionsUsed: Number(p.sessionsUsed),
+      startDate: p.startDate?.toISOString() ?? null,
+      endDate: p.endDate?.toISOString() ?? null,
+      durationDays: Number(p.durationDays),
+      reservedDays: Number(p.reservedDays),
+      extensionDays: Number(p.extensionDays),
+      price: Number(p.price),
+      status: (isAutoExpired ? "EXPIRED" : p.status) as "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED",
+      notes: p.notes,
+      contractCode: p.contractCode ?? null,
+      createdAt: p.createdAt.toISOString(),
+      contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL",
+    };
+  });
 
   const serializedPrograms = programs.map((p) => ({
     id: p.id,
