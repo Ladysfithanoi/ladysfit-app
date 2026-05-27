@@ -31,6 +31,18 @@ type Props = {
 const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
+// ── Package multi-select helpers ──────────────────────────────────────────────
+const PACKAGE_OPTIONS = ["L1", "L2", "L3", "L4", "L5", "Loyalfit"] as const;
+
+function parsePackageList(pkg: string | null | undefined): string[] {
+  if (!pkg?.trim()) return [];
+  return pkg.split(/[,+/]/).map(s => s.trim()).filter(Boolean);
+}
+
+function serializePackageList(pkgs: string[]): string {
+  return pkgs.join("+");
+}
+
 // ── Note helpers ──────────────────────────────────────────────────────────────
 
 function todayISO() {
@@ -143,6 +155,12 @@ export function LeadsTab({
   async function handleSave() {
     if (!form.customerName?.trim()) { setError("Tên khách hàng không được để trống"); return; }
     if (!form.assignedPTId) { setError("Vui lòng chọn nhân sự phụ trách"); return; }
+    if (!form.source) { setError("Vui lòng chọn Phân nguồn"); return; }
+    const selectedPkgs = parsePackageList(form.packageRegistered);
+    if (selectedPkgs.includes("L1") && selectedPkgs.includes("L2")) {
+      setError("Gói L1 và L2 không được phép đăng ký cùng lúc");
+      return;
+    }
     setSaving(true);
     setError("");
     const body = { branchId, month, year, ...form, signDate: form.signDateStr || null };
@@ -774,11 +792,11 @@ export function LeadsTab({
                   </select>
                 </FormRow>
               )}
-              <FormRow label="Phân nguồn">
+              <FormRow label="Phân nguồn *">
                 <select
                   value={form.source ?? ""}
                   onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
-                  className={inputCls}
+                  className={cn(inputCls, !form.source && "border-amber-300 focus:ring-amber-300/30")}
                 >
                   <option value="">— Chọn nguồn —</option>
                   {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -813,10 +831,9 @@ export function LeadsTab({
                 </select>
               </FormRow>
               <FormRow label="Gói tập đăng ký">
-                <input
-                  value={form.packageRegistered ?? ""}
-                  onChange={e => setForm(f => ({ ...f, packageRegistered: e.target.value }))}
-                  className={inputCls}
+                <PackageMultiSelect
+                  value={parsePackageList(form.packageRegistered)}
+                  onChange={pkgs => setForm(f => ({ ...f, packageRegistered: serializePackageList(pkgs) || null }))}
                 />
               </FormRow>
               <div className="grid grid-cols-2 gap-3">
@@ -873,9 +890,10 @@ export function LeadsTab({
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
               <button
                 onClick={handleSave}
-                disabled={saving}
-                className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-60"
+                disabled={saving || !form.source}
+                className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-50"
                 style={{ backgroundColor: "#f15b5c" }}
+                title={!form.source ? "Vui lòng chọn Phân nguồn trước" : undefined}
               >
                 {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Thêm mới"}
               </button>
@@ -1034,6 +1052,96 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
     <div className="space-y-1.5">
       <label className="text-sm font-semibold text-gray-700">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// ── Package Multi-Select ──────────────────────────────────────────────────────
+
+function PackageMultiSelect({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasL1 = value.includes("L1");
+  const hasL2 = value.includes("L2");
+  const hasConflict = hasL1 && hasL2;
+
+  function toggle(pkg: string) {
+    if (value.includes(pkg)) {
+      onChange(value.filter(p => p !== pkg));
+    } else {
+      onChange([...value, pkg]);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          inputCls,
+          "flex items-center justify-between cursor-pointer text-left px-3",
+          hasConflict && "border-red-400"
+        )}
+      >
+        <span className={cn("truncate", value.length === 0 ? "text-gray-400" : "text-gray-800")}>
+          {value.length === 0 ? "— Chọn gói tập —" : value.join(", ")}
+        </span>
+        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop to close dropdown */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white rounded-xl border border-gray-200 shadow-lg p-2 space-y-0.5">
+            {PACKAGE_OPTIONS.map(pkg => {
+              const isSelected = value.includes(pkg);
+              const isDisabled = (pkg === "L2" && hasL1) || (pkg === "L1" && hasL2);
+              return (
+                <label
+                  key={pkg}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors select-none",
+                    isDisabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "cursor-pointer hover:bg-gray-50",
+                    isSelected && !isDisabled ? "bg-[#f15b5c]/5" : ""
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    disabled={isDisabled}
+                    onChange={() => { if (!isDisabled) toggle(pkg); }}
+                    className="accent-[#f15b5c] w-4 h-4"
+                  />
+                  <span className={cn(
+                    "text-sm font-semibold",
+                    isSelected ? "text-[#f15b5c]" : "text-gray-700"
+                  )}>
+                    {pkg}
+                  </span>
+                  {isDisabled && (
+                    <span className="text-[10px] text-gray-400 ml-auto">Không thể chọn chung</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {hasConflict && (
+        <p className="text-xs text-red-500 mt-1 font-semibold">
+          ⚠️ Gói L1 và L2 không được phép đăng ký cùng lúc
+        </p>
+      )}
     </div>
   );
 }
