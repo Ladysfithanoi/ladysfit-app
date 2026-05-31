@@ -99,6 +99,11 @@ export function Step1Info({
   const info = consultation.info as Record<string, unknown> | null;
   const formRef = useRef<HTMLFormElement>(null);
 
+  // After completion the profile is read-only, but the CIF parameters can still be
+  // unlocked for editing via the "Chỉnh sửa thông số CIF" button (edit mode).
+  const [editing, setEditing] = useState(false);
+  const fieldsDisabled = isReadOnly && !editing;
+
   const [branchId, setBranchId] = useState(consultation.branchId ?? "");
   const [createdById, setCreatedById] = useState(consultation.createdById ?? "");
   const [height, setHeight] = useState<string>((info?.height as string | number | undefined)?.toString() ?? "");
@@ -183,6 +188,20 @@ export function Step1Info({
     setSubmitting(false);
   }
 
+  // Save CIF edits on an already-completed consultation (does not change status).
+  async function handleSaveEdit() {
+    const fd = new FormData(formRef.current!);
+    if (!fd.get("fullName") || !fd.get("phone")) {
+      setValidationError("Vui lòng điền họ tên và số điện thoại");
+      return;
+    }
+    setValidationError("");
+    setSubmitting(true);
+    await onDraft(buildPayload());
+    setSubmitting(false);
+    setEditing(false);
+  }
+
   const defaultConsultDate = info?.consultDate
     ? isoToDMY(info.consultDate as string)
     : isoToDMY(new Date().toISOString());
@@ -195,7 +214,7 @@ export function Step1Info({
         <div className="flex flex-col sm:flex-row gap-4 w-full">
           <div className="w-full sm:w-1/2">
             <Field label="Cơ sở đăng ký" required>
-              <select value={branchId} onChange={(e) => { setBranchId(e.target.value); setCreatedById(""); }} disabled={isReadOnly} className={selectCls}>
+              <select value={branchId} onChange={(e) => { setBranchId(e.target.value); setCreatedById(""); }} disabled={fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn cơ sở —</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -203,7 +222,7 @@ export function Step1Info({
           </div>
           <div className="w-full sm:w-1/2">
             <Field label="Nhân sự phụ trách" required>
-              <select value={createdById} onChange={(e) => setCreatedById(e.target.value)} disabled={(!isAdmin && !isFM) || isReadOnly} className={selectCls}>
+              <select value={createdById} onChange={(e) => setCreatedById(e.target.value)} disabled={(!isAdmin && !isFM) || fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn nhân sự —</option>
                 {filteredStaff.map((s) => <option key={s.id} value={s.id}>{s.name ?? s.email}</option>)}
               </select>
@@ -218,26 +237,26 @@ export function Step1Info({
         <div className="p-5 space-y-3">
           <Row half>
             <Field label="Họ & tên" required>
-              <input name="fullName" defaultValue={(info?.fullName as string) ?? ""} disabled={isReadOnly} placeholder="Nguyễn Thị A" className={inputCls} />
+              <input name="fullName" defaultValue={(info?.fullName as string) ?? ""} disabled={fieldsDisabled} placeholder="Nguyễn Thị A" className={inputCls} />
             </Field>
             <Field label="Điện thoại" required>
-              <input name="phone" defaultValue={(info?.phone as string) ?? ""} disabled={isReadOnly} placeholder="09xxxxxxxx" className={inputCls} />
+              <input name="phone" defaultValue={(info?.phone as string) ?? ""} disabled={fieldsDisabled} placeholder="09xxxxxxxx" className={inputCls} />
             </Field>
           </Row>
           <Row half>
             <Field label="Địa chỉ">
-              <input name="address" defaultValue={(info?.address as string) ?? ""} disabled={isReadOnly} placeholder="Số nhà, đường, quận..." className={inputCls} />
+              <input name="address" defaultValue={(info?.address as string) ?? ""} disabled={fieldsDisabled} placeholder="Số nhà, đường, quận..." className={inputCls} />
             </Field>
             <Field label="Email">
-              <input name="email" type="email" defaultValue={(info?.email as string) ?? ""} disabled={isReadOnly} placeholder="khachhang@email.com" className={inputCls} />
+              <input name="email" type="email" defaultValue={(info?.email as string) ?? ""} disabled={fieldsDisabled} placeholder="khachhang@email.com" className={inputCls} />
             </Field>
           </Row>
           <Row half>
             <Field label="Ngày sinh">
-              <input type="date" lang="vi" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={isReadOnly} className={inputCls} />
+              <input type="date" lang="vi" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={fieldsDisabled} className={inputCls} />
             </Field>
             <Field label="Ngày tư vấn (dd/mm/yyyy)">
-              <input name="consultDate" defaultValue={defaultConsultDate} disabled={isReadOnly} placeholder="dd/mm/yyyy" className={inputCls} />
+              <input name="consultDate" defaultValue={defaultConsultDate} disabled={fieldsDisabled} placeholder="dd/mm/yyyy" className={inputCls} />
             </Field>
           </Row>
         </div>
@@ -251,13 +270,13 @@ export function Step1Info({
         <div className="p-5 space-y-3">
           <Row half>
             <Field label="Biết LDF qua đâu?">
-              <select name="knowLDFVia" defaultValue={(info?.knowLDFVia as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+              <select name="knowLDFVia" defaultValue={(info?.knowLDFVia as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn —</option>
                 {["Walk-in", "Referral", "Thương hiệu cá nhân", "Bạn bè", "Tivi", "Hội viên cũ", "Website", "Báo, tạp chí", "Biển hiệu", "Facebook", "Tờ rơi", "Tiktok", "Instagram", "Thread", "Referral.PT"].map((v) => <option key={v}>{v}</option>)}
               </select>
             </Field>
             <Field label="Tình trạng gia đình">
-              <select name="familyStatus" defaultValue={(info?.familyStatus as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+              <select name="familyStatus" defaultValue={(info?.familyStatus as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn —</option>
                 {["Độc thân", "Đã lập gia đình nhưng chưa có con", "Đã lập gia đình và đã có con"].map((v) => <option key={v}>{v}</option>)}
               </select>
@@ -276,13 +295,13 @@ export function Step1Info({
                 type="number" step="0.1"
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
-                disabled={isReadOnly}
+                disabled={fieldsDisabled}
                 placeholder="158"
                 className={inputCls}
               />
             </Field>
             <Field label="Cân nặng hiện tại (kg)" required>
-              <input name="currentWeight" type="number" step="0.1" defaultValue={(info?.currentWeight as string | number | undefined)?.toString() ?? ""} disabled={isReadOnly} placeholder="68" className={inputCls} />
+              <input name="currentWeight" type="number" step="0.1" defaultValue={(info?.currentWeight as string | number | undefined)?.toString() ?? ""} disabled={fieldsDisabled} placeholder="68" className={inputCls} />
             </Field>
           </Row>
           {idealLow && (
@@ -291,21 +310,21 @@ export function Step1Info({
             </p>
           )}
           <Field label="Mục tiêu của bạn">
-            <input name="goalDescription" defaultValue={(info?.goalDescription as string) ?? ""} disabled={isReadOnly} placeholder="VD: Giảm 20kg, Săn chắc cơ thể, Cải thiện sức khỏe..." className={inputCls} />
+            <input name="goalDescription" defaultValue={(info?.goalDescription as string) ?? ""} disabled={fieldsDisabled} placeholder="VD: Giảm 20kg, Săn chắc cơ thể, Cải thiện sức khỏe..." className={inputCls} />
           </Field>
           <Row half>
             <Field label="Cân nặng mục tiêu (kg)">
-              <input name="targetWeight" type="number" step="0.1" defaultValue={(info?.targetWeight as string | number | undefined)?.toString() ?? ""} disabled={isReadOnly} placeholder="55" className={inputCls} />
+              <input name="targetWeight" type="number" step="0.1" defaultValue={(info?.targetWeight as string | number | undefined)?.toString() ?? ""} disabled={fieldsDisabled} placeholder="55" className={inputCls} />
             </Field>
             <Field label="Bạn muốn đạt mục tiêu này trong vòng bao lâu?">
-              <input name="timeToAchieve" defaultValue={(info?.timeToAchieve as string) ?? ""} disabled={isReadOnly} placeholder="3 tháng, 6 tháng..." className={inputCls} />
+              <input name="timeToAchieve" defaultValue={(info?.timeToAchieve as string) ?? ""} disabled={fieldsDisabled} placeholder="3 tháng, 6 tháng..." className={inputCls} />
             </Field>
           </Row>
           <Field label="Bạn đã suy nghĩ về mục tiêu này bao lâu rồi mà chưa đạt được?">
-            <input name="previousAttempts" defaultValue={(info?.previousAttempts as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="previousAttempts" defaultValue={(info?.previousAttempts as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Field label="Cảm xúc của bạn thế nào về cân nặng hiện tại?">
-            <textarea name="currentFeeling" rows={2} defaultValue={(info?.currentFeeling as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="currentFeeling" rows={2} defaultValue={(info?.currentFeeling as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
         </div>
       </div>
@@ -317,19 +336,19 @@ export function Step1Info({
         </div>
         <div className="p-5 space-y-3">
           <Field label="Tại sao bạn quyết định tập để thay đổi vóc dáng vào thời điểm này?">
-            <textarea name="whyNow" rows={2} defaultValue={(info?.whyNow as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="whyNow" rows={2} defaultValue={(info?.whyNow as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label="Gia đình có ủng hộ mình thay đổi vóc dáng không?">
-            <select name="familySupport" defaultValue={(info?.familySupport as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+            <select name="familySupport" defaultValue={(info?.familySupport as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
               <option value="">— Chọn —</option>
               {["Có", "Không", "Chưa biết"].map((v) => <option key={v}>{v}</option>)}
             </select>
           </Field>
           <Field label={`Mức độ quyết tâm thay đổi vóc dáng: ${motivationLevel}/10`}>
-            <Slider value={motivationLevel} onChange={setMotivationLevel} disabled={isReadOnly} />
+            <Slider value={motivationLevel} onChange={setMotivationLevel} disabled={fieldsDisabled} />
           </Field>
           <Field label="Có rào cản nào ngăn cản bạn đến với việc tập luyện không?">
-            <textarea name="barriers" rows={2} defaultValue={(info?.barriers as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="barriers" rows={2} defaultValue={(info?.barriers as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
         </div>
       </div>
@@ -341,36 +360,36 @@ export function Step1Info({
         </div>
         <div className="p-5 space-y-3">
           <Field label="Kinh nghiệm tập luyện">
-            <textarea name="exerciseExperience" rows={2} defaultValue={(info?.exerciseExperience as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="exerciseExperience" rows={2} defaultValue={(info?.exerciseExperience as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label="Chế độ ăn đang áp dụng">
-            <input name="currentDiet" defaultValue={(info?.currentDiet as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="currentDiet" defaultValue={(info?.currentDiet as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Row half>
             <Field label="Số bữa ăn/ngày">
-              <input name="mealsPerDay" type="number" min={1} max={10} defaultValue={(info?.mealsPerDay as string | number | undefined)?.toString() ?? ""} disabled={isReadOnly} placeholder="3" className={inputCls} />
+              <input name="mealsPerDay" type="number" min={1} max={10} defaultValue={(info?.mealsPerDay as string | number | undefined)?.toString() ?? ""} disabled={fieldsDisabled} placeholder="3" className={inputCls} />
             </Field>
             <Field label="Số buổi tập/tuần">
-              <input name="workoutsPerWeek" type="number" min={0} max={14} defaultValue={(info?.workoutsPerWeek as string | number | undefined)?.toString() ?? ""} disabled={isReadOnly} placeholder="4" className={inputCls} />
+              <input name="workoutsPerWeek" type="number" min={0} max={14} defaultValue={(info?.workoutsPerWeek as string | number | undefined)?.toString() ?? ""} disabled={fieldsDisabled} placeholder="4" className={inputCls} />
             </Field>
           </Row>
           <Field label="Những bữa đó thường ăn gì?">
-            <textarea name="typicalMeals" rows={2} defaultValue={(info?.typicalMeals as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="typicalMeals" rows={2} defaultValue={(info?.typicalMeals as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label="Ngoài bữa chính thì có ăn gì khác không?">
-            <input name="snacking" defaultValue={(info?.snacking as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="snacking" defaultValue={(info?.snacking as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Field label="Có hay đi ăn ngoài không?">
-            <input name="diningOut" defaultValue={(info?.diningOut as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="diningOut" defaultValue={(info?.diningOut as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Field label="Thích hoặc ghét món ăn nào?">
-            <input name="foodPreferences" defaultValue={(info?.foodPreferences as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="foodPreferences" defaultValue={(info?.foodPreferences as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Field label="Dị ứng thực phẩm?">
-            <input name="foodAllergies" defaultValue={(info?.foodAllergies as string) ?? ""} disabled={isReadOnly} className={inputCls} />
+            <input name="foodAllergies" defaultValue={(info?.foodAllergies as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
           </Field>
           <Field label="Có thể tập vào thời gian nào?">
-            <input name="availableTime" defaultValue={(info?.availableTime as string) ?? ""} disabled={isReadOnly} placeholder="Sáng sớm, buổi tối..." className={inputCls} />
+            <input name="availableTime" defaultValue={(info?.availableTime as string) ?? ""} disabled={fieldsDisabled} placeholder="Sáng sớm, buổi tối..." className={inputCls} />
           </Field>
         </div>
       </div>
@@ -380,16 +399,16 @@ export function Step1Info({
         <SectionHeader>Đặc điểm công việc, lối sống & bệnh lý</SectionHeader>
         <div className="p-5 space-y-3">
           <Field label="Bệnh lý cần lưu tâm (huyết áp, tim mạch, xương khớp...)">
-            <textarea name="healthConditions" rows={2} defaultValue={(info?.healthConditions as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="healthConditions" rows={2} defaultValue={(info?.healthConditions as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label="Chấn thương (đau mỏi gáy, thắt lưng, giãn tĩnh mạch...)">
-            <textarea name="injuries" rows={2} defaultValue={(info?.injuries as string) ?? ""} disabled={isReadOnly} className={textareaCls} />
+            <textarea name="injuries" rows={2} defaultValue={(info?.injuries as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label={`Mức độ căng thẳng trong cuộc sống: ${stressLevel}/10`}>
-            <Slider value={stressLevel} onChange={setStressLevel} disabled={isReadOnly} />
+            <Slider value={stressLevel} onChange={setStressLevel} disabled={fieldsDisabled} />
           </Field>
           <Field label="Chất lượng giấc ngủ">
-            <select name="sleepQuality" defaultValue={(info?.sleepQuality as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+            <select name="sleepQuality" defaultValue={(info?.sleepQuality as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
               <option value="">— Chọn —</option>
               {["Tốt", "Bình thường", "Khó ngủ", "Mất ngủ"].map((v) => <option key={v}>{v}</option>)}
             </select>
@@ -402,19 +421,19 @@ export function Step1Info({
         <SectionHeader>Mong muốn của bản thân</SectionHeader>
         <div className="p-5 space-y-3">
           <Field label="Bạn đang mong muốn gì ở một gói tập PT hiện tại?">
-            <select name="desiredPackage" defaultValue={(info?.desiredPackage as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+            <select name="desiredPackage" defaultValue={(info?.desiredPackage as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
               <option value="">— Chọn —</option>
               {["Tập PT từ đầu đến lúc đẹp", "Tập PT một thời gian rồi sau tự tập", "Tập một gói tập tiết kiệm nhất có thể"].map((v) => <option key={v}>{v}</option>)}
             </select>
           </Field>
           <Field label="Gói tập sẽ tự chi trả hay được gia đình hỗ trợ?">
-            <select name="whoPaysBill" defaultValue={(info?.whoPaysBill as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+            <select name="whoPaysBill" defaultValue={(info?.whoPaysBill as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
               <option value="">— Chọn —</option>
               {["Tự chi trả", "Gia đình hỗ trợ một phần", "Gia đình hỗ trợ toàn phần"].map((v) => <option key={v}>{v}</option>)}
             </select>
           </Field>
           <Field label="Mức chi phí mong muốn">
-            <select name="budget" defaultValue={(info?.budget as string) ?? ""} disabled={isReadOnly} className={selectCls}>
+            <select name="budget" defaultValue={(info?.budget as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
               <option value="">— Chọn —</option>
               {["Dưới 10 triệu", "10–20 triệu", "20–30 triệu", "30–50 triệu", "Trên 50 triệu"].map((v) => <option key={v}>{v}</option>)}
             </select>
@@ -449,6 +468,43 @@ export function Step1Info({
           >
             {submitting ? "Đang lưu..." : "Lưu & Tiếp tục →"}
           </button>
+        </div>
+      )}
+
+      {/* Post-completion CIF edit — unlock & save without changing status */}
+      {isReadOnly && (
+        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+          {!editing ? (
+            canSaveAndContinue && (
+              <button
+                type="button"
+                onClick={() => { setValidationError(""); setEditing(true); }}
+                className="py-3 px-5 rounded-xl border border-[#f15b5c] text-sm font-bold text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors w-full sm:w-auto"
+              >
+                Chỉnh sửa thông số CIF
+              </button>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { setValidationError(""); setEditing(false); }}
+                disabled={submitting}
+                className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 w-full sm:w-auto"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={submitting}
+                className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {submitting ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </>
+          )}
         </div>
       )}
     </form>

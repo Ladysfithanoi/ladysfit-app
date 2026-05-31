@@ -59,24 +59,32 @@ export function ConsultationWizard({
   const [step, setStep] = useState(initial.currentStep);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const isReadOnly = consultation.status === "COMPLETED";
   const canSaveAndContinue = ['ADMIN', 'FM', 'PT'].includes(userRole ?? 'PT');
 
   const save = useCallback(async (payload: Record<string, unknown>, nextStep?: number) => {
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch(`/api/consultation/${consultation.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, step: nextStep ?? step }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setConsultation((prev) => ({ ...prev, ...data }));
-        setSavedAt(new Date());
-        if (nextStep) setStep(nextStep);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError((data && data.error) || `Lưu thất bại (mã ${res.status}). Vui lòng thử lại.`);
+        return false;
       }
+      if (data) setConsultation((prev) => ({ ...prev, ...data }));
+      setSavedAt(new Date());
+      if (nextStep) setStep(nextStep);
+      return true;
+    } catch {
+      setError("Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -92,6 +100,7 @@ export function ConsultationWizard({
   }
 
   function handlePrev() {
+    setError(null);
     setStep((s) => Math.max(s - 1, 1));
   }
 
@@ -141,7 +150,7 @@ export function ConsultationWizard({
               <div key={n} className="flex items-center flex-1 last:flex-none">
                 <button
                   type="button"
-                  onClick={() => isAccessible && setStep(n)}
+                  onClick={() => { if (isAccessible) { setError(null); setStep(n); } }}
                   title={isLocked ? "Hoàn thành bước trước để tiếp tục" : undefined}
                   className={cn(
                     "flex flex-col items-center gap-1.5 flex-shrink-0",
@@ -177,6 +186,20 @@ export function ConsultationWizard({
           })}
         </div>
       </div>
+
+      {/* Save error */}
+      {error && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-600">{error}</p>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs font-bold text-red-400 hover:text-red-600 shrink-0"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
 
       {/* Step content */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
