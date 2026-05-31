@@ -213,8 +213,8 @@ function getAvailablePackages(
   if (hasL1orL2) {
     note = "ℹ️ Đã sử dụng gói Giai đoạn 1";
   } else if (eligibleL2) {
-    names = ["L2", ...names];
-    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 6 kg)`;
+    names = ["L1", "L2", ...names];
+    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 6 kg) — có thể chọn L1 hoặc L2`;
     noteOk = true;
   } else if (eligibleL1) {
     names = ["L1", ...names];
