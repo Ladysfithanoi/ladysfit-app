@@ -5,6 +5,9 @@ import Link from "next/link";
 import { Search, ChevronRight, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { Pagination } from "@/components/ui/pagination";
+
+const PAGE_SIZE = 5;
 
 type Branch = { id: string; name: string };
 type PT = { id: string; name: string | null; branchId: string | null; role: string; managedBranches?: { branchId: string }[] };
@@ -236,6 +239,17 @@ export function ClientsPageClient({
     });
   }, [clients, activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
 
+  // Pagination — max PAGE_SIZE rows per page
+  const [page, setPage] = useState(1);
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
+  const safePage = Math.min(page, pageCount || 1);
+  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Reset to first page whenever the result set changes (tab switch / filtering)
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
+
   return (
     <>
       {/* Header */}
@@ -402,7 +416,7 @@ export function ClientsPageClient({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => (
+                {pageRows.map((c) => (
                   <tr
                     key={c.id}
                     className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle"
@@ -419,7 +433,7 @@ export function ClientsPageClient({
                           )}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-gray-800">{c.fullName}</p>
+                          <p className="text-sm font-semibold text-gray-800 whitespace-nowrap">{c.fullName}</p>
                           <div className="flex items-center gap-1 mt-0.5">
                             {c.foodLogToday && (
                               <span title="Đã ghi nhật ký ăn uống hôm nay" className="text-xs leading-none">🍽️</span>
@@ -510,6 +524,16 @@ export function ClientsPageClient({
               </tbody>
             </table>
           </div>
+        )}
+        {filtered.length > 0 && (
+          <Pagination
+            page={safePage}
+            pageCount={pageCount}
+            total={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemLabel="khách hàng"
+          />
         )}
       </div>
 

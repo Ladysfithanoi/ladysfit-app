@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, ChevronRight, ClipboardList, Search, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { Pagination } from "@/components/ui/pagination";
+
+const PAGE_SIZE = 5;
 
 type Branch = { id: string; name: string };
 type Staff = { id: string; name: string | null; email: string; branchId: string | null };
@@ -150,6 +153,17 @@ export function ConsultationListClient({
   const displayed = filtered.filter((c) => c.status === tab);
   const draftCount = filtered.filter((c) => c.status === "DRAFT").length;
   const completedCount = filtered.filter((c) => c.status === "COMPLETED").length;
+
+  // Pagination — max PAGE_SIZE rows per page
+  const [page, setPage] = useState(1);
+  const pageCount = Math.ceil(displayed.length / PAGE_SIZE);
+  const safePage = Math.min(page, pageCount || 1);
+  const pageRows = displayed.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Reset to first page whenever the result set changes (tab switch / filtering)
+  useEffect(() => {
+    setPage(1);
+  }, [tab, phoneSearch, ptFilter, branchFilter, dateFrom, dateTo]);
 
   async function handleCreate() {
     setCreating(true);
@@ -356,7 +370,7 @@ export function ConsultationListClient({
                 </tr>
               </thead>
               <tbody>
-                {displayed.map((c) => (
+                {pageRows.map((c) => (
                   <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle">
                     <td className="px-5 py-3.5 min-w-[180px]">
                       <div className="flex items-center gap-2.5">
@@ -365,7 +379,7 @@ export function ConsultationListClient({
                             {(c.info?.fullName || "?")[0].toUpperCase()}
                           </span>
                         </div>
-                        <p className="text-sm font-semibold text-gray-800">
+                        <p className="text-sm font-semibold text-gray-800 whitespace-nowrap">
                           {c.info?.fullName || <span className="text-gray-300 italic">Chưa có tên</span>}
                         </p>
                       </div>
@@ -398,6 +412,16 @@ export function ConsultationListClient({
               </tbody>
             </table>
           </div>
+        )}
+        {displayed.length > 0 && (
+          <Pagination
+            page={safePage}
+            pageCount={pageCount}
+            total={displayed.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemLabel="hồ sơ"
+          />
         )}
       </div>
 
