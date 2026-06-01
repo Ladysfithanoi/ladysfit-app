@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { WeightChart, WeekDayData } from "./weight-chart";
 import { FMPTSessions } from "./fm-pt-sessions";
 import { RecentTransformsTable } from "./recent-transforms-table";
+import { BranchPerformance } from "./branch-performance";
+import { TransformStats } from "./transform-stats";
 
 export type AdminStats = {
   totalClients: number;
@@ -27,14 +29,13 @@ export type AdminStats = {
     lostKg: number;
     updatedAt: string;
   }[];
+  transformEvents: {
+    branchId: string;
+    branchName: string;
+    date: string;
+  }[];
   weeklyChart: WeekDayData[];
 };
-
-function rateStyle(rate: number) {
-  if (rate < 30) return { text: "text-red-500", bg: "bg-red-50" };
-  if (rate <= 60) return { text: "text-orange-500", bg: "bg-orange-50" };
-  return { text: "text-green-600", bg: "bg-green-50" };
-}
 
 export function AdminDashboard({
   stats,
@@ -120,81 +121,13 @@ export function AdminDashboard({
       </div>
 
       {/* Branch performance */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
-          <Building2 className="w-4 h-4 text-[#f15b5c]" />
-          <h2 className="text-base font-extrabold text-gray-900">Hiệu quả theo cơ sở</h2>
-        </div>
-        {stats.branchStats.length === 0 ? (
-          <div className="py-14 flex items-center justify-center">
-            <p className="text-sm text-gray-300 font-semibold">Chưa có dữ liệu</p>
-          </div>
-        ) : (
-          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-50 bg-gray-50/50">
-                  {["Cơ sở", "Số PT", "Tổng KH", "Đang tập", "Đã Transform", "Tỉ lệ Transform"].map(
-                    (h, i) => (
-                      <th
-                        key={h}
-                        className={cn(
-                          "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
-                          i === 0 ? "text-left" : "text-center"
-                        )}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {stats.branchStats.map((b) => {
-                  const rs = rateStyle(b.transformRate);
-                  return (
-                    <tr
-                      key={b.id}
-                      className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors"
-                    >
-                      <td className="px-5 py-3.5">
-                        <p className="text-sm font-semibold text-gray-800">{b.name}</p>
-                      </td>
-                      <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-700">
-                        {b.ptCount}
-                      </td>
-                      <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-700">
-                        {b.totalKH}
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-50 text-green-700 min-w-[2rem]">
-                          {b.activeKH}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#f15b5c]/10 text-[#f15b5c] min-w-[2rem]">
-                          {b.transformedKH}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span
-                          className={cn(
-                            "inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-extrabold min-w-[3.5rem]",
-                            rs.bg,
-                            rs.text
-                          )}
-                        >
-                          {b.totalKH > 0 ? `${b.transformRate.toFixed(0)}%` : "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <BranchPerformance branchStats={stats.branchStats} />
+
+      {/* Transform statistics over time (total + per-branch + month/quarter) */}
+      <TransformStats
+        events={stats.transformEvents}
+        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
+      />
 
       {/* FM-only: PT session statistics */}
       {isFM && (

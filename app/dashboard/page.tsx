@@ -110,6 +110,28 @@ export default async function DashboardPage() {
 
     const transformed = allClients.filter((c) => c.initialWeight - c.currentWeight >= 7);
 
+    // Determine WHEN each transformed client first reached ≥ 7 kg loss, so transforms
+    // can be grouped by month / quarter. Fall back to updatedAt if no weight log crossed.
+    const transformedIds = transformed.map((c) => c.id);
+    const transformLogs =
+      transformedIds.length > 0
+        ? await prisma.weightLog.findMany({
+            where: { clientId: { in: transformedIds } },
+            select: { clientId: true, date: true, weight: true },
+            orderBy: { date: "asc" },
+          })
+        : [];
+
+    const transformedById = new Map(transformed.map((c) => [c.id, c]));
+    const firstTransformDate = new Map<string, Date>();
+    for (const log of transformLogs) {
+      if (firstTransformDate.has(log.clientId)) continue;
+      const c = transformedById.get(log.clientId);
+      if (c && c.initialWeight - log.weight >= 7) {
+        firstTransformDate.set(log.clientId, log.date);
+      }
+    }
+
     const stats: AdminStats = {
       totalClients: allClients.length,
       activeClients: allClients.filter((c) => c.status === "ACTIVE").length,
@@ -135,6 +157,11 @@ export default async function DashboardPage() {
         ptName: c.assignedPT.name ?? c.assignedPT.email,
         lostKg: c.initialWeight - c.currentWeight,
         updatedAt: c.updatedAt.toISOString(),
+      })),
+      transformEvents: transformed.map((c) => ({
+        branchId: c.branchId,
+        branchName: c.branch.name,
+        date: (firstTransformDate.get(c.id) ?? c.updatedAt).toISOString(),
       })),
       weeklyChart: getLast8WeeksData(chartLogs),
     };
