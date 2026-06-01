@@ -49,6 +49,12 @@ function computeWeekDates(year: number, month: number, weekNumber: number) {
   weekStart.setDate(firstMon.getDate() + (weekNumber - 1) * 7);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
+  // The final reporting week (5) always ends on the last calendar day of the month;
+  // also clamp any earlier week that would spill past month-end (short months).
+  const lastDay = new Date(year, month, 0);
+  if (weekNumber === 5 || weekEnd > lastDay) {
+    weekEnd.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
+  }
   return { weekStart, weekEnd };
 }
 
@@ -418,7 +424,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                       const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
                       return (
                         <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                          <div>W{w} ĐẠT</div>
+                          <div>W{w}</div>
+                          <div className="text-[9px] font-bold text-gray-400 normal-case">MT · Đạt</div>
                           <div className="text-[10px] font-normal text-gray-400 normal-case">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
                           <button onClick={() => openWeeklyEdit(myTarget.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
                         </th>
@@ -431,18 +438,26 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                 <tbody>
                   {KPI_KEYS.map((k) => {
                     const monthTarget = myTarget[k.targetKey as keyof MonthlyTarget] as number;
-                    const weekActuals = WEEKS.map((w) => {
+                    const weekData = WEEKS.map((w) => {
                       const wa = myTarget.weeklyActuals.find((a) => a.weekNumber === w);
-                      return (wa?.[k.actualKey as keyof typeof wa] as number) ?? 0;
+                      return {
+                        target: (wa?.[k.targetKey as keyof typeof wa] as number) ?? 0,
+                        actual: (wa?.[k.actualKey as keyof typeof wa] as number) ?? 0,
+                      };
                     });
-                    const monthActual = weekActuals.reduce((s, v) => s + v, 0);
+                    const monthActual = weekData.reduce((s, d) => s + d.actual, 0);
                     const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                     return (
                       <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
                         <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10 bg-white">{k.label}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
-                        {weekActuals.map((v, i) => (
-                          <td key={i} className="px-3 py-2 text-center text-gray-700">{k.isFloat ? v.toFixed(1) : v}</td>
+                        {weekData.map((d, i) => (
+                          <td key={i} className="px-3 py-2 text-center">
+                            <div className="flex flex-col leading-tight">
+                              <span className="text-[11px] text-gray-400">{k.isFloat ? d.target.toFixed(1) : d.target}</span>
+                              <span className="font-semibold text-gray-700">{k.isFloat ? d.actual.toFixed(1) : d.actual}</span>
+                            </div>
+                          </td>
                         ))}
                         <td className="px-3 py-2 text-center font-bold text-gray-800">
                           {k.isFloat ? monthActual.toFixed(1) : monthActual}
@@ -642,7 +657,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     const { weekStart: ws, weekEnd: we } = computeWeekDates(year, month, w);
                     return (
                       <th key={w} className="px-3 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">
-                        <div>W{w} ĐẠT</div>
+                        <div>W{w}</div>
+                        <div className="text-[9px] font-bold text-gray-400 normal-case">MT · Đạt</div>
                         <div className="text-[10px] font-normal text-gray-400 normal-case">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
                         {!isReadOnly && (
                           <button onClick={() => openWeeklyEdit(t.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
@@ -657,18 +673,26 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               <tbody>
                 {KPI_KEYS.map((k) => {
                   const monthTarget = t[k.targetKey as keyof MonthlyTarget] as number;
-                  const weekActuals = WEEKS.map((w) => {
+                  const weekData = WEEKS.map((w) => {
                     const wa = t.weeklyActuals.find((a) => a.weekNumber === w);
-                    return (wa?.[k.actualKey as keyof typeof wa] as number) ?? 0;
+                    return {
+                      target: (wa?.[k.targetKey as keyof typeof wa] as number) ?? 0,
+                      actual: (wa?.[k.actualKey as keyof typeof wa] as number) ?? 0,
+                    };
                   });
-                  const monthActual = weekActuals.reduce((s, v) => s + v, 0);
+                  const monthActual = weekData.reduce((s, d) => s + d.actual, 0);
                   const achievement = monthTarget > 0 ? Math.round((monthActual / monthTarget) * 100) : 0;
                   return (
                     <tr key={k.key} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
                       <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10 bg-white">{k.label}</td>
                       <td className="px-3 py-2 text-center text-gray-500">{monthTarget}</td>
-                      {weekActuals.map((v, i) => (
-                        <td key={i} className="px-3 py-2 text-center text-gray-700">{k.isFloat ? v.toFixed(1) : v}</td>
+                      {weekData.map((d, i) => (
+                        <td key={i} className="px-3 py-2 text-center">
+                          <div className="flex flex-col leading-tight">
+                            <span className="text-[11px] text-gray-400">{k.isFloat ? d.target.toFixed(1) : d.target}</span>
+                            <span className="font-semibold text-gray-700">{k.isFloat ? d.actual.toFixed(1) : d.actual}</span>
+                          </div>
+                        </td>
                       ))}
                       <td className="px-3 py-2 text-center font-bold text-gray-800">
                         {k.isFloat ? monthActual.toFixed(1) : monthActual}

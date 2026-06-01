@@ -8,12 +8,18 @@ function computeWeekBounds(year: number, month: number) {
   const dow = d.getDay() || 7;
   const firstMon = new Date(d);
   firstMon.setDate(d.getDate() - dow + 1);
+  const lastDay = new Date(year, month, 0);
   return [1, 2, 3, 4, 5].map((w) => {
     const start = new Date(firstMon);
     start.setDate(firstMon.getDate() + (w - 1) * 7);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
+    // The final reporting week (5) always ends on the last calendar day of the month;
+    // clamp any earlier week that spills past month-end too.
+    if (w === 5 || end > lastDay) {
+      end.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
+    }
     end.setHours(23, 59, 59, 999);
     return { weekNumber: w, weekStart: start.toISOString(), weekEnd: end.toISOString() };
   });

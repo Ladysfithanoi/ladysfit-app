@@ -9,6 +9,13 @@ function computeWeekDates(year: number, month: number, weekNumber: number) {
   weekStart.setDate(firstMon.getDate() + (weekNumber - 1) * 7);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
+  // The final reporting week (5) always ends on the last calendar day of the month,
+  // so revenue signed at month-end is captured. Clamp earlier overflow weeks too.
+  const lastDay = new Date(year, month, 0);
+  if (weekNumber === 5 || weekEnd > lastDay) {
+    weekEnd.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
+  }
+  weekEnd.setHours(23, 59, 59, 999);
   return { weekStart, weekEnd };
 }
 
