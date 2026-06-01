@@ -15,7 +15,7 @@ export async function GET() {
   const alerts = await prisma.performanceAlert.findMany({
     where: isFM ? { client: { branchId: { in: managedBranchIds } } } : {},
     include: {
-      client: { select: { id: true, fullName: true, branchId: true } },
+      client: { select: { id: true, fullName: true, branchId: true, branch: { select: { id: true, name: true } } } },
       pt: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -34,6 +34,8 @@ export async function GET() {
       isRead: a.isRead,
       createdAt: a.createdAt.toISOString(),
       client: a.client,
+      branchId: a.client.branchId,
+      branchName: a.client.branch?.name ?? "—",
       pt: a.pt,
     }))
   );

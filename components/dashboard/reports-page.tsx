@@ -42,8 +42,12 @@ type AlertRow = {
   isRead: boolean;
   createdAt: string;
   client: { id: string; fullName: string };
+  branchId: string;
+  branchName: string;
   pt: { id: string; name: string | null };
 };
+
+const ALERT_PAGE_SIZE = 10;
 
 const ALERT_LABEL: Record<string, string> = {
   SLOW_PROGRESS: "Tiến độ chậm",
@@ -72,6 +76,12 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   const [ptBranch, setPtBranch] = useState("");
   const [ptPage, setPtPage] = useState(1);
 
+  // Alert history filters + pagination
+  const [alertSearch, setAlertSearch] = useState("");
+  const [alertBranch, setAlertBranch] = useState("");
+  const [alertType, setAlertType] = useState("");
+  const [alertPage, setAlertPage] = useState(1);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -90,6 +100,7 @@ export function ReportsPage({ userRole }: { userRole: string }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => { setPtPage(1); }, [ptSearch, ptBranch]);
+  useEffect(() => { setAlertPage(1); }, [alertSearch, alertBranch, alertType]);
 
   async function runCheck() {
     setRunning(true);
@@ -122,6 +133,23 @@ export function ReportsPage({ userRole }: { userRole: string }) {
     );
   }, [ptRows, ptSearch, ptBranch]);
 
+  // Alert history: branch options + filtered list
+  const alertBranchOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    alerts.forEach((a) => { if (a.branchId) map.set(a.branchId, a.branchName); });
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  }, [alerts]);
+
+  const filteredAlerts = useMemo(() => {
+    const q = alertSearch.trim().toLowerCase();
+    return alerts.filter(
+      (a) =>
+        (!alertBranch || a.branchId === alertBranch) &&
+        (!alertType || a.alertType === alertType) &&
+        (!q || (a.pt.name ?? "").toLowerCase().includes(q))
+    );
+  }, [alerts, alertSearch, alertBranch, alertType]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -142,6 +170,10 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   const ptPageCount = Math.ceil(filteredPts.length / PT_PAGE_SIZE);
   const ptSafePage = Math.min(ptPage, ptPageCount || 1);
   const ptPageItems = filteredPts.slice((ptSafePage - 1) * PT_PAGE_SIZE, ptSafePage * PT_PAGE_SIZE);
+
+  const alertPageCount = Math.ceil(filteredAlerts.length / ALERT_PAGE_SIZE);
+  const alertSafePage = Math.min(alertPage, alertPageCount || 1);
+  const alertPageItems = filteredAlerts.slice((alertSafePage - 1) * ALERT_PAGE_SIZE, alertSafePage * ALERT_PAGE_SIZE);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
@@ -348,33 +380,73 @@ export function ReportsPage({ userRole }: { userRole: string }) {
 
       {/* Alerts table */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-extrabold text-gray-800">Lịch sử cảnh báo tiến độ</h2>
-          <span className="text-xs text-gray-400 font-semibold">{alerts.length} cảnh báo gần nhất</span>
+        <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-extrabold text-gray-800">Lịch sử cảnh báo tiến độ</h2>
+            <span className="text-xs text-gray-400 font-semibold">{filteredAlerts.length} cảnh báo</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={alertSearch}
+                onChange={(e) => setAlertSearch(e.target.value)}
+                placeholder="Tìm tên PT..."
+                className="h-9 pl-9 pr-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-44"
+              />
+            </div>
+            <select
+              value={alertBranch}
+              onChange={(e) => setAlertBranch(e.target.value)}
+              className="h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer"
+            >
+              <option value="">Tất cả cơ sở</option>
+              {alertBranchOptions.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            <select
+              value={alertType}
+              onChange={(e) => setAlertType(e.target.value)}
+              className="h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer"
+            >
+              <option value="">Tất cả loại</option>
+              {Object.entries(ALERT_LABEL).map(([k, label]) => (
+                <option key={k} value={k}>{label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {alerts.length === 0 ? (
           <div className="py-10 text-center">
             <CheckCircle className="w-6 h-6 text-gray-200 mx-auto mb-2" />
             <p className="text-xs text-gray-300 font-semibold">Chưa có cảnh báo</p>
           </div>
+        ) : filteredAlerts.length === 0 ? (
+          <div className="py-10 text-center">
+            <Search className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+            <p className="text-xs text-gray-300 font-semibold">Không tìm thấy cảnh báo phù hợp</p>
+          </div>
         ) : (
+          <>
           <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-          <table className="w-full min-w-[600px] text-sm">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                {["Khách hàng", "Loại", "Chi tiết", "Tuần", "Nhân sự phụ trách", "Trạng thái"].map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
+                {["Khách hàng", "Cơ sở", "Loại", "Chi tiết", "Tuần", "Nhân sự phụ trách", "Trạng thái"].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {alerts.map((a) => (
+              {alertPageItems.map((a) => (
                 <tr key={a.id} className={cn("hover:bg-gray-50/50 transition-colors", !a.isRead && "bg-amber-50/30")}>
-                  <td className="px-5 py-3 font-semibold text-gray-800">{a.client.fullName}</td>
+                  <td className="px-5 py-3 font-semibold text-gray-800 whitespace-nowrap">{a.client.fullName}</td>
+                  <td className="px-5 py-3 text-gray-500 font-medium whitespace-nowrap">{a.branchName}</td>
                   <td className="px-5 py-3">
-                    <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full", ALERT_COLOR[a.alertType])}>
+                    <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap", ALERT_COLOR[a.alertType])}>
                       {ALERT_LABEL[a.alertType]}
                     </span>
                   </td>
@@ -398,12 +470,12 @@ export function ReportsPage({ userRole }: { userRole: string }) {
                   <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {new Date(a.weekStart).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}
                   </td>
-                  <td className="px-5 py-3 text-gray-600">{a.pt.name ?? "—"}</td>
+                  <td className="px-5 py-3 text-gray-600 whitespace-nowrap">{a.pt.name ?? "—"}</td>
                   <td className="px-5 py-3">
                     {a.isRead ? (
                       <span className="text-xs text-gray-300 font-semibold">Đã đọc</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 whitespace-nowrap">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
                         Chưa đọc
                       </span>
@@ -414,6 +486,16 @@ export function ReportsPage({ userRole }: { userRole: string }) {
             </tbody>
           </table>
           </div>
+
+          <Pagination
+            page={alertSafePage}
+            pageCount={alertPageCount}
+            total={filteredAlerts.length}
+            pageSize={ALERT_PAGE_SIZE}
+            onPageChange={setAlertPage}
+            itemLabel="cảnh báo"
+          />
+          </>
         )}
       </div>
     </div>
