@@ -37,15 +37,14 @@ export async function GET(req: Request) {
 
   const branchIds = branches.map((b) => b.id);
 
-  // Revenue: query SalesLead directly — identical logic to monthly-stats "Tổng doanh thu"
-  // so both screens always show the same number.
+  // Revenue: sum actualRevenue across ALL leads for the branch/month — identical to the
+  // "Tổng doanh thu" card in Setup Doanh số (leads-tab), which counts every lead regardless
+  // of status or sign date. No status / signDate filter so the two screens always match.
   const leads = await prisma.salesLead.findMany({
     where: {
       branchId: { in: branchIds },
       month,
       year,
-      status: { in: ["PIF", "DE", "PB"] },
-      signDate: { not: null },
     },
     select: { branchId: true, actualRevenue: true },
   });
