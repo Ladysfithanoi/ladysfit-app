@@ -126,7 +126,7 @@ export function AdminDashboard({
       {/* Transform statistics over time (total + per-branch + month/quarter) */}
       <TransformStats
         events={stats.transformEvents}
-        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
+        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name, totalKH: b.totalKH }))}
       />
 
       {/* FM-only: PT session statistics */}

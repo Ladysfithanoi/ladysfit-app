@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { Trophy, TrendingUp, CalendarRange } from "lucide-react";
+import { Trophy, CalendarRange, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type TransformEvent = {
@@ -14,7 +14,7 @@ type TransformEvent = {
   date: string; // ISO — when the client first reached ≥ 7 kg loss
 };
 
-type Branch = { id: string; name: string };
+type Branch = { id: string; name: string; totalKH: number };
 
 type Mode = "month" | "quarter";
 
@@ -85,16 +85,21 @@ export function TransformStats({
   const totalAllTime = branchEvents.length;
   const totalThisYear = yearEvents.length;
   const periodCount = mode === "month" ? 12 : 4;
-  const avgPerPeriod = Math.round((totalThisYear / periodCount) * 10) / 10;
-  const best = chartData.reduce(
-    (acc, d) => (d.count > acc.count ? d : acc),
-    { label: "—", count: 0 }
-  );
+
+  // Total clients for the current branch selection — denominator for the % metrics.
+  const totalClients = branchId
+    ? branches.find((b) => b.id === branchId)?.totalKH ?? 0
+    : branches.reduce((s, b) => s + b.totalKH, 0);
+
+  // % of all clients who have Transformed, and that rate averaged per period.
+  const transformPctTotal = totalClients > 0 ? (totalAllTime / totalClients) * 100 : 0;
+  const transformPctAvgPeriod =
+    totalClients > 0 ? (totalThisYear / totalClients / periodCount) * 100 : 0;
 
   const summaryCards = [
     {
       title: "Tổng Transform",
-      value: totalAllTime,
+      value: String(totalAllTime),
       sub: "Tất cả thời gian",
       Icon: Trophy,
       iconBg: "bg-[#f15b5c]/10",
@@ -102,25 +107,25 @@ export function TransformStats({
     },
     {
       title: `Năm ${year}`,
-      value: totalThisYear,
+      value: String(totalThisYear),
       sub: branchId ? branches.find((b) => b.id === branchId)?.name ?? "" : "Toàn hệ thống",
       Icon: CalendarRange,
       iconBg: "bg-blue-50",
       iconColor: "text-blue-500",
     },
     {
-      title: mode === "month" ? "Cao nhất / tháng" : "Cao nhất / quý",
-      value: best.count,
-      sub: best.count > 0 ? best.label : "—",
-      Icon: TrendingUp,
+      title: "% Transform tổng",
+      value: `${transformPctTotal.toFixed(1)}%`,
+      sub: `${totalAllTime}/${totalClients} KH`,
+      Icon: Percent,
       iconBg: "bg-amber-50",
       iconColor: "text-amber-500",
     },
     {
-      title: mode === "month" ? "TB / tháng" : "TB / quý",
-      value: avgPerPeriod,
+      title: mode === "month" ? "% Transform TB/tháng" : "% Transform TB/quý",
+      value: `${transformPctAvgPeriod.toFixed(1)}%`,
       sub: `Năm ${year}`,
-      Icon: TrendingUp,
+      Icon: Percent,
       iconBg: "bg-green-50",
       iconColor: "text-green-500",
     },
