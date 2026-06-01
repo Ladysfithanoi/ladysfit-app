@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
-import { Users, TrendingUp, Package, AlertTriangle, CheckCircle, RefreshCw } from "lucide-react";
+import { Users, TrendingUp, Package, AlertTriangle, CheckCircle, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Pagination } from "@/components/ui/pagination";
 
 type SummaryData = {
   totalClients: number;
@@ -21,10 +22,14 @@ type SummaryData = {
 type PTRow = {
   id: string;
   name: string;
+  branchId: string;
+  branchName: string;
   activeClients: number;
   recentSessions: number;
   unreadAlerts: number;
 };
+
+const PT_PAGE_SIZE = 5;
 
 type AlertRow = {
   id: string;
@@ -62,6 +67,11 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<{ checked: number; created: number } | null>(null);
 
+  // PT performance filters + pagination
+  const [ptSearch, setPtSearch] = useState("");
+  const [ptBranch, setPtBranch] = useState("");
+  const [ptPage, setPtPage] = useState(1);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -79,6 +89,7 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { setPtPage(1); }, [ptSearch, ptBranch]);
 
   async function runCheck() {
     setRunning(true);
@@ -111,6 +122,26 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   const unreadAlerts = alerts.filter((a) => !a.isRead);
   const slowProgress = alerts.filter((a) => a.alertType === "SLOW_PROGRESS").length;
   const noWeighIn = alerts.filter((a) => a.alertType === "NO_WEIGH_IN").length;
+
+  // PT performance: branch options + filtered + paginated
+  const ptBranchOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    ptRows.forEach((p) => { if (p.branchId) map.set(p.branchId, p.branchName); });
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  }, [ptRows]);
+
+  const filteredPts = useMemo(() => {
+    const q = ptSearch.trim().toLowerCase();
+    return ptRows.filter(
+      (p) =>
+        (!ptBranch || p.branchId === ptBranch) &&
+        (!q || p.name.toLowerCase().includes(q))
+    );
+  }, [ptRows, ptSearch, ptBranch]);
+
+  const ptPageCount = Math.ceil(filteredPts.length / PT_PAGE_SIZE);
+  const ptSafePage = Math.min(ptPage, ptPageCount || 1);
+  const ptPageItems = filteredPts.slice((ptSafePage - 1) * PT_PAGE_SIZE, ptSafePage * PT_PAGE_SIZE);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
@@ -233,30 +264,58 @@ export function ReportsPage({ userRole }: { userRole: string }) {
 
       {/* PT performance table */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
+        <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-sm font-extrabold text-gray-800">Hiệu suất PT</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={ptSearch}
+                onChange={(e) => setPtSearch(e.target.value)}
+                placeholder="Tìm tên PT..."
+                className="h-9 pl-9 pr-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-44"
+              />
+            </div>
+            <select
+              value={ptBranch}
+              onChange={(e) => setPtBranch(e.target.value)}
+              className="h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer"
+            >
+              <option value="">Tất cả cơ sở</option>
+              {ptBranchOptions.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {ptRows.length === 0 ? (
           <div className="py-10 text-center">
             <TrendingUp className="w-6 h-6 text-gray-200 mx-auto mb-2" />
             <p className="text-xs text-gray-300 font-semibold">Chưa có dữ liệu</p>
           </div>
+        ) : filteredPts.length === 0 ? (
+          <div className="py-10 text-center">
+            <Search className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+            <p className="text-xs text-gray-300 font-semibold">Không tìm thấy PT phù hợp</p>
+          </div>
         ) : (
+          <>
           <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-          <table className="w-full min-w-[500px] text-sm">
+          <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-gray-50">
-                {["PT", "KH đang hoạt động", "Buổi tập (30 ngày)", "Cảnh báo chưa đọc"].map((h) => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
+                {["PT", "Cơ sở", "KH đang hoạt động", "Buổi tập (30 ngày)", "Cảnh báo chưa đọc"].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {ptRows.map((pt) => (
+              {ptPageItems.map((pt) => (
                 <tr key={pt.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3 font-semibold text-gray-800">{pt.name}</td>
+                  <td className="px-5 py-3 font-semibold text-gray-800 whitespace-nowrap">{pt.name}</td>
+                  <td className="px-5 py-3 text-gray-500 font-medium whitespace-nowrap">{pt.branchName}</td>
                   <td className="px-5 py-3 text-gray-600">{pt.activeClients}</td>
                   <td className="px-5 py-3 text-gray-600">{pt.recentSessions}</td>
                   <td className="px-5 py-3">
@@ -274,6 +333,16 @@ export function ReportsPage({ userRole }: { userRole: string }) {
             </tbody>
           </table>
           </div>
+
+          <Pagination
+            page={ptSafePage}
+            pageCount={ptPageCount}
+            total={filteredPts.length}
+            pageSize={PT_PAGE_SIZE}
+            onPageChange={setPtPage}
+            itemLabel="PT"
+          />
+          </>
         )}
       </div>
 

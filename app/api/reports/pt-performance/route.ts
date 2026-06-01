@@ -20,6 +20,7 @@ export async function GET() {
       id: true,
       name: true,
       email: true,
+      branch: { select: { id: true, name: true } },
       clients: {
         where: { status: "ACTIVE" },
         select: {
@@ -47,6 +48,8 @@ export async function GET() {
     return {
       id: pt.id,
       name: pt.name ?? pt.email,
+      branchId: pt.branch?.id ?? "",
+      branchName: pt.branch?.name ?? "—",
       activeClients,
       recentSessions,
       unreadAlerts,
