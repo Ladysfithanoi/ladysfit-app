@@ -21,8 +21,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   });
 
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const isAdmin = session.user.role === "ADMIN";
-  if (!isAdmin && c.createdById !== session.user.id) {
+  const role = session.user.role;
+  const isAdmin = role === "ADMIN";
+  const isFMManaged = role === "FM" && (session.user.managedBranchIds ?? []).includes(c.branchId);
+  if (!isAdmin && !isFMManaged && c.createdById !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -54,8 +56,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const c = await prisma.consultation.findUnique({ where: { id: params.id } });
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const isAdmin = session.user.role === "ADMIN";
-  if (!isAdmin && c.createdById !== session.user.id) {
+  const role = session.user.role;
+  const isAdmin = role === "ADMIN";
+  const isFMManaged = role === "FM" && (session.user.managedBranchIds ?? []).includes(c.branchId);
+  if (!isAdmin && !isFMManaged && c.createdById !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
