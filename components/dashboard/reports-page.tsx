@@ -106,6 +106,22 @@ export function ReportsPage({ userRole }: { userRole: string }) {
     }
   }
 
+  // PT performance: branch options + filtered list (hooks must run before any early return)
+  const ptBranchOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    ptRows.forEach((p) => { if (p.branchId) map.set(p.branchId, p.branchName); });
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  }, [ptRows]);
+
+  const filteredPts = useMemo(() => {
+    const q = ptSearch.trim().toLowerCase();
+    return ptRows.filter(
+      (p) =>
+        (!ptBranch || p.branchId === ptBranch) &&
+        (!q || p.name.toLowerCase().includes(q))
+    );
+  }, [ptRows, ptSearch, ptBranch]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -122,22 +138,6 @@ export function ReportsPage({ userRole }: { userRole: string }) {
   const unreadAlerts = alerts.filter((a) => !a.isRead);
   const slowProgress = alerts.filter((a) => a.alertType === "SLOW_PROGRESS").length;
   const noWeighIn = alerts.filter((a) => a.alertType === "NO_WEIGH_IN").length;
-
-  // PT performance: branch options + filtered + paginated
-  const ptBranchOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    ptRows.forEach((p) => { if (p.branchId) map.set(p.branchId, p.branchName); });
-    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [ptRows]);
-
-  const filteredPts = useMemo(() => {
-    const q = ptSearch.trim().toLowerCase();
-    return ptRows.filter(
-      (p) =>
-        (!ptBranch || p.branchId === ptBranch) &&
-        (!q || p.name.toLowerCase().includes(q))
-    );
-  }, [ptRows, ptSearch, ptBranch]);
 
   const ptPageCount = Math.ceil(filteredPts.length / PT_PAGE_SIZE);
   const ptSafePage = Math.min(ptPage, ptPageCount || 1);
