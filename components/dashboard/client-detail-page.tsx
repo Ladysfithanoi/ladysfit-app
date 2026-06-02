@@ -808,7 +808,15 @@ export function ClientDetailPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: accountEmail, password: generatedPassword || undefined }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      if (!res.ok) {
+        // Server may return a non-JSON error page; fall back to a friendly message.
+        let msg = "Không thể lưu tài khoản. Vui lòng thử lại.";
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch { /* response body was not JSON */ }
+        throw new Error(msg);
+      }
       setSavedPassword(generatedPassword);
       setGeneratedPassword("");
       setAccountSuccess(true);

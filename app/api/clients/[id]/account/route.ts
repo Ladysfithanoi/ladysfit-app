@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -66,14 +67,26 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     ? await bcrypt.hash(password, 10)
     : undefined;
 
-  const client = await prisma.client.update({
-    where: { id: params.id },
-    data: {
-      email,
-      ...(hashed ? { password: hashed, passwordSetAt: new Date() } : {}),
-    },
-    select: { id: true, email: true, passwordSetAt: true },
-  });
+  let client;
+  try {
+    client = await prisma.client.update({
+      where: { id: params.id },
+      data: {
+        email,
+        ...(hashed ? { password: hashed, passwordSetAt: new Date() } : {}),
+      },
+      select: { id: true, email: true, passwordSetAt: true },
+    });
+  } catch (err) {
+    // Email is unique — a duplicate triggers a P2002 unique constraint error.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return NextResponse.json(
+        { error: "Email này đã được dùng cho một tài khoản khác" },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
   return NextResponse.json(client);
 }
