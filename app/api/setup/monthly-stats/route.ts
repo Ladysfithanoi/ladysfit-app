@@ -29,23 +29,33 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const leads = await prisma.salesLead.findMany({
+  // All leads in the period (any status) — used for lead-source & profile analysis.
+  const allLeads = await prisma.salesLead.findMany({
     where: {
       branchId,
       month,
       year,
-      status: { in: ["PIF", "DE", "PB"] },
-      signDate: { not: null },
       ...(isPT ? { assignedPTId: session.user.id } : {}),
     },
     select: {
       source: true,
+      status: true,
+      signDate: true,
       actualRevenue: true,
+      yearOfBirth: true,
       assignedPTId: true,
       assignedPT: { select: { id: true, name: true, email: true } },
+      consultation: { select: { info: { select: { currentWeight: true } } } },
     },
   });
 
+  const isWon = (l: (typeof allLeads)[number]) =>
+    (l.status === "PIF" || l.status === "DE" || l.status === "PB") && l.signDate != null;
+
+  // Won contracts only — used for the revenue & PT tables (unchanged behaviour).
+  const leads = allLeads.filter(isWon);
+
+  const totalLeads = allLeads.length;
   const totalContracts = leads.length;
   const totalRevenue = leads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
 
@@ -112,5 +122,97 @@ export async function GET(req: Request) {
     })
     .sort((a, b) => b.revenue - a.revenue);
 
-  return NextResponse.json({ bySource, byPT, totalContracts, totalRevenue });
+  // ── By source (all leads + conversion) ───────────────────────────────────
+  const sourceAllMap = new Map<string, { leads: number; contracts: number }>();
+  for (const lead of allLeads) {
+    const key = lead.source?.trim() || "Không rõ nguồn";
+    const cur = sourceAllMap.get(key) ?? { leads: 0, contracts: 0 };
+    cur.leads += 1;
+    if (isWon(lead)) cur.contracts += 1;
+    sourceAllMap.set(key, cur);
+  }
+
+  const bySourceAll = Array.from(sourceAllMap.entries())
+    .filter(([, stat]) => stat.leads > 0)
+    .map(([source, stat]) => ({
+      source,
+      leads: stat.leads,
+      contracts: stat.contracts,
+      leadPct: totalLeads > 0 ? Math.round((stat.leads / totalLeads) * 1000) / 10 : 0,
+      conversionPct: stat.leads > 0 ? Math.round((stat.contracts / stat.leads) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => {
+      const ai = SOURCES.indexOf(a.source);
+      const bi = SOURCES.indexOf(b.source);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.source.localeCompare(b.source);
+    });
+
+  // ── Profile: age & weight buckets (leads vs won) ──────────────────────────
+  const AGE_ORDER = ["≤ 24", "25–34", "35–44", "≥ 45", "Không rõ"];
+  const WEIGHT_ORDER = ["< 50 kg", "50–59 kg", "60–69 kg", "70–79 kg", "≥ 80 kg", "Không rõ"];
+
+  const ageBucket = (yob: number | null): string => {
+    if (!yob || yob < 1900 || yob > year) return "Không rõ";
+    const age = year - yob;
+    if (age <= 24) return "≤ 24";
+    if (age <= 34) return "25–34";
+    if (age <= 44) return "35–44";
+    return "≥ 45";
+  };
+  const weightBucket = (w: number | null | undefined): string => {
+    if (!w || w <= 0) return "Không rõ";
+    if (w < 50) return "< 50 kg";
+    if (w < 60) return "50–59 kg";
+    if (w < 70) return "60–69 kg";
+    if (w < 80) return "70–79 kg";
+    return "≥ 80 kg";
+  };
+
+  const ageMap = new Map<string, { leads: number; contracts: number }>();
+  const weightMap = new Map<string, { leads: number; contracts: number }>();
+  for (const lead of allLeads) {
+    const won = isWon(lead);
+    const ab = ageBucket(lead.yearOfBirth);
+    const ac = ageMap.get(ab) ?? { leads: 0, contracts: 0 };
+    ac.leads += 1;
+    if (won) ac.contracts += 1;
+    ageMap.set(ab, ac);
+
+    const wb = weightBucket(lead.consultation?.info?.currentWeight);
+    const wc = weightMap.get(wb) ?? { leads: 0, contracts: 0 };
+    wc.leads += 1;
+    if (won) wc.contracts += 1;
+    weightMap.set(wb, wc);
+  }
+
+  const buildBuckets = (order: string[], map: Map<string, { leads: number; contracts: number }>) =>
+    order
+      .map((bucket) => {
+        const stat = map.get(bucket) ?? { leads: 0, contracts: 0 };
+        return {
+          bucket,
+          leads: stat.leads,
+          contracts: stat.contracts,
+          leadPct: totalLeads > 0 ? Math.round((stat.leads / totalLeads) * 1000) / 10 : 0,
+          conversionPct: stat.leads > 0 ? Math.round((stat.contracts / stat.leads) * 1000) / 10 : 0,
+        };
+      })
+      .filter((b) => b.leads > 0);
+
+  const byAge = buildBuckets(AGE_ORDER, ageMap);
+  const byWeight = buildBuckets(WEIGHT_ORDER, weightMap);
+
+  return NextResponse.json({
+    bySource,
+    bySourceAll,
+    byAge,
+    byWeight,
+    byPT,
+    totalLeads,
+    totalContracts,
+    totalRevenue,
+  });
 }

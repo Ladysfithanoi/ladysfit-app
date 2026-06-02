@@ -12,6 +12,22 @@ type SourceStat = {
   revenuePct: number;
 };
 
+type SourceConvStat = {
+  source: string;
+  leads: number;
+  contracts: number;
+  leadPct: number;
+  conversionPct: number;
+};
+
+type BucketStat = {
+  bucket: string;
+  leads: number;
+  contracts: number;
+  leadPct: number;
+  conversionPct: number;
+};
+
 type PTStat = {
   ptId: string;
   ptName: string;
@@ -23,7 +39,11 @@ type PTStat = {
 
 type StatsData = {
   bySource: SourceStat[];
+  bySourceAll: SourceConvStat[];
+  byAge: BucketStat[];
+  byWeight: BucketStat[];
   byPT: PTStat[];
+  totalLeads: number;
   totalContracts: number;
   totalRevenue: number;
 };
@@ -73,15 +93,16 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   if (loading) return <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>;
-  if (!data || data.totalContracts === 0) {
+  if (!data || data.totalLeads === 0) {
     return (
       <div className="py-12 text-center text-sm text-gray-300">
-        Không có hợp đồng nào trong tháng {month}/{year}
+        Không có lead nào trong tháng {month}/{year}
       </div>
     );
   }
 
-  const { bySource, byPT, totalContracts, totalRevenue } = data;
+  const { bySource, bySourceAll, byAge, byWeight, byPT, totalLeads, totalContracts, totalRevenue } = data;
+  const overallConversionPct = totalLeads > 0 ? Math.round((totalContracts / totalLeads) * 1000) / 10 : 0;
 
   const contractChartData = bySource.map((s) => ({
     name: s.source,
@@ -100,17 +121,75 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
       {/* Page header */}
       <div>
         <h2 className="text-base font-extrabold text-gray-900">
-          Thống kê doanh thu theo nguồn — Tháng {month}/{year}
+          Thống kê nguồn lead — Tháng {month}/{year}
         </h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Chỉ tính lead có trạng thái PIF / Đặt cọc / Thanh toán nốt và đã có ngày ký
+          Tổng {totalLeads} lead • {totalContracts} đã chốt HĐ • tỉ lệ chốt {overallConversionPct}%
         </p>
       </div>
 
-      {/* Section 1: Source breakdown table */}
+      {/* Section 0: Lead source + conversion (all leads) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Toàn bộ lead về theo nguồn và tỉ lệ chốt hợp đồng của từng kênh
+          </p>
+        </div>
+        <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-[#f5f5f5]">
+                <th className={cn(th, "text-left")}>Nguồn</th>
+                <th className={cn(th, "text-center")}>Số lead</th>
+                <th className={cn(th, "text-center")}>% lead</th>
+                <th className={cn(th, "text-center")}>Đã chốt</th>
+                <th className={cn(th, "text-center")}>Tỉ lệ chốt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bySourceAll.map((row) => (
+                <tr key={row.source} className="even:bg-[#fafafa]">
+                  <td className={td}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: SOURCE_COLORS[row.source] ?? "#9ca3af" }}
+                      />
+                      <span className="font-semibold">{row.source}</span>
+                    </div>
+                  </td>
+                  <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.leads}</td>
+                  <td className={cn(td, "text-center")}>
+                    <span className="font-semibold text-blue-600">{row.leadPct}%</span>
+                  </td>
+                  <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.contracts}</td>
+                  <td className={cn(td, "text-center")}>
+                    <span className="font-semibold text-emerald-600">{row.conversionPct}%</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-200">
+                <td className={cn(td, "font-extrabold text-gray-900")}>Tổng</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalLeads}</td>
+                <td className={cn(td, "text-center font-bold text-gray-500")}>100%</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalContracts}</td>
+                <td className={cn(td, "text-center font-bold text-emerald-600")}>{overallConversionPct}%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* Section 1: Source breakdown by revenue (won contracts only) */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+          <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead theo doanh thu</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Chỉ tính lead đã chốt (PIF / Đặt cọc / Thanh toán nốt) và đã có ngày ký
+          </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
           <table className="w-full border-collapse">
@@ -157,6 +236,20 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
             </tfoot>
           </table>
         </div>
+      </div>
+
+      {/* Section 1b: Lead profile (chuẩn tệp) — age & weight */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ProfileTable
+          title="Phân tích nguồn lead chuẩn tệp — Độ tuổi"
+          colLabel="Độ tuổi"
+          rows={byAge}
+        />
+        <ProfileTable
+          title="Phân tích nguồn lead chuẩn tệp — Cân nặng"
+          colLabel="Cân nặng"
+          rows={byWeight}
+        />
       </div>
 
       {/* Section 2: Donut charts */}
@@ -284,6 +377,66 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileTable({
+  title,
+  colLabel,
+  rows,
+}: {
+  title: string;
+  colLabel: string;
+  rows: BucketStat[];
+}) {
+  const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
+  const totalContracts = rows.reduce((s, r) => s + r.contracts, 0);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+        <p className="text-sm font-extrabold text-gray-800">{title}</p>
+      </div>
+      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[#f5f5f5]">
+              <th className={cn(th, "text-left")}>{colLabel}</th>
+              <th className={cn(th, "text-center")}>Số lead</th>
+              <th className={cn(th, "text-center")}>% lead</th>
+              <th className={cn(th, "text-center")}>Đã chốt</th>
+              <th className={cn(th, "text-center")}>Tỉ lệ chốt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.bucket} className="even:bg-[#fafafa]">
+                <td className={cn(td, "font-semibold text-gray-800")}>{row.bucket}</td>
+                <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.leads}</td>
+                <td className={cn(td, "text-center")}>
+                  <span className="font-semibold text-blue-600">{row.leadPct}%</span>
+                </td>
+                <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.contracts}</td>
+                <td className={cn(td, "text-center")}>
+                  <span className="font-semibold text-emerald-600">{row.conversionPct}%</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-50 border-t-2 border-gray-200">
+              <td className={cn(td, "font-extrabold text-gray-900")}>Tổng</td>
+              <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalLeads}</td>
+              <td className={cn(td, "text-center font-bold text-gray-500")}>100%</td>
+              <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalContracts}</td>
+              <td className={cn(td, "text-center font-bold text-emerald-600")}>
+                {totalLeads > 0 ? Math.round((totalContracts / totalLeads) * 1000) / 10 : 0}%
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
