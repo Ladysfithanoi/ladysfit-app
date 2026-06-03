@@ -66,6 +66,86 @@ type WorkoutLogItem = {
   setLogs: SetLogItem[];
 };
 
+type PendingConfirmation = {
+  id: string;
+  sessionName: string;
+  phase: string;
+  ptName: string | null;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+};
+
+// Sessions the PT finished that need THIS client to confirm on their own device.
+// Confirming here is the anti-forgery proof the client was actually present.
+function PendingConfirmations({ items }: { items: PendingConfirmation[] }) {
+  const router = useRouter();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  if (items.length === 0) return null;
+
+  async function act(id: string, action: "confirm" | "reject") {
+    setBusyId(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/my/workout-logs/${id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-5 mb-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xl">✋</span>
+        <p className="text-sm font-extrabold text-amber-800">Xác nhận buổi tập của bạn</p>
+      </div>
+      {items.map((it) => {
+        const label = it.sessionName.split("—")[0].trim();
+        const mins =
+          it.checkInAt && it.checkOutAt
+            ? Math.round((new Date(it.checkOutAt).getTime() - new Date(it.checkInAt).getTime()) / 60000)
+            : null;
+        const busy = busyId === it.id;
+        return (
+          <div key={it.id} className="rounded-2xl bg-white border border-amber-200 p-4">
+            <p className="text-sm font-bold text-gray-800">{label} — {it.phase}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              PT: {it.ptName ?? "—"}{mins != null ? ` · ${mins} phút` : ""}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">Bạn xác nhận đã tập buổi này chứ?</p>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => act(it.id, "confirm")}
+                disabled={busy}
+                className="flex-1 h-11 rounded-2xl bg-green-600 text-white text-sm font-bold disabled:opacity-60"
+              >
+                {busy ? "Đang xử lý..." : "✓ Xác nhận đã tập"}
+              </button>
+              <button
+                onClick={() => act(it.id, "reject")}
+                disabled={busy}
+                className="h-11 px-4 rounded-2xl border border-gray-300 text-sm font-semibold text-gray-500 disabled:opacity-60"
+              >
+                Không phải
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+    </div>
+  );
+}
+
 function WorkoutProgramSection({ program }: { program: PortalProgram | null }) {
   const [activeSession, setActiveSession] = useState(0);
   const [expanded, setExpanded] = useState(true);
@@ -392,10 +472,12 @@ export function ActivityTab({
   activityLogs,
   workoutProgram = null,
   workoutLogs = [],
+  pendingConfirmations = [],
 }: {
   activityLogs: ActivityLog[];
   workoutProgram?: PortalProgram | null;
   workoutLogs?: WorkoutLogItem[];
+  pendingConfirmations?: PendingConfirmation[];
 }) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -459,6 +541,9 @@ export function ActivityTab({
   return (
     <>
       <h2 className="text-lg font-extrabold text-gray-900 mb-4">Tập luyện</h2>
+
+      {/* ── Pending session confirmations (anti-forgery) ── */}
+      <PendingConfirmations items={pendingConfirmations} />
 
       {/* ── Section 1: Workout program (PT-created, read-only) ── */}
       <WorkoutProgramSection program={workoutProgram} />

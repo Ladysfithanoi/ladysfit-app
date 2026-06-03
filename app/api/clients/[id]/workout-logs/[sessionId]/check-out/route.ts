@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { incrementPackageAndNotify, serializeWorkoutLog } from "@/lib/workout-session";
 
 const INTERACTION_WINDOW_MS = 10 * 60 * 1000; // must interact within 10 min of check-in
 
@@ -23,9 +24,16 @@ function hasData(sl: SetLogInput): boolean {
   ].some((v) => v != null && String(v).trim() !== "");
 }
 
+const INCLUDE = {
+  setLogs: { orderBy: { id: "asc" } },
+  createdBy: { select: { id: true, name: true } },
+} as const;
+
 // POST /api/clients/[id]/workout-logs/[logId]/check-out
-// Finalizes an in-progress session. Validates the anti-cheat rules and either
-// completes the session (incrementing sessionsUsed) or voids it.
+// PT ends the session. Validates anti-cheat rules, then either:
+//   - method "client_app": moves to AWAITING_CONFIRMATION (client must confirm on their app) — NOT counted yet
+//   - method "signature":  completes now via the client's signature (fallback) — counted
+// or voids the session when there was no interaction within 10 minutes.
 export async function POST(
   req: Request,
   { params }: { params: { id: string; sessionId: string } }
@@ -39,7 +47,9 @@ export async function POST(
       where: { id: logId, clientId: params.id },
     });
     if (!log) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
-    if (log.status !== "IN_PROGRESS") {
+    // Allow finishing an in-progress session, or falling back to a signature on a
+    // session already waiting for the client's app confirmation.
+    if (log.status !== "IN_PROGRESS" && log.status !== "AWAITING_CONFIRMATION") {
       return NextResponse.json({ error: "Buổi tập này đã được kết thúc" }, { status: 400 });
     }
     if (!log.checkInAt) {
@@ -47,14 +57,15 @@ export async function POST(
     }
 
     const body = (await req.json()) as {
+      method?: "client_app" | "signature";
       signatureUrl?: string | null;
       notes?: string | null;
       setLogs?: SetLogInput[];
     };
-
+    const method = body.method ?? (body.signatureUrl ? "signature" : "client_app");
     const setLogs = body.setLogs ?? [];
 
-    // Persist the latest set data.
+    // Persist latest set data.
     if (setLogs.length > 0) {
       await Promise.all(
         setLogs.map((sl) =>
@@ -82,19 +93,14 @@ export async function POST(
 
     const now = new Date();
 
-    // Stamp first interaction (server time) if data exists and it's not set yet.
     let firstInteractionAt = log.firstInteractionAt;
-    if (!firstInteractionAt && setLogs.some(hasData)) {
-      firstInteractionAt = now;
-    }
+    if (!firstInteractionAt && setLogs.some(hasData)) firstInteractionAt = now;
 
     const interactionOk =
       firstInteractionAt != null &&
       firstInteractionAt.getTime() - log.checkInAt.getTime() <= INTERACTION_WINDOW_MS;
 
-    const sig = (body.signatureUrl ?? "").trim();
-
-    // ── Rule 1: no interaction within 10 min → the session can never count. Void it. ──
+    // ── Rule 1: no interaction within 10 min → void ──
     if (!interactionOk) {
       const voided = await prisma.workoutLog.update({
         where: { id: logId },
@@ -102,41 +108,46 @@ export async function POST(
           status: "VOID",
           checkOutAt: now,
           firstInteractionAt,
-          signatureUrl: sig || null,
+          signatureUrl: (body.signatureUrl ?? "").trim() || null,
           notes: body.notes ?? log.notes,
           voidReason: "Không có tương tác (nhập số liệu) trong 10 phút đầu",
         },
-        include: {
-          setLogs: { orderBy: { id: "asc" } },
-          createdBy: { select: { id: true, name: true } },
-        },
+        include: INCLUDE,
       });
-      return NextResponse.json({
-        ...serialize(voided),
-        valid: false,
-        reason: voided.voidReason,
-        packageUpdate: null,
-      });
+      return NextResponse.json({ ...serializeWorkoutLog(voided), valid: false, reason: voided.voidReason, packageUpdate: null });
     }
 
-    // ── Rule 2: minimum duration (configurable) ──
+    // ── Rule 2: minimum duration ──
     const config = await prisma.systemConfig.findUnique({ where: { id: "main" } });
     const minMinutes = config?.minSessionMinutes ?? 30;
     const elapsedMin = (now.getTime() - log.checkInAt.getTime()) / 60000;
     if (elapsedMin < minMinutes) {
-      // Keep IN_PROGRESS so the PT can continue and finalize later.
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }
       return NextResponse.json(
-        {
-          error: `Buổi tập mới được ${Math.floor(elapsedMin)} phút, cần tối thiểu ${minMinutes} phút mới có thể xác nhận.`,
-        },
+        { error: `Buổi tập mới được ${Math.floor(elapsedMin)} phút, cần tối thiểu ${minMinutes} phút mới có thể xác nhận.` },
         { status: 400 }
       );
     }
 
-    // ── Rule 3: signature required ──
+    // ── Path A: client confirms on their own app (anti-forgery) ──
+    if (method === "client_app") {
+      const pending = await prisma.workoutLog.update({
+        where: { id: logId },
+        data: {
+          status: "AWAITING_CONFIRMATION",
+          checkOutAt: now,
+          firstInteractionAt,
+          notes: body.notes ?? log.notes,
+        },
+        include: INCLUDE,
+      });
+      return NextResponse.json({ ...serializeWorkoutLog(pending), valid: true, awaitingConfirmation: true, packageUpdate: null });
+    }
+
+    // ── Path B: signature fallback (completes now, flagged as SIGNATURE) ──
+    const sig = (body.signatureUrl ?? "").trim();
     if (!sig) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
@@ -144,122 +155,26 @@ export async function POST(
       return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
     }
 
-    // ── All rules passed → complete the session ──
     const completed = await prisma.workoutLog.update({
       where: { id: logId },
       data: {
         status: "COMPLETED",
         checkOutAt: now,
+        confirmedAt: now,
+        confirmationMethod: "SIGNATURE",
         firstInteractionAt,
         signatureUrl: sig,
         notes: body.notes ?? log.notes,
       },
-      include: {
-        setLogs: { orderBy: { id: "asc" } },
-        createdBy: { select: { id: true, name: true } },
-      },
+      include: INCLUDE,
     });
 
-    // Increment sessionsUsed on the active package enrollment.
-    let packageUpdate: {
-      id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
-    } | null = null;
+    const packageUpdate = await incrementPackageAndNotify(params.id, completed);
 
-    const activePackage = await prisma.packageEnrollment.findFirst({
-      where: { clientId: params.id, status: "ACTIVE" },
-      orderBy: { createdAt: "desc" },
-    });
-    if (activePackage) {
-      const newSessionsUsed = activePackage.sessionsUsed + 1;
-      const newStatus = newSessionsUsed >= activePackage.sessions ? "COMPLETED" : "ACTIVE";
-      const updated = await prisma.packageEnrollment.update({
-        where: { id: activePackage.id },
-        data: { sessionsUsed: newSessionsUsed, status: newStatus },
-      });
-      packageUpdate = {
-        id: updated.id,
-        sessionsUsed: updated.sessionsUsed,
-        sessions: updated.sessions,
-        packageName: updated.packageName,
-        status: updated.status,
-      };
-    }
-
-    // Completion notification for the client (non-critical).
-    try {
-      const [client, currentSession, program] = await Promise.all([
-        prisma.client.findUnique({ where: { id: params.id }, select: { fullName: true } }),
-        prisma.workoutSession.findUnique({ where: { id: log.sessionId }, select: { sessionName: true, order: true } }),
-        prisma.workoutProgram.findUnique({
-          where: { id: log.programId },
-          select: {
-            phase: true,
-            workoutType: true,
-            weeks: {
-              where: { id: log.weekId },
-              include: { sessions: { orderBy: { order: "asc" }, select: { sessionName: true, order: true } } },
-            },
-            sessions: {
-              where: { weekId: null },
-              orderBy: { order: "asc" },
-              select: { sessionName: true, order: true },
-            },
-          },
-        }),
-      ]);
-
-      if (client && currentSession && program) {
-        const phase = program.phase;
-        const allSessions = program.weeks[0]?.sessions.length
-          ? program.weeks[0].sessions
-          : program.sessions;
-        const currentIdx = allSessions.findIndex((s) => s.order === currentSession.order);
-        const nextSession =
-          currentIdx >= 0 && currentIdx < allSessions.length - 1
-            ? allSessions[currentIdx + 1]
-            : allSessions[0];
-        const currentLabel = currentSession.sessionName.split("—")[0].trim();
-        const nextLabel = nextSession?.sessionName.split("—")[0].trim() ?? currentLabel;
-
-        await prisma.workoutNotification.create({
-          data: {
-            clientId: params.id,
-            workoutLogId: completed.id,
-            message: `Chúc mừng chị ${client.fullName} đã hoàn thành ${currentLabel} - ${phase}. Buổi tập tiếp theo của chị sẽ là ${nextLabel} - ${phase}`,
-            nextSessionName: nextLabel,
-            nextSessionPhase: phase,
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-          },
-        });
-      }
-    } catch {
-      // ignore
-    }
-
-    return NextResponse.json({
-      ...serialize(completed),
-      valid: true,
-      packageUpdate,
-    });
+    return NextResponse.json({ ...serializeWorkoutLog(completed), valid: true, packageUpdate });
   } catch (error: unknown) {
     const e = error as { message?: string };
     console.error("[workout-logs check-out]", e.message);
     return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
   }
-}
-
-type LogWithRelations = Awaited<ReturnType<typeof prisma.workoutLog.findFirstOrThrow>> & {
-  setLogs: unknown[];
-  createdBy: { id: string; name: string | null };
-};
-
-function serialize(log: LogWithRelations) {
-  return {
-    ...log,
-    sessionDate: log.sessionDate.toISOString(),
-    createdAt: log.createdAt.toISOString(),
-    checkInAt: log.checkInAt?.toISOString() ?? null,
-    checkOutAt: log.checkOutAt?.toISOString() ?? null,
-    firstInteractionAt: log.firstInteractionAt?.toISOString() ?? null,
-  };
 }

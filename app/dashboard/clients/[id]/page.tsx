@@ -253,6 +253,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
     checkOutAt: l.checkOutAt?.toISOString() ?? null,
     firstInteractionAt: l.firstInteractionAt?.toISOString() ?? null,
     signatureUrl: l.signatureUrl,
+    confirmationMethod: l.confirmationMethod,
+    confirmedAt: l.confirmedAt?.toISOString() ?? null,
   }));
 
   return (

@@ -608,10 +608,20 @@ model WorkoutMovement {
 
 // Lifecycle of a workout session, used for the check-in/check-out anti-cheat flow.
 // Legacy/manually saved logs default to COMPLETED so existing counts stay intact.
+// AWAITING_CONFIRMATION = PT finished, waiting for the client to confirm on their app.
 enum WorkoutLogStatus {
   IN_PROGRESS
+  AWAITING_CONFIRMATION
   COMPLETED
   VOID
+}
+
+// How a completed session was confirmed by the client.
+// CLIENT_APP = client tapped confirm on their own device (strong, anti-forgery).
+// SIGNATURE  = client signed on the PT's device (fallback, weaker — flagged for review).
+enum WorkoutConfirmMethod {
+  CLIENT_APP
+  SIGNATURE
 }
 
 model WorkoutLog {
@@ -632,8 +642,11 @@ model WorkoutLog {
   // First time the PT entered any set data; used to enforce the "interaction
   // within 10 minutes of check-in" rule.
   firstInteractionAt DateTime?
-  // Client's hand-drawn signature as a PNG data-URL.
+  // Client's hand-drawn signature as a PNG data-URL (only for SIGNATURE fallback).
   signatureUrl       String?          @db.Text
+  // How/when the client confirmed the session (drives sessionsUsed increment).
+  confirmationMethod WorkoutConfirmMethod?
+  confirmedAt        DateTime?
   // Reason a session was voided (e.g. no interaction within 10 minutes).
   voidReason         String?
 

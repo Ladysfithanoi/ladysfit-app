@@ -427,28 +427,71 @@ export function LiveSessionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, setLogs]);
 
-  async function checkOut(signatureUrl: string) {
+  async function checkOut(method: "client_app" | "signature", signatureUrl = "") {
     setFinishing(true);
     setError("");
     try {
       const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureUrl, notes: notes || null, setLogs: buildSetLogPayload() }),
+        body: JSON.stringify({ method, signatureUrl, notes: notes || null, setLogs: buildSetLogPayload() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
       setShowSig(false);
-      if (data.valid) {
-        onCompleted(data as WorkoutLogRow, data.packageUpdate ?? null);
-      } else {
+      if (!data.valid) {
         onVoided(data as WorkoutLogRow);
+      } else if (data.awaitingConfirmation) {
+        // Session now waits for the client to confirm on their own app.
+        onUpdated(data as WorkoutLogRow);
+      } else {
+        onCompleted(data as WorkoutLogRow, data.packageUpdate ?? null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setFinishing(false);
     }
+  }
+
+  // ── Waiting-for-client view (PT finished, client must confirm on their app) ──
+  if (log.status === "AWAITING_CONFIRMATION") {
+    return (
+      <div className="mt-3 border border-amber-300 rounded-xl overflow-hidden bg-amber-50/40">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-100/60 border-b border-amber-200">
+          <Clock className="w-4 h-4 text-amber-600" />
+          <span className="text-xs font-extrabold text-amber-700">Đang chờ khách xác nhận</span>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-gray-700">
+            Đã gửi yêu cầu xác nhận. Đề nghị khách mở <span className="font-bold">app Ladysfit trên điện thoại của khách</span> và bấm
+            {" "}<span className="font-bold text-green-700">&quot;Xác nhận đã tập&quot;</span>. Buổi tập sẽ được tính ngay khi khách xác nhận.
+          </p>
+          <p className="text-xs text-gray-500">
+            Buổi tập vẫn được lưu, anh/chị có thể đóng trang. Khi khách xác nhận, buổi sẽ tự động được cộng.
+          </p>
+          {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
+          <div className="pt-1 border-t border-amber-200">
+            <p className="text-[11px] text-gray-400 mb-2">Khách không tiện dùng app?</p>
+            <button
+              onClick={() => setShowSig(true)}
+              disabled={finishing}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl border border-gray-300 text-sm font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-60"
+            >
+              <PenLine className="w-3.5 h-3.5" />
+              Khách ký tại đây (dự phòng)
+            </button>
+          </div>
+        </div>
+        {showSig && (
+          <SignaturePad
+            saving={finishing}
+            onCancel={() => setShowSig(false)}
+            onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
+          />
+        )}
+      </div>
+    );
   }
 
   return (
@@ -651,7 +694,7 @@ export function LiveSessionPanel({
 
           {interactionFailed ? (
             <button
-              onClick={() => checkOut("")}
+              onClick={() => checkOut("signature", "")}
               disabled={finishing}
               className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5 bg-gray-500 hover:bg-gray-600"
             >
@@ -660,24 +703,40 @@ export function LiveSessionPanel({
             </button>
           ) : (
             <button
-              onClick={async () => { await saveProgress(); setShowSig(true); }}
+              onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
               disabled={finishing || saving || !durationMet}
-              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận để tính buổi"}
+              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Gửi cho khách xác nhận trên app của khách"}
               className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
               style={{ backgroundColor: "#f15b5c" }}
             >
-              <PenLine className="w-3.5 h-3.5" />
-              Kết thúc & khách ký
+              {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Kết thúc & gửi khách xác nhận
             </button>
           )}
         </div>
+
+        {/* Fallback: customer signs on this device if they can't use their app */}
+        {!interactionFailed && (
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <span className="text-[11px] text-gray-400">Khách không tiện dùng app?</span>
+            <button
+              onClick={async () => { await saveProgress(); setShowSig(true); }}
+              disabled={finishing || saving || !durationMet}
+              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận ngay trên máy này (dự phòng)"}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              <PenLine className="w-3.5 h-3.5" />
+              Khách ký tại đây (dự phòng)
+            </button>
+          </div>
+        )}
       </div>
 
       {showSig && (
         <SignaturePad
           saving={finishing}
           onCancel={() => setShowSig(false)}
-          onConfirm={(dataUrl) => checkOut(dataUrl)}
+          onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
         />
       )}
     </div>
@@ -1042,11 +1101,18 @@ export function SessionLogHistory({
                                 Thời lượng: {Math.round((new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000)} phút
                               </span>
                             )}
+                            {log.confirmationMethod === "CLIENT_APP" && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 border border-green-100 rounded-lg px-2.5 py-1">
+                                <Check className="w-3 h-3" /> Khách xác nhận qua app
+                              </span>
+                            )}
+                            {log.confirmationMethod === "SIGNATURE" && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                                <PenLine className="w-3 h-3" /> Ký tại chỗ (dự phòng)
+                              </span>
+                            )}
                             {log.signatureUrl ? (
                               <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700">
-                                  <PenLine className="w-3 h-3" /> Khách đã ký
-                                </span>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={log.signatureUrl}

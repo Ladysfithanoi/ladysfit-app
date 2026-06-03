@@ -11,7 +11,7 @@ export default async function ActivityPage() {
 
   const clientId = session.user.id;
 
-  const [client, activityLogs, program, rawWorkoutLogs] = await Promise.all([
+  const [client, activityLogs, program, rawWorkoutLogs, rawPending] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, avatarUrl: true } }),
     prisma.activityLog.findMany({ where: { clientId }, orderBy: { date: "desc" }, take: 30 }),
     prisma.workoutProgram.findFirst({
@@ -45,9 +45,28 @@ export default async function ActivityPage() {
       orderBy: { sessionDate: "desc" },
       take: 30,
     }),
+    // Sessions the PT finished that are waiting for THIS client to confirm.
+    prisma.workoutLog.findMany({
+      where: { clientId, status: "AWAITING_CONFIRMATION" },
+      include: {
+        session: { select: { sessionName: true } },
+        program: { select: { phase: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { checkOutAt: "desc" },
+    }),
   ]);
 
   if (!client) redirect("/my/login");
+
+  const pendingConfirmations = rawPending.map((l) => ({
+    id: l.id,
+    sessionName: l.session.sessionName,
+    phase: l.program.phase,
+    ptName: l.createdBy.name ?? null,
+    checkInAt: l.checkInAt?.toISOString() ?? null,
+    checkOutAt: l.checkOutAt?.toISOString() ?? null,
+  }));
 
   const serializedLogs = activityLogs.map((l) => ({
     id: l.id,
@@ -150,6 +169,7 @@ export default async function ActivityPage() {
         activityLogs={serializedLogs}
         workoutProgram={portalProgram}
         workoutLogs={workoutLogs}
+        pendingConfirmations={pendingConfirmations}
       />
     </PortalLayoutClient>
   );

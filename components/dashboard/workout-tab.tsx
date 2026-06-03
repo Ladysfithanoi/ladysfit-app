@@ -76,7 +76,8 @@ export type SetLogRow = {
   exerciseNotes: string | null;
 };
 
-export type WorkoutLogStatus = "IN_PROGRESS" | "COMPLETED" | "VOID";
+export type WorkoutLogStatus = "IN_PROGRESS" | "AWAITING_CONFIRMATION" | "COMPLETED" | "VOID";
+export type WorkoutConfirmMethod = "CLIENT_APP" | "SIGNATURE";
 
 export type WorkoutLogRow = {
   id: string;
@@ -93,6 +94,8 @@ export type WorkoutLogRow = {
   checkOutAt: string | null;
   firstInteractionAt: string | null;
   signatureUrl: string | null;
+  confirmationMethod: WorkoutConfirmMethod | null;
+  confirmedAt: string | null;
 };
 
 function fmtDate(iso: string): string {
@@ -849,7 +852,10 @@ function ProgramView({
                   const sessionLogs = workoutLogs.filter((l) => l.sessionId === activeSession.id);
                   // Only completed sessions count toward history / last-session / suggestions.
                   const completedLogs = sessionLogs.filter((l) => l.status === "COMPLETED");
-                  const inProgressLog = sessionLogs.find((l) => l.status === "IN_PROGRESS") ?? null;
+                  // An active session is one in progress OR waiting for the client to confirm.
+                  const inProgressLog = sessionLogs.find(
+                    (l) => l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION"
+                  ) ?? null;
                   const lastLog = completedLogs[0] ?? null;
 
                   // Previous week data for progressive overload suggestions.
