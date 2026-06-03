@@ -78,12 +78,22 @@ function fmtRevenue(v: number) {
 const th = "border border-gray-200 px-3 py-2.5 text-xs font-bold text-gray-500 uppercase whitespace-nowrap";
 const td = "border border-gray-200 px-3 py-2.5 text-xs text-gray-700";
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const filterSelectCls =
+  "h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer";
+
 export function MonthlyStatsTab({ branchId, month, year, period = "month", quarter = 1 }: Props) {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selYear, setSelYear] = useState(year);
+  const [selQuarter, setSelQuarter] = useState(quarter);
+
+  const isPeriod = period === "quarter" || period === "year";
+  const effYear = isPeriod ? selYear : year;
 
   const periodLabel =
-    period === "quarter" ? `Quý ${quarter}/${year}` : period === "year" ? `Năm ${year}` : `Tháng ${month}/${year}`;
+    period === "quarter" ? `Quý ${selQuarter}/${effYear}` : period === "year" ? `Năm ${effYear}` : `Tháng ${month}/${year}`;
 
   const fetchStats = useCallback(async () => {
     if (!branchId) return;
@@ -91,24 +101,48 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
     try {
       const periodQs =
         period === "quarter"
-          ? `period=quarter&quarter=${quarter}&year=${year}`
+          ? `period=quarter&quarter=${selQuarter}&year=${effYear}`
           : period === "year"
-            ? `period=year&year=${year}`
+            ? `period=year&year=${effYear}`
             : `month=${month}&year=${year}`;
       const res = await fetch(`/api/setup/monthly-stats?branchId=${branchId}&${periodQs}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [branchId, month, year, period, quarter]);
+  }, [branchId, month, year, period, selQuarter, effYear]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  if (loading) return <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>;
+  // Self-contained period filter shown inside the Quý / Năm stats view.
+  const filterBar = isPeriod ? (
+    <div className="flex flex-wrap items-center gap-2">
+      {period === "quarter" && (
+        <select value={selQuarter} onChange={(e) => setSelQuarter(parseInt(e.target.value))} className={filterSelectCls}>
+          {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Quý {q}</option>)}
+        </select>
+      )}
+      <select value={selYear} onChange={(e) => setSelYear(parseInt(e.target.value))} className={filterSelectCls}>
+        {YEAR_OPTIONS.map((y) => <option key={y} value={y}>Năm {y}</option>)}
+      </select>
+    </div>
+  ) : null;
+
+  if (loading) {
+    return (
+      <div className="space-y-4 max-w-5xl">
+        {filterBar}
+        <div className="py-12 text-center text-sm text-gray-400">Đang tải...</div>
+      </div>
+    );
+  }
   if (!data || data.totalLeads === 0) {
     return (
-      <div className="py-12 text-center text-sm text-gray-300">
-        Không có lead nào trong {periodLabel}
+      <div className="space-y-4 max-w-5xl">
+        {filterBar}
+        <div className="py-12 text-center text-sm text-gray-300">
+          Không có lead nào trong {periodLabel}
+        </div>
       </div>
     );
   }
@@ -130,6 +164,7 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
 
   return (
     <div className="space-y-5 max-w-5xl">
+      {filterBar}
       {/* Page header */}
       <div>
         <h2 className="text-base font-extrabold text-gray-900">

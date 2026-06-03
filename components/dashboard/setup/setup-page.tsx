@@ -38,8 +38,8 @@ const now = new Date();
 export function SetupPage({ branches, currentUserId, currentUserRole, userName, isReadOnly, ptBranchId }: Props) {
   const [tab, setTab] = useState<TabKey>("leads");
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [quarter, setQuarter] = useState(Math.ceil((now.getMonth() + 1) / 3));
   const [year, setYear] = useState(now.getFullYear());
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3);
   const [branchId, setBranchId] = useState(ptBranchId ?? branches[0]?.id ?? "");
   const [ptList, setPtList] = useState<PTUser[]>([]);
   const [selectedPTId, setSelectedPTId] = useState("");
@@ -127,17 +127,9 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
               </select>
             </div>
           )}
-          {/* Period & Năm — 50/50 mobile, inline desktop. Tháng (hầu hết tab) / Quý (tab Báo cáo quý) */}
-          <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto md:gap-2">
-            {tab === "quarterStats" ? (
-              <div className="w-full md:w-[110px]">
-                <select value={quarter} onChange={(e) => setQuarter(parseInt(e.target.value))} className={selectCls}>
-                  {[1, 2, 3, 4].map((q) => (
-                    <option key={q} value={q}>Quý {q}</option>
-                  ))}
-                </select>
-              </div>
-            ) : tab !== "yearStats" ? (
+          {/* Tháng & Năm — ẩn ở tab Thống kê quý / năm (2 tab này có bộ lọc kỳ riêng trong bảng) */}
+          {tab !== "quarterStats" && tab !== "yearStats" && (
+            <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto md:gap-2">
               <div className="w-full md:w-[100px]">
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
                   {months.map((m) => (
@@ -145,15 +137,15 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
                   ))}
                 </select>
               </div>
-            ) : null}
-            <div className="w-full md:w-[100px]">
-              <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className={selectCls}>
-                {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+              <div className="w-full md:w-[100px]">
+                <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className={selectCls}>
+                  {years.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -244,7 +236,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           month={month}
           year={year}
           period="quarter"
-          quarter={quarter}
+          quarter={currentQuarter}
         />
       )}
       {tab === "yearStats" && (
