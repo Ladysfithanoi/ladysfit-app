@@ -156,6 +156,7 @@ export function LeadsTab({
     if (!form.customerName?.trim()) { setError("Tên khách hàng không được để trống"); return; }
     if (!form.assignedPTId) { setError("Vui lòng chọn nhân sự phụ trách"); return; }
     if (!form.source) { setError("Vui lòng chọn Phân nguồn"); return; }
+    if (form.source === "Referral" && !form.referralSource?.trim()) { setError("Vui lòng điền nguồn Referral đến từ đâu"); return; }
     const selectedPkgs = parsePackageList(form.packageRegistered);
     if (selectedPkgs.includes("L1") && selectedPkgs.includes("L2")) {
       setError("Gói L1 và L2 không được phép đăng ký cùng lúc");
@@ -163,7 +164,11 @@ export function LeadsTab({
     }
     setSaving(true);
     setError("");
-    const body = { branchId, month, year, ...form, signDate: form.signDateStr || null };
+    const body = {
+      branchId, month, year, ...form,
+      referralSource: form.source === "Referral" ? (form.referralSource?.trim() || null) : null,
+      signDate: form.signDateStr || null,
+    };
     try {
       const url = editing ? `/api/setup/leads/${editing.id}` : "/api/setup/leads";
       const res = await fetch(url, {
@@ -529,7 +534,12 @@ export function LeadsTab({
 
                               <td className="px-3 py-2.5 text-gray-500">{l.yearOfBirth ?? "—"}</td>
                               <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.phone ?? "—"}</td>
-                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{l.source ?? "—"}</td>
+                              <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                                {l.source ?? "—"}
+                                {l.source === "Referral" && l.referralSource && (
+                                  <span className="block text-[11px] text-gray-400">({l.referralSource})</span>
+                                )}
+                              </td>
 
                               {/* Chăm sóc — clickable with warning indicator */}
                               <td className="px-3 py-2.5 max-w-[140px]">
@@ -802,6 +812,16 @@ export function LeadsTab({
                   {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </FormRow>
+              {form.source === "Referral" && (
+                <FormRow label="Referral đến từ đâu? *">
+                  <input
+                    value={form.referralSource ?? ""}
+                    onChange={e => setForm(f => ({ ...f, referralSource: e.target.value }))}
+                    className={cn(inputCls, !form.referralSource?.trim() && "border-amber-300 focus:ring-amber-300/30")}
+                    placeholder="VD: Hội viên Nguyễn Thị B giới thiệu..."
+                  />
+                </FormRow>
+              )}
               <FormRow label="Quá trình chăm sóc">
                 <textarea
                   value={form.notes ?? ""}
@@ -890,10 +910,10 @@ export function LeadsTab({
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
               <button
                 onClick={handleSave}
-                disabled={saving || !form.source}
+                disabled={saving || !form.source || (form.source === "Referral" && !form.referralSource?.trim())}
                 className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-50"
                 style={{ backgroundColor: "#f15b5c" }}
-                title={!form.source ? "Vui lòng chọn Phân nguồn trước" : undefined}
+                title={!form.source ? "Vui lòng chọn Phân nguồn trước" : (form.source === "Referral" && !form.referralSource?.trim()) ? "Vui lòng điền nguồn Referral đến từ đâu" : undefined}
               >
                 {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Thêm mới"}
               </button>
@@ -978,7 +998,7 @@ function CareNotesPopup({
               <p className="text-xs text-gray-400 mt-0.5 truncate">
                 Nhân sự: {ptName}
                 {lead.forecast && ` · Gói: ${lead.forecast}`}
-                {lead.source   && ` · Nguồn: ${lead.source}`}
+                {lead.source   && ` · Nguồn: ${lead.source}${lead.source === "Referral" && lead.referralSource ? ` (${lead.referralSource})` : ""}`}
               </p>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5">

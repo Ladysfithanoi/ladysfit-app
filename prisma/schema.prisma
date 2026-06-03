@@ -208,6 +208,7 @@ model ConsultationInfo {
   email          String?
   consultDate    DateTime @default(now())
   knowLDFVia     String?
+  referralSource String?
   familyStatus   String?
   height         Float    @default(0)
   currentWeight  Float    @default(0)
@@ -779,6 +780,7 @@ model SalesLead {
   yearOfBirth       Int?
   phone             String?
   source            String?
+  referralSource    String?
   notes             String?    @db.Text
   forecast          String?
   status            LeadStatus @default(TAKECARE)

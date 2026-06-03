@@ -107,6 +107,8 @@ export function Step1Info({
   const [branchId, setBranchId] = useState(consultation.branchId ?? "");
   const [createdById, setCreatedById] = useState(consultation.createdById ?? "");
   const [height, setHeight] = useState<string>((info?.height as string | number | undefined)?.toString() ?? "");
+  const [knowLDFVia, setKnowLDFVia] = useState<string>((info?.knowLDFVia as string) ?? "");
+  const [referralSource, setReferralSource] = useState<string>((info?.referralSource as string) ?? "");
   const [motivationLevel, setMotivationLevel] = useState((info?.motivationLevel as number) ?? 7);
   const [stressLevel, setStressLevel] = useState((info?.stressLevel as number) ?? 5);
 
@@ -133,7 +135,8 @@ export function Step1Info({
         email: g("email"),
         dateOfBirth: g("dateOfBirth") ? new Date(g("dateOfBirth") + "T00:00:00.000Z").toISOString() : null,
         consultDate: dmyToISO(g("consultDate")) || new Date().toISOString(),
-        knowLDFVia: g("knowLDFVia"),
+        knowLDFVia,
+        referralSource: knowLDFVia === "Referral" ? referralSource.trim() : null,
         familyStatus: g("familyStatus"),
         height: height ? Number(height) : 0,
         currentWeight: g("currentWeight") ? Number(g("currentWeight")) : 0,
@@ -176,6 +179,10 @@ export function Step1Info({
       setValidationError("Vui lòng điền họ tên và số điện thoại");
       return;
     }
+    if (knowLDFVia === "Referral" && !referralSource.trim()) {
+      setValidationError("Vui lòng điền nguồn Referral đến từ đâu");
+      return;
+    }
     setValidationError("");
     setSubmitting(true);
     await onNext(buildPayload());
@@ -193,6 +200,10 @@ export function Step1Info({
     const fd = new FormData(formRef.current!);
     if (!fd.get("fullName") || !fd.get("phone")) {
       setValidationError("Vui lòng điền họ tên và số điện thoại");
+      return;
+    }
+    if (knowLDFVia === "Referral" && !referralSource.trim()) {
+      setValidationError("Vui lòng điền nguồn Referral đến từ đâu");
       return;
     }
     setValidationError("");
@@ -270,7 +281,7 @@ export function Step1Info({
         <div className="p-5 space-y-3">
           <Row half>
             <Field label="Biết LDF qua đâu?">
-              <select name="knowLDFVia" defaultValue={(info?.knowLDFVia as string) ?? ""} disabled={fieldsDisabled} className={selectCls}>
+              <select name="knowLDFVia" value={knowLDFVia} onChange={(e) => setKnowLDFVia(e.target.value)} disabled={fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn —</option>
                 {["Walk-in", "Referral", "Thương hiệu cá nhân", "Bạn bè", "Tivi", "Hội viên cũ", "Website", "Báo, tạp chí", "Biển hiệu", "Facebook", "Tờ rơi", "Tiktok", "Instagram", "Thread", "Referral.PT"].map((v) => <option key={v}>{v}</option>)}
               </select>
@@ -282,6 +293,18 @@ export function Step1Info({
               </select>
             </Field>
           </Row>
+          {knowLDFVia === "Referral" && (
+            <Field label="Referral đến từ đâu?" required>
+              <input
+                name="referralSource"
+                value={referralSource}
+                onChange={(e) => setReferralSource(e.target.value)}
+                disabled={fieldsDisabled}
+                placeholder="VD: Hội viên Nguyễn Thị B giới thiệu..."
+                className={inputCls}
+              />
+            </Field>
+          )}
         </div>
       </div>
 

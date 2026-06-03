@@ -48,6 +48,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       yearOfBirth: "yearOfBirth" in body ? (body.yearOfBirth ? parseInt(String(body.yearOfBirth)) : null) : lead.yearOfBirth,
       phone: "phone" in body ? (body.phone ? String(body.phone) : null) : lead.phone,
       source: "source" in body ? (body.source ? String(body.source) : null) : lead.source,
+      referralSource: "referralSource" in body ? (body.referralSource ? String(body.referralSource) : null) : lead.referralSource,
       notes: "notes" in body ? (body.notes ? String(body.notes) : null) : lead.notes,
       forecast: "forecast" in body ? (body.forecast ? String(body.forecast) : null) : lead.forecast,
       status: "status" in body && body.status ? body.status as "TAKECARE" | "FAIL" | "DE" | "PIF" | "PB" : lead.status,

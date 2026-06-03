@@ -150,6 +150,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       phone?: string;
       dateOfBirth?: string | null;
       knowLDFVia?: string | null;
+      referralSource?: string | null;
     };
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -158,6 +159,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const phone = infoData.phone?.trim() || null;
     const yearOfBirth = infoData.dateOfBirth ? new Date(infoData.dateOfBirth).getFullYear() : null;
     const source = infoData.knowLDFVia?.trim() || null;
+    const referralSource = source === "Referral" ? (infoData.referralSource?.trim() || null) : null;
 
     const linkedLead = await prisma.salesLead.findUnique({ where: { consultationId: params.id } });
 
@@ -171,7 +173,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           customerName,
           ...(yearOfBirth != null ? { yearOfBirth } : {}),
           ...(phone != null ? { phone } : {}),
-          ...(source != null ? { source } : {}),
+          ...(source != null ? { source, referralSource } : {}),
         },
       });
     } else {
@@ -194,6 +196,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             yearOfBirth,
             phone,
             source,
+            referralSource,
             notes: `[Từ tư vấn ${fmtDate(now)}]`,
             status: "TAKECARE",
             month: currentMonth,

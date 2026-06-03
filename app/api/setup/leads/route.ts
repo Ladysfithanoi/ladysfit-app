@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { branchId, assignedPTId, customerName, yearOfBirth, phone, source, notes,
+  const { branchId, assignedPTId, customerName, yearOfBirth, phone, source, referralSource, notes,
     forecast, status, packageRegistered, actualRevenue, remainingPayment,
     fitpartnerRevenue, signDate, remark, month, year } = body;
 
@@ -78,7 +78,9 @@ export async function POST(req: Request) {
     data: {
       branchId, assignedPTId, createdById: session.user.id,
       customerName, yearOfBirth: yearOfBirth ? parseInt(yearOfBirth) : null,
-      phone: phone || null, source: source || null, notes: notes || null,
+      phone: phone || null, source: source || null,
+      referralSource: source === "Referral" ? (referralSource || null) : null,
+      notes: notes || null,
       forecast: forecast || null, status: status || "TAKECARE",
       packageRegistered: packageRegistered || null,
       actualRevenue: actualRevenue ? parseFloat(actualRevenue) : null,

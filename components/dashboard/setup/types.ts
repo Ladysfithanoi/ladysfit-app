@@ -36,6 +36,7 @@ export type SalesLead = {
   yearOfBirth: number | null;
   phone: string | null;
   source: string | null;
+  referralSource: string | null;
   notes: string | null;
   forecast: string | null;
   status: LeadStatus;
