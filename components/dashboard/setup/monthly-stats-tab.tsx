@@ -247,7 +247,7 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
         />
         <ProfileTable
           title="Phân tích nguồn lead chuẩn tệp — Cân nặng"
-          colLabel="Cân nặng"
+          colLabel="Chênh lệch cân nặng"
           rows={byWeight}
         />
       </div>

@@ -45,7 +45,7 @@ export async function GET(req: Request) {
       yearOfBirth: true,
       assignedPTId: true,
       assignedPT: { select: { id: true, name: true, email: true } },
-      consultation: { select: { info: { select: { currentWeight: true } } } },
+      consultation: { select: { info: { select: { currentWeight: true, height: true } } } },
     },
   });
 
@@ -152,7 +152,8 @@ export async function GET(req: Request) {
 
   // ── Profile: age & weight buckets (leads vs won) ──────────────────────────
   const AGE_ORDER = ["≤ 24", "25–34", "35–44", "≥ 45", "Không rõ"];
-  const WEIGHT_ORDER = ["< 50 kg", "50–59 kg", "60–69 kg", "70–79 kg", "≥ 80 kg", "Không rõ"];
+  // Weight buckets reflect the gap to ideal weight: currentWeight(kg) − height(cm) + 100.
+  const WEIGHT_ORDER = ["≥ 10 kg", "≥ 6 kg", "≥ 3 kg", "0 – 2.9 kg", "< 0 kg", "Không rõ"];
 
   const ageBucket = (yob: number | null): string => {
     if (!yob || yob < 1900 || yob > year) return "Không rõ";
@@ -162,13 +163,14 @@ export async function GET(req: Request) {
     if (age <= 44) return "35–44";
     return "≥ 45";
   };
-  const weightBucket = (w: number | null | undefined): string => {
-    if (!w || w <= 0) return "Không rõ";
-    if (w < 50) return "< 50 kg";
-    if (w < 60) return "50–59 kg";
-    if (w < 70) return "60–69 kg";
-    if (w < 80) return "70–79 kg";
-    return "≥ 80 kg";
+  const weightBucket = (w: number | null | undefined, h: number | null | undefined): string => {
+    if (!w || w <= 0 || !h || h <= 0) return "Không rõ";
+    const diff = w - h + 100; // gap to ideal weight (height − 100)
+    if (diff >= 10) return "≥ 10 kg";
+    if (diff >= 6) return "≥ 6 kg";
+    if (diff >= 3) return "≥ 3 kg";
+    if (diff >= 0) return "0 – 2.9 kg";
+    return "< 0 kg";
   };
 
   const ageMap = new Map<string, { leads: number; contracts: number }>();
@@ -181,7 +183,7 @@ export async function GET(req: Request) {
     if (won) ac.contracts += 1;
     ageMap.set(ab, ac);
 
-    const wb = weightBucket(lead.consultation?.info?.currentWeight);
+    const wb = weightBucket(lead.consultation?.info?.currentWeight, lead.consultation?.info?.height);
     const wc = weightMap.get(wb) ?? { leads: 0, contracts: 0 };
     wc.leads += 1;
     if (won) wc.contracts += 1;
