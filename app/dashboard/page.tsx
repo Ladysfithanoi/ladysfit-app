@@ -88,6 +88,7 @@ export default async function DashboardPage() {
           height: true,
           updatedAt: true,
           branchId: true,
+          assignedPTId: true,
           branch: { select: { id: true, name: true } },
           assignedPT: { select: { name: true, email: true } },
         },
@@ -219,6 +220,21 @@ export default async function DashboardPage() {
           eligibleNotTransformedOngoing,
         };
       }),
+      notTransformedClients: allClients
+        .filter((c) => !isTransformed(c))
+        .map((c) => ({
+          id: c.id,
+          fullName: c.fullName,
+          branchId: c.branchId,
+          branchName: c.branch.name,
+          ptId: c.assignedPTId,
+          ptName: c.assignedPT.name ?? c.assignedPT.email,
+          currentWeight: c.currentWeight,
+          initialWeight: c.initialWeight,
+          lostKg: Math.max(0, c.initialWeight - c.currentWeight),
+          eligible: isClassifiable(c) ? isEligible(c) : null,
+          hasOngoingProgram: ongoingProgramClientIds.has(c.id),
+        })),
       weeklyChart: getLast8WeeksData(chartLogs),
     };
 

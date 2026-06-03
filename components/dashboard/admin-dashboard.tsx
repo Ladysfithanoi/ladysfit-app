@@ -7,6 +7,7 @@ import { RecentTransformsTable } from "./recent-transforms-table";
 import { BranchPerformance } from "./branch-performance";
 import { TransformStats } from "./transform-stats";
 import { TransformQualityStats } from "./transform-quality-stats";
+import { NotTransformedTable } from "./not-transformed-table";
 
 export type AdminStats = {
   totalClients: number;
@@ -42,6 +43,19 @@ export type AdminStats = {
     notEligible: number;
     notEligibleTransformed: number;
     eligibleNotTransformedOngoing: number;
+  }[];
+  notTransformedClients: {
+    id: string;
+    fullName: string;
+    branchId: string;
+    branchName: string;
+    ptId: string;
+    ptName: string;
+    currentWeight: number;
+    initialWeight: number;
+    lostKg: number;
+    eligible: boolean | null;
+    hasOngoingProgram: boolean;
   }[];
   weeklyChart: WeekDayData[];
 };
@@ -141,6 +155,12 @@ export function AdminDashboard({
       {/* Transform quality — eligible (≥7kg above ideal) vs achieved + avg programs */}
       <TransformQualityStats
         quality={stats.transformQuality}
+        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
+      />
+
+      {/* Detail table: clients who haven't Transformed yet, filterable by branch + PT */}
+      <NotTransformedTable
+        clients={stats.notTransformedClients}
         branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
       />
 
