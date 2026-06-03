@@ -85,6 +85,7 @@ export default async function DashboardPage() {
           status: true,
           initialWeight: true,
           currentWeight: true,
+          height: true,
           updatedAt: true,
           branchId: true,
           branch: { select: { id: true, name: true } },
@@ -132,6 +133,33 @@ export default async function DashboardPage() {
       }
     }
 
+    // "Lộ trình" (package enrollments) each transformed client signed up to reach Transform.
+    // Count only enrollments created on/before the first-transform date.
+    const transformEnrollments =
+      transformedIds.length > 0
+        ? await prisma.packageEnrollment.findMany({
+            where: { clientId: { in: transformedIds } },
+            select: { clientId: true, createdAt: true },
+          })
+        : [];
+
+    const programCount = new Map<string, number>();
+    for (const e of transformEnrollments) {
+      const ftd = firstTransformDate.get(e.clientId);
+      if (!ftd || e.createdAt <= ftd) {
+        programCount.set(e.clientId, (programCount.get(e.clientId) ?? 0) + 1);
+      }
+    }
+
+    // Eligible to lose 7 kg = at least 7 kg above ideal weight (height − 100):
+    //   initialWeight(kg) − height(cm) + 100 ≥ 7. Clients without weight/height are unclassified.
+    const isEligible = (c: { initialWeight: number; height: number }) =>
+      c.initialWeight > 0 && c.height > 0 && c.initialWeight - c.height + 100 >= 7;
+    const isClassifiable = (c: { initialWeight: number; height: number }) =>
+      c.initialWeight > 0 && c.height > 0;
+    const isTransformed = (c: { initialWeight: number; currentWeight: number }) =>
+      c.initialWeight - c.currentWeight >= 7;
+
     const stats: AdminStats = {
       totalClients: allClients.length,
       activeClients: allClients.filter((c) => c.status === "ACTIVE").length,
@@ -163,6 +191,36 @@ export default async function DashboardPage() {
         branchName: c.branch.name,
         date: (firstTransformDate.get(c.id) ?? c.updatedAt).toISOString(),
       })),
+      transformQuality: branches.map((b) => {
+        const bc = allClients.filter((c) => c.branchId === b.id);
+        let eligible = 0, eligibleTransformed = 0, notEligible = 0, notEligibleTransformed = 0;
+        let transformedCount = 0, programsSum = 0;
+        for (const c of bc) {
+          const t = isTransformed(c);
+          if (isClassifiable(c)) {
+            if (isEligible(c)) {
+              eligible += 1;
+              if (t) eligibleTransformed += 1;
+            } else {
+              notEligible += 1;
+              if (t) notEligibleTransformed += 1;
+            }
+          }
+          if (t) {
+            transformedCount += 1;
+            programsSum += Math.max(1, programCount.get(c.id) ?? 0);
+          }
+        }
+        return {
+          branchId: b.id,
+          eligible,
+          eligibleTransformed,
+          notEligible,
+          notEligibleTransformed,
+          transformedCount,
+          programsSum,
+        };
+      }),
       weeklyChart: getLast8WeeksData(chartLogs),
     };
 

@@ -6,6 +6,7 @@ import { FMPTSessions } from "./fm-pt-sessions";
 import { RecentTransformsTable } from "./recent-transforms-table";
 import { BranchPerformance } from "./branch-performance";
 import { TransformStats } from "./transform-stats";
+import { TransformQualityStats } from "./transform-quality-stats";
 
 export type AdminStats = {
   totalClients: number;
@@ -33,6 +34,15 @@ export type AdminStats = {
     branchId: string;
     branchName: string;
     date: string;
+  }[];
+  transformQuality: {
+    branchId: string;
+    eligible: number;
+    eligibleTransformed: number;
+    notEligible: number;
+    notEligibleTransformed: number;
+    transformedCount: number;
+    programsSum: number;
   }[];
   weeklyChart: WeekDayData[];
 };
@@ -127,6 +137,12 @@ export function AdminDashboard({
       <TransformStats
         events={stats.transformEvents}
         branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name, totalKH: b.totalKH }))}
+      />
+
+      {/* Transform quality — eligible (≥7kg above ideal) vs achieved + avg programs */}
+      <TransformQualityStats
+        quality={stats.transformQuality}
+        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
       />
 
       {/* FM-only: PT session statistics */}
