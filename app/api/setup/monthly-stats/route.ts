@@ -49,26 +49,31 @@ export async function GET(req: Request) {
     },
   });
 
+  // A registered customer = bought a contract (deposit / paid-in-full / paid-remaining).
+  // No signDate gate, so "đã chốt" counts every registered lead.
   const isWon = (l: (typeof allLeads)[number]) =>
-    (l.status === "PIF" || l.status === "DE" || l.status === "PB") && l.signDate != null;
+    l.status === "PIF" || l.status === "DE" || l.status === "PB";
 
-  // Won contracts only — used for the revenue & PT tables (unchanged behaviour).
   const leads = allLeads.filter(isWon);
 
   const totalLeads = allLeads.length;
   const totalContracts = leads.length;
-  const totalRevenue = leads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
+  // Revenue counts every lead in the month (matches Setup "Tổng doanh thu"), regardless
+  // of status or sign date — a contract counts whether or not it was fully paid.
+  const totalRevenue = allLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
 
   // ── By source ────────────────────────────────────────────────────────────
   const sourceMap = new Map<string, { contracts: number; revenue: number }>();
-  for (const lead of leads) {
+  for (const lead of allLeads) {
     const key = lead.source?.trim() || "Không rõ nguồn";
     const cur = sourceMap.get(key) ?? { contracts: 0, revenue: 0 };
-    sourceMap.set(key, { contracts: cur.contracts + 1, revenue: cur.revenue + (lead.actualRevenue ?? 0) });
+    cur.revenue += lead.actualRevenue ?? 0;
+    if (isWon(lead)) cur.contracts += 1;
+    sourceMap.set(key, cur);
   }
 
   const bySource = Array.from(sourceMap.entries())
-    .filter(([, stat]) => stat.contracts > 0)
+    .filter(([, stat]) => stat.contracts > 0 || stat.revenue > 0)
     .map(([source, stat]) => ({
       source,
       contracts: stat.contracts,
@@ -93,18 +98,21 @@ export async function GET(req: Request) {
     sources: Map<string, number>;
   }>();
 
-  for (const lead of leads) {
+  for (const lead of allLeads) {
     const ptId = lead.assignedPTId;
     const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? { name: ptName, contracts: 0, revenue: 0, sources: new Map() };
-    const src = lead.source?.trim() || "Không rõ nguồn";
-    cur.contracts += 1;
     cur.revenue += lead.actualRevenue ?? 0;
-    cur.sources.set(src, (cur.sources.get(src) ?? 0) + 1);
+    if (isWon(lead)) {
+      const src = lead.source?.trim() || "Không rõ nguồn";
+      cur.contracts += 1;
+      cur.sources.set(src, (cur.sources.get(src) ?? 0) + 1);
+    }
     ptMap.set(ptId, cur);
   }
 
   const byPT = Array.from(ptMap.entries())
+    .filter(([, stat]) => stat.contracts > 0 || stat.revenue > 0)
     .map(([ptId, stat]) => {
       let mainSource = "—";
       let maxCount = 0;
