@@ -9,7 +9,7 @@ import type { AdminStats } from "./admin-dashboard";
 type Row = AdminStats["notTransformedClients"][number];
 type Branch = { id: string; name: string };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 export function NotTransformedTable({
   clients,
