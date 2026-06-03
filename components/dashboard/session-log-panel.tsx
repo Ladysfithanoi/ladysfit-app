@@ -454,12 +454,112 @@ export function LiveSessionPanel({
     }
   }
 
+  // ── Poll for the client's confirmation while the session is waiting ──
+  const [confirmResult, setConfirmResult] = useState<null | "completed" | "rejected">(null);
+  const [checking, setChecking] = useState(false);
+  const [checkNote, setCheckNote] = useState("");
+
+  const pollStatus = useCallback(async (): Promise<"completed" | "rejected" | null> => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs?sessionId=${log.sessionId}`);
+      if (!res.ok) return null;
+      const logs = (await res.json()) as WorkoutLogRow[];
+      const me = logs.find((l) => l.id === log.id);
+      if (!me) return null;
+      if (me.status === "COMPLETED") return "completed";
+      if (me.status === "VOID") return "rejected";
+      return null;
+    } catch {
+      return null;
+    }
+  }, [clientId, log.sessionId, log.id]);
+
+  // Auto-check every 5s while waiting for the client to confirm.
+  useEffect(() => {
+    if (log.status !== "AWAITING_CONFIRMATION" || confirmResult) return;
+    const t = setInterval(async () => {
+      const r = await pollStatus();
+      if (r) setConfirmResult(r);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [log.status, confirmResult, pollStatus]);
+
+  // Once resolved, show the outcome briefly then bubble it up to the parent.
+  useEffect(() => {
+    if (!confirmResult) return;
+    const t = setTimeout(async () => {
+      if (confirmResult === "completed") {
+        let pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null = null;
+        try {
+          const pres = await fetch(`/api/clients/${clientId}/packages`);
+          if (pres.ok) {
+            const pkgs = (await pres.json()) as { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string }[];
+            const newest = pkgs[pkgs.length - 1];
+            if (newest) pkg = { id: newest.id, sessionsUsed: newest.sessionsUsed, sessions: newest.sessions, packageName: newest.packageName, status: newest.status };
+          }
+        } catch {}
+        onCompleted({ ...log, status: "COMPLETED", confirmationMethod: "CLIENT_APP", confirmedAt: new Date().toISOString() }, pkg);
+      } else {
+        onVoided({ ...log, status: "VOID" });
+      }
+    }, confirmResult === "completed" ? 1600 : 2200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmResult]);
+
+  async function manualCheck() {
+    setChecking(true);
+    setCheckNote("");
+    const r = await pollStatus();
+    setChecking(false);
+    if (r) setConfirmResult(r);
+    else {
+      setCheckNote("Khách chưa xác nhận, vui lòng đợi...");
+      setTimeout(() => setCheckNote(""), 3000);
+    }
+  }
+
   // ── Waiting-for-client view (PT finished, client must confirm on their app) ──
   if (log.status === "AWAITING_CONFIRMATION") {
+    // Resolved: client confirmed → success
+    if (confirmResult === "completed") {
+      return (
+        <div className="mt-3 border border-green-300 rounded-xl overflow-hidden bg-green-50">
+          <div className="p-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <Check className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-green-700">Khách đã xác nhận!</p>
+              <p className="text-xs text-green-600 mt-0.5">Buổi tập đã được tính thành công.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Resolved: client rejected → not counted
+    if (confirmResult === "rejected") {
+      return (
+        <div className="mt-3 border border-red-300 rounded-xl overflow-hidden bg-red-50">
+          <div className="p-5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+              <X className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-red-700">Khách báo không phải buổi của họ</p>
+              <p className="text-xs text-red-600 mt-0.5">Buổi tập này không được tính.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mt-3 border border-amber-300 rounded-xl overflow-hidden bg-amber-50/40">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-100/60 border-b border-amber-200">
-          <Clock className="w-4 h-4 text-amber-600" />
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+          </span>
           <span className="text-xs font-extrabold text-amber-700">Đang chờ khách xác nhận</span>
         </div>
         <div className="p-4 space-y-3">
@@ -468,10 +568,22 @@ export function LiveSessionPanel({
             {" "}<span className="font-bold text-green-700">&quot;Xác nhận đã tập&quot;</span>. Buổi tập sẽ được tính ngay khi khách xác nhận.
           </p>
           <p className="text-xs text-gray-500">
-            Buổi tập vẫn được lưu, anh/chị có thể đóng trang. Khi khách xác nhận, buổi sẽ tự động được cộng.
+            Màn hình tự kiểm tra mỗi vài giây. Anh/chị cũng có thể bấm &quot;Kiểm tra ngay&quot;.
           </p>
+
+          <button
+            onClick={manualCheck}
+            disabled={checking}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Kiểm tra ngay
+          </button>
+          {checkNote && <p className="text-xs text-amber-700 font-medium">{checkNote}</p>}
           {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
-          <div className="pt-1 border-t border-amber-200">
+
+          <div className="pt-2 border-t border-amber-200">
             <p className="text-[11px] text-gray-400 mb-2">Khách không tiện dùng app?</p>
             <button
               onClick={() => setShowSig(true)}
