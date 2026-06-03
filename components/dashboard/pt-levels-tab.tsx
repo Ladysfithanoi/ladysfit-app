@@ -53,7 +53,7 @@ const inputCls =
 function LevelBadge({ name, color }: { name: string; color: string }) {
   return (
     <span
-      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-white"
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-white whitespace-nowrap"
       style={{ backgroundColor: color }}
     >
       {name}
@@ -365,51 +365,51 @@ export function PTLevelsTab() {
             </div>
           ) : (
             <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[820px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-5 py-3 text-xs font-bold text-gray-500">STT</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Tên cấp độ</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Thi lại sau</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Giai đoạn tiếp cận</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Nhân sự</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Mặc định</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500">Trạng thái</th>
+                    <th className="text-left px-5 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">STT</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Tên cấp độ</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Thi lại sau</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Giai đoạn tiếp cận</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Nhân sự</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Mặc định</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Trạng thái</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody>
                   {levels.map((level, i) => (
                     <tr key={level.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                      <td className="px-5 py-3.5 text-xs text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-5 py-3.5 text-xs text-gray-400 whitespace-nowrap">{i + 1}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <LevelBadge name={level.name} color={level.color} />
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-gray-600">{level.retestIntervalDays} ngày</td>
+                      <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{level.retestIntervalDays} ngày</td>
                       <td className="px-4 py-3.5">
                         {level.phaseAccess.length === 0 ? (
-                          <span className="text-xs text-gray-400">Tất cả</span>
+                          <span className="text-xs text-gray-400 whitespace-nowrap">Tất cả</span>
                         ) : (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1 min-w-[160px]">
                             {level.phaseAccess.map((a) => (
-                              <span key={a.id} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">
+                              <span key={a.id} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap">
                                 {a.phase.name}
                               </span>
                             ))}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-gray-600">{level._count.users}</td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{level._count.users}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         {level.isDefault && (
-                          <span className="text-[10px] bg-[#f15b5c]/10 text-[#f15b5c] px-2 py-0.5 rounded-full font-bold">
+                          <span className="text-[10px] bg-[#f15b5c]/10 text-[#f15b5c] px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                             Mặc định
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
                             level.isActive
                               ? "bg-green-50 text-green-600"
                               : "bg-gray-100 text-gray-400"
