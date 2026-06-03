@@ -68,6 +68,7 @@ export function PTLevelsTab() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [toast, setToast] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error">("success");
   // Minimum session duration (minutes) editor
   const [minMinutesInput, setMinMinutesInput] = useState("30");
   const [savingMinMinutes, setSavingMinMinutes] = useState(false);
@@ -89,7 +90,8 @@ export function PTLevelsTab() {
   const [levelToDelete, setLevelToDelete] = useState<PTLevel | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  function showToast(msg: string) {
+  function showToast(msg: string, type: "success" | "error" = "success") {
+    setToastType(type);
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
   }
@@ -132,22 +134,29 @@ export function PTLevelsTab() {
   async function handleSaveMinMinutes() {
     const value = Math.round(Number(minMinutesInput));
     if (!Number.isFinite(value) || value <= 0) {
-      showToast("Số phút không hợp lệ");
+      showToast("Số phút không hợp lệ", "error");
       return;
     }
     setSavingMinMinutes(true);
-    const res = await fetch("/api/admin/system-config", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ minSessionMinutes: value }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/admin/system-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minSessionMinutes: value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Lưu thất bại (mã ${res.status})`);
+      }
       const updated: SystemConfig = await res.json();
       setConfig(updated);
       setMinMinutesInput(String(updated.minSessionMinutes));
-      showToast(`Đã lưu: buổi tập tối thiểu ${updated.minSessionMinutes} phút`);
+      showToast(`✓ Đã lưu: buổi tập tối thiểu ${updated.minSessionMinutes} phút`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Lưu thất bại, vui lòng thử lại", "error");
+    } finally {
+      setSavingMinMinutes(false);
     }
-    setSavingMinMinutes(false);
   }
 
   function openAdd() {
@@ -251,7 +260,11 @@ export function PTLevelsTab() {
     <>
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-gray-800 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+        <div
+          className={`fixed bottom-6 right-6 z-50 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg ${
+            toastType === "error" ? "bg-red-600" : "bg-green-600"
+          }`}
+        >
           {toast}
         </div>
       )}
