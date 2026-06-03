@@ -6,7 +6,6 @@ import { LeadsTab } from "./leads-tab";
 import { TargetsTab } from "./targets-tab";
 import { WeeklyReportTab } from "./weekly-report-tab";
 import { ReportTab } from "./report-tab";
-import { PeriodReportTab } from "./period-report-tab";
 import { MonthlyStatsTab } from "./monthly-stats-tab";
 import { PTUser, SOURCES, LEAD_STATUS_LABEL, LeadStatus } from "./types";
 
@@ -27,12 +26,12 @@ const TABS = [
   { key: "targets", label: "Mục tiêu & KPI" },
   { key: "weeklyReport", label: "Báo cáo tuần" },
   { key: "report", label: "Báo cáo tháng" },
-  { key: "quarterReport", label: "Báo cáo quý" },
-  { key: "yearReport", label: "Báo cáo năm" },
   { key: "stats", label: "Thống kê tháng" },
+  { key: "quarterStats", label: "Thống kê quý" },
+  { key: "yearStats", label: "Thống kê năm" },
 ] as const;
 
-type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "quarterReport" | "yearReport" | "stats";
+type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "stats" | "quarterStats" | "yearStats";
 
 const now = new Date();
 
@@ -130,7 +129,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           )}
           {/* Period & Năm — 50/50 mobile, inline desktop. Tháng (hầu hết tab) / Quý (tab Báo cáo quý) */}
           <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto md:gap-2">
-            {tab === "quarterReport" ? (
+            {tab === "quarterStats" ? (
               <div className="w-full md:w-[110px]">
                 <select value={quarter} onChange={(e) => setQuarter(parseInt(e.target.value))} className={selectCls}>
                   {[1, 2, 3, 4].map((q) => (
@@ -138,7 +137,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
                   ))}
                 </select>
               </div>
-            ) : tab !== "yearReport" ? (
+            ) : tab !== "yearStats" ? (
               <div className="w-full md:w-[100px]">
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
                   {months.map((m) => (
@@ -230,18 +229,31 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           isPT={isPT}
         />
       )}
-      {tab === "quarterReport" && (
-        <PeriodReportTab branchId={branchId} year={year} period="quarter" quarter={quarter} />
-      )}
-      {tab === "yearReport" && (
-        <PeriodReportTab branchId={branchId} year={year} period="year" quarter={quarter} />
-      )}
       {tab === "stats" && (
         <MonthlyStatsTab
           branchId={branchId}
           branchName={branchName}
           month={month}
           year={year}
+        />
+      )}
+      {tab === "quarterStats" && (
+        <MonthlyStatsTab
+          branchId={branchId}
+          branchName={branchName}
+          month={month}
+          year={year}
+          period="quarter"
+          quarter={quarter}
+        />
+      )}
+      {tab === "yearStats" && (
+        <MonthlyStatsTab
+          branchId={branchId}
+          branchName={branchName}
+          month={month}
+          year={year}
+          period="year"
         />
       )}
     </div>

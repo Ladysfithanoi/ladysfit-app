@@ -20,8 +20,12 @@ export async function GET(req: Request) {
   const branchId = searchParams.get("branchId");
   const month = parseInt(searchParams.get("month") ?? "0");
   const year = parseInt(searchParams.get("year") ?? "0");
+  // period: omitted/"month" → single month; "quarter" → 3 months; "year" → all 12.
+  const period = searchParams.get("period");
+  const quarter = parseInt(searchParams.get("quarter") ?? "0");
 
-  if (!branchId || !month || !year) {
+  const validQuarter = period !== "quarter" || (quarter >= 1 && quarter <= 4);
+  if (!branchId || !year || (period !== "quarter" && period !== "year" && !month) || !validQuarter) {
     return NextResponse.json({ error: "Missing params" }, { status: 400 });
   }
 
@@ -29,11 +33,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Which reporting months this period covers (SalesLead.month/year).
+  const monthFilter =
+    period === "year"
+      ? { in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }
+      : period === "quarter"
+        ? { in: [(quarter - 1) * 3 + 1, (quarter - 1) * 3 + 2, (quarter - 1) * 3 + 3] }
+        : month;
+
   // All leads in the period (any status) — used for lead-source & profile analysis.
   const allLeads = await prisma.salesLead.findMany({
     where: {
       branchId,
-      month,
+      month: monthFilter,
       year,
       ...(isPT ? { assignedPTId: session.user.id } : {}),
     },

@@ -53,6 +53,8 @@ type Props = {
   branchName: string;
   month: number;
   year: number;
+  period?: "month" | "quarter" | "year";
+  quarter?: number;
 };
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -76,20 +78,29 @@ function fmtRevenue(v: number) {
 const th = "border border-gray-200 px-3 py-2.5 text-xs font-bold text-gray-500 uppercase whitespace-nowrap";
 const td = "border border-gray-200 px-3 py-2.5 text-xs text-gray-700";
 
-export function MonthlyStatsTab({ branchId, month, year }: Props) {
+export function MonthlyStatsTab({ branchId, month, year, period = "month", quarter = 1 }: Props) {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const periodLabel =
+    period === "quarter" ? `Quý ${quarter}/${year}` : period === "year" ? `Năm ${year}` : `Tháng ${month}/${year}`;
 
   const fetchStats = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/setup/monthly-stats?branchId=${branchId}&month=${month}&year=${year}`);
+      const periodQs =
+        period === "quarter"
+          ? `period=quarter&quarter=${quarter}&year=${year}`
+          : period === "year"
+            ? `period=year&year=${year}`
+            : `month=${month}&year=${year}`;
+      const res = await fetch(`/api/setup/monthly-stats?branchId=${branchId}&${periodQs}`);
       if (res.ok) setData(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [branchId, month, year]);
+  }, [branchId, month, year, period, quarter]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -97,7 +108,7 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
   if (!data || data.totalLeads === 0) {
     return (
       <div className="py-12 text-center text-sm text-gray-300">
-        Không có lead nào trong tháng {month}/{year}
+        Không có lead nào trong {periodLabel}
       </div>
     );
   }
@@ -122,7 +133,7 @@ export function MonthlyStatsTab({ branchId, month, year }: Props) {
       {/* Page header */}
       <div>
         <h2 className="text-base font-extrabold text-gray-900">
-          Thống kê nguồn lead — Tháng {month}/{year}
+          Thống kê nguồn lead — {periodLabel}
         </h2>
         <p className="text-xs text-gray-400 mt-0.5">
           Tổng {totalLeads} lead • {totalContracts} đã chốt HĐ • tỉ lệ chốt {overallConversionPct}%
