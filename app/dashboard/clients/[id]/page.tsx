@@ -248,6 +248,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
     createdBy: l.createdBy,
     createdAt: l.createdAt.toISOString(),
     setLogs: l.setLogs,
+    status: l.status,
+    checkInAt: l.checkInAt?.toISOString() ?? null,
+    checkOutAt: l.checkOutAt?.toISOString() ?? null,
+    firstInteractionAt: l.firstInteractionAt?.toISOString() ?? null,
+    signatureUrl: l.signatureUrl,
   }));
 
   return (
@@ -295,6 +300,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       currentUserId={session.user.id}
       isSubstitute={isSubstitute}
       enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
+      minSessionMinutes={sysConfig?.minSessionMinutes ?? 30}
     />
   );
 }

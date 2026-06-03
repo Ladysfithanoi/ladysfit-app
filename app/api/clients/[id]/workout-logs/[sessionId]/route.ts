@@ -80,9 +80,23 @@ export async function PUT(
       )
     );
 
+    // For an in-progress session, stamp the first interaction (server time) the
+    // first time any set data is saved — used to enforce the 10-minute rule.
+    const hasData = body.setLogs.some((sl) =>
+      [
+        sl.set1Load, sl.set1Reps, sl.set2Load, sl.set2Reps, sl.set3Load, sl.set3Reps,
+        sl.set4Load, sl.set4Reps, sl.set5Load, sl.set5Reps, sl.set6Load, sl.set6Reps,
+      ].some((v) => v != null && String(v).trim() !== "")
+    );
+    const stampInteraction =
+      existing.status === "IN_PROGRESS" && existing.firstInteractionAt == null && hasData;
+
     const updated = await prisma.workoutLog.update({
       where: { id: logId },
-      data: { notes: body.notes ?? null },
+      data: {
+        notes: body.notes ?? null,
+        ...(stampInteraction ? { firstInteractionAt: new Date() } : {}),
+      },
       include: {
         setLogs: { orderBy: { id: "asc" } },
         createdBy: { select: { id: true, name: true } },
@@ -93,6 +107,9 @@ export async function PUT(
       ...updated,
       sessionDate: updated.sessionDate.toISOString(),
       createdAt: updated.createdAt.toISOString(),
+      checkInAt: updated.checkInAt?.toISOString() ?? null,
+      checkOutAt: updated.checkOutAt?.toISOString() ?? null,
+      firstInteractionAt: updated.firstInteractionAt?.toISOString() ?? null,
     });
   } catch (error: unknown) {
     const e = error as { message?: string };

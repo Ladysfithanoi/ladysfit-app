@@ -25,7 +25,7 @@ export async function GET() {
         where: { status: "ACTIVE" },
         select: {
           id: true,
-          workoutLogs: { select: { id: true, sessionDate: true }, orderBy: { sessionDate: "desc" }, take: 30 },
+          workoutLogs: { where: { status: "COMPLETED" }, select: { id: true, sessionDate: true }, orderBy: { sessionDate: "desc" }, take: 30 },
         },
       },
       ptAlerts: {

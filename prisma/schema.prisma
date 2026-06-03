@@ -606,6 +606,14 @@ model WorkoutMovement {
   @@map("workout_movements")
 }
 
+// Lifecycle of a workout session, used for the check-in/check-out anti-cheat flow.
+// Legacy/manually saved logs default to COMPLETED so existing counts stay intact.
+enum WorkoutLogStatus {
+  IN_PROGRESS
+  COMPLETED
+  VOID
+}
+
 model WorkoutLog {
   id          String   @id @default(cuid())
   clientId    String
@@ -616,6 +624,18 @@ model WorkoutLog {
   notes       String?  @db.Text
   createdById String
   createdAt   DateTime @default(now())
+
+  // ── Check-in / check-out tracking (server-authoritative timestamps) ──
+  status             WorkoutLogStatus @default(COMPLETED)
+  checkInAt          DateTime?
+  checkOutAt         DateTime?
+  // First time the PT entered any set data; used to enforce the "interaction
+  // within 10 minutes of check-in" rule.
+  firstInteractionAt DateTime?
+  // Client's hand-drawn signature as a PNG data-URL.
+  signatureUrl       String?          @db.Text
+  // Reason a session was voided (e.g. no interaction within 10 minutes).
+  voidReason         String?
 
   client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   program   WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -1196,6 +1216,8 @@ model PTLevelPhaseAccess {
 model SystemConfig {
   id                String   @id
   enableLevelSystem Boolean  @default(true)
+  // Minimum minutes between check-in and signature for a session to count.
+  minSessionMinutes Int      @default(30)
   updatedAt         DateTime @updatedAt
 
   @@map("system_config")

@@ -1,18 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, AlertTriangle, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DateMaskInput } from "@/components/ui/date-mask-input";
-import type { WorkoutSession, WorkoutLogRow, SetLogRow } from "./workout-tab";
-import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
+import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -114,14 +107,6 @@ function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
 
 type SetDraft = { load: string; reps: string };
 
-type SetLogDraft = {
-  movementId: string | null;
-  movementName: string;
-  exerciseName: string;
-  sets: SetDraft[];
-  exerciseNotes: string;
-};
-
 type EditSetLogDraft = {
   id: string;
   movementName: string;
@@ -130,89 +115,209 @@ type EditSetLogDraft = {
   exerciseNotes: string;
 };
 
-// ── SessionLogForm ─────────────────────────────────────────────────────────
+// ── SignaturePad (customer signs to confirm the session) ───────────────────
 
-export function SessionLogForm({
-  session,
-  weekId,
-  weekNumber,
-  programId,
-  clientId,
-  phase,
-  prevWeekLogs,
-  onSaved,
-  onClose,
+function SignaturePad({
+  onConfirm,
+  onCancel,
+  saving,
 }: {
-  session: WorkoutSession;
-  weekId: string;
-  weekNumber: number;
-  programId: string;
-  clientId: string;
-  phase: string;
-  prevWeekLogs: WorkoutLogRow[];
-  onSaved: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
-  onClose: () => void;
+  onConfirm: (dataUrl: string) => void;
+  onCancel: () => void;
+  saving: boolean;
 }) {
-  const [date, setDate] = useState(todayISO());
-  const [notes, setNotes] = useState("");
-  const [toast, setToast] = useState("");
-  const [setLogs, setSetLogs] = useState<SetLogDraft[]>(() =>
-    session.movements.map((m) => ({
-      movementId: m.id,
-      movementName: m.movementName,
-      exerciseName: m.selectedExercise,
-      sets: SETS.map(() => ({ load: "", reps: "" })),
-      exerciseNotes: "",
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+
+  // Size the canvas to its rendered width so coordinates line up 1:1.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ratio = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    canvas.width = cssW * ratio;
+    canvas.height = cssH * ratio;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+  }, []);
+
+  function point(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function start(e: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    canvas.setPointerCapture(e.pointerId);
+    drawing.current = true;
+    const { x, y } = point(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  function move(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    const { x, y } = point(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    if (!hasDrawn) setHasDrawn(true);
+  }
+
+  function end() {
+    drawing.current = false;
+  }
+
+  function clear() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-extrabold text-gray-900">Khách ký xác nhận buổi tập</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Đề nghị khách dùng ngón tay ký vào ô bên dưới</p>
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerLeave={end}
+          className="w-full h-44 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 touch-none cursor-crosshair"
+          style={{ touchAction: "none" }}
+        />
+
+        <div className="flex gap-2">
+          <button
+            onClick={clear}
+            disabled={saving}
+            className="h-10 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Xóa
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={saving}
+            className="h-10 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={() => {
+              const canvas = canvasRef.current;
+              if (canvas) onConfirm(canvas.toDataURL("image/png"));
+            }}
+            disabled={!hasDrawn || saving}
+            className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xác nhận...</> : <><Check className="w-4 h-4" />Xác nhận & tính buổi</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── LiveSessionPanel (check-in → ghi số liệu → khách ký) ───────────────────
+
+function fmtClock(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function LiveSessionPanel({
+  log,
+  sessionName,
+  weekNumber,
+  phase,
+  clientId,
+  minSessionMinutes,
+  prevWeekLogs,
+  onUpdated,
+  onCompleted,
+  onVoided,
+}: {
+  log: WorkoutLogRow;
+  sessionName: string;
+  weekNumber: number;
+  phase: string;
+  clientId: string;
+  minSessionMinutes: number;
+  prevWeekLogs: WorkoutLogRow[];
+  onUpdated: (log: WorkoutLogRow) => void;
+  onCompleted: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  onVoided: (log: WorkoutLogRow) => void;
+}) {
+  const [notes, setNotes] = useState(log.notes ?? "");
+  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
+    log.setLogs.map((sl) => ({
+      id: sl.id,
+      movementName: sl.movementName,
+      exerciseName: sl.exerciseName,
+      exerciseNotes: sl.exerciseNotes ?? "",
+      sets: [
+        { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
+        { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
+        { load: sl.set3Load ?? "", reps: sl.set3Reps ?? "" },
+        { load: sl.set4Load ?? "", reps: sl.set4Reps ?? "" },
+        { load: sl.set5Load ?? "", reps: sl.set5Reps ?? "" },
+        { load: sl.set6Load ?? "", reps: sl.set6Reps ?? "" },
+      ],
     }))
   );
   const [saving, setSaving] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [showSig, setShowSig] = useState(false);
   const [error, setError] = useState("");
-  // Target set for the "copy Set 1" action — defaults to the largest planned set count.
-  const [copyTargetSet, setCopyTargetSet] = useState<number>(() =>
-    Math.min(
-      Math.max(2, ...session.movements.map((m) => m.sets || 1)),
-      SETS.length
-    )
-  );
+  const [toast, setToast] = useState("");
+  const [copyTargetSet, setCopyTargetSet] = useState<number>(SETS.length);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  // ── Auto-save draft ────────────────────────────────────────────────────────
-  const draftKey = `ladysfit_draft_session_${clientId}_${programId}_${weekId}_${session.id}`;
-  const { clearDraft: clearSessionDraft } = useFormAutoSave(
-    draftKey,
-    { date, notes, setLogs },
-    !saving && isDirty
-  );
-
-  // Restore draft on mount (no DB fetch here — state starts from session.movements)
+  // Live ticking clock for the elapsed timer.
   useEffect(() => {
-    type SessionDraft = { date: string; notes: string; setLogs: SetLogDraft[] };
-    const draft = loadDraft<SessionDraft>(draftKey);
-    if (!draft) return;
-    if (draft.date) setDate(draft.date);
-    if (draft.notes !== undefined) setNotes(draft.notes);
-    // Only restore setLogs if structure matches current session.
-    // Always overwrite movementId/movementName/exerciseName with fresh session values
-    // to prevent stale FK references when the program was edited or phases were switched.
-    if (Array.isArray(draft.setLogs) && draft.setLogs.length === session.movements.length) {
-      setSetLogs(draft.setLogs.map((sl, i) => ({
-        ...sl,
-        movementId: session.movements[i].id,
-        movementName: session.movements[i].movementName,
-        exerciseName: session.movements[i].selectedExercise,
-      })));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  const isCardio = isCardioSession(session.sessionName);
+  const checkInMs = log.checkInAt ? new Date(log.checkInAt).getTime() : Date.now();
+  const elapsedMs = nowMs - checkInMs;
+  const elapsedMin = elapsedMs / 60000;
+
+  const firstInteractionMs = log.firstInteractionAt ? new Date(log.firstInteractionAt).getTime() : null;
+  const interactionDone = firstInteractionMs != null && firstInteractionMs - checkInMs <= 10 * 60 * 1000;
+  const interactionWindowLeftMs = 10 * 60 * 1000 - elapsedMs;
+  const interactionFailed = !interactionDone && interactionWindowLeftMs <= 0;
+  const durationMet = elapsedMin >= minSessionMinutes;
+
+  const isCardio = isCardioSession(sessionName);
   const repRange = isCardio ? null : getRepRange(phase);
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
 
-  // Build lookup: movementName → suggestion + "Lần trước" reference
+  // Build "Lần trước" + suggestion lookups from the previous week's completed log.
   const prevSuggestions = new Map<string, Suggestion>();
-  const prevRefs = new Map<string, string>(); // movementName → "30kg × 12 reps"
-
+  const prevRefs = new Map<string, string>();
   if (prevWeekLogs.length > 0) {
     const prevLog = prevWeekLogs[0];
     for (const sl of prevLog.setLogs) {
@@ -226,7 +331,6 @@ export function SessionLogForm({
   }
 
   function updateSet(movIdx: number, setIdx: number, field: "load" | "reps", value: string) {
-    setIsDirty(true);
     setSetLogs((prev) =>
       prev.map((sl, i) =>
         i === movIdx
@@ -236,24 +340,18 @@ export function SessionLogForm({
     );
   }
 
-  function updateNotes(movIdx: number, value: string) {
-    setIsDirty(true);
+  function updateExerciseNotes(movIdx: number, value: string) {
     setSetLogs((prev) => prev.map((sl, i) => (i === movIdx ? { ...sl, exerciseNotes: value } : sl)));
   }
 
-  // Copy each exercise's Set 1 (load + reps) into Set 2 .. Set `target`,
-  // so PTs don't have to retype identical numbers. `target` is chosen by the PT.
   function copySet1To(target: number) {
-    setIsDirty(true);
     setSetLogs((prev) =>
       prev.map((sl) => {
         const first = sl.sets[0];
-        if (!first.load && !first.reps) return sl; // nothing to copy
+        if (!first.load && !first.reps) return sl;
         return {
           ...sl,
-          sets: sl.sets.map((s, j) =>
-            j > 0 && j < target ? { load: first.load, reps: first.reps } : s
-          ),
+          sets: sl.sets.map((s, j) => (j > 0 && j < target ? { load: first.load, reps: first.reps } : s)),
         };
       })
     );
@@ -261,97 +359,131 @@ export function SessionLogForm({
 
   const canCopySet1 = setLogs.some((sl) => sl.sets[0].load || sl.sets[0].reps);
 
-  async function handleSave() {
-    // Block submission if any row has data entered but no exercise assigned
-    const invalidRows = setLogs.filter((sl) => {
-      const hasData = sl.sets.some((s) => s.load.trim() !== "" || s.reps.trim() !== "");
-      const hasExercise = sl.movementId && sl.exerciseName && sl.exerciseName.trim() !== "" && sl.exerciseName !== "—";
-      return hasData && !hasExercise;
-    });
-    if (invalidRows.length > 0) {
-      setError("Vui lòng chọn bài tập cho các hàng có ghi nhận kết quả!");
-      return;
-    }
+  function buildSetLogPayload() {
+    return setLogs.map((sl) => ({
+      id: sl.id,
+      set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps || null,
+      set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps || null,
+      set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps || null,
+      set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps || null,
+      set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps || null,
+      set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps || null,
+      exerciseNotes: sl.exerciseNotes || null,
+    }));
+  }
+
+  const saveProgress = useCallback(async () => {
     setSaving(true);
     setError("");
     try {
-      const payload = {
-        programId,
-        weekId,
-        sessionId: session.id,
-        sessionDate: new Date(date).toISOString(),
-        notes: notes || null,
-        setLogs: setLogs.map((sl) => ({
-          movementId: sl.movementId,
-          movementName: sl.movementName,
-          exerciseName: sl.exerciseName,
-          set1Load: sl.sets[0].load || null, set1Reps: sl.sets[0].reps || null,
-          set2Load: sl.sets[1].load || null, set2Reps: sl.sets[1].reps || null,
-          set3Load: sl.sets[2].load || null, set3Reps: sl.sets[2].reps || null,
-          set4Load: sl.sets[3].load || null, set4Reps: sl.sets[3].reps || null,
-          set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps || null,
-          set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps || null,
-          exerciseNotes: sl.exerciseNotes || null,
-        })),
-      };
-
-      const res = await fetch(`/api/clients/${clientId}/workout-logs`, {
-        method: "POST",
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
-      const data = await res.json();
-      const { packageUpdate, ...logData } = data;
-      const saved = logData as WorkoutLogRow;
-      if (packageUpdate) {
-        setToast(`Đã lưu buổi tập! Tổng: ${packageUpdate.sessionsUsed}/${packageUpdate.sessions} buổi · ${packageUpdate.packageName}`);
-        setTimeout(() => setToast(""), 4000);
-      }
-      clearSessionDraft();
-      setIsDirty(false);
-      onSaved(saved, packageUpdate ?? null);
+      const updated = (await res.json()) as WorkoutLogRow;
+      onUpdated(updated);
+      setToast("Đã lưu số liệu");
+      setTimeout(() => setToast(""), 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setSaving(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, log.id, notes, setLogs]);
+
+  async function checkOut(signatureUrl: string) {
+    setFinishing(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signatureUrl, notes: notes || null, setLogs: buildSetLogPayload() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      setShowSig(false);
+      if (data.valid) {
+        onCompleted(data as WorkoutLogRow, data.packageUpdate ?? null);
+      } else {
+        onVoided(data as WorkoutLogRow);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setFinishing(false);
+    }
   }
 
   return (
-    <div className="mt-3 border border-[#f15b5c]/20 rounded-xl overflow-hidden bg-[#fff9f9]">
-      {/* Header */}
+    <div className="mt-3 border border-[#f15b5c]/30 rounded-xl overflow-hidden bg-[#fff9f9]">
+      {/* Header with live timer */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-[#fff0f0] border-b border-[#f15b5c]/10">
-        <span className="text-xs font-extrabold text-[#f15b5c]">Ghi lại buổi tập</span>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#f15b5c]/10 text-gray-400 hover:text-[#f15b5c]">
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <span className="text-xs font-extrabold text-[#f15b5c] flex items-center gap-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
+          </span>
+          Buổi tập đang diễn ra
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-700 tabular-nums">
+          <Clock className="w-4 h-4 text-[#f15b5c]" />
+          {fmtClock(elapsedMs)}
+        </span>
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Date + session notes */}
-        <div className="flex flex-wrap gap-3 items-start">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-500">Ngày tập</label>
-            <DateMaskInput
-              value={date}
-              onChange={(v) => { setDate(v); setIsDirty(true); }}
-              className="h-9 rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
-            />
-          </div>
-          <div className="flex-1 min-w-[200px] space-y-1">
-            <label className="text-xs font-semibold text-gray-500">Ghi chú buổi tập</label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => { setNotes(e.target.value); setIsDirty(true); }}
-              placeholder="Ghi chú chung buổi tập..."
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none bg-white"
-            />
+        {/* Status banners */}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {/* Interaction status */}
+          {interactionDone ? (
+            <div className="flex items-center gap-2 text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+              <Check className="w-4 h-4 flex-shrink-0" />
+              Đã ghi nhận tương tác trong 10 phút đầu
+            </div>
+          ) : interactionFailed ? (
+            <div className="flex items-center gap-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              Quá 10 phút chưa nhập số liệu — buổi này sẽ KHÔNG được tính
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              Còn {fmtClock(interactionWindowLeftMs)} để nhập số liệu đầu tiên
+            </div>
+          )}
+          {/* Duration status */}
+          <div
+            className={cn(
+              "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
+              durationMet
+                ? "text-green-700 bg-green-50 border-green-100"
+                : "text-gray-500 bg-gray-50 border-gray-200"
+            )}
+          >
+            <Clock className="w-4 h-4 flex-shrink-0" />
+            {durationMet
+              ? `Đã đủ thời gian tối thiểu (${minSessionMinutes} phút)`
+              : `Cần tối thiểu ${minSessionMinutes} phút (còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút)`}
           </div>
         </div>
 
-        {/* Copy Set 1 → đến Set N (tuỳ chọn) */}
+        {/* Session notes */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-500">Ghi chú buổi tập</label>
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Ghi chú chung buổi tập..."
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none bg-white"
+          />
+        </div>
+
+        {/* Copy Set 1 → đến Set N */}
         <div className="flex justify-end items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-gray-500">Chép Set 1 đến</span>
           <select
@@ -399,16 +531,12 @@ export function SessionLogForm({
                 const suggestion = showSuggestions ? (prevSuggestions.get(sl.movementName) ?? null) : null;
                 const prevRef = prevRefs.get(sl.movementName);
                 return (
-                  <tr key={mi} className={cn("border-b border-gray-50 last:border-0", mi % 2 === 1 && "bg-gray-50/30")}>
-                    <td className="px-3 py-2 font-semibold text-gray-700 align-top pt-3">
-                      {sl.movementName}
-                    </td>
+                  <tr key={sl.id} className={cn("border-b border-gray-50 last:border-0", mi % 2 === 1 && "bg-gray-50/30")}>
+                    <td className="px-3 py-2 font-semibold text-gray-700 align-top pt-3">{sl.movementName}</td>
                     <td className="px-3 py-2 align-top pt-2">
                       <span className="text-gray-600 block">{sl.exerciseName || <span className="text-gray-300 italic">—</span>}</span>
                       {prevRef && (
-                        <span className="text-[10px] text-gray-400 mt-0.5 block">
-                          📅 Lần trước: {prevRef}
-                        </span>
+                        <span className="text-[10px] text-gray-400 mt-0.5 block">📅 Lần trước: {prevRef}</span>
                       )}
                     </td>
                     {SETS.map((_, si) => {
@@ -445,7 +573,7 @@ export function SessionLogForm({
                       <textarea
                         rows={2}
                         value={sl.exerciseNotes}
-                        onChange={(e) => updateNotes(mi, e.target.value)}
+                        onChange={(e) => updateExerciseNotes(mi, e.target.value)}
                         placeholder="VD: đau gối..."
                         className="w-full rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/30 resize-none bg-white"
                       />
@@ -462,30 +590,54 @@ export function SessionLogForm({
           </table>
         </div>
 
-        {/* Actions */}
+        {/* Feedback */}
         {toast && (
-          <p className="text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2">
-            ✓ {toast}
-          </p>
+          <p className="text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2">✓ {toast}</p>
         )}
         {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
+
+        {/* Actions */}
         <div className="flex gap-2 pt-1">
           <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
-            style={{ backgroundColor: "#f15b5c" }}
+            onClick={saveProgress}
+            disabled={saving || finishing}
+            className="h-9 px-4 rounded-xl border border-[#f15b5c]/30 text-sm font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-60 flex items-center justify-center gap-1.5"
           >
-            {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Đang lưu...</> : "Lưu buổi tập"}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Lưu số liệu
           </button>
-          <button
-            onClick={onClose}
-            className="h-9 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50"
-          >
-            Hủy
-          </button>
+
+          {interactionFailed ? (
+            <button
+              onClick={() => checkOut("")}
+              disabled={finishing}
+              className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5 bg-gray-500 hover:bg-gray-600"
+            >
+              {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+              Đóng buổi (không tính)
+            </button>
+          ) : (
+            <button
+              onClick={async () => { await saveProgress(); setShowSig(true); }}
+              disabled={finishing || saving || !durationMet}
+              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận để tính buổi"}
+              className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <PenLine className="w-3.5 h-3.5" />
+              Kết thúc & khách ký
+            </button>
+          )}
         </div>
       </div>
+
+      {showSig && (
+        <SignaturePad
+          saving={finishing}
+          onCancel={() => setShowSig(false)}
+          onConfirm={(dataUrl) => checkOut(dataUrl)}
+        />
+      )}
     </div>
   );
 }
@@ -838,6 +990,31 @@ export function SessionLogHistory({
                             </tbody>
                           </table>
                         </div>
+
+                        {/* Check-in/check-out confirmation */}
+                        {(log.signatureUrl || log.checkInAt) && (
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            {log.checkInAt && log.checkOutAt && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1">
+                                <Clock className="w-3 h-3" />
+                                Thời lượng: {Math.round((new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000)} phút
+                              </span>
+                            )}
+                            {log.signatureUrl ? (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700">
+                                  <PenLine className="w-3 h-3" /> Khách đã ký
+                                </span>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={log.signatureUrl}
+                                  alt="Chữ ký khách"
+                                  className="h-12 rounded-lg border border-gray-200 bg-white"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     )
                   )}

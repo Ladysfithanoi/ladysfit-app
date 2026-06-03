@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   const config = await prisma.systemConfig.findUnique({ where: { id: "main" } });
-  return NextResponse.json(config ?? { id: "main", enableLevelSystem: true });
+  return NextResponse.json(config ?? { id: "main", enableLevelSystem: true, minSessionMinutes: 30 });
 }
 
 export async function PUT(req: Request) {
@@ -19,12 +19,26 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { enableLevelSystem } = (await req.json()) as { enableLevelSystem: boolean };
+  const body = (await req.json()) as {
+    enableLevelSystem?: boolean;
+    minSessionMinutes?: number;
+  };
+
+  // Build a partial update so callers can change either field independently.
+  const update: { enableLevelSystem?: boolean; minSessionMinutes?: number } = {};
+  if (typeof body.enableLevelSystem === "boolean") update.enableLevelSystem = body.enableLevelSystem;
+  if (typeof body.minSessionMinutes === "number" && body.minSessionMinutes > 0) {
+    update.minSessionMinutes = Math.round(body.minSessionMinutes);
+  }
 
   const config = await prisma.systemConfig.upsert({
     where: { id: "main" },
-    update: { enableLevelSystem },
-    create: { id: "main", enableLevelSystem },
+    update,
+    create: {
+      id: "main",
+      enableLevelSystem: update.enableLevelSystem ?? true,
+      minSessionMinutes: update.minSessionMinutes ?? 30,
+    },
   });
 
   return NextResponse.json(config);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Shield, ShieldOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2 } from "lucide-react";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
 type WorkoutPhase = {
@@ -33,6 +33,7 @@ type PTLevel = {
 type SystemConfig = {
   id: string;
   enableLevelSystem: boolean;
+  minSessionMinutes: number;
 };
 
 const PRESET_COLORS = [
@@ -67,6 +68,9 @@ export function PTLevelsTab() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [toast, setToast] = useState("");
+  // Minimum session duration (minutes) editor
+  const [minMinutesInput, setMinMinutesInput] = useState("30");
+  const [savingMinMinutes, setSavingMinMinutes] = useState(false);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -97,7 +101,11 @@ export function PTLevelsTab() {
       fetch("/api/admin/pt-levels"),
       fetch("/api/admin/phases"),
     ]);
-    if (cfgRes.ok) setConfig(await cfgRes.json());
+    if (cfgRes.ok) {
+      const cfg: SystemConfig = await cfgRes.json();
+      setConfig(cfg);
+      setMinMinutesInput(String(cfg.minSessionMinutes ?? 30));
+    }
     if (lvlRes.ok) setLevels(await lvlRes.json());
     if (phaseRes.ok) setPhases(await phaseRes.json());
     setLoading(false);
@@ -119,6 +127,27 @@ export function PTLevelsTab() {
       showToast(updated.enableLevelSystem ? "Đã bật hệ thống cấp độ" : "Đã tắt hệ thống cấp độ");
     }
     setToggling(false);
+  }
+
+  async function handleSaveMinMinutes() {
+    const value = Math.round(Number(minMinutesInput));
+    if (!Number.isFinite(value) || value <= 0) {
+      showToast("Số phút không hợp lệ");
+      return;
+    }
+    setSavingMinMinutes(true);
+    const res = await fetch("/api/admin/system-config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minSessionMinutes: value }),
+    });
+    if (res.ok) {
+      const updated: SystemConfig = await res.json();
+      setConfig(updated);
+      setMinMinutesInput(String(updated.minSessionMinutes));
+      showToast(`Đã lưu: buổi tập tối thiểu ${updated.minSessionMinutes} phút`);
+    }
+    setSavingMinMinutes(false);
   }
 
   function openAdd() {
@@ -269,6 +298,40 @@ export function PTLevelsTab() {
               <span className="text-gray-400">Đang tắt</span>
             )}
           </p>
+        </div>
+
+        {/* ── Section 1b: Minimum session duration ── */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-[#fff0f0] flex items-center justify-center">
+              <Clock className="w-5 h-5 text-[#f15b5c]" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Thời lượng buổi tập tối thiểu</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Buổi tập chỉ được tính khi thời gian từ lúc check-in đến lúc khách ký ≥ số phút này
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              value={minMinutesInput}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setMinMinutesInput(e.target.value)}
+              className="w-24 h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+            />
+            <span className="text-sm text-gray-500">phút</span>
+            <button
+              onClick={handleSaveMinMinutes}
+              disabled={savingMinMinutes}
+              className="ml-2 inline-flex items-center gap-1.5 h-9 px-4 rounded-xl bg-[#f15b5c] text-white text-sm font-bold hover:opacity-90 disabled:opacity-60"
+            >
+              {savingMinMinutes && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Lưu
+            </button>
+          </div>
         </div>
 
         {/* ── Section 2: Level list ── */}

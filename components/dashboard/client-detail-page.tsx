@@ -257,6 +257,7 @@ export function ClientDetailPage({
   currentUserId,
   isSubstitute,
   enableLevelSystem = true,
+  minSessionMinutes = 30,
 }: {
   client: ClientDetail;
   branches: Branch[];
@@ -270,6 +271,7 @@ export function ClientDetailPage({
   currentUserId?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
+  minSessionMinutes?: number;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
@@ -2087,6 +2089,7 @@ export function ClientDetailPage({
           }
           userRole={userRole}
           enableLevelSystem={enableLevelSystem}
+          minSessionMinutes={minSessionMinutes}
         />
       )}
 

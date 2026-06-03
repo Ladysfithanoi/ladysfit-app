@@ -8,7 +8,7 @@ import {
   getSlotsForSessionType,
   basePhase,
 } from "@/lib/workout-structure";
-import { SessionLogForm, SessionLogHistory } from "./session-log-panel";
+import { LiveSessionPanel, SessionLogHistory } from "./session-log-panel";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -76,6 +76,8 @@ export type SetLogRow = {
   exerciseNotes: string | null;
 };
 
+export type WorkoutLogStatus = "IN_PROGRESS" | "COMPLETED" | "VOID";
+
 export type WorkoutLogRow = {
   id: string;
   sessionId: string;
@@ -86,6 +88,11 @@ export type WorkoutLogRow = {
   createdBy: { id: string; name: string | null };
   createdAt: string;
   setLogs: SetLogRow[];
+  status: WorkoutLogStatus;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  firstInteractionAt: string | null;
+  signatureUrl: string | null;
 };
 
 function fmtDate(iso: string): string {
@@ -244,6 +251,7 @@ function ProgramView({
   userRole,
   isSubstitute,
   enableLevelSystem = true,
+  minSessionMinutes = 30,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -251,10 +259,11 @@ function ProgramView({
   onUpdate: (updated: Partial<WorkoutProgram> & { id: string }) => void;
   onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
-  onLogUpdated: (updated: WorkoutLogRow) => void;
+  onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
+  minSessionMinutes?: number;
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -298,8 +307,28 @@ function ProgramView({
   const [isDirty, setIsDirty] = useState(false);
 
   // Session logging
-  const [loggingSessionId, setLoggingSessionId] = useState<string | null>(null);
   const [historySessionId, setHistorySessionId] = useState<string | null>(null);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [checkInError, setCheckInError] = useState("");
+
+  async function handleCheckIn(sessionId: string, weekId: string) {
+    setCheckingInId(sessionId);
+    setCheckInError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/check-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programId: program.id, weekId, sessionId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      const log = (await res.json()) as WorkoutLogRow;
+      onLogAdded(log, null);
+    } catch (err) {
+      setCheckInError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setCheckingInId(null);
+    }
+  }
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
@@ -756,7 +785,7 @@ function ProgramView({
                 {(editMode ? draftSessions : currentWeekData.sessions).map((s, i) => (
                   <button
                     key={i}
-                    onClick={() => { setActiveSessionIdx(i); setLoggingSessionId(null); }}
+                    onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
                     className={cn(
                       "flex-shrink-0 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
                       i === activeSessionIdx
@@ -818,8 +847,10 @@ function ProgramView({
                   const activeSession = currentWeekData.sessions[activeSessionIdx];
                   if (!activeSession) return null;
                   const sessionLogs = workoutLogs.filter((l) => l.sessionId === activeSession.id);
-                  const lastLog = sessionLogs[0] ?? null;
-                  const isLogging = loggingSessionId === activeSession.id;
+                  // Only completed sessions count toward history / last-session / suggestions.
+                  const completedLogs = sessionLogs.filter((l) => l.status === "COMPLETED");
+                  const inProgressLog = sessionLogs.find((l) => l.status === "IN_PROGRESS") ?? null;
+                  const lastLog = completedLogs[0] ?? null;
 
                   // Previous week data for progressive overload suggestions.
                   // Each week has its own session IDs, so we match by position index
@@ -830,7 +861,7 @@ function ProgramView({
                   const prevWeekSession = prevWeek?.sessions[activeSessionIdx];
                   const prevWeekLogs = prevWeek && prevWeekSession
                     ? workoutLogs.filter(
-                        (l) => l.weekId === prevWeek.id && l.sessionId === prevWeekSession.id
+                        (l) => l.weekId === prevWeek.id && l.sessionId === prevWeekSession.id && l.status === "COMPLETED"
                       )
                     : [];
 
@@ -840,28 +871,35 @@ function ProgramView({
 
                       {/* ── Log section ── */}
                       <div className="mt-4 pt-3 border-t border-gray-50">
-                        {isLogging ? (
-                          <SessionLogForm
-                            session={activeSession}
-                            weekId={currentWeekData.id}
+                        {inProgressLog ? (
+                          <LiveSessionPanel
+                            log={inProgressLog}
+                            sessionName={activeSession.sessionName}
                             weekNumber={currentWeekData.weekNumber}
-                            programId={program.id}
-                            clientId={clientId}
                             phase={program.phase}
+                            clientId={clientId}
+                            minSessionMinutes={minSessionMinutes}
                             prevWeekLogs={prevWeekLogs}
-                            onSaved={(log, pkg) => { onLogAdded(log, pkg); setLoggingSessionId(null); }}
-                            onClose={() => setLoggingSessionId(null)}
+                            onUpdated={(log) => onLogUpdated(log)}
+                            onCompleted={(log, pkg) => onLogUpdated(log, pkg)}
+                            onVoided={(log) => onLogUpdated(log)}
                           />
                         ) : (
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <button
-                              onClick={() => setLoggingSessionId(activeSession.id)}
-                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white"
-                              style={{ backgroundColor: "#f15b5c" }}
-                            >
-                              <ClipboardList className="w-3.5 h-3.5" />
-                              Ghi lại buổi tập
-                            </button>
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => handleCheckIn(activeSession.id, currentWeekData.id)}
+                                disabled={checkingInId === activeSession.id || isArchived}
+                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
+                                style={{ backgroundColor: "#f15b5c" }}
+                              >
+                                {checkingInId === activeSession.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <ClipboardList className="w-3.5 h-3.5" />}
+                                Bắt đầu buổi tập (Check-in)
+                              </button>
+                              {checkInError && <span className="text-[11px] text-[#f15b5c] font-medium">{checkInError}</span>}
+                            </div>
                             {lastLog && (
                               <div className="flex items-center gap-2 text-xs text-gray-400">
                                 <span>Lần cuối: <span className="font-semibold text-gray-600">{fmtDate(lastLog.sessionDate)}</span></span>
@@ -870,7 +908,7 @@ function ProgramView({
                                   onClick={() => setHistorySessionId(activeSession.id)}
                                   className="font-semibold text-[#f15b5c] hover:underline"
                                 >
-                                  Xem lịch sử ({sessionLogs.length})
+                                  Xem lịch sử ({completedLogs.length})
                                 </button>
                               </div>
                             )}
@@ -885,7 +923,7 @@ function ProgramView({
                       {historySessionId === activeSession.id && (
                         <SessionLogHistory
                           sessionName={activeSession.sessionName}
-                          logs={sessionLogs}
+                          logs={completedLogs}
                           phase={program.phase}
                           clientId={clientId}
                           onLogUpdated={onLogUpdated}
@@ -1133,6 +1171,7 @@ export function WorkoutTab({
   userRole,
   isSubstitute,
   enableLevelSystem = true,
+  minSessionMinutes = 30,
 }: {
   clientId: string;
   initialPrograms: WorkoutProgram[];
@@ -1141,6 +1180,7 @@ export function WorkoutTab({
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
+  minSessionMinutes?: number;
 }) {
   const [programs, setPrograms] = useState(initialPrograms);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
@@ -1163,9 +1203,10 @@ export function WorkoutTab({
     if (pkg) onPackageUpdated?.(pkg);
   }, [onPackageUpdated]);
 
-  const handleLogUpdated = useCallback((updated: WorkoutLogRow) => {
+  const handleLogUpdated = useCallback((updated: WorkoutLogRow, pkg?: PackageUpdate | null) => {
     setWorkoutLogs((prev) => prev.map((l) => l.id === updated.id ? updated : l));
-  }, []);
+    if (pkg) onPackageUpdated?.(pkg);
+  }, [onPackageUpdated]);
 
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
@@ -1210,6 +1251,7 @@ export function WorkoutTab({
           userRole={userRole}
           isSubstitute={isSubstitute}
           enableLevelSystem={enableLevelSystem}
+          minSessionMinutes={minSessionMinutes}
         />
       ))}
 
@@ -1238,6 +1280,7 @@ export function WorkoutTab({
                   userRole={userRole}
                   isSubstitute={isSubstitute}
                   enableLevelSystem={enableLevelSystem}
+                  minSessionMinutes={minSessionMinutes}
                 />
               ))}
             </div>

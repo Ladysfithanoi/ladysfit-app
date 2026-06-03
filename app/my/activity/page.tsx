@@ -35,7 +35,7 @@ export default async function ActivityPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.workoutLog.findMany({
-      where: { clientId },
+      where: { clientId, status: "COMPLETED" },
       include: {
         session: { select: { sessionName: true } },
         program: { select: { workoutType: true } },
