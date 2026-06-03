@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const SOURCES = ["Facebook Page", "Referral", "Tiktok", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân"];
+const SOURCES = ["Facebook Page", "Referral", "Tiktok", "Thread", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân"];
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);

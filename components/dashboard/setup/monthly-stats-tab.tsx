@@ -59,6 +59,7 @@ const SOURCE_COLORS: Record<string, string> = {
   "Facebook Page":        "#3b82f6",
   "Referral":             "#06b6d4",
   "Tiktok":               "#a855f7",
+  "Thread":               "#0f172a",
   "Zalo":                 "#14b8a6",
   "Outdoor":              "#f97316",
   "Website":              "#eab308",
