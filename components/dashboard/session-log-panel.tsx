@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { WorkoutSession, WorkoutLogRow, SetLogRow } from "./workout-tab";
@@ -119,6 +119,7 @@ type SetLogDraft = {
   movementName: string;
   exerciseName: string;
   sets: SetDraft[];
+  setCount: number;
   exerciseNotes: string;
 };
 
@@ -162,6 +163,7 @@ export function SessionLogForm({
       movementName: m.movementName,
       exerciseName: m.selectedExercise,
       sets: SETS.map(() => ({ load: "", reps: "" })),
+      setCount: Math.min(Math.max(m.sets || 1, 1), SETS.length),
       exerciseNotes: "",
     }))
   );
@@ -193,6 +195,7 @@ export function SessionLogForm({
         movementId: session.movements[i].id,
         movementName: session.movements[i].movementName,
         exerciseName: session.movements[i].selectedExercise,
+        setCount: Math.min(Math.max(session.movements[i].sets || 1, 1), SETS.length),
       })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,6 +236,26 @@ export function SessionLogForm({
     setIsDirty(true);
     setSetLogs((prev) => prev.map((sl, i) => (i === movIdx ? { ...sl, exerciseNotes: value } : sl)));
   }
+
+  // Copy each exercise's Set 1 (load + reps) into its remaining planned sets,
+  // so PTs don't have to retype identical numbers for Set 2, 3, ...
+  function copySet1ToRest() {
+    setIsDirty(true);
+    setSetLogs((prev) =>
+      prev.map((sl) => {
+        const first = sl.sets[0];
+        if (!first.load && !first.reps) return sl; // nothing to copy
+        return {
+          ...sl,
+          sets: sl.sets.map((s, j) =>
+            j > 0 && j < sl.setCount ? { load: first.load, reps: first.reps } : s
+          ),
+        };
+      })
+    );
+  }
+
+  const canCopySet1 = setLogs.some((sl) => sl.setCount > 1 && (sl.sets[0].load || sl.sets[0].reps));
 
   async function handleSave() {
     // Block submission if any row has data entered but no exercise assigned
@@ -322,6 +345,20 @@ export function SessionLogForm({
               className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none bg-white"
             />
           </div>
+        </div>
+
+        {/* Copy Set 1 → các set còn lại */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={copySet1ToRest}
+            disabled={!canCopySet1}
+            title="Sao chép thông số Set 1 của tất cả bài tập sang Set 2, Set 3,..."
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-[#f15b5c]/30 text-xs font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            Chép Set 1 → các set còn lại
+          </button>
         </div>
 
         {/* Set table */}
