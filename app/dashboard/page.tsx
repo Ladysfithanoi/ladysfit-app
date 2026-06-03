@@ -241,7 +241,7 @@ export default async function DashboardPage() {
         currentWeight: true,
         targetWeight: true,
       },
-      orderBy: { fullName: "asc" },
+      orderBy: { createdAt: "desc" }, // newest clients first
     }),
     prisma.weightLog.findMany({
       where: { date: { gte: eightWeeksAgo }, client: { assignedPTId: ptId } },
@@ -255,7 +255,8 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const recentLogs = rawRecentLogs.slice(0, 5).map((log) => {
+  // Pass all recent logs (newest first) so the dashboard can paginate them client-side.
+  const recentLogs = rawRecentLogs.map((log) => {
     const prev = rawRecentLogs.find(
       (l) =>
         l.clientId === log.clientId &&
