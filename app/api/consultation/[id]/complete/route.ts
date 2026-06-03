@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { fmtDate } from "@/lib/format-date";
+import { recountClientContracts } from "@/lib/recount-contracts";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -134,6 +135,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         status: "ACTIVE" as const,
       })),
     });
+    await recountClientContracts(client.id);
   }
 
   // Link pre-created workout programs from Step 3 to the new client

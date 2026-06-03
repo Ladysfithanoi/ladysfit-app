@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recountClientContracts } from "@/lib/recount-contracts";
 
 export async function PUT(
   req: Request,
@@ -74,5 +75,6 @@ export async function DELETE(
   }
 
   await prisma.packageEnrollment.delete({ where: { id: params.packageId } });
+  await recountClientContracts(params.id);
   return NextResponse.json({ ok: true });
 }

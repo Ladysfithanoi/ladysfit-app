@@ -89,6 +89,7 @@ export default async function DashboardPage() {
           updatedAt: true,
           branchId: true,
           assignedPTId: true,
+          contractCount: true,
           branch: { select: { id: true, name: true } },
           assignedPT: { select: { name: true, email: true } },
         },
@@ -149,12 +150,10 @@ export default async function DashboardPage() {
         : [];
 
     const now = Date.now();
-    const enrollCount = new Map<string, number>();
     const ongoingProgramClientIds = new Set<string>();
     // Most recent enrollment per client (used to show the package + when it ended).
     const lastEnrollment = new Map<string, { packageName: string; endDate: Date | null }>();
     for (const e of enrollments) {
-      enrollCount.set(e.clientId, (enrollCount.get(e.clientId) ?? 0) + 1);
       lastEnrollment.set(e.clientId, { packageName: e.packageName, endDate: e.endDate });
       const expired = e.status === "ACTIVE" && e.endDate != null && now > e.endDate.getTime();
       const ongoing = (e.status === "ACTIVE" && !expired) || e.status === "PAUSED";
@@ -254,7 +253,7 @@ export default async function DashboardPage() {
         };
         for (const c of allClients) {
           if (c.branchId !== b.id) continue;
-          const n = enrollCount.get(c.id) ?? 0;
+          const n = c.contractCount; // persisted count of registered contracts (lộ trình)
           if (n < 1) continue; // only customers who actually bought a lộ trình
           const churned = !ongoingProgramClientIds.has(c.id);
           if (n === 1) { row.total1 += 1; if (churned) row.churned1 += 1; }
@@ -265,7 +264,7 @@ export default async function DashboardPage() {
         return row;
       }),
       churnedAfterOne: allClients
-        .filter((c) => (enrollCount.get(c.id) ?? 0) === 1 && !ongoingProgramClientIds.has(c.id))
+        .filter((c) => c.contractCount === 1 && !ongoingProgramClientIds.has(c.id))
         .map((c) => {
           const e = lastEnrollment.get(c.id);
           return {

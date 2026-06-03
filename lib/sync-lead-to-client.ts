@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { recountClientContracts } from "@/lib/recount-contracts";
 
 type LeadForSync = {
   id: string;
@@ -43,6 +44,8 @@ export async function syncLeadToClient(lead: LeadForSync): Promise<string | null
     startDate,
     price
   );
+
+  await recountClientContracts(client.id);
 
   return client.id;
 }

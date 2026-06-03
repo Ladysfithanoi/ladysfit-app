@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { recountClientContracts } from "@/lib/recount-contracts";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -102,6 +103,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       enrollmentId, params.id, ptId, startWeight, startWeightConfirmed === true, endDate
     );
   }
+
+  await recountClientContracts(params.id);
 
   const pkg = await prisma.packageEnrollment.findUnique({ where: { id: enrollmentId } });
   return NextResponse.json({ ...pkg, contractType: resolvedContractType }, { status: 201 });

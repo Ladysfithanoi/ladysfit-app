@@ -149,6 +149,9 @@ model Client {
   dietPhase        String       @default("Giai đoạn 1")
   status           ClientStatus @default(ACTIVE)
   hasTransformed   Boolean      @default(false)
+  // Number of registered contracts (lộ trình) = count of package_enrollments.
+  // Kept in sync whenever enrollments are added/removed; used for churn statistics.
+  contractCount    Int          @default(0)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
