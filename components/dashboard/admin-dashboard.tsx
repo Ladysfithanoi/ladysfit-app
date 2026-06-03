@@ -8,6 +8,7 @@ import { BranchPerformance } from "./branch-performance";
 import { TransformStats } from "./transform-stats";
 import { TransformQualityStats } from "./transform-quality-stats";
 import { NotTransformedTable } from "./not-transformed-table";
+import { ChurnStats } from "./churn-stats";
 
 export type AdminStats = {
   totalClients: number;
@@ -56,6 +57,24 @@ export type AdminStats = {
     lostKg: number;
     eligible: boolean | null;
     hasOngoingProgram: boolean;
+  }[];
+  churnStats: {
+    branchId: string;
+    total1: number; churned1: number;
+    total2: number; churned2: number;
+    total3: number; churned3: number;
+    total4plus: number; churned4plus: number;
+  }[];
+  churnedAfterOne: {
+    id: string;
+    fullName: string;
+    branchId: string;
+    branchName: string;
+    ptId: string;
+    ptName: string;
+    packageName: string | null;
+    lostKg: number;
+    endDate: string | null;
   }[];
   weeklyChart: WeekDayData[];
 };
@@ -161,6 +180,13 @@ export function AdminDashboard({
       {/* Detail table: clients who haven't Transformed yet, filterable by branch + PT */}
       <NotTransformedTable
         clients={stats.notTransformedClients}
+        branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
+      />
+
+      {/* Churn rate by number of lộ trình bought + table of single-purchase churners */}
+      <ChurnStats
+        churnStats={stats.churnStats}
+        churnedAfterOne={stats.churnedAfterOne}
         branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
       />
 

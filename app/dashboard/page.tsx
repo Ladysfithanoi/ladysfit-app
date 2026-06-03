@@ -134,24 +134,31 @@ export default async function DashboardPage() {
       }
     }
 
-    // A client "chưa hết lộ trình" still has a package enrollment running: ACTIVE and not
-    // past its end date, or PAUSED. COMPLETED / EXPIRED (incl. ACTIVE past endDate) = finished.
-    const notTransformedIds = allClients
-      .filter((c) => c.initialWeight - c.currentWeight < 7)
-      .map((c) => c.id);
-    const ongoingEnrollments =
-      notTransformedIds.length > 0
+    // Fetch every client's package enrollments (lộ trình) to compute:
+    //  - how many lộ trình each client has bought (enrollCount)
+    //  - whether a client still has an ongoing lộ trình. "Ongoing" = ACTIVE and not past its
+    //    end date, or PAUSED. COMPLETED / EXPIRED (incl. ACTIVE past endDate) = finished.
+    const allClientIds = allClients.map((c) => c.id);
+    const enrollments =
+      allClientIds.length > 0
         ? await prisma.packageEnrollment.findMany({
-            where: { clientId: { in: notTransformedIds }, status: { in: ["ACTIVE", "PAUSED"] } },
-            select: { clientId: true, status: true, endDate: true },
+            where: { clientId: { in: allClientIds } },
+            select: { clientId: true, status: true, endDate: true, packageName: true, createdAt: true },
+            orderBy: { createdAt: "asc" },
           })
         : [];
 
     const now = Date.now();
+    const enrollCount = new Map<string, number>();
     const ongoingProgramClientIds = new Set<string>();
-    for (const e of ongoingEnrollments) {
+    // Most recent enrollment per client (used to show the package + when it ended).
+    const lastEnrollment = new Map<string, { packageName: string; endDate: Date | null }>();
+    for (const e of enrollments) {
+      enrollCount.set(e.clientId, (enrollCount.get(e.clientId) ?? 0) + 1);
+      lastEnrollment.set(e.clientId, { packageName: e.packageName, endDate: e.endDate });
       const expired = e.status === "ACTIVE" && e.endDate != null && now > e.endDate.getTime();
-      if (!expired) ongoingProgramClientIds.add(e.clientId);
+      const ongoing = (e.status === "ACTIVE" && !expired) || e.status === "PAUSED";
+      if (ongoing) ongoingProgramClientIds.add(e.clientId);
     }
 
     // Eligible to lose 7 kg = at least 7 kg above ideal weight (height − 100):
@@ -235,6 +242,44 @@ export default async function DashboardPage() {
           eligible: isClassifiable(c) ? isEligible(c) : null,
           hasOngoingProgram: ongoingProgramClientIds.has(c.id),
         })),
+      // Churn (rời bỏ) by number of lộ trình bought. A buyer (≥1 enrollment) has "churned"
+      // when no enrollment is currently ongoing. Buckets: exactly 1 / 2 / 3 / 4+.
+      churnStats: branches.map((b) => {
+        const row = {
+          branchId: b.id,
+          total1: 0, churned1: 0,
+          total2: 0, churned2: 0,
+          total3: 0, churned3: 0,
+          total4plus: 0, churned4plus: 0,
+        };
+        for (const c of allClients) {
+          if (c.branchId !== b.id) continue;
+          const n = enrollCount.get(c.id) ?? 0;
+          if (n < 1) continue; // only customers who actually bought a lộ trình
+          const churned = !ongoingProgramClientIds.has(c.id);
+          if (n === 1) { row.total1 += 1; if (churned) row.churned1 += 1; }
+          else if (n === 2) { row.total2 += 1; if (churned) row.churned2 += 1; }
+          else if (n === 3) { row.total3 += 1; if (churned) row.churned3 += 1; }
+          else { row.total4plus += 1; if (churned) row.churned4plus += 1; }
+        }
+        return row;
+      }),
+      churnedAfterOne: allClients
+        .filter((c) => (enrollCount.get(c.id) ?? 0) === 1 && !ongoingProgramClientIds.has(c.id))
+        .map((c) => {
+          const e = lastEnrollment.get(c.id);
+          return {
+            id: c.id,
+            fullName: c.fullName,
+            branchId: c.branchId,
+            branchName: c.branch.name,
+            ptId: c.assignedPTId,
+            ptName: c.assignedPT.name ?? c.assignedPT.email,
+            packageName: e?.packageName ?? null,
+            lostKg: Math.max(0, c.initialWeight - c.currentWeight),
+            endDate: e?.endDate ? e.endDate.toISOString() : null,
+          };
+        }),
       weeklyChart: getLast8WeeksData(chartLogs),
     };
 
