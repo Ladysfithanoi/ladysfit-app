@@ -133,22 +133,24 @@ export default async function DashboardPage() {
       }
     }
 
-    // "Lộ trình" (package enrollments) each transformed client signed up to reach Transform.
-    // Count only enrollments created on/before the first-transform date.
-    const transformEnrollments =
-      transformedIds.length > 0
+    // A client "chưa hết lộ trình" still has a package enrollment running: ACTIVE and not
+    // past its end date, or PAUSED. COMPLETED / EXPIRED (incl. ACTIVE past endDate) = finished.
+    const notTransformedIds = allClients
+      .filter((c) => c.initialWeight - c.currentWeight < 7)
+      .map((c) => c.id);
+    const ongoingEnrollments =
+      notTransformedIds.length > 0
         ? await prisma.packageEnrollment.findMany({
-            where: { clientId: { in: transformedIds } },
-            select: { clientId: true, createdAt: true },
+            where: { clientId: { in: notTransformedIds }, status: { in: ["ACTIVE", "PAUSED"] } },
+            select: { clientId: true, status: true, endDate: true },
           })
         : [];
 
-    const programCount = new Map<string, number>();
-    for (const e of transformEnrollments) {
-      const ftd = firstTransformDate.get(e.clientId);
-      if (!ftd || e.createdAt <= ftd) {
-        programCount.set(e.clientId, (programCount.get(e.clientId) ?? 0) + 1);
-      }
+    const now = Date.now();
+    const ongoingProgramClientIds = new Set<string>();
+    for (const e of ongoingEnrollments) {
+      const expired = e.status === "ACTIVE" && e.endDate != null && now > e.endDate.getTime();
+      if (!expired) ongoingProgramClientIds.add(e.clientId);
     }
 
     // Eligible to lose 7 kg = at least 7 kg above ideal weight (height − 100):
@@ -194,7 +196,7 @@ export default async function DashboardPage() {
       transformQuality: branches.map((b) => {
         const bc = allClients.filter((c) => c.branchId === b.id);
         let eligible = 0, eligibleTransformed = 0, notEligible = 0, notEligibleTransformed = 0;
-        let transformedCount = 0, programsSum = 0;
+        let notTransformed = 0, notTransformedOngoing = 0;
         for (const c of bc) {
           const t = isTransformed(c);
           if (isClassifiable(c)) {
@@ -206,9 +208,9 @@ export default async function DashboardPage() {
               if (t) notEligibleTransformed += 1;
             }
           }
-          if (t) {
-            transformedCount += 1;
-            programsSum += Math.max(1, programCount.get(c.id) ?? 0);
+          if (!t) {
+            notTransformed += 1;
+            if (ongoingProgramClientIds.has(c.id)) notTransformedOngoing += 1;
           }
         }
         return {
@@ -217,8 +219,8 @@ export default async function DashboardPage() {
           eligibleTransformed,
           notEligible,
           notEligibleTransformed,
-          transformedCount,
-          programsSum,
+          notTransformed,
+          notTransformedOngoing,
         };
       }),
       weeklyChart: getLast8WeeksData(chartLogs),

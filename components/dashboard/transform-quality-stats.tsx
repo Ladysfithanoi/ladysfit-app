@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Target, UserCheck, UserX, Repeat } from "lucide-react";
+import { Target, UserCheck, UserX, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Quality = {
@@ -10,8 +10,8 @@ type Quality = {
   eligibleTransformed: number;
   notEligible: number;
   notEligibleTransformed: number;
-  transformedCount: number;
-  programsSum: number;
+  notTransformed: number;
+  notTransformedOngoing: number;
 };
 
 type Branch = { id: string; name: string };
@@ -34,10 +34,10 @@ export function TransformQualityStats({
         eligibleTransformed: s.eligibleTransformed + q.eligibleTransformed,
         notEligible: s.notEligible + q.notEligible,
         notEligibleTransformed: s.notEligibleTransformed + q.notEligibleTransformed,
-        transformedCount: s.transformedCount + q.transformedCount,
-        programsSum: s.programsSum + q.programsSum,
+        notTransformed: s.notTransformed + q.notTransformed,
+        notTransformedOngoing: s.notTransformedOngoing + q.notTransformedOngoing,
       }),
-      { eligible: 0, eligibleTransformed: 0, notEligible: 0, notEligibleTransformed: 0, transformedCount: 0, programsSum: 0 }
+      { eligible: 0, eligibleTransformed: 0, notEligible: 0, notEligibleTransformed: 0, notTransformed: 0, notTransformedOngoing: 0 }
     );
   }, [quality, branchId]);
 
@@ -47,7 +47,7 @@ export function TransformQualityStats({
   const rateAchieved = pct(agg.eligibleTransformed, agg.eligible);
   const rateMissed = pct(eligibleNotTransformed, agg.eligible);
   const rateUnexpected = pct(agg.notEligibleTransformed, agg.notEligible);
-  const avgPrograms = agg.transformedCount > 0 ? agg.programsSum / agg.transformedCount : 0;
+  const rateOngoing = pct(agg.notTransformedOngoing, agg.notTransformed);
 
   const cards = [
     {
@@ -75,10 +75,10 @@ export function TransformQualityStats({
       iconColor: "text-blue-500",
     },
     {
-      title: "TB lộ trình để đạt Transform",
-      value: `${avgPrograms.toFixed(1)} lộ trình`,
-      sub: `Trên ${agg.transformedCount} KH đã Transform`,
-      Icon: Repeat,
+      title: "Chưa Transform vì chưa hết lộ trình",
+      value: `${rateOngoing.toFixed(1)}%`,
+      sub: `${agg.notTransformedOngoing}/${agg.notTransformed} KH chưa Transform`,
+      Icon: Hourglass,
       iconBg: "bg-[#f15b5c]/10",
       iconColor: "text-[#f15b5c]",
     },
