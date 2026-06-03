@@ -119,7 +119,6 @@ type SetLogDraft = {
   movementName: string;
   exerciseName: string;
   sets: SetDraft[];
-  setCount: number;
   exerciseNotes: string;
 };
 
@@ -163,13 +162,19 @@ export function SessionLogForm({
       movementName: m.movementName,
       exerciseName: m.selectedExercise,
       sets: SETS.map(() => ({ load: "", reps: "" })),
-      setCount: Math.min(Math.max(m.sets || 1, 1), SETS.length),
       exerciseNotes: "",
     }))
   );
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState("");
+  // Target set for the "copy Set 1" action — defaults to the largest planned set count.
+  const [copyTargetSet, setCopyTargetSet] = useState<number>(() =>
+    Math.min(
+      Math.max(2, ...session.movements.map((m) => m.sets || 1)),
+      SETS.length
+    )
+  );
 
   // ── Auto-save draft ────────────────────────────────────────────────────────
   const draftKey = `ladysfit_draft_session_${clientId}_${programId}_${weekId}_${session.id}`;
@@ -195,7 +200,6 @@ export function SessionLogForm({
         movementId: session.movements[i].id,
         movementName: session.movements[i].movementName,
         exerciseName: session.movements[i].selectedExercise,
-        setCount: Math.min(Math.max(session.movements[i].sets || 1, 1), SETS.length),
       })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,9 +241,9 @@ export function SessionLogForm({
     setSetLogs((prev) => prev.map((sl, i) => (i === movIdx ? { ...sl, exerciseNotes: value } : sl)));
   }
 
-  // Copy each exercise's Set 1 (load + reps) into its remaining planned sets,
-  // so PTs don't have to retype identical numbers for Set 2, 3, ...
-  function copySet1ToRest() {
+  // Copy each exercise's Set 1 (load + reps) into Set 2 .. Set `target`,
+  // so PTs don't have to retype identical numbers. `target` is chosen by the PT.
+  function copySet1To(target: number) {
     setIsDirty(true);
     setSetLogs((prev) =>
       prev.map((sl) => {
@@ -248,14 +252,14 @@ export function SessionLogForm({
         return {
           ...sl,
           sets: sl.sets.map((s, j) =>
-            j > 0 && j < sl.setCount ? { load: first.load, reps: first.reps } : s
+            j > 0 && j < target ? { load: first.load, reps: first.reps } : s
           ),
         };
       })
     );
   }
 
-  const canCopySet1 = setLogs.some((sl) => sl.setCount > 1 && (sl.sets[0].load || sl.sets[0].reps));
+  const canCopySet1 = setLogs.some((sl) => sl.sets[0].load || sl.sets[0].reps);
 
   async function handleSave() {
     // Block submission if any row has data entered but no exercise assigned
@@ -347,17 +351,27 @@ export function SessionLogForm({
           </div>
         </div>
 
-        {/* Copy Set 1 → các set còn lại */}
-        <div className="flex justify-end">
+        {/* Copy Set 1 → đến Set N (tuỳ chọn) */}
+        <div className="flex justify-end items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-gray-500">Chép Set 1 đến</span>
+          <select
+            value={copyTargetSet}
+            onChange={(e) => setCopyTargetSet(Number(e.target.value))}
+            className="h-8 rounded-lg border border-gray-200 px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40 bg-white"
+          >
+            {SETS.filter((n) => n >= 2).map((n) => (
+              <option key={n} value={n}>Set {n}</option>
+            ))}
+          </select>
           <button
             type="button"
-            onClick={copySet1ToRest}
+            onClick={() => copySet1To(copyTargetSet)}
             disabled={!canCopySet1}
-            title="Sao chép thông số Set 1 của tất cả bài tập sang Set 2, Set 3,..."
+            title={`Sao chép thông số Set 1 của tất cả bài tập sang Set 2 đến Set ${copyTargetSet}`}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-[#f15b5c]/30 text-xs font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Copy className="w-3.5 h-3.5" />
-            Chép Set 1 → các set còn lại
+            Chép
           </button>
         </div>
 
