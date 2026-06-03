@@ -10,8 +10,7 @@ type Quality = {
   eligibleTransformed: number;
   notEligible: number;
   notEligibleTransformed: number;
-  notTransformed: number;
-  notTransformedOngoing: number;
+  eligibleNotTransformedOngoing: number;
 };
 
 type Branch = { id: string; name: string };
@@ -34,10 +33,9 @@ export function TransformQualityStats({
         eligibleTransformed: s.eligibleTransformed + q.eligibleTransformed,
         notEligible: s.notEligible + q.notEligible,
         notEligibleTransformed: s.notEligibleTransformed + q.notEligibleTransformed,
-        notTransformed: s.notTransformed + q.notTransformed,
-        notTransformedOngoing: s.notTransformedOngoing + q.notTransformedOngoing,
+        eligibleNotTransformedOngoing: s.eligibleNotTransformedOngoing + q.eligibleNotTransformedOngoing,
       }),
-      { eligible: 0, eligibleTransformed: 0, notEligible: 0, notEligibleTransformed: 0, notTransformed: 0, notTransformedOngoing: 0 }
+      { eligible: 0, eligibleTransformed: 0, notEligible: 0, notEligibleTransformed: 0, eligibleNotTransformedOngoing: 0 }
     );
   }, [quality, branchId]);
 
@@ -47,7 +45,7 @@ export function TransformQualityStats({
   const rateAchieved = pct(agg.eligibleTransformed, agg.eligible);
   const rateMissed = pct(eligibleNotTransformed, agg.eligible);
   const rateUnexpected = pct(agg.notEligibleTransformed, agg.notEligible);
-  const rateOngoing = pct(agg.notTransformedOngoing, agg.notTransformed);
+  const rateOngoing = pct(agg.eligibleNotTransformedOngoing, agg.eligible);
 
   const cards = [
     {
@@ -77,7 +75,7 @@ export function TransformQualityStats({
     {
       title: "Chưa Transform vì chưa hết lộ trình",
       value: `${rateOngoing.toFixed(1)}%`,
-      sub: `${agg.notTransformedOngoing}/${agg.notTransformed} KH chưa Transform`,
+      sub: `${agg.eligibleNotTransformedOngoing}/${agg.eligible} KH đủ điều kiện`,
       Icon: Hourglass,
       iconBg: "bg-[#f15b5c]/10",
       iconColor: "text-[#f15b5c]",

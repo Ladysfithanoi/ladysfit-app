@@ -196,21 +196,18 @@ export default async function DashboardPage() {
       transformQuality: branches.map((b) => {
         const bc = allClients.filter((c) => c.branchId === b.id);
         let eligible = 0, eligibleTransformed = 0, notEligible = 0, notEligibleTransformed = 0;
-        let notTransformed = 0, notTransformedOngoing = 0;
+        let eligibleNotTransformedOngoing = 0;
         for (const c of bc) {
           const t = isTransformed(c);
           if (isClassifiable(c)) {
             if (isEligible(c)) {
               eligible += 1;
               if (t) eligibleTransformed += 1;
+              else if (ongoingProgramClientIds.has(c.id)) eligibleNotTransformedOngoing += 1;
             } else {
               notEligible += 1;
               if (t) notEligibleTransformed += 1;
             }
-          }
-          if (!t) {
-            notTransformed += 1;
-            if (ongoingProgramClientIds.has(c.id)) notTransformedOngoing += 1;
           }
         }
         return {
@@ -219,8 +216,7 @@ export default async function DashboardPage() {
           eligibleTransformed,
           notEligible,
           notEligibleTransformed,
-          notTransformed,
-          notTransformedOngoing,
+          eligibleNotTransformedOngoing,
         };
       }),
       weeklyChart: getLast8WeeksData(chartLogs),

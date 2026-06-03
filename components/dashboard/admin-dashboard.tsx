@@ -41,8 +41,7 @@ export type AdminStats = {
     eligibleTransformed: number;
     notEligible: number;
     notEligibleTransformed: number;
-    notTransformed: number;
-    notTransformedOngoing: number;
+    eligibleNotTransformedOngoing: number;
   }[];
   weeklyChart: WeekDayData[];
 };
