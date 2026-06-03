@@ -54,16 +54,16 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
   const weekBounds = computeWeekBounds(year, month);
 
   const [leads, consultations, transformedClients] = await Promise.all([
+    // Every lead in the reporting month counts toward revenue (matches Setup
+    // "Tổng doanh thu") — no status / signDate gate.
     prisma.salesLead.findMany({
       where: {
         assignedPTId: { in: ptIds },
         branchId: { in: branchIds },
         month,
         year,
-        status: { in: ["PIF", "DE", "PB"] },
-        signDate: { not: null },
       },
-      select: { assignedPTId: true, signDate: true, actualRevenue: true, fitpartnerRevenue: true },
+      select: { assignedPTId: true, signDate: true, createdAt: true, actualRevenue: true, fitpartnerRevenue: true },
     }),
     prisma.consultation.findMany({
       where: {
@@ -83,6 +83,15 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
     }),
   ]);
 
+  // Assign a lead to a reporting week by sign date (else creation date); anything that
+  // doesn't fall in a week window lands in the final week so the month total is complete.
+  const assignWeek = (date: Date): number => {
+    for (const { w, start, end } of weekBounds) {
+      if (date >= start && date <= end) return w;
+    }
+    return 5;
+  };
+
   return targets.map((target) => {
     const myLeads = leads.filter((l) => l.assignedPTId === target.userId);
     const myConsults = consultations.filter((c) => c.createdById === target.userId);
@@ -91,19 +100,16 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
     const weeklyActuals = weekBounds.map(({ w, start, end }) => {
       const existing = target.weeklyActuals.find((wa) => wa.weekNumber === w);
 
-      const wLeads = myLeads.filter((l) => {
-        const d = new Date(l.signDate!);
-        return d >= start && d <= end;
-      });
+      const wLeads = myLeads.filter((l) => assignWeek(new Date(l.signDate ?? l.createdAt)) === w);
       const revenueActual = wLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
       const fitpartnerRevenueActual = wLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0);
       const fitActual = myConsults.filter((c) => c.updatedAt >= start && c.updatedAt <= end).length;
       const transformActual = myTransforms.filter((c) => c.updatedAt >= start && c.updatedAt <= end).length;
 
       if (existing) {
-        // Preserve all stored values — revenue is kept in sync by syncLeadRevenueToWeeklyActuals
-        // whenever a lead is saved. Don't override manually-entered actuals.
-        return existing;
+        // Revenue is always derived from leads (never entered by hand), so refresh it from
+        // the current leads; keep the manually-entered actuals (fit/cooperation/…/notes).
+        return { ...existing, revenueActual, fitpartnerRevenueActual };
       }
       return {
         id: `dyn-${target.id}-w${w}`,

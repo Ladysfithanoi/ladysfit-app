@@ -40,23 +40,24 @@ export async function syncLeadRevenueToWeeklyActuals(
 
   if (!target) return;
 
+  // Every lead in the reporting month counts toward revenue — whether or not it was
+  // fully paid or a sign date was entered — so this matches Setup "Tổng doanh thu".
   const leads = await prisma.salesLead.findMany({
     where: {
       assignedPTId: ptId,
       branchId,
       month,
       year,
-      status: { in: ["PIF", "DE", "PB"] },
-      signDate: { not: null },
     },
-    select: { signDate: true, actualRevenue: true, fitpartnerRevenue: true },
+    select: { signDate: true, createdAt: true, actualRevenue: true, fitpartnerRevenue: true },
   });
 
   const weekRevenue: Record<number, { revenue: number; fitpartner: number }> = {};
   for (const lead of leads) {
-    if (!lead.signDate) continue;
-    const w = getWeekNumber(new Date(lead.signDate), year, month);
-    if (!w) continue;
+    // Bucket by sign date when present, else the date the lead was created. Leads that
+    // still don't fall in any week land in the final week so the month total is complete.
+    const bucketDate = lead.signDate ?? lead.createdAt;
+    const w = getWeekNumber(new Date(bucketDate), year, month) ?? 5;
     if (!weekRevenue[w]) weekRevenue[w] = { revenue: 0, fitpartner: 0 };
     weekRevenue[w].revenue += lead.actualRevenue ?? 0;
     weekRevenue[w].fitpartner += lead.fitpartnerRevenue ?? 0;

@@ -185,22 +185,26 @@ export async function GET(req: Request) {
     });
   }
 
-  // Compute revenueActual from SalesLead.actualRevenue where signDate falls in the selected week
+  // Revenue per user for the selected week. Every lead in the reporting month counts
+  // (matches Setup "Tổng doanh thu") regardless of payment/sign status — bucket by sign
+  // date, else creation date, with the final week catching anything not in a week window.
   const selectedBound = weekBounds.find((b) => b.weekNumber === weekNumber);
   if (selectedBound) {
+    const assignWeek = (date: Date): number => {
+      for (const b of weekBounds) {
+        if (date >= new Date(b.weekStart) && date <= new Date(b.weekEnd)) return b.weekNumber;
+      }
+      return 5;
+    };
+
     const leads = await prisma.salesLead.findMany({
-      where: {
-        branchId,
-        signDate: {
-          gte: new Date(selectedBound.weekStart),
-          lte: new Date(selectedBound.weekEnd),
-        },
-      },
-      select: { assignedPTId: true, actualRevenue: true },
+      where: { branchId, month, year },
+      select: { assignedPTId: true, signDate: true, createdAt: true, actualRevenue: true },
     });
 
     const leadRevenueByUser: Record<string, number> = {};
     for (const lead of leads) {
+      if (assignWeek(new Date(lead.signDate ?? lead.createdAt)) !== weekNumber) continue;
       if (lead.assignedPTId && lead.actualRevenue !== null) {
         leadRevenueByUser[lead.assignedPTId] =
           (leadRevenueByUser[lead.assignedPTId] ?? 0) + lead.actualRevenue;
