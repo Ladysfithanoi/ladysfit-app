@@ -394,6 +394,39 @@ export function LiveSessionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, log.id, notes, setLogs]);
 
+  // Auto-save in-progress data (notes + sets) so a refresh or accidental tab
+  // close never loses what the PT has typed. The session row already lives in
+  // the DB from check-in; this keeps its contents in sync as they type.
+  const skipFirstAutoSave = useRef(true);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
+  useEffect(() => {
+    if (skipFirstAutoSave.current) {
+      skipFirstAutoSave.current = false;
+      return;
+    }
+    setAutoSaved(false);
+    const handle = setTimeout(() => {
+      setAutoSaving(true);
+      fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((updated) => {
+          if (updated) {
+            onUpdated(updated as WorkoutLogRow);
+            setAutoSaved(true);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setAutoSaving(false));
+    }, 1200);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, setLogs]);
+
   async function checkOut(signatureUrl: string) {
     setFinishing(true);
     setError("");
@@ -591,6 +624,15 @@ export function LiveSessionPanel({
         </div>
 
         {/* Feedback */}
+        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-semibold">
+          {autoSaving ? (
+            <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Đang tự động lưu...</span>
+          ) : autoSaved ? (
+            <span className="inline-flex items-center gap-1 text-green-600"><Check className="w-3 h-3" />Đã tự động lưu</span>
+          ) : (
+            <span>Dữ liệu được tự động lưu, không lo mất khi thoát trang</span>
+          )}
+        </div>
         {toast && (
           <p className="text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2">✓ {toast}</p>
         )}
