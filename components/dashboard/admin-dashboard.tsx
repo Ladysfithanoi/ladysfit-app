@@ -58,22 +58,16 @@ export type AdminStats = {
     eligible: boolean | null;
     hasOngoingProgram: boolean;
   }[];
-  churnStats: {
-    branchId: string;
-    total1: number; churned1: number;
-    total2: number; churned2: number;
-    total3: number; churned3: number;
-    total4plus: number; churned4plus: number;
-  }[];
-  churnedAfterOne: {
+  churnClients: {
     id: string;
     fullName: string;
     branchId: string;
     branchName: string;
     ptId: string;
     ptName: string;
+    contracts: number;
+    churned: boolean;
     packageName: string | null;
-    lostKg: number;
     endDate: string | null;
   }[];
   weeklyChart: WeekDayData[];
@@ -183,10 +177,9 @@ export function AdminDashboard({
         branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
       />
 
-      {/* Churn rate by number of lộ trình bought + table of single-purchase churners */}
+      {/* Churn rate by number of lộ trình bought + full filterable list of buyers */}
       <ChurnStats
-        churnStats={stats.churnStats}
-        churnedAfterOne={stats.churnedAfterOne}
+        churnClients={stats.churnClients}
         branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))}
       />
 

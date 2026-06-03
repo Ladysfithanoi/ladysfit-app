@@ -241,30 +241,11 @@ export default async function DashboardPage() {
           eligible: isClassifiable(c) ? isEligible(c) : null,
           hasOngoingProgram: ongoingProgramClientIds.has(c.id),
         })),
-      // Churn (rời bỏ) by number of lộ trình bought. A buyer (≥1 enrollment) has "churned"
-      // when no enrollment is currently ongoing. Buckets: exactly 1 / 2 / 3 / 4+.
-      churnStats: branches.map((b) => {
-        const row = {
-          branchId: b.id,
-          total1: 0, churned1: 0,
-          total2: 0, churned2: 0,
-          total3: 0, churned3: 0,
-          total4plus: 0, churned4plus: 0,
-        };
-        for (const c of allClients) {
-          if (c.branchId !== b.id) continue;
-          const n = c.contractCount; // persisted count of registered contracts (lộ trình)
-          if (n < 1) continue; // only customers who actually bought a lộ trình
-          const churned = !ongoingProgramClientIds.has(c.id);
-          if (n === 1) { row.total1 += 1; if (churned) row.churned1 += 1; }
-          else if (n === 2) { row.total2 += 1; if (churned) row.churned2 += 1; }
-          else if (n === 3) { row.total3 += 1; if (churned) row.churned3 += 1; }
-          else { row.total4plus += 1; if (churned) row.churned4plus += 1; }
-        }
-        return row;
-      }),
-      churnedAfterOne: allClients
-        .filter((c) => c.contractCount === 1 && !ongoingProgramClientIds.has(c.id))
+      // Every customer who bought ≥1 lộ trình. `contracts` = persisted contractCount.
+      // "churned" = no enrollment currently ongoing (all finished/expired, not renewed).
+      // The UI groups these into buckets (1 / 2 / 3 / >3) and computes churn rate per bucket.
+      churnClients: allClients
+        .filter((c) => c.contractCount >= 1)
         .map((c) => {
           const e = lastEnrollment.get(c.id);
           return {
@@ -274,8 +255,9 @@ export default async function DashboardPage() {
             branchName: c.branch.name,
             ptId: c.assignedPTId,
             ptName: c.assignedPT.name ?? c.assignedPT.email,
+            contracts: c.contractCount,
+            churned: !ongoingProgramClientIds.has(c.id),
             packageName: e?.packageName ?? null,
-            lostKg: Math.max(0, c.initialWeight - c.currentWeight),
             endDate: e?.endDate ? e.endDate.toISOString() : null,
           };
         }),
