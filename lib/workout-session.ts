@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { refreshClientChurnStatus } from "@/lib/client-status";
 
 export type PackageUpdate = {
   id: string;
@@ -35,6 +36,12 @@ export async function incrementPackageAndNotify(
       packageName: updated.packageName,
       status: updated.status,
     };
+
+    // Hết buổi: nếu gói vừa hoàn thành và khách không còn lộ trình nào khác
+    // đang chạy thì chuyển trạng thái khách sang "Nghỉ tập".
+    if (newStatus === "COMPLETED") {
+      await refreshClientChurnStatus(clientId);
+    }
   }
 
   // Completion notification for the client (non-critical).

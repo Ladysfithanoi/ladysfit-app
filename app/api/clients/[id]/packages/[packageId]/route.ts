@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
+import { refreshClientChurnStatus } from "@/lib/client-status";
 
 export async function PUT(
   req: Request,
@@ -56,6 +57,10 @@ export async function PUT(
     where: { id: params.packageId },
     data,
   });
+
+  // Sửa gói thủ công (đánh dấu hết hạn/hoàn thành, đổi ngày...) cũng có thể khiến
+  // khách hết lộ trình → tự chuyển sang "Nghỉ tập" nếu không còn lộ trình nào chạy.
+  await refreshClientChurnStatus(params.id);
 
   return NextResponse.json(updated);
 }

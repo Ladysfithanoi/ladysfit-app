@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
+import { reactivateClientOnNewPackage } from "@/lib/client-status";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -105,6 +106,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   await recountClientContracts(params.id);
+  // Mua lộ trình mới → khách "Nghỉ tập" quay lại "Đang tập".
+  await reactivateClientOnNewPackage(params.id);
 
   const pkg = await prisma.packageEnrollment.findUnique({ where: { id: enrollmentId } });
   return NextResponse.json({ ...pkg, contractType: resolvedContractType }, { status: 201 });
