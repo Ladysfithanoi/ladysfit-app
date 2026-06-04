@@ -335,6 +335,14 @@ function ProgramView({
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
+
+  // Sessions with a live log (checked in / waiting for client confirmation) — used
+  // to flag which session the client is currently training, on the week & session tabs.
+  const activeSessionIds = new Set(
+    workoutLogs
+      .filter((l) => l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION")
+      .map((l) => l.sessionId)
+  );
   const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
   const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
 
@@ -685,23 +693,33 @@ function ProgramView({
           {/* Week tabs */}
           <div className="px-5 pt-4 flex items-center gap-2">
             <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
-              {program.weeks.map((w, wi) => (
-                <button
-                  key={w.id}
-                  onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
-                  className={cn(
-                    "flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
-                    wi === activeWeekIdx
-                      ? "bg-[#f15b5c] text-white border-[#f15b5c]"
-                      : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                  )}
-                >
-                  Tuần {w.weekNumber}
-                  {w.weekNumber === program.currentWeek && (
-                    <span className="ml-1.5 text-[10px] opacity-80">(hiện tại)</span>
-                  )}
-                </button>
-              ))}
+              {program.weeks.map((w, wi) => {
+                const weekHasActive = w.sessions.some((s) => activeSessionIds.has(s.id));
+                const isActiveTab = wi === activeWeekIdx;
+                return (
+                  <button
+                    key={w.id}
+                    onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
+                    className={cn(
+                      "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+                      isActiveTab
+                        ? "bg-[#f15b5c] text-white border-[#f15b5c]"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                    )}
+                  >
+                    {weekHasActive && (
+                      <span className="relative flex h-2 w-2" title="Khách đang tập trong tuần này">
+                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
+                        <span className={cn("relative inline-flex rounded-full h-2 w-2", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
+                      </span>
+                    )}
+                    Tuần {w.weekNumber}
+                    {w.weekNumber === program.currentWeek && (
+                      <span className="text-[10px] opacity-80">(hiện tại)</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             {!editMode && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -785,22 +803,31 @@ function ProgramView({
 
               {/* Session tabs */}
               <div className="flex gap-1 overflow-x-auto pb-1 mb-3">
-                {(editMode ? draftSessions : currentWeekData.sessions).map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
-                    className={cn(
-                      "flex-shrink-0 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
-                      i === activeSessionIdx
-                        ? "border-[#f15b5c] text-[#f15b5c] bg-white"
-                        : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
-                    )}
-                  >
-                    {editMode
-                      ? `Buổi ${String.fromCharCode(65 + i)}`
-                      : (s as WorkoutSession).sessionName.split("—")[0].trim()}
-                  </button>
-                ))}
+                {(editMode ? draftSessions : currentWeekData.sessions).map((s, i) => {
+                  const sessionActive = !editMode && activeSessionIds.has((s as WorkoutSession).id);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
+                      className={cn(
+                        "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
+                        i === activeSessionIdx
+                          ? "border-[#f15b5c] text-[#f15b5c] bg-white"
+                          : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
+                      )}
+                    >
+                      {sessionActive && (
+                        <span className="relative flex h-2 w-2" title="Khách đang tập buổi này">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
+                        </span>
+                      )}
+                      {editMode
+                        ? `Buổi ${String.fromCharCode(65 + i)}`
+                        : (s as WorkoutSession).sessionName.split("—")[0].trim()}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Session content */}
