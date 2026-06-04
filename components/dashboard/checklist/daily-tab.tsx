@@ -175,7 +175,23 @@ function MonthCalendarPicker({
     const [y, m] = value.split("-").map(Number);
     return { y, m: m - 1 };
   });
+  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  // The dropdown is rendered fixed (not absolute) so it isn't clipped by any
+  // ancestor with overflow-hidden (the FM toolbar card). Anchor it to the button.
+  function toggleOpen() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const width = 256; // w-64
+      let left = r.left;
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+      if (left < 8) left = 8;
+      setCoords({ top: r.bottom + 4, left });
+    }
+    setOpen((o) => !o);
+  }
 
   useEffect(() => {
     // Re-sync the visible month whenever the selected date changes externally.
@@ -188,8 +204,16 @@ function MonthCalendarPicker({
     function onDoc(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function close() { setOpen(false); }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    // Fixed positioning is computed on open; close on scroll/resize so it never drifts.
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [open]);
 
   const today = todayISO();
@@ -219,15 +243,19 @@ function MonthCalendarPicker({
   return (
     <div className={cn("relative", className)} ref={ref}>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         className="h-9 w-full rounded-xl border border-gray-200 bg-white flex items-center gap-2 px-3 text-sm text-gray-700 hover:border-[#f15b5c]/50 transition-colors"
       >
         <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
         <span className="whitespace-nowrap">{fmtDate(value)}</span>
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-64">
+        <div
+          className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-64"
+          style={{ top: coords.top, left: coords.left }}
+        >
           <div className="flex items-center justify-between mb-2">
             <button type="button" onClick={prevMonth} className="p-1 rounded-lg text-gray-500 hover:bg-gray-100">
               <ChevronLeft className="w-4 h-4" />
