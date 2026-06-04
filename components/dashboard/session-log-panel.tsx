@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save, Trash2 } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
@@ -114,6 +114,24 @@ type EditSetLogDraft = {
   sets: SetDraft[];
   exerciseNotes: string;
 };
+
+// Map persisted set-log rows into the editable table drafts.
+function toSetLogDrafts(setLogs: WorkoutLogRow["setLogs"]): EditSetLogDraft[] {
+  return setLogs.map((sl) => ({
+    id: sl.id,
+    movementName: sl.movementName,
+    exerciseName: sl.exerciseName,
+    exerciseNotes: sl.exerciseNotes ?? "",
+    sets: [
+      { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
+      { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
+      { load: sl.set3Load ?? "", reps: sl.set3Reps ?? "" },
+      { load: sl.set4Load ?? "", reps: sl.set4Reps ?? "" },
+      { load: sl.set5Load ?? "", reps: sl.set5Reps ?? "" },
+      { load: sl.set6Load ?? "", reps: sl.set6Reps ?? "" },
+    ],
+  }));
+}
 
 // ── SignaturePad (customer signs to confirm the session) ───────────────────
 
@@ -271,23 +289,9 @@ export function LiveSessionPanel({
   onVoided: (log: WorkoutLogRow) => void;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
-  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
-    log.setLogs.map((sl) => ({
-      id: sl.id,
-      movementName: sl.movementName,
-      exerciseName: sl.exerciseName,
-      exerciseNotes: sl.exerciseNotes ?? "",
-      sets: [
-        { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
-        { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
-        { load: sl.set3Load ?? "", reps: sl.set3Reps ?? "" },
-        { load: sl.set4Load ?? "", reps: sl.set4Reps ?? "" },
-        { load: sl.set5Load ?? "", reps: sl.set5Reps ?? "" },
-        { load: sl.set6Load ?? "", reps: sl.set6Reps ?? "" },
-      ],
-    }))
-  );
+  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() => toSetLogDrafts(log.setLogs));
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [showSig, setShowSig] = useState(false);
   const [error, setError] = useState("");
@@ -402,6 +406,30 @@ export function LiveSessionPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, log.id, notes, setLogs]);
+
+  // Re-sync the table's exercise list with the program's CURRENT movements,
+  // keeping everything the PT has already typed. Saves first so nothing is lost.
+  async function syncMovements() {
+    setSyncing(true);
+    setError("");
+    try {
+      await saveProgress();
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/sync-movements`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      const updated = data as WorkoutLogRow;
+      onUpdated(updated);
+      setSetLogs(toSetLogDrafts(updated.setLogs));
+      setToast("Đã cập nhật bài tập theo chương trình");
+      setTimeout(() => setToast(""), 2500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   // Auto-save in-progress data (notes + sets) so a refresh or accidental tab
   // close never loses what the PT has typed. The session row already lives in
@@ -660,28 +688,40 @@ export function LiveSessionPanel({
           />
         </div>
 
-        {/* Copy Set 1 → đến Set N */}
-        <div className="flex justify-end items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-gray-500">Chép Set 1 đến</span>
-          <select
-            value={copyTargetSet}
-            onChange={(e) => setCopyTargetSet(Number(e.target.value))}
-            className="h-8 rounded-lg border border-gray-200 px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40 bg-white"
-          >
-            {SETS.filter((n) => n >= 2).map((n) => (
-              <option key={n} value={n}>Set {n}</option>
-            ))}
-          </select>
+        {/* Sync exercises with program + copy Set 1 controls */}
+        <div className="flex justify-between items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => copySet1To(copyTargetSet)}
-            disabled={!canCopySet1}
-            title={`Sao chép thông số Set 1 của tất cả bài tập sang Set 2 đến Set ${copyTargetSet}`}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-[#f15b5c]/30 text-xs font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={syncMovements}
+            disabled={syncing || saving || finishing}
+            title="Đồng bộ danh sách bài tập trong nhật ký theo chương trình hiện tại (giữ nguyên số liệu đã nhập)"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Copy className="w-3.5 h-3.5" />
-            Chép
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Cập nhật bài tập theo chương trình
           </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500">Chép Set 1 đến</span>
+            <select
+              value={copyTargetSet}
+              onChange={(e) => setCopyTargetSet(Number(e.target.value))}
+              className="h-8 rounded-lg border border-gray-200 px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40 bg-white"
+            >
+              {SETS.filter((n) => n >= 2).map((n) => (
+                <option key={n} value={n}>Set {n}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => copySet1To(copyTargetSet)}
+              disabled={!canCopySet1}
+              title={`Sao chép thông số Set 1 của tất cả bài tập sang Set 2 đến Set ${copyTargetSet}`}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-[#f15b5c]/30 text-xs font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Chép
+            </button>
+          </div>
         </div>
 
         {/* Set table */}
@@ -856,22 +896,7 @@ function EditLogPanel({
   onClose: () => void;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
-  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
-    log.setLogs.map((sl) => ({
-      id: sl.id,
-      movementName: sl.movementName,
-      exerciseName: sl.exerciseName,
-      exerciseNotes: sl.exerciseNotes ?? "",
-      sets: [
-        { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
-        { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
-        { load: sl.set3Load ?? "", reps: sl.set3Reps ?? "" },
-        { load: sl.set4Load ?? "", reps: sl.set4Reps ?? "" },
-        { load: sl.set5Load ?? "", reps: sl.set5Reps ?? "" },
-        { load: sl.set6Load ?? "", reps: sl.set6Reps ?? "" },
-      ],
-    }))
-  );
+  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() => toSetLogDrafts(log.setLogs));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
