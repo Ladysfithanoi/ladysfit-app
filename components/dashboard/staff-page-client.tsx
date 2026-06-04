@@ -157,6 +157,8 @@ export function StaffPageClient({
   const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
   const [resetting, setResetting] = useState<StaffMember | null>(null);
   const [resetPw, setResetPw] = useState("");
   const [resetShowPw, setResetShowPw] = useState(false);
@@ -198,6 +200,14 @@ export function StaffPageClient({
       return matchBranch && matchSearch;
     });
   }, [initialStaff, branchFilter, search]);
+
+  // Pagination — show at most PAGE_SIZE staff per page.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Jump back to the first page whenever the filter/search narrows the list.
+  useEffect(() => { setPage(1); }, [search, branchFilter]);
 
   function isoToYMD(iso: Date | string | null): string {
     if (!iso) return "";
@@ -441,7 +451,7 @@ export function StaffPageClient({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s) => (
+              {paged.map((s) => (
                 <tr
                   key={s.id}
                   className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors"
@@ -532,6 +542,45 @@ export function StaffPageClient({
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400 font-semibold">
+            Trang <span className="text-gray-700">{currentPage}</span> / {totalPages}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="h-8 px-3 rounded-lg text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Trước
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={cn(
+                  "h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold border transition-colors",
+                  p === currentPage
+                    ? "bg-[#f15b5c] text-white border-[#f15b5c]"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="h-8 px-3 rounded-lg text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation */}
       <AlertDialog

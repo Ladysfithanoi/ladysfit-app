@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save, Trash2, RefreshCw } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
@@ -890,25 +890,16 @@ export function LiveSessionPanel({
         )}
         {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
 
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={saveProgress}
-            disabled={saving || finishing}
-            className="h-9 px-4 rounded-xl border border-[#f15b5c]/30 text-sm font-bold text-[#f15b5c] bg-white hover:bg-[#fff0f0] disabled:opacity-60 flex items-center justify-center gap-1.5"
-          >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Lưu số liệu
-          </button>
-
+        {/* Actions — số liệu đã tự động lưu, nút này vừa lưu nốt vừa gửi khách xác nhận */}
+        <div className="pt-1">
           <button
             onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
             disabled={finishing || saving || !durationMet}
             title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Gửi cho khách xác nhận trên app của khách"}
-            className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+            className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
             style={{ backgroundColor: "#f15b5c" }}
           >
-            {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Kết thúc & gửi khách xác nhận
           </button>
         </div>

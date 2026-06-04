@@ -280,6 +280,11 @@ function ProgramView({
   const [activeWeekIdx, setActiveWeekIdx] = useState(initialWeekIdx);
   const [activeSessionIdx, setActiveSessionIdx] = useState(0);
 
+  // Week navigation: only the most recent few weeks show as tabs; the rest live
+  // behind a searchable "Xem thêm" picker so the bar doesn't grow endlessly.
+  const [showWeekPicker, setShowWeekPicker] = useState(false);
+  const [weekSearch, setWeekSearch] = useState("");
+
   const [phases, setPhases] = useState<PhaseData[]>([]);
   useEffect(() => {
     fetch("/api/admin/phases")
@@ -342,6 +347,14 @@ function ProgramView({
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
+
+  // Show at most the 3 most recent weeks as tabs; older weeks go behind "Xem thêm".
+  // The currently-selected week is always kept visible even if it's an old one.
+  const RECENT_WEEKS = 3;
+  const recentStartIdx = Math.max(0, program.weeks.length - RECENT_WEEKS);
+  const visibleWeekIdxs = program.weeks
+    .map((_, i) => i)
+    .filter((i) => i >= recentStartIdx || i === activeWeekIdx);
 
   async function handleDeleteSession() {
     if (!currentWeekData) return;
@@ -720,45 +733,107 @@ function ProgramView({
       {/* ── Week-based display ── */}
       {hasWeeks && (
         <div>
-          {/* Week tabs */}
-          <div className="px-5 pt-4 flex items-center gap-2">
-            <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
-              {program.weeks.map((w, wi) => {
-                const weekHasActive = w.sessions.some((s) => activeSessionIds.has(s.id));
-                const isActiveTab = wi === activeWeekIdx;
-                return (
+          {/* Week navigation */}
+          <div className="px-5 pt-4 space-y-2">
+            {/* Row 1: recent week tabs + "Xem thêm" picker for older weeks */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
+                {visibleWeekIdxs.map((wi) => {
+                  const w = program.weeks[wi];
+                  const weekHasActive = w.sessions.some((s) => activeSessionIds.has(s.id));
+                  const isActiveTab = wi === activeWeekIdx;
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
+                      className={cn(
+                        "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+                        isActiveTab
+                          ? "bg-[#f15b5c] text-white border-[#f15b5c]"
+                          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                      )}
+                    >
+                      {weekHasActive && (
+                        <span className="relative flex h-2 w-2" title="Khách đang tập trong tuần này">
+                          <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
+                          <span className={cn("relative inline-flex rounded-full h-2 w-2", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
+                        </span>
+                      )}
+                      Tuần {w.weekNumber}
+                      {w.weekNumber === program.currentWeek && (
+                        <span className="text-[10px] opacity-80">(hiện tại)</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {recentStartIdx > 0 && (
+                <div className="relative flex-shrink-0">
                   <button
-                    key={w.id}
-                    onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
-                    className={cn(
-                      "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
-                      isActiveTab
-                        ? "bg-[#f15b5c] text-white border-[#f15b5c]"
-                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                    )}
+                    onClick={() => { setShowWeekPicker((v) => !v); setWeekSearch(""); }}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                   >
-                    {weekHasActive && (
-                      <span className="relative flex h-2 w-2" title="Khách đang tập trong tuần này">
-                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
-                        <span className={cn("relative inline-flex rounded-full h-2 w-2", isActiveTab ? "bg-white" : "bg-[#f15b5c]")} />
-                      </span>
-                    )}
-                    Tuần {w.weekNumber}
-                    {w.weekNumber === program.currentWeek && (
-                      <span className="text-[10px] opacity-80">(hiện tại)</span>
-                    )}
+                    Xem thêm ({recentStartIdx})
+                    {showWeekPicker ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </button>
-                );
-              })}
+                  {showWeekPicker && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowWeekPicker(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+                        <input
+                          autoFocus
+                          value={weekSearch}
+                          onChange={(e) => setWeekSearch(e.target.value)}
+                          placeholder="Tìm số tuần..."
+                          inputMode="numeric"
+                          className="w-full h-8 rounded-lg border border-gray-200 px-2.5 text-xs mb-2 focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40"
+                        />
+                        <div className="max-h-60 overflow-y-auto space-y-0.5">
+                          {program.weeks
+                            .map((w, wi) => ({ w, wi }))
+                            .filter(({ w }) => weekSearch.trim() === "" || String(w.weekNumber).includes(weekSearch.trim()))
+                            .reverse()
+                            .map(({ w, wi }) => (
+                              <button
+                                key={w.id}
+                                onClick={() => {
+                                  setActiveWeekIdx(wi);
+                                  setActiveSessionIdx(0);
+                                  if (editMode) exitEditModeOnly();
+                                  setShowWeekPicker(false);
+                                  setWeekSearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                                  wi === activeWeekIdx ? "bg-[#f15b5c] text-white" : "text-gray-600 hover:bg-gray-50"
+                                )}
+                              >
+                                Tuần {w.weekNumber}
+                                {w.weekNumber === program.currentWeek && (
+                                  <span className="text-[10px] opacity-80"> (hiện tại)</span>
+                                )}
+                              </button>
+                            ))}
+                          {program.weeks.filter((w) => weekSearch.trim() === "" || String(w.weekNumber).includes(weekSearch.trim())).length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-3">Không tìm thấy tuần</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Row 2: delete / add week — on their own line so they don't crowd the tabs */}
             {!editMode && (
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center justify-end gap-1.5">
                 {program.weeks.length > 1 && currentWeekData && currentWeekData.id === program.weeks[program.weeks.length - 1].id && (
                   <button
                     onClick={() => setConfirmDeleteWeek(true)}
                     disabled={deletingWeek}
                     title={`Xóa Tuần ${currentWeekData.weekNumber}`}
-                    className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
                   >
                     <Trash2 className="w-3 h-3" />
                     Xóa tuần
@@ -767,7 +842,7 @@ function ProgramView({
                 <button
                   onClick={handleAddWeek}
                   disabled={addingWeek}
-                  className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   {addingWeek ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                   Thêm tuần mới
