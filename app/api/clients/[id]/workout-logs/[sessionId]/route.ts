@@ -116,3 +116,34 @@ export async function PUT(
     return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
   }
 }
+
+// DELETE /api/clients/[id]/workout-logs/[logId] — discard a mistaken check-in.
+// Only an active (not-yet-counted) log can be removed; completed/void logs are
+// kept so counted sessions and history are never lost. Set logs cascade-delete.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string; sessionId: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const logId = params.sessionId; // dynamic segment reused as logId
+    const existing = await prisma.workoutLog.findFirst({
+      where: { id: logId, clientId: params.id },
+    });
+    if (!existing) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
+    if (existing.status !== "IN_PROGRESS" && existing.status !== "AWAITING_CONFIRMATION") {
+      return NextResponse.json(
+        { error: "Chỉ xóa được buổi tập đang diễn ra hoặc đang chờ xác nhận" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.workoutLog.delete({ where: { id: logId } });
+    return NextResponse.json({ ok: true, deletedId: logId });
+  } catch (error: unknown) {
+    const e = error as { message?: string };
+    return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });
+  }
+}

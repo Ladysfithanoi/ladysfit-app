@@ -276,6 +276,7 @@ export function LiveSessionPanel({
   onUpdated,
   onCompleted,
   onVoided,
+  onDeleted,
 }: {
   log: WorkoutLogRow;
   sessionName: string;
@@ -287,6 +288,7 @@ export function LiveSessionPanel({
   onUpdated: (log: WorkoutLogRow) => void;
   onCompleted: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onVoided: (log: WorkoutLogRow) => void;
+  onDeleted: (logId: string) => void;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
   const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() => toSetLogDrafts(log.setLogs));
@@ -298,6 +300,9 @@ export function LiveSessionPanel({
   const [toast, setToast] = useState("");
   const [copyTargetSet, setCopyTargetSet] = useState<number>(SETS.length);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [collapsed, setCollapsed] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Live ticking clock for the elapsed timer.
   useEffect(() => {
@@ -428,6 +433,24 @@ export function LiveSessionPanel({
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // Delete the current in-progress log (checked in by mistake). Removes the row
+  // and its set logs; the session goes back to the "Check-in" state.
+  async function deleteLog() {
+    setDeleting(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      onDeleted(log.id);
+    } catch (err) {
+      // Keep the confirm dialog open so the error is visible next to the button.
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      setDeleting(false);
     }
   }
 
@@ -646,21 +669,55 @@ export function LiveSessionPanel({
   return (
     <div className="mt-3 border border-[#f15b5c]/30 rounded-xl overflow-hidden bg-[#fff9f9]">
       {/* Header with live timer */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-[#fff0f0] border-b border-[#f15b5c]/10">
-        <span className="text-xs font-extrabold text-[#f15b5c] flex items-center gap-1.5">
-          <span className="relative flex h-2 w-2">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-[#fff0f0] border-b border-[#f15b5c]/10">
+        <span className="text-xs font-extrabold text-[#f15b5c] flex items-center gap-1.5 min-w-0">
+          <span className="relative flex h-2 w-2 flex-shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
           </span>
-          Buổi tập đang diễn ra
+          <span className="truncate">Buổi tập đang diễn ra</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-700 tabular-nums">
-          <Clock className="w-4 h-4 text-[#f15b5c]" />
-          {fmtClock(elapsedMs)}
-        </span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-gray-700 tabular-nums">
+            <Clock className="w-4 h-4 text-[#f15b5c]" />
+            {fmtClock(elapsedMs)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting}
+            title="Xóa buổi tập này (lỡ check-in nhầm)"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? "Mở rộng nhật ký" : "Thu nhỏ nhật ký"}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white/70 transition-colors"
+          >
+            {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
-      <div className="p-4 space-y-3">
+      {collapsed && (
+        <div className="px-4 py-2.5 text-xs text-gray-500 flex items-center justify-between gap-2">
+          <span className="truncate">
+            {sessionName.split("—")[0].trim()} · {durationMet ? "Đã đủ thời gian tối thiểu" : `Còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="font-semibold text-[#f15b5c] hover:underline flex-shrink-0"
+          >
+            Mở rộng
+          </button>
+        </div>
+      )}
+
+      <div className={cn("p-4 space-y-3", collapsed && "hidden")}>
         {/* Duration status */}
         <div
           className={cn(
@@ -877,6 +934,42 @@ export function LiveSessionPanel({
           onCancel={() => setShowSig(false)}
           onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
         />
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">Xóa buổi tập này?</p>
+                <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              Toàn bộ số liệu đã nhập trong buổi đang diễn ra này sẽ bị xóa. Buổi tập sẽ quay về trạng thái chưa check-in.
+            </p>
+            {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={deleteLog}
+                disabled={deleting}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-colors"
+              >
+                {deleting ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xóa...</> : "Xóa buổi này"}
+              </button>
+              <button
+                onClick={() => { setConfirmDelete(false); setError(""); }}
+                disabled={deleting}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

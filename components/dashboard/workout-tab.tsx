@@ -251,6 +251,7 @@ function ProgramView({
   onArchive,
   onLogAdded,
   onLogUpdated,
+  onLogDeleted,
   userRole,
   isSubstitute,
   enableLevelSystem = true,
@@ -263,6 +264,7 @@ function ProgramView({
   onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  onLogDeleted: (logId: string) => void;
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
@@ -916,6 +918,7 @@ function ProgramView({
                             onUpdated={(log) => onLogUpdated(log)}
                             onCompleted={(log, pkg) => onLogUpdated(log, pkg)}
                             onVoided={(log) => onLogUpdated(log)}
+                            onDeleted={(logId) => onLogDeleted(logId)}
                           />
                         ) : (
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1241,6 +1244,10 @@ export function WorkoutTab({
     if (pkg) onPackageUpdated?.(pkg);
   }, [onPackageUpdated]);
 
+  const handleLogDeleted = useCallback((logId: string) => {
+    setWorkoutLogs((prev) => prev.filter((l) => l.id !== logId));
+  }, []);
+
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
   }
@@ -1281,6 +1288,7 @@ export function WorkoutTab({
           onArchive={handleArchive}
           onLogAdded={handleLogAdded}
           onLogUpdated={handleLogUpdated}
+          onLogDeleted={handleLogDeleted}
           userRole={userRole}
           isSubstitute={isSubstitute}
           enableLevelSystem={enableLevelSystem}
@@ -1310,6 +1318,7 @@ export function WorkoutTab({
                   onArchive={handleArchive}
                   onLogAdded={handleLogAdded}
                   onLogUpdated={handleLogUpdated}
+                  onLogDeleted={handleLogDeleted}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
                   enableLevelSystem={enableLevelSystem}
