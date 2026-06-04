@@ -252,6 +252,7 @@ function ProgramView({
   onLogAdded,
   onLogUpdated,
   onLogDeleted,
+  onSessionDeleted,
   userRole,
   isSubstitute,
   enableLevelSystem = true,
@@ -265,6 +266,7 @@ function ProgramView({
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  onSessionDeleted: (week: WorkoutWeek, sessionId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
@@ -315,6 +317,9 @@ function ProgramView({
   const [historySessionId, setHistorySessionId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState("");
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState(false);
+  const [deletingSession, setDeletingSession] = useState(false);
+  const [deleteSessionError, setDeleteSessionError] = useState("");
 
   async function handleCheckIn(sessionId: string, weekId: string) {
     setCheckingInId(sessionId);
@@ -337,6 +342,29 @@ function ProgramView({
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
+
+  async function handleDeleteSession() {
+    if (!currentWeekData) return;
+    const sess = currentWeekData.sessions[activeSessionIdx];
+    if (!sess) return;
+    setDeletingSession(true);
+    setDeleteSessionError("");
+    try {
+      const res = await fetch(
+        `/api/clients/${clientId}/programs/${program.id}/weeks/${currentWeekData.id}/sessions/${sess.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      onSessionDeleted(data.week as WorkoutWeek, sess.id, data.packageUpdate ?? null);
+      setActiveSessionIdx(0);
+      setConfirmDeleteSession(false);
+    } catch (err) {
+      setDeleteSessionError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setDeletingSession(false);
+    }
+  }
 
   // Sessions with a live log (checked in / waiting for client confirmation) — used
   // to flag which session the client is currently training, on the week & session tabs.
@@ -804,7 +832,8 @@ function ProgramView({
               )}
 
               {/* Session tabs */}
-              <div className="flex gap-1 overflow-x-auto pb-1 mb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
                 {(editMode ? draftSessions : currentWeekData.sessions).map((s, i) => {
                   const sessionActive = !editMode && activeSessionIds.has((s as WorkoutSession).id);
                   return (
@@ -830,6 +859,17 @@ function ProgramView({
                     </button>
                   );
                 })}
+                </div>
+                {!editMode && !isArchived && currentWeekData.sessions.length > 0 && (
+                  <button
+                    onClick={() => { setConfirmDeleteSession(true); setDeleteSessionError(""); }}
+                    title="Xóa buổi đang chọn khỏi tuần này"
+                    className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Xóa buổi</span>
+                  </button>
+                )}
               </div>
 
               {/* Session content */}
@@ -1111,6 +1151,46 @@ function ProgramView({
         </div>
       )}
 
+      {/* ── Confirm delete session modal ── */}
+      {confirmDeleteSession && currentWeekData && currentWeekData.sessions[activeSessionIdx] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">
+                  Xóa {currentWeekData.sessions[activeSessionIdx].sessionName.split("—")[0].trim()}?
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              Buổi tập này (cùng các bài tập và nhật ký đã ghi của nó trong Tuần {currentWeekData.weekNumber}) sẽ bị xóa.
+              Các buổi đã hoàn thành sẽ được <span className="font-bold text-red-600">trừ khỏi số buổi đã tính</span>.
+            </p>
+            {deleteSessionError && <p className="text-xs text-red-500 font-medium">{deleteSessionError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteSession}
+                disabled={deletingSession}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-colors"
+              >
+                {deletingSession ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xóa...</> : "Xóa buổi này"}
+              </button>
+              <button
+                onClick={() => { setConfirmDeleteSession(false); setDeleteSessionError(""); }}
+                disabled={deletingSession}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Confirm delete week modal ── */}
       {confirmDeleteWeek && currentWeekData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
@@ -1250,6 +1330,18 @@ export function WorkoutTab({
     if (pkg) onPackageUpdated?.(pkg);
   }, [onPackageUpdated]);
 
+  const handleSessionDeleted = useCallback((week: WorkoutWeek, sessionId: string, pkg?: PackageUpdate | null) => {
+    // Replace the week that owns this session and drop the deleted session's logs.
+    setPrograms((prev) =>
+      prev.map((p) => ({
+        ...p,
+        weeks: p.weeks.map((w) => (w.id === week.id ? week : w)),
+      }))
+    );
+    setWorkoutLogs((prev) => prev.filter((l) => l.sessionId !== sessionId));
+    if (pkg) onPackageUpdated?.(pkg);
+  }, [onPackageUpdated]);
+
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
   }
@@ -1291,6 +1383,7 @@ export function WorkoutTab({
           onLogAdded={handleLogAdded}
           onLogUpdated={handleLogUpdated}
           onLogDeleted={handleLogDeleted}
+          onSessionDeleted={handleSessionDeleted}
           userRole={userRole}
           isSubstitute={isSubstitute}
           enableLevelSystem={enableLevelSystem}
@@ -1321,6 +1414,7 @@ export function WorkoutTab({
                   onLogAdded={handleLogAdded}
                   onLogUpdated={handleLogUpdated}
                   onLogDeleted={handleLogDeleted}
+                  onSessionDeleted={handleSessionDeleted}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
                   enableLevelSystem={enableLevelSystem}
