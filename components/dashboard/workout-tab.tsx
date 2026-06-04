@@ -264,7 +264,7 @@ function ProgramView({
   onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
-  onLogDeleted: (logId: string) => void;
+  onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   userRole?: string;
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
@@ -963,6 +963,7 @@ function ProgramView({
                           phase={program.phase}
                           clientId={clientId}
                           onLogUpdated={onLogUpdated}
+                          onLogDeleted={onLogDeleted}
                           onClose={() => setHistorySessionId(null)}
                         />
                       )}
@@ -1244,9 +1245,10 @@ export function WorkoutTab({
     if (pkg) onPackageUpdated?.(pkg);
   }, [onPackageUpdated]);
 
-  const handleLogDeleted = useCallback((logId: string) => {
+  const handleLogDeleted = useCallback((logId: string, pkg?: PackageUpdate | null) => {
     setWorkoutLogs((prev) => prev.filter((l) => l.id !== logId));
-  }, []);
+    if (pkg) onPackageUpdated?.(pkg);
+  }, [onPackageUpdated]);
 
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));

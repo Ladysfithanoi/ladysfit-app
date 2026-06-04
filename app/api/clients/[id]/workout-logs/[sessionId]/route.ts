@@ -117,9 +117,12 @@ export async function PUT(
   }
 }
 
-// DELETE /api/clients/[id]/workout-logs/[logId] — discard a mistaken check-in.
-// Only an active (not-yet-counted) log can be removed; completed/void logs are
-// kept so counted sessions and history are never lost. Set logs cascade-delete.
+// DELETE /api/clients/[id]/workout-logs/[logId] — remove a workout log.
+// Active logs (IN_PROGRESS / AWAITING_CONFIRMATION) were never counted, so they
+// just vanish. A COMPLETED log was counted via incrementPackageAndNotify, so we
+// reverse that here: decrement the package's sessionsUsed and re-open it if it
+// had been auto-completed. Re-recording the session later counts it again.
+// Set logs cascade-delete with the log.
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string; sessionId: string } }
@@ -133,15 +136,34 @@ export async function DELETE(
       where: { id: logId, clientId: params.id },
     });
     if (!existing) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
-    if (existing.status !== "IN_PROGRESS" && existing.status !== "AWAITING_CONFIRMATION") {
-      return NextResponse.json(
-        { error: "Chỉ xóa được buổi tập đang diễn ra hoặc đang chờ xác nhận" },
-        { status: 400 }
-      );
+
+    let packageUpdate: {
+      id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
+    } | null = null;
+
+    // Reverse the session count for a completed log.
+    if (existing.status === "COMPLETED") {
+      const pkg = await prisma.packageEnrollment.findFirst({
+        where: { clientId: params.id, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (pkg) {
+        const updated = await prisma.packageEnrollment.update({
+          where: { id: pkg.id },
+          data: { sessionsUsed: pkg.sessionsUsed - 1, status: "ACTIVE" },
+        });
+        packageUpdate = {
+          id: updated.id,
+          sessionsUsed: updated.sessionsUsed,
+          sessions: updated.sessions,
+          packageName: updated.packageName,
+          status: updated.status,
+        };
+      }
     }
 
     await prisma.workoutLog.delete({ where: { id: logId } });
-    return NextResponse.json({ ok: true, deletedId: logId });
+    return NextResponse.json({ ok: true, deletedId: logId, packageUpdate });
   } catch (error: unknown) {
     const e = error as { message?: string };
     return NextResponse.json({ error: e.message ?? "Internal server error" }, { status: 500 });

@@ -1137,6 +1137,7 @@ export function SessionLogHistory({
   phase,
   clientId,
   onLogUpdated,
+  onLogDeleted,
   onClose,
 }: {
   sessionName: string;
@@ -1144,11 +1145,15 @@ export function SessionLogHistory({
   phase: string;
   clientId: string;
   onLogUpdated: (updated: WorkoutLogRow) => void;
+  onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onClose: () => void;
 }) {
   const [logs, setLogs] = useState(initialLogs);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const isCardio = isCardioSession(sessionName);
   const showSuggestions = !isCardio && getRepRange(phase) != null;
@@ -1157,6 +1162,23 @@ export function SessionLogHistory({
     setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     onLogUpdated(updated);
     setEditingLogId(null);
+  }
+
+  async function handleDelete(logId: string) {
+    setDeletingId(logId);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${logId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      setLogs((prev) => prev.filter((l) => l.id !== logId));
+      onLogDeleted(logId, data.packageUpdate ?? null);
+      setConfirmDeleteId(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -1226,6 +1248,14 @@ export function SessionLogHistory({
                         )}
                       >
                         <Pencil className="w-3 h-3" />
+                      </button>
+                      {/* Delete button — removes the session and un-counts it */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(log.id); setDeleteError(""); }}
+                        title="Xóa buổi tập này (trừ khỏi số buổi đã tính)"
+                        className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => { setExpanded(isOpen ? null : log.id); setEditingLogId(null); }}
@@ -1349,6 +1379,43 @@ export function SessionLogHistory({
           )}
         </div>
       </div>
+
+      {/* Confirm delete a recorded session */}
+      {confirmDeleteId && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">Xóa buổi tập này?</p>
+                <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              Buổi tập sẽ bị xóa khỏi lịch sử và <span className="font-bold text-red-600">trừ khỏi số buổi đã tính</span>. Nếu ghi lại nhật ký buổi này sau đó thì sẽ được tính lại.
+            </p>
+            {deleteError && <p className="text-xs text-red-500 font-medium">{deleteError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDelete(confirmDeleteId)}
+                disabled={deletingId === confirmDeleteId}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 transition-colors"
+              >
+                {deletingId === confirmDeleteId ? <><Loader2 className="w-4 h-4 animate-spin" />Đang xóa...</> : "Xóa buổi này"}
+              </button>
+              <button
+                onClick={() => { setConfirmDeleteId(null); setDeleteError(""); }}
+                disabled={deletingId === confirmDeleteId}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
