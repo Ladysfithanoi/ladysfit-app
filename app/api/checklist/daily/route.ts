@@ -36,8 +36,10 @@ export async function GET(req: Request) {
   }
   // ADMIN: có thể xem bất kỳ user nào — không cần kiểm tra thêm
 
-  // PT and FM: only allowed to query dates within the current month (UTC+7)
-  if (!isAdmin) {
+  // PT may only view the current month. FM (and ADMIN) can review the full
+  // history of staff in their managed branches — viewing past months is read-only,
+  // enforced on the save path below.
+  if (isPT) {
     const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000); // UTC+7
     const currentMonth = nowVN.getUTCMonth();
     const currentYear = nowVN.getUTCFullYear();
@@ -99,12 +101,24 @@ export async function POST(req: Request) {
     dailyCompleted?: string;
     dailyIncomplete?: string;
     dailyNextPlan?: string;
-    items: { order: number; time?: string; task: string; kpi?: string; actualResult?: number; note?: string }[];
+    items: { order: number; time?: string; task: string; kpi?: string; actualResult?: number; note?: string; isTeachingSession?: boolean }[];
   };
 
   // PT can only save their own
   if (isPT && body.userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Editing is restricted to the current month — past months are review-only.
+  {
+    const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000); // UTC+7
+    const [reqYear, reqMonth] = body.date.split("-").map(Number);
+    if (reqYear !== nowVN.getUTCFullYear() || reqMonth - 1 !== nowVN.getUTCMonth()) {
+      return NextResponse.json(
+        { error: "Chỉ được chỉnh sửa check-list trong tháng hiện tại" },
+        { status: 403 }
+      );
+    }
   }
 
   const reportDate = toDateOnly(body.date);
@@ -137,6 +151,7 @@ export async function POST(req: Request) {
             kpi: item.kpi ?? null,
             actualResult: item.actualResult ?? null,
             note: item.note ?? null,
+            isTeachingSession: item.isTeachingSession ?? false,
           })),
         },
       },
@@ -162,6 +177,7 @@ export async function POST(req: Request) {
             kpi: item.kpi ?? null,
             actualResult: item.actualResult ?? null,
             note: item.note ?? null,
+            isTeachingSession: item.isTeachingSession ?? false,
           })),
         },
       },

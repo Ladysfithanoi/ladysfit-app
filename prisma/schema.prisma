@@ -962,15 +962,16 @@ model DailyChecklist {
 }
 
 model ChecklistItem {
-  id           String   @id @default(cuid())
-  checklistId  String
-  order        Int
-  time         String?
-  task         String
-  kpi          String?
-  actualResult Float?
-  note         String?
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  checklistId        String
+  order              Int
+  time               String?
+  task               String
+  kpi                String?
+  actualResult       Float?
+  note               String?
+  isTeachingSession  Boolean  @default(false)
+  createdAt          DateTime @default(now())
 
   checklist DailyChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
 

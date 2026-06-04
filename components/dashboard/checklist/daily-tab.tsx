@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
-import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
+import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
@@ -25,6 +25,11 @@ function fmtDate(iso: string) {
 function currentMonthLabel() {
   const d = new Date();
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+function isCurrentMonthISO(iso: string): boolean {
+  const [y, m] = iso.split("-").map(Number);
+  const d = new Date();
+  return y === d.getFullYear() && m === d.getMonth() + 1;
 }
 // Normalize arbitrary time input → "HH:MM" (24h), returns "" if invalid
 function normalizeTime(raw: string): string {
@@ -103,6 +108,7 @@ type Row = {
   kpi: string;
   actualResult: number;
   note: string;
+  isTeaching: boolean;
 };
 
 type ChecklistData = {
@@ -156,13 +162,128 @@ function DateInput({
   );
 }
 
+// ── MonthCalendarPicker — full-history month calendar (FM review) ────────────
+// A click-to-open month grid that lets FM browse back to any past month. Future
+// days are disabled; there is no lower bound so the whole history is reachable.
+function MonthCalendarPicker({
+  value, onChange, className,
+}: {
+  value: string; onChange: (v: string) => void; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState(() => {
+    const [y, m] = value.split("-").map(Number);
+    return { y, m: m - 1 };
+  });
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Re-sync the visible month whenever the selected date changes externally.
+    const [y, m] = value.split("-").map(Number);
+    setView({ y, m: m - 1 });
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const today = todayISO();
+  const todayD = new Date();
+  const curY = todayD.getFullYear();
+  const curM = todayD.getMonth();
+  const canNext = view.y < curY || (view.y === curY && view.m < curM);
+
+  function prevMonth() {
+    setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }));
+  }
+  function nextMonth() {
+    if (!canNext) return;
+    setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }));
+  }
+
+  const firstDow = new Date(view.y, view.m, 1).getDay();
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  function ymdOf(d: number) {
+    return `${view.y}-${String(view.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  return (
+    <div className={cn("relative", className)} ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="h-9 w-full rounded-xl border border-gray-200 bg-white flex items-center gap-2 px-3 text-sm text-gray-700 hover:border-[#f15b5c]/50 transition-colors"
+      >
+        <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <span className="whitespace-nowrap">{fmtDate(value)}</span>
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-64">
+          <div className="flex items-center justify-between mb-2">
+            <button type="button" onClick={prevMonth} className="p-1 rounded-lg text-gray-500 hover:bg-gray-100">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-bold text-gray-700">Tháng {view.m + 1}/{view.y}</span>
+            <button
+              type="button"
+              onClick={nextMonth}
+              disabled={!canNext}
+              className="p-1 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-bold text-gray-400 mb-1">
+            {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((d) => <div key={d}>{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {cells.map((d, i) => {
+              if (d === null) return <div key={i} />;
+              const ymd = ymdOf(d);
+              const isFuture = ymd > today;
+              const isSel = ymd === value;
+              const isToday = ymd === today;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={isFuture}
+                  onClick={() => { onChange(ymd); setOpen(false); }}
+                  className={cn(
+                    "h-8 rounded-lg text-xs font-semibold transition-colors",
+                    isSel
+                      ? "bg-[#f15b5c] text-white"
+                      : isToday
+                        ? "border border-[#f15b5c] text-[#f15b5c]"
+                        : "text-gray-600 hover:bg-gray-100",
+                    isFuture && "opacity-30 cursor-not-allowed hover:bg-transparent"
+                  )}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // appearance-none + m-0: strips iOS Safari default input chrome (inner shadow, padding, border-radius)
 // box-border: padding counted inward so input stays within column boundary
 // text-[16px]: prevents iOS Safari auto-zoom (zoom triggers when font-size < 16px)
 const inputCls =
   "h-7 w-full min-w-0 box-border m-0 appearance-none rounded-lg border border-gray-200 bg-white px-1.5 text-[16px] sm:text-xs leading-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
-const dateCls =
-  "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
 // ── Calendar Grid sub-component ───────────────────────────────────────────────
 function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
@@ -374,8 +495,11 @@ export function DailyTab({
   // Calendar overview modal state
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const canEdit           = !isTeamView;
-  const canEditReflection = !isTeamView;
+  // Editing is allowed only on your own current-month checklist. FM can browse
+  // their own (and their team's) past months, but those are review-only.
+  const dateInCurrentMonth = isCurrentMonthISO(date);
+  const canEdit           = !isTeamView && dateInCurrentMonth;
+  const canEditReflection = canEdit;
 
   // ── Auto-save draft (own checklist only) ──────────────────────────────────
   const draftKey = `ladysfit_draft_checklist_${currentUserId}_${ownDate}`;
@@ -417,6 +541,7 @@ export function DailyTab({
             kpi: (item.kpi as string) ?? "",
             actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
             note: (item.note as string) ?? "",
+            isTeaching: Boolean(item.isTeachingSession),
           }))
         : [];
       if (draft) {
@@ -471,6 +596,7 @@ export function DailyTab({
             kpi: (item.kpi as string) ?? "",
             actualResult: item.actualResult != null ? Number(item.actualResult) : 0,
             note: (item.note as string) ?? "",
+            isTeaching: Boolean(item.isTeachingSession),
           }))
         );
       }
@@ -502,7 +628,7 @@ export function DailyTab({
   // ── row helpers ────────────────────────────────────────────────────────────
   function addRow() {
     setIsDirty(true);
-    setRows((p) => [...p, { order: p.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "" }]);
+    setRows((p) => [...p, { order: p.length + 1, time: "", task: "", kpi: "", actualResult: 0, note: "", isTeaching: false }]);
   }
   function removeRow(i: number) {
     setIsDirty(true);
@@ -512,7 +638,7 @@ export function DailyTab({
     setIsDirty(true);
     setRows((prev) => {
       const next = [...prev];
-      next.splice(i + 1, 0, { order: 0, time: "", task: "", kpi: "", actualResult: 0, note: "" });
+      next.splice(i + 1, 0, { order: 0, time: "", task: "", kpi: "", actualResult: 0, note: "", isTeaching: false });
       return next.map((r, idx) => ({ ...r, order: idx + 1 }));
     });
   }
@@ -554,6 +680,7 @@ export function DailyTab({
             kpi: r.kpi || undefined,
             actualResult: r.actualResult || undefined,
             note: r.note || undefined,
+            isTeachingSession: r.isTeaching || undefined,
           })),
         }),
       });
@@ -575,6 +702,14 @@ export function DailyTab({
     return !isNaN(k) && k > 0 && (r.actualResult / k) * 100 >= 80;
   }).length;
   const pct = rows.length > 0 ? Math.round((completedTasks / rows.length) * 100) : 0;
+
+  // Teaching-session tally for the day (rows marked "buổi dạy": KPI = planned, T.Đạt = done).
+  const teachingRows = rows.filter((r) => r.isTeaching);
+  const teachingPlanned = teachingRows.reduce((s, r) => {
+    const k = parseFloat(r.kpi);
+    return s + (!isNaN(k) && k > 0 ? k : 1);
+  }, 0);
+  const teachingDone = teachingRows.reduce((s, r) => s + (r.actualResult || 0), 0);
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
@@ -623,23 +758,24 @@ export function DailyTab({
             )}
 
             <div className="flex items-center gap-2">
-              <CalendarDays className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày:</label>
-              <DateInput
+              <MonthCalendarPicker
                 value={fmSubTab === "team" ? teamDate : ownDate}
-                min={minDate}
-                max={todayISO()}
                 onChange={(v) => fmSubTab === "team" ? setTeamDate(v) : setOwnDate(v)}
               />
             </div>
 
             <span className={cn(
               "text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap border",
-              fmSubTab === "own"
+              canEdit
                 ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                 : "bg-amber-50 text-amber-600 border-amber-200"
             )}>
-              {fmSubTab === "own" ? `✏️ Của bạn · ${currentMonthLabel()}` : `👁 Chỉ xem · ${currentMonthLabel()}`}
+              {canEdit
+                ? `✏️ Của bạn · ${currentMonthLabel()}`
+                : fmSubTab === "own"
+                  ? `👁 Xem lại · ${fmtDate(date)}`
+                  : `👁 Chỉ xem · ${fmtDate(date)}`}
             </span>
           </div>
         </div>
@@ -730,6 +866,13 @@ export function DailyTab({
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {teachingRows.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs">
+                <Dumbbell className="w-3.5 h-3.5 text-[#f15b5c]" />
+                <span className="font-semibold text-gray-500">Buổi dạy:</span>
+                <span className="font-bold text-gray-700">{teachingDone}/{teachingPlanned} buổi</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -839,9 +982,27 @@ export function DailyTab({
                       </td>
                       <td className="px-1.5 py-1.5 overflow-hidden">
                         {canEdit ? (
-                          <input value={row.task} onChange={(e) => updateRow(i, "task", e.target.value)} className={inputCls} placeholder="Tên công việc..." />
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updateRow(i, "isTeaching", !row.isTeaching)}
+                              title={row.isTeaching ? "Đang đánh dấu là buổi dạy — bấm để bỏ" : "Đánh dấu dòng này là buổi dạy"}
+                              className={cn(
+                                "flex-shrink-0 p-1 rounded-md border transition-colors",
+                                row.isTeaching
+                                  ? "bg-[#f15b5c] border-[#f15b5c] text-white"
+                                  : "border-gray-200 text-gray-300 hover:text-gray-500 hover:border-gray-300"
+                              )}
+                            >
+                              <Dumbbell className="w-3 h-3" />
+                            </button>
+                            <input value={row.task} onChange={(e) => updateRow(i, "task", e.target.value)} className={inputCls} placeholder="Tên công việc..." />
+                          </div>
                         ) : (
-                          <span className="block truncate font-semibold text-gray-800" title={row.task}>{row.task || "—"}</span>
+                          <span className="flex items-center gap-1 font-semibold text-gray-800" title={row.task}>
+                            {row.isTeaching && <Dumbbell className="w-3 h-3 text-[#f15b5c] flex-shrink-0" />}
+                            <span className="truncate">{row.task || "—"}</span>
+                          </span>
                         )}
                       </td>
                       <td className="px-1.5 py-1.5 overflow-hidden">
