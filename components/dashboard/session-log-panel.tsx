@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
@@ -355,6 +355,19 @@ export function LiveSessionPanel({
 
   const canCopySet1 = setLogs.some((sl) => sl.sets[0].load || sl.sets[0].reps);
 
+  // Clear one whole Set column (load + reps) across every movement in the session.
+  function clearSetColumn(setIdx: number) {
+    setSetLogs((prev) =>
+      prev.map((sl) => ({
+        ...sl,
+        sets: sl.sets.map((s, j) => (j === setIdx ? { load: "", reps: "" } : s)),
+      }))
+    );
+  }
+
+  const columnHasData = (setIdx: number) =>
+    setLogs.some((sl) => sl.sets[setIdx]?.load || sl.sets[setIdx]?.reps);
+
   function buildSetLogPayload() {
     return setLogs.map((sl) => ({
       id: sl.id,
@@ -678,9 +691,20 @@ export function LiveSessionPanel({
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-3 py-2 text-left font-bold text-gray-400 w-32">Chuyển động</th>
                 <th className="px-3 py-2 text-left font-bold text-gray-400 w-36">Bài tập</th>
-                {SETS.map((n) => (
+                {SETS.map((n, si) => (
                   <th key={n} className="px-1 py-2 text-center font-bold text-gray-400 w-[90px]">
-                    Set {n}
+                    <div className="inline-flex items-center gap-1">
+                      Set {n}
+                      <button
+                        type="button"
+                        onClick={() => clearSetColumn(si)}
+                        disabled={!columnHasData(si)}
+                        title={`Xóa toàn bộ số liệu cột Set ${n}`}
+                        className="text-gray-300 hover:text-[#f15b5c] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-gray-300"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                     <div className="text-[9px] text-gray-300 font-normal">kg / reps</div>
                   </th>
                 ))}
