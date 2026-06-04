@@ -4,8 +4,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { incrementPackageAndNotify, serializeWorkoutLog } from "@/lib/workout-session";
 
-const INTERACTION_WINDOW_MS = 10 * 60 * 1000; // must interact within 10 min of check-in
-
 type SetLogInput = {
   id: string;
   set1Load?: string | null; set1Reps?: string | null;
@@ -33,7 +31,6 @@ const INCLUDE = {
 // PT ends the session. Validates anti-cheat rules, then either:
 //   - method "client_app": moves to AWAITING_CONFIRMATION (client must confirm on their app) — NOT counted yet
 //   - method "signature":  completes now via the client's signature (fallback) — counted
-// or voids the session when there was no interaction within 10 minutes.
 export async function POST(
   req: Request,
   { params }: { params: { id: string; sessionId: string } }
@@ -93,31 +90,11 @@ export async function POST(
 
     const now = new Date();
 
+    // Stamp the time of first data entry (metadata only — no longer voids the session).
     let firstInteractionAt = log.firstInteractionAt;
     if (!firstInteractionAt && setLogs.some(hasData)) firstInteractionAt = now;
 
-    const interactionOk =
-      firstInteractionAt != null &&
-      firstInteractionAt.getTime() - log.checkInAt.getTime() <= INTERACTION_WINDOW_MS;
-
-    // ── Rule 1: no interaction within 10 min → void ──
-    if (!interactionOk) {
-      const voided = await prisma.workoutLog.update({
-        where: { id: logId },
-        data: {
-          status: "VOID",
-          checkOutAt: now,
-          firstInteractionAt,
-          signatureUrl: (body.signatureUrl ?? "").trim() || null,
-          notes: body.notes ?? log.notes,
-          voidReason: "Không có tương tác (nhập số liệu) trong 10 phút đầu",
-        },
-        include: INCLUDE,
-      });
-      return NextResponse.json({ ...serializeWorkoutLog(voided), valid: false, reason: voided.voidReason, packageUpdate: null });
-    }
-
-    // ── Rule 2: minimum duration ──
+    // ── Rule: minimum duration ──
     const config = await prisma.systemConfig.findUnique({ where: { id: "main" } });
     const minMinutes = config?.minSessionMinutes ?? 30;
     const elapsedMin = (now.getTime() - log.checkInAt.getTime()) / 60000;

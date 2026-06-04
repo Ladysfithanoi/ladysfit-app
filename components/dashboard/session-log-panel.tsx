@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, AlertTriangle, Save } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
@@ -305,10 +305,6 @@ export function LiveSessionPanel({
   const elapsedMs = nowMs - checkInMs;
   const elapsedMin = elapsedMs / 60000;
 
-  const firstInteractionMs = log.firstInteractionAt ? new Date(log.firstInteractionAt).getTime() : null;
-  const interactionDone = firstInteractionMs != null && firstInteractionMs - checkInMs <= 10 * 60 * 1000;
-  const interactionWindowLeftMs = 10 * 60 * 1000 - elapsedMs;
-  const interactionFailed = !interactionDone && interactionWindowLeftMs <= 0;
   const durationMet = elapsedMin >= minSessionMinutes;
 
   const isCardio = isCardioSession(sessionName);
@@ -624,39 +620,19 @@ export function LiveSessionPanel({
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Status banners */}
-        <div className="grid gap-2 sm:grid-cols-2">
-          {/* Interaction status */}
-          {interactionDone ? (
-            <div className="flex items-center gap-2 text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-              <Check className="w-4 h-4 flex-shrink-0" />
-              Đã ghi nhận tương tác trong 10 phút đầu
-            </div>
-          ) : interactionFailed ? (
-            <div className="flex items-center gap-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              Quá 10 phút chưa nhập số liệu — buổi này sẽ KHÔNG được tính
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <Clock className="w-4 h-4 flex-shrink-0" />
-              Còn {fmtClock(interactionWindowLeftMs)} để nhập số liệu đầu tiên
-            </div>
+        {/* Duration status */}
+        <div
+          className={cn(
+            "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
+            durationMet
+              ? "text-green-700 bg-green-50 border-green-100"
+              : "text-gray-500 bg-gray-50 border-gray-200"
           )}
-          {/* Duration status */}
-          <div
-            className={cn(
-              "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
-              durationMet
-                ? "text-green-700 bg-green-50 border-green-100"
-                : "text-gray-500 bg-gray-50 border-gray-200"
-            )}
-          >
-            <Clock className="w-4 h-4 flex-shrink-0" />
-            {durationMet
-              ? `Đã đủ thời gian tối thiểu (${minSessionMinutes} phút)`
-              : `Cần tối thiểu ${minSessionMinutes} phút (còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút)`}
-          </div>
+        >
+          <Clock className="w-4 h-4 flex-shrink-0" />
+          {durationMet
+            ? `Đã đủ thời gian tối thiểu (${minSessionMinutes} phút)`
+            : `Cần tối thiểu ${minSessionMinutes} phút (còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút)`}
         </div>
 
         {/* Session notes */}
@@ -804,44 +780,31 @@ export function LiveSessionPanel({
             Lưu số liệu
           </button>
 
-          {interactionFailed ? (
-            <button
-              onClick={() => checkOut("signature", "")}
-              disabled={finishing}
-              className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5 bg-gray-500 hover:bg-gray-600"
-            >
-              {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-              Đóng buổi (không tính)
-            </button>
-          ) : (
-            <button
-              onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
-              disabled={finishing || saving || !durationMet}
-              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Gửi cho khách xác nhận trên app của khách"}
-              className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-              Kết thúc & gửi khách xác nhận
-            </button>
-          )}
+          <button
+            onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
+            disabled={finishing || saving || !durationMet}
+            title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Gửi cho khách xác nhận trên app của khách"}
+            className="flex-1 h-9 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            {finishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Kết thúc & gửi khách xác nhận
+          </button>
         </div>
 
         {/* Fallback: customer signs on this device if they can't use their app */}
-        {!interactionFailed && (
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <span className="text-[11px] text-gray-400">Khách không tiện dùng app?</span>
-            <button
-              onClick={async () => { await saveProgress(); setShowSig(true); }}
-              disabled={finishing || saving || !durationMet}
-              title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận ngay trên máy này (dự phòng)"}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              <PenLine className="w-3.5 h-3.5" />
-              Khách ký tại đây (dự phòng)
-            </button>
-          </div>
-        )}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-[11px] text-gray-400">Khách không tiện dùng app?</span>
+          <button
+            onClick={async () => { await saveProgress(); setShowSig(true); }}
+            disabled={finishing || saving || !durationMet}
+            title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận ngay trên máy này (dự phòng)"}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            <PenLine className="w-3.5 h-3.5" />
+            Khách ký tại đây (dự phòng)
+          </button>
+        </div>
       </div>
 
       {showSig && (
