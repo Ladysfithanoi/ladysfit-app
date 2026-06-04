@@ -860,7 +860,7 @@ function ProgramView({
                   );
                 })}
                 </div>
-                {!editMode && !isArchived && currentWeekData.sessions.length > 0 && (
+                {!editMode && !isArchived && currentWeekData.sessions.length > 1 && (
                   <button
                     onClick={() => { setConfirmDeleteSession(true); setDeleteSessionError(""); }}
                     title="Xóa buổi đang chọn khỏi tuần này"

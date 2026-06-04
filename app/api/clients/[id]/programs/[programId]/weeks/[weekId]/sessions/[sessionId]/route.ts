@@ -29,6 +29,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Không tìm thấy buổi tập" }, { status: 404 });
     }
 
+    // Keep at least one session per week so the week is never left empty.
+    const sessionCount = await prisma.workoutSession.count({ where: { weekId: params.weekId } });
+    if (sessionCount <= 1) {
+      return NextResponse.json(
+        { error: "Không thể xóa buổi tập cuối cùng của tuần. Mỗi tuần cần ít nhất 1 buổi." },
+        { status: 400 }
+      );
+    }
+
     let packageUpdate: {
       id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
     } | null = null;
