@@ -117,6 +117,14 @@ export function WeeklyReportTab({
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
   const [modalContent, setModalContent] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastIsError, setToastIsError] = useState(false);
+
+  function showToast(msg: string, isError = false) {
+    setToastIsError(isError);
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), isError ? 4000 : 3000);
+  }
 
   // ── Auto-save draft ────────────────────────────────────────────────────────
   const draftKey = `ladysfit_draft_weekly_${branchId}_${year}_${month}_w${selectedWeek}_${currentUserId}`;
@@ -220,7 +228,15 @@ export function WeeklyReportTab({
           solutions: solutions.trim() || null,
         }),
       });
-      if (res.ok) { clearWeeklyDraft(); setIsDirty(false); }
+      if (res.ok) {
+        clearWeeklyDraft();
+        setIsDirty(false);
+        showToast("Đã lưu báo cáo tuần thành công");
+      } else {
+        showToast("Lưu báo cáo thất bại, vui lòng thử lại", true);
+      }
+    } catch {
+      showToast("Lỗi kết nối, không thể lưu báo cáo", true);
     } finally {
       setSaving(false);
     }
@@ -250,7 +266,7 @@ export function WeeklyReportTab({
       }
       if (!monthlyTargetId) { setSavingActuals(false); return; }
 
-      await fetch("/api/setup/weekly-actual", {
+      const res = await fetch("/api/setup/weekly-actual", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -262,6 +278,13 @@ export function WeeklyReportTab({
         }),
       });
       await fetchReport();
+      if (res.ok) {
+        showToast("Đã lưu thực đạt của tôi thành công");
+      } else {
+        showToast("Lưu thực đạt thất bại, vui lòng thử lại", true);
+      }
+    } catch {
+      showToast("Lỗi kết nối, không thể lưu thực đạt", true);
     } finally {
       setSavingActuals(false);
     }
@@ -798,6 +821,16 @@ export function WeeklyReportTab({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast thông báo */}
+      {toastMsg && (
+        <div className={cn(
+          "fixed bottom-6 left-1/2 -translate-x-1/2 z-[110] text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg",
+          toastIsError ? "bg-red-600" : "bg-gray-900"
+        )}>
+          {toastMsg}
         </div>
       )}
     </div>
