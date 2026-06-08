@@ -107,7 +107,11 @@ export async function POST(
     if (elapsedMin > MAX_SESSION_MINUTES) {
       await prisma.workoutLog.delete({ where: { id: logId } });
       return NextResponse.json(
-        { error: `Buổi tập đã vượt quá ${MAX_SESSION_MINUTES} phút (2 tiếng) nên đã tự động hủy và không được tính. Vui lòng check-in lại.` },
+        {
+          error: `Buổi tập đã vượt quá ${MAX_SESSION_MINUTES} phút (2 tiếng) nên đã tự động hủy và không được tính. Vui lòng check-in lại.`,
+          autoCancelled: true,
+          deletedId: logId,
+        },
         { status: 400 }
       );
     }

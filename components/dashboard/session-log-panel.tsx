@@ -467,7 +467,9 @@ export function LiveSessionPanel({
       const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      // 404 = the log was already removed (e.g. an over-cap check-out deleted it).
+      // Either way it no longer exists, so revert the UI to the Check-in state.
+      if (!res.ok && res.status !== 404) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       onDeleted(log.id);
     } catch (err) {
       // Keep the confirm dialog open so the error is visible next to the button.
@@ -479,15 +481,20 @@ export function LiveSessionPanel({
   // Auto-cancel a session that runs past the 2-hour cap: show the notice, then
   // delete the in-progress log so it is never counted (session reverts to
   // "Check-in"). The server check-out also rejects over-cap sessions as a guard.
+  //
+  // NOTE: `autoCancelled` must stay OUT of this effect's deps. If it were a dep,
+  // calling setAutoCancelled(true) would re-run the effect, the cleanup would
+  // clearTimeout the pending delete, and deleteLog would never fire — leaving the
+  // panel stuck on the "đã hủy" notice with no way back to Check-in.
   useEffect(() => {
-    if (!overMax || autoCancelled || log.status !== "IN_PROGRESS") return;
+    if (!overMax || log.status !== "IN_PROGRESS") return;
     setAutoCancelled(true);
     const t = setTimeout(() => {
       void deleteLog();
     }, 6000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overMax, autoCancelled, log.status]);
+  }, [overMax, log.status]);
 
   // Auto-save in-progress data (notes + sets) so a refresh or accidental tab
   // close never loses what the PT has typed. The session row already lives in
@@ -532,7 +539,16 @@ export function LiveSessionPanel({
         body: JSON.stringify({ method, signatureUrl, notes: notes || null, setLogs: buildSetLogPayload() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      if (!res.ok) {
+        // Over the 2-hour cap: the server already auto-cancelled & removed this log.
+        // Drop it from state so the session reverts to the Check-in button.
+        if (data.autoCancelled && data.deletedId) {
+          setShowSig(false);
+          onDeleted(data.deletedId as string);
+          return;
+        }
+        throw new Error(data.error ?? "Có lỗi xảy ra");
+      }
       setShowSig(false);
       if (!data.valid) {
         onVoided(data as WorkoutLogRow);
@@ -709,11 +725,22 @@ export function LiveSessionPanel({
           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
             <X className="w-5 h-5 text-red-600" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-extrabold text-red-700">Buổi tập đã tự động hủy</p>
             <p className="text-xs text-red-600 mt-0.5">
               Buổi tập đã vượt quá {MAX_SESSION_MINUTES} phút (2 tiếng) nên không được tính. Vui lòng check-in lại để bắt đầu buổi mới.
             </p>
+            {error && <p className="text-xs text-red-500 font-medium mt-1">{error}</p>}
+            <button
+              type="button"
+              onClick={() => void deleteLog()}
+              disabled={deleting}
+              className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
+              Check-in lại
+            </button>
           </div>
         </div>
       </div>
