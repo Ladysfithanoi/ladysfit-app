@@ -67,12 +67,15 @@ export function DetailWeightChart({
     );
   }
 
-  const minY = Math.min(...data.map((d) => d.weight), targetWeight) - 1;
-  const maxY = Math.max(...data.map((d) => d.weight)) + 1;
+  // Round the domain to whole kilograms so the axis ticks land on clean numbers,
+  // and add headroom (top margin) so the highest tick label isn't clipped off the
+  // top of the chart — previously the largest weight's number could disappear.
+  const minY = Math.floor(Math.min(...data.map((d) => d.weight), targetWeight) - 1);
+  const maxY = Math.ceil(Math.max(...data.map((d) => d.weight)) + 1);
 
   return (
     <ResponsiveContainer width="100%" height={250}>
-      <LineChart data={data} margin={{ top: 8, right: 56, left: -8, bottom: 0 }}>
+      <LineChart data={data} margin={{ top: 20, right: 56, left: -8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
         <XAxis
           dataKey="date"
@@ -83,6 +86,7 @@ export function DetailWeightChart({
         />
         <YAxis
           domain={[minY, maxY]}
+          allowDecimals={false}
           axisLine={false}
           tickLine={false}
           tick={{ fontSize: 11, fill: "#9ca3af" }}

@@ -11,7 +11,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { Popover } from "@/components/ui/popover";
 import { MiniWeightChart, DetailWeightChart, ChartPoint } from "@/components/dashboard/weight-log-charts";
 import {
-  ChevronLeft, ChevronDown, Star, Pencil, Plus, Scale,
+  ChevronLeft, ChevronRight, ChevronDown, Star, Pencil, Plus, Scale,
   Salad, User, Heart, BarChart2, Info,
   TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw, Loader2,
 } from "lucide-react";
@@ -317,6 +317,8 @@ export function ClientDetailPage({
 
   // Weight logs local state — allows optimistic updates after add/edit/delete
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>(client.weightLogs);
+  // Weight-log table pagination — max 5 weigh-in days per page
+  const [weightLogPage, setWeightLogPage] = useState(1);
 
   // Edit weight log modal
   const [editingWeightLog, setEditingWeightLog] = useState<WeightLog | null>(null);
@@ -469,6 +471,17 @@ export function ClientDetailPage({
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
   const sortedLogsDesc = [...sortedLogsAsc].reverse();
+
+  // Paginate the weight-log table: 5 weigh-in days per page (newest first).
+  const WEIGHT_LOGS_PER_PAGE = 5;
+  const weightTotalPages = Math.max(1, Math.ceil(sortedLogsDesc.length / WEIGHT_LOGS_PER_PAGE));
+  const safeWeightPage = Math.min(weightLogPage, weightTotalPages);
+  const weightPageStart = (safeWeightPage - 1) * WEIGHT_LOGS_PER_PAGE;
+  const pagedWeightLogs = sortedLogsDesc.slice(weightPageStart, weightPageStart + WEIGHT_LOGS_PER_PAGE);
+  // Keep the page in range when logs are deleted.
+  useEffect(() => {
+    if (weightLogPage > weightTotalPages) setWeightLogPage(weightTotalPages);
+  }, [weightLogPage, weightTotalPages]);
 
   // Chart data
   const chartData: ChartPoint[] = sortedLogsAsc.map((log) => ({
@@ -862,6 +875,7 @@ export function ClientDetailPage({
         [...prev, { id: newLog.id, date: newLog.date, weight: newLog.weight, note: newLog.note }]
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       );
+      setWeightLogPage(1); // jump to the first page so the new entry is visible
       setWeightOpen(false);
       router.refresh();
     } catch (err) {
@@ -1927,8 +1941,10 @@ export function ClientDetailPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedLogsDesc.map((log, i) => {
-                      const prev = sortedLogsDesc[i + 1];
+                    {pagedWeightLogs.map((log, i) => {
+                      // Compare against the next-older log in the full list so the
+                      // "Thay đổi" column stays correct across page boundaries.
+                      const prev = sortedLogsDesc[weightPageStart + i + 1];
                       const change = prev ? log.weight - prev.weight : null;
                       return (
                         <tr key={log.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
@@ -1971,6 +1987,33 @@ export function ClientDetailPage({
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination — 5 weigh-in days per page */}
+            {weightTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-gray-50">
+                <span className="text-xs font-semibold text-gray-400">
+                  Trang {safeWeightPage}/{weightTotalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setWeightLogPage((p) => Math.max(1, p - 1))}
+                    disabled={safeWeightPage <= 1}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang trước"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setWeightLogPage((p) => Math.min(weightTotalPages, p + 1))}
+                    disabled={safeWeightPage >= weightTotalPages}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang sau"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
