@@ -42,6 +42,7 @@ export async function POST(
     const logId = params.sessionId; // dynamic segment reused as logId
     const log = await prisma.workoutLog.findFirst({
       where: { id: logId, clientId: params.id },
+      include: { session: { select: { sessionName: true } } },
     });
     if (!log) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
     // Allow finishing an in-progress session, or falling back to a signature on a
@@ -119,6 +120,33 @@ export async function POST(
         { error: `Buổi tập mới được ${Math.floor(elapsedMin)} phút, cần tối thiểu ${minMinutes} phút mới có thể xác nhận.` },
         { status: 400 }
       );
+    }
+
+    // ── Rule: at least 3 sets with BOTH weight (load) and reps ──
+    // Data-quality gate so an empty session can't be signed off. Cardio sessions
+    // don't track weight/reps, so they're exempt.
+    const MIN_FILLED_SETS = 3;
+    const isCardio = /cardio/i.test(log.session?.sessionName ?? "");
+    if (!isCardio) {
+      const filledSets = setLogs.reduce((n, sl) => {
+        const pairs: Array<[unknown, unknown]> = [
+          [sl.set1Load, sl.set1Reps], [sl.set2Load, sl.set2Reps], [sl.set3Load, sl.set3Reps],
+          [sl.set4Load, sl.set4Reps], [sl.set5Load, sl.set5Reps], [sl.set6Load, sl.set6Reps],
+        ];
+        return n + pairs.filter(
+          ([l, r]) =>
+            l != null && String(l).trim() !== "" && r != null && String(r).trim() !== ""
+        ).length;
+      }, 0);
+      if (filledSets < MIN_FILLED_SETS) {
+        if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
+          await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
+        }
+        return NextResponse.json(
+          { error: `Cần điền cân nặng và số reps cho tối thiểu ${MIN_FILLED_SETS} set mới có thể hoàn thành buổi tập.` },
+          { status: 400 }
+        );
+      }
     }
 
     // ── Path A: client confirms on their own app (anti-forgery) ──

@@ -331,6 +331,17 @@ export function LiveSessionPanel({
   const repRange = isCardio ? null : getRepRange(phase);
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
 
+  // ── Rule: at least 3 sets must have BOTH weight (load) and reps before the
+  // session can be signed/completed. Cardio sessions don't track weight/reps,
+  // so they're exempt. (Enforced again server-side in the check-out route.)
+  const MIN_FILLED_SETS = 3;
+  const filledSetCount = setLogs.reduce(
+    (n, sl) => n + sl.sets.filter((s) => s.load.trim() !== "" && s.reps.trim() !== "").length,
+    0
+  );
+  const setsRequirementMet = isCardio || filledSetCount >= MIN_FILLED_SETS;
+  const canFinish = durationMet && setsRequirementMet;
+
   // Build "Lần trước" + suggestion lookups from the previous week's completed log.
   const prevSuggestions = new Map<string, Suggestion>();
   const prevRefs = new Map<string, string>();
@@ -776,6 +787,23 @@ export function LiveSessionPanel({
             : `Cần tối thiểu ${minSessionMinutes} phút (còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút)`}
         </div>
 
+        {/* Data-quality status: at least 3 sets need weight + reps (non-cardio) */}
+        {!isCardio && (
+          <div
+            className={cn(
+              "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
+              setsRequirementMet
+                ? "text-green-700 bg-green-50 border-green-100"
+                : "text-gray-500 bg-gray-50 border-gray-200"
+            )}
+          >
+            <ClipboardList className="w-4 h-4 flex-shrink-0" />
+            {setsRequirementMet
+              ? `Đã điền đủ tối thiểu ${MIN_FILLED_SETS} set (cân nặng + reps)`
+              : `Cần điền cân nặng + số reps cho tối thiểu ${MIN_FILLED_SETS} set (đã có ${filledSetCount}/${MIN_FILLED_SETS})`}
+          </div>
+        )}
+
         {/* Session notes */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-500">Ghi chú buổi tập</label>
@@ -937,8 +965,14 @@ export function LiveSessionPanel({
         <div className="pt-1">
           <button
             onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
-            disabled={finishing || saving || !durationMet}
-            title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Gửi cho khách xác nhận trên app của khách"}
+            disabled={finishing || saving || !canFinish}
+            title={
+              !durationMet
+                ? `Cần tối thiểu ${minSessionMinutes} phút`
+                : !setsRequirementMet
+                  ? `Cần điền cân nặng + số reps cho tối thiểu ${MIN_FILLED_SETS} set`
+                  : "Gửi cho khách xác nhận trên app của khách"
+            }
             className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
             style={{ backgroundColor: "#f15b5c" }}
           >
@@ -952,8 +986,14 @@ export function LiveSessionPanel({
           <span className="text-[11px] text-gray-400">Khách không tiện dùng app?</span>
           <button
             onClick={async () => { await saveProgress(); setShowSig(true); }}
-            disabled={finishing || saving || !durationMet}
-            title={!durationMet ? `Cần tối thiểu ${minSessionMinutes} phút` : "Khách ký xác nhận ngay trên máy này (dự phòng)"}
+            disabled={finishing || saving || !canFinish}
+            title={
+              !durationMet
+                ? `Cần tối thiểu ${minSessionMinutes} phút`
+                : !setsRequirementMet
+                  ? `Cần điền cân nặng + số reps cho tối thiểu ${MIN_FILLED_SETS} set`
+                  : "Khách ký xác nhận ngay trên máy này (dự phòng)"
+            }
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
           >
             <PenLine className="w-3.5 h-3.5" />
