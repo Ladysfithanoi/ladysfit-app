@@ -40,6 +40,14 @@ type ReportData = {
   solutions?: string | null;
 };
 
+type UserReport = {
+  userId: string;
+  userName: string;
+  arisingTasks: string | null;
+  incompleteWork: string | null;
+  solutions: string | null;
+};
+
 type Props = {
   branchId: string;
   branchName: string;
@@ -110,6 +118,8 @@ export function WeeklyReportTab({
   const [arisingTasks, setArisingTasks] = useState<ArisingTask[]>([]);
   const [incompleteWork, setIncompleteWork] = useState("");
   const [solutions, setSolutions] = useState("");
+  const [userReports, setUserReports] = useState<UserReport[]>([]);
+  const [openReportUserId, setOpenReportUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -142,8 +152,9 @@ export function WeeklyReportTab({
         `/api/setup/weekly-report?branchId=${branchId}&month=${month}&year=${year}&weekNumber=${selectedWeek}`
       );
       if (res.ok) {
-        const data: { report: ReportData | null; kpi: KpiRow[]; perUserKpi: PerUserKpi[]; weekBounds: WeekBound[] } = await res.json();
+        const data: { report: ReportData | null; userReports?: UserReport[]; kpi: KpiRow[]; perUserKpi: PerUserKpi[]; weekBounds: WeekBound[] } = await res.json();
         setWeekBounds(data.weekBounds ?? []);
+        setUserReports(data.userReports ?? []);
         const rows = isFitpartner
           ? (data.kpi ?? [])
           : (data.kpi ?? []).filter((r) => !isFitpartnerLabel(r.label));
@@ -299,6 +310,15 @@ export function WeeklyReportTab({
   const myPerUserRow = perUserKpi.find((p) => p.userId === currentUserId);
   const showAggregate = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
   const showPerUser = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+  // FM/CEO/COO/ADMIN can view the PT reports of the branch (PT cannot see theirs).
+  const canViewPtReports =
+    currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" ||
+    currentUserRole === "COO" || currentUserRole === "ADMIN";
+
+  function parseArising(json: string | null): ArisingTask[] {
+    if (!json) return [];
+    try { return JSON.parse(json) as ArisingTask[]; } catch { return []; }
+  }
 
   return (
     <div className="space-y-5 max-w-4xl">
@@ -757,7 +777,7 @@ export function WeeklyReportTab({
               </div>
             </div>
 
-            {/* Save report button (FM/CEO/COO only) */}
+            {/* Save report button — everyone saves their own report */}
             {canEdit && (
               <div className="flex justify-end">
                 <button
@@ -768,6 +788,76 @@ export function WeeklyReportTab({
                 >
                   {saving ? "Đang lưu..." : "Lưu báo cáo tuần"}
                 </button>
+              </div>
+            )}
+
+            {/* ── BÁO CÁO TUẦN CỦA PT (chỉ FM/quản lý xem được) ───────────── */}
+            {canViewPtReports && (
+              <div className="pt-2">
+                <div
+                  className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
+                  style={{ backgroundColor: "#6b7280" }}
+                >
+                  BÁO CÁO TUẦN CỦA PT
+                </div>
+                <div className="border border-gray-200 border-t-0 rounded-b-lg divide-y divide-gray-100">
+                  {userReports.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-xs text-gray-300 italic">
+                      Chưa có PT nào nộp báo cáo tuần này
+                    </p>
+                  ) : (
+                    userReports.map((ur) => {
+                      const open = openReportUserId === ur.userId;
+                      const tasks = parseArising(ur.arisingTasks);
+                      const isEmpty = tasks.length === 0 && !ur.incompleteWork && !ur.solutions;
+                      return (
+                        <div key={ur.userId}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenReportUserId(open ? null : ur.userId)}
+                            className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="text-sm font-bold text-gray-700">{ur.userName}</span>
+                            <span className="text-[11px] text-gray-400">
+                              {isEmpty ? "Chưa có nội dung" : open ? "Thu gọn ▲" : "Xem chi tiết ▼"}
+                            </span>
+                          </button>
+                          {open && !isEmpty && (
+                            <div className="px-4 pb-4 space-y-3">
+                              {tasks.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Công việc phát sinh</p>
+                                  <ul className="space-y-1">
+                                    {tasks.map((t) => (
+                                      <li key={t.id} className="text-xs text-gray-700">
+                                        • {t.content || "—"}
+                                        {(t.kpi || t.actual) && (
+                                          <span className="text-gray-400"> ({t.kpi || "—"} / {t.actual || "—"})</span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {ur.incompleteWork && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Việc chưa hoàn thành</p>
+                                  <p className="text-xs text-gray-700 whitespace-pre-wrap">{ur.incompleteWork}</p>
+                                </div>
+                              )}
+                              {ur.solutions && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Giải pháp khắc phục</p>
+                                  <p className="text-xs text-gray-700 whitespace-pre-wrap">{ur.solutions}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>

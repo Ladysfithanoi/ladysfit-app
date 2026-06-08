@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["ADMIN", "FM", "CEO_FITPARTNER", "COO"].includes(role)) {
+  if (!["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -27,11 +27,32 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Reports are per-user: return the logged-in user's own monthly note.
   const report = await prisma.monthlyBranchReport.findUnique({
-    where: { branchId_month_year: { branchId, month, year } },
+    where: {
+      branchId_month_year_userId: { branchId, month, year, userId: session.user.id },
+    },
   });
 
-  return NextResponse.json(report);
+  // FM/CEO/COO/ADMIN can additionally read the PT reports of the branch they manage
+  // (the managedBranchIds guard above already limits FM to their own branches).
+  const canViewOthers = role === "FM" || role === "CEO_FITPARTNER" || role === "COO" || role === "ADMIN";
+  let userReports: { userId: string; userName: string; incompleteWork: string | null }[] = [];
+  if (canViewOthers) {
+    const rows = await prisma.monthlyBranchReport.findMany({
+      where: { branchId, month, year, user: { role: "PT", deletedAt: null } },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    userReports = rows
+      .map((r) => ({
+        userId: r.userId,
+        userName: r.user.name ?? r.user.email,
+        incompleteWork: r.incompleteWork,
+      }))
+      .sort((a, b) => a.userName.localeCompare(b.userName, "vi"));
+  }
+
+  return NextResponse.json({ report, userReports });
 }
 
 export async function PUT(req: Request) {
@@ -39,7 +60,7 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["FM", "CEO_FITPARTNER", "COO"].includes(role)) {
+  if (!["FM", "CEO_FITPARTNER", "COO", "PT"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -61,11 +82,15 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Each staff member edits only their own monthly note.
   const report = await prisma.monthlyBranchReport.upsert({
-    where: { branchId_month_year: { branchId, month, year } },
+    where: {
+      branchId_month_year_userId: { branchId, month, year, userId: session.user.id },
+    },
     update: { incompleteWork: incompleteWork ?? null },
     create: {
       branchId,
+      userId: session.user.id,
       month,
       year,
       incompleteWork: incompleteWork ?? null,

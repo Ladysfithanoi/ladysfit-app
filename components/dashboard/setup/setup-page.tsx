@@ -218,7 +218,9 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           month={month}
           year={year}
           currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
           isPT={isPT}
+          isReadOnly={isReadOnly}
         />
       )}
       {tab === "stats" && (

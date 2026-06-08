@@ -66,6 +66,8 @@ model User {
   monthlyTargets        MonthlyTarget[]    @relation("PTMonthlyTargets")
   weeklyReports         WeeklyReport[]        @relation("FMWeeklyReports")
   monthlyBranchReports  MonthlyBranchReport[] @relation("FMMonthlyReports")
+  ownedWeeklyReports        WeeklyReport[]        @relation("UserWeeklyReports")
+  ownedMonthlyBranchReports MonthlyBranchReport[] @relation("UserMonthlyReports")
   dailyChecklists       DailyChecklist[]      @relation("UserDailyChecklists")
   weeklyMonthlyReports  WeeklyMonthlyReport[] @relation("UserWeeklyMonthlyReports")
   salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
@@ -899,6 +901,7 @@ model WeeklyActual {
 model WeeklyReport {
   id             String   @id @default(cuid())
   branchId       String
+  userId         String
   month          Int
   year           Int
   weekNumber     Int
@@ -912,14 +915,16 @@ model WeeklyReport {
 
   branch    Branch @relation(fields: [branchId], references: [id])
   createdBy User   @relation("FMWeeklyReports", fields: [createdById], references: [id])
+  user      User   @relation("UserWeeklyReports", fields: [userId], references: [id])
 
-  @@unique([branchId, month, year, weekNumber])
+  @@unique([branchId, month, year, weekNumber, userId])
   @@map("weekly_reports")
 }
 
 model MonthlyBranchReport {
   id             String   @id @default(cuid())
   branchId       String
+  userId         String
   month          Int
   year           Int
   incompleteWork String?  @db.Text
@@ -929,8 +934,9 @@ model MonthlyBranchReport {
 
   branch    Branch @relation(fields: [branchId], references: [id])
   createdBy User   @relation("FMMonthlyReports", fields: [createdById], references: [id])
+  user      User   @relation("UserMonthlyReports", fields: [userId], references: [id])
 
-  @@unique([branchId, month, year])
+  @@unique([branchId, month, year, userId])
   @@map("monthly_branch_reports")
 }
 

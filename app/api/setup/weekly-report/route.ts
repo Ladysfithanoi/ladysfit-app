@@ -110,6 +110,7 @@ export async function GET(req: Request) {
     ? { branchId, month, year, userId: session.user.id, user: { deletedAt: null } }
     : { branchId, month, year, user: { deletedAt: null } };
 
+  // Reports are now per-user: each staff member owns their own notes for the week.
   const [targets, report] = await Promise.all([
     prisma.monthlyTarget.findMany({
       where: targetsWhere,
@@ -119,9 +120,37 @@ export async function GET(req: Request) {
       },
     }) as Promise<MonthlyTargetRow[]>,
     prisma.weeklyReport.findUnique({
-      where: { branchId_month_year_weekNumber: { branchId, month, year, weekNumber } },
+      where: {
+        branchId_month_year_weekNumber_userId: {
+          branchId, month, year, weekNumber, userId: session.user.id,
+        },
+      },
     }),
   ]);
+
+  // FM/CEO/COO/ADMIN can additionally read the PT reports of the branch they manage
+  // (the managedBranchIds guard above already limits FM to their own branches).
+  // PT only ever receive their own report above, so they never see an FM's report.
+  const canViewOthers = role === "FM" || role === "CEO_FITPARTNER" || role === "COO" || isAdmin;
+  let userReports: {
+    userId: string; userName: string;
+    arisingTasks: string | null; incompleteWork: string | null; solutions: string | null;
+  }[] = [];
+  if (canViewOthers) {
+    const rows = await prisma.weeklyReport.findMany({
+      where: { branchId, month, year, weekNumber, user: { role: "PT", deletedAt: null } },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    userReports = rows
+      .map((r) => ({
+        userId: r.userId,
+        userName: r.user.name ?? r.user.email,
+        arisingTasks: r.arisingTasks,
+        incompleteWork: r.incompleteWork,
+        solutions: r.solutions,
+      }))
+      .sort((a, b) => a.userName.localeCompare(b.userName, "vi"));
+  }
 
   const weekBounds = computeWeekBounds(year, month);
 
@@ -229,7 +258,7 @@ export async function GET(req: Request) {
   // Only expose aggregate to privileged roles; PT/Admin see only their own row
   const kpiForRole = (isPT || isAdmin) ? [] : kpi;
 
-  return NextResponse.json({ report, kpi: kpiForRole, perUserKpi, weekBounds });
+  return NextResponse.json({ report, userReports, kpi: kpiForRole, perUserKpi, weekBounds });
 }
 
 export async function PUT(req: Request) {
@@ -262,11 +291,17 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Each staff member edits only their own report for the week.
   const report = await prisma.weeklyReport.upsert({
-    where: { branchId_month_year_weekNumber: { branchId, month, year, weekNumber } },
+    where: {
+      branchId_month_year_weekNumber_userId: {
+        branchId, month, year, weekNumber, userId: session.user.id,
+      },
+    },
     update: { arisingTasks: arisingTasks ?? null, incompleteWork: incompleteWork ?? null, solutions: solutions ?? null },
     create: {
       branchId,
+      userId: session.user.id,
       month,
       year,
       weekNumber,

@@ -11,8 +11,12 @@ type Props = {
   month: number;
   year: number;
   currentUserRole: string;
+  currentUserId: string;
   isPT: boolean;
+  isReadOnly: boolean;
 };
+
+type UserReport = { userId: string; userName: string; incompleteWork: string | null };
 
 const BASE_KPI_ROWS = [
   { label: "Doanh số (triệu)", targetKey: "revenueTarget", actualKey: "revenueActual", isFloat: true },
@@ -33,19 +37,30 @@ function pctColor(pct: number) {
   return "text-red-500 font-bold";
 }
 
-export function ReportTab({ branchId, branchName, month, year, currentUserRole, isPT }: Props) {
+export function ReportTab({ branchId, branchName, month, year, currentUserRole, currentUserId, isPT, isReadOnly }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_ROWS = isFitpartner ? [BASE_KPI_ROWS[0], FITPARTNER_KPI_ROW, ...BASE_KPI_ROWS.slice(1)] : BASE_KPI_ROWS;
-  const canEdit = currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+  // Everyone (PT included) can now write their own monthly note.
+  const canEdit =
+    !isReadOnly &&
+    (currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" ||
+      currentUserRole === "COO" || currentUserRole === "PT");
+  // FM/CEO/COO/ADMIN can view the PT reports of the branch (PT cannot see theirs).
+  const canViewPtReports =
+    currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" ||
+    currentUserRole === "COO" || currentUserRole === "ADMIN";
 
   const [targets, setTargets] = useState<MonthlyTarget[]>([]);
   const [loading, setLoading] = useState(true);
   const [incompleteWork, setIncompleteWork] = useState("");
+  const [userReports, setUserReports] = useState<UserReport[]>([]);
+  const [openReportUserId, setOpenReportUserId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
   // ── Auto-save draft ────────────────────────────────────────────────────────
-  const draftKey = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
+  // Draft is per-user so a shared device never mixes notes between staff.
+  const draftKey = `ladysfit_draft_monthly_${branchId}_${year}_${month}_${currentUserId}`;
   const { clearDraft: clearMonthlyDraft } = useFormAutoSave(
     draftKey,
     { incompleteWork },
@@ -56,30 +71,28 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
     if (!branchId) return;
     setLoading(true);
     try {
-      const url = isPT
+      // PT see only their own aggregate (targets); others see the branch aggregate.
+      const targetsUrl = isPT
         ? `/api/setup/targets?branchId=${branchId}&month=${month}&year=${year}`
         : `/api/setup/report?branchId=${branchId}&month=${month}&year=${year}`;
       const [targetsRes, reportRes] = await Promise.all([
-        fetch(url),
-        isPT ? Promise.resolve(null) : fetch(`/api/setup/monthly-report?branchId=${branchId}&month=${month}&year=${year}`),
+        fetch(targetsUrl),
+        fetch(`/api/setup/monthly-report?branchId=${branchId}&month=${month}&year=${year}`),
       ]);
       if (targetsRes.ok) setTargets(await targetsRes.json());
-      if (reportRes?.ok) {
-        const r = await reportRes.json();
-        const dbIncomplete = r?.incompleteWork ?? "";
-        const key = `ladysfit_draft_monthly_${branchId}_${year}_${month}`;
+      if (reportRes.ok) {
+        const data: { report: { incompleteWork?: string | null } | null; userReports?: UserReport[] } = await reportRes.json();
+        setUserReports(data.userReports ?? []);
+        const dbIncomplete = data.report?.incompleteWork ?? "";
+        const key = `ladysfit_draft_monthly_${branchId}_${year}_${month}_${currentUserId}`;
         const draft = loadDraft<{ incompleteWork: string }>(key);
-        if (draft) {
-          setIncompleteWork(draft.incompleteWork ?? dbIncomplete);
-        } else {
-          setIncompleteWork(dbIncomplete);
-        }
+        setIncompleteWork(draft?.incompleteWork ?? dbIncomplete);
         setIsDirty(false);
       }
     } finally {
       setLoading(false);
     }
-  }, [branchId, month, year, isPT]);
+  }, [branchId, month, year, isPT, currentUserId]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -175,9 +188,8 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
         </div>
       </div>
 
-      {/* Monthly incomplete work section — FM/CEO/ADMIN only */}
-      {!isPT && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Monthly note section — each staff edits their own */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div
             className="px-5 py-3 text-sm font-extrabold text-white uppercase text-center"
             style={{ backgroundColor: "#f15b5c" }}
@@ -212,6 +224,48 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
                   {saving ? "Đang lưu..." : "Lưu báo cáo tháng"}
                 </button>
               </div>
+            )}
+          </div>
+        </div>
+
+      {/* Báo cáo tháng của PT — chỉ FM/quản lý xem được */}
+      {canViewPtReports && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div
+            className="px-5 py-3 text-sm font-extrabold text-white uppercase text-center"
+            style={{ backgroundColor: "#6b7280" }}
+          >
+            BÁO CÁO THÁNG CỦA PT
+          </div>
+          <div className="divide-y divide-gray-100">
+            {userReports.length === 0 ? (
+              <p className="px-5 py-6 text-center text-xs text-gray-300 italic">
+                Chưa có PT nào nộp báo cáo tháng này
+              </p>
+            ) : (
+              userReports.map((ur) => {
+                const open = openReportUserId === ur.userId;
+                const isEmpty = !ur.incompleteWork;
+                return (
+                  <div key={ur.userId}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenReportUserId(open ? null : ur.userId)}
+                      className="w-full flex items-center justify-between gap-2 px-5 py-3 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <span className="text-sm font-bold text-gray-700">{ur.userName}</span>
+                      <span className="text-[11px] text-gray-400">
+                        {isEmpty ? "Chưa có nội dung" : open ? "Thu gọn ▲" : "Xem chi tiết ▼"}
+                      </span>
+                    </button>
+                    {open && !isEmpty && (
+                      <div className="px-5 pb-4">
+                        <p className="text-xs text-gray-700 whitespace-pre-wrap">{ur.incompleteWork}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

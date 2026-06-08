@@ -15,7 +15,11 @@
       "Bash(grep -E \"^tsx$\")",
       "Bash(npx tsx *)",
       "PowerShell(npm run *)",
-      "PowerShell(Out-Null *)"
+      "PowerShell(Out-Null *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(rm .git/COMMIT_EDITMSG_TMP)",
+      "Bash(git push *)"
     ]
   }
 }
