@@ -126,28 +126,32 @@ export async function POST(
       );
     }
 
-    // ── Rule: at least 3 sets with BOTH weight (load) and reps ──
-    // Data-quality gate so an empty session can't be signed off. Cardio sessions
-    // don't track weight/reps, so they're exempt.
-    const MIN_FILLED_SETS = 3;
+    // ── Rule: at least 6 exercises must each have weight (load) + reps filled
+    // for 3 sets ── Data-quality gate so a thin/empty session can't be signed
+    // off. Cardio sessions don't track weight/reps, so they're exempt.
+    const MIN_SETS_PER_EXERCISE = 3;
+    const MIN_COMPLETE_EXERCISES = 6;
     const isCardio = /cardio/i.test(log.session?.sessionName ?? "");
     if (!isCardio) {
-      const filledSets = setLogs.reduce((n, sl) => {
+      const completeExercises = setLogs.reduce((n, sl) => {
         const pairs: Array<[unknown, unknown]> = [
           [sl.set1Load, sl.set1Reps], [sl.set2Load, sl.set2Reps], [sl.set3Load, sl.set3Reps],
           [sl.set4Load, sl.set4Reps], [sl.set5Load, sl.set5Reps], [sl.set6Load, sl.set6Reps],
         ];
-        return n + pairs.filter(
+        const filledSets = pairs.filter(
           ([l, r]) =>
             l != null && String(l).trim() !== "" && r != null && String(r).trim() !== ""
         ).length;
+        return n + (filledSets >= MIN_SETS_PER_EXERCISE ? 1 : 0);
       }, 0);
-      if (filledSets < MIN_FILLED_SETS) {
+      // Can't require more complete exercises than the session actually has.
+      const requiredExercises = Math.min(MIN_COMPLETE_EXERCISES, setLogs.length);
+      if (completeExercises < requiredExercises) {
         if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
           await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
         }
         return NextResponse.json(
-          { error: `Cần điền cân nặng và số reps cho tối thiểu ${MIN_FILLED_SETS} set mới có thể hoàn thành buổi tập.` },
+          { error: `Cần điền cân nặng và số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${requiredExercises} bài tập mới có thể hoàn thành buổi tập.` },
           { status: 400 }
         );
       }
