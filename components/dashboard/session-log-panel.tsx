@@ -1230,6 +1230,149 @@ function EditLogPanel({
   );
 }
 
+// ── WeekLogOverview ────────────────────────────────────────────────────────
+// Read-only "bảng tổng quan" cho cả một tuần: mỗi buổi tập là một thẻ, hiển thị
+// nhật ký đã hoàn thành (ngày, thời lượng, số liệu từng set) để xem nhanh cả
+// tuần thay vì mở từng buổi một.
+
+export type WeekOverviewSession = {
+  id: string;
+  label: string; // "Buổi 5"
+  type: string; // loại buổi, ví dụ "Tạ 1" / "Cardio"
+  logs: WorkoutLogRow[]; // các log COMPLETED của buổi này trong tuần, mới nhất trước
+};
+
+export function WeekLogOverview({
+  weekNumber,
+  sessions,
+  onClose,
+}: {
+  weekNumber: number;
+  sessions: WeekOverviewSession[];
+  onClose: () => void;
+}) {
+  const trainedCount = sessions.filter((s) => s.logs.length > 0).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-900">Nhật ký tập — Tuần {weekNumber}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">{trainedCount}/{sessions.length} buổi đã tập trong tuần</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
+          {sessions.length === 0 ? (
+            <div className="py-12 flex flex-col items-center gap-2">
+              <ClipboardList className="w-8 h-8 text-gray-200" />
+              <p className="text-sm text-gray-300 font-semibold">Tuần này chưa có buổi tập</p>
+            </div>
+          ) : (
+            sessions.map((s) => {
+              const latest = s.logs[0] ?? null;
+              return (
+                <div key={s.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                  {/* Session header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100">
+                    <span className="text-sm font-bold text-gray-800">
+                      {s.label}
+                      {s.type && <span className="ml-2 text-xs font-semibold text-gray-400">{s.type}</span>}
+                    </span>
+                    {latest ? (
+                      <span className="inline-flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-semibold text-gray-600">{fmtDate(latest.sessionDate)}</span>
+                        {latest.checkInAt && latest.checkOutAt && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {Math.round((new Date(latest.checkOutAt).getTime() - new Date(latest.checkInAt).getTime()) / 60000)} phút
+                          </span>
+                        )}
+                        {s.logs.length > 1 && (
+                          <span className="text-gray-400">(+{s.logs.length - 1} lần khác)</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400">Chưa tập</span>
+                    )}
+                  </div>
+
+                  {/* Session body */}
+                  {latest ? (
+                    <div className="px-3 py-2.5">
+                      {latest.notes && (
+                        <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 mb-2.5">
+                          {latest.notes}
+                        </p>
+                      )}
+                      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
+                        <table className="w-full text-xs" style={{ minWidth: 520 }}>
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                              <th className="px-3 py-2 text-left font-bold text-gray-400">Bài tập</th>
+                              {SETS.map((n) => (
+                                <th key={n} className="px-2 py-2 text-center font-bold text-gray-400">Set {n}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {latest.setLogs.map((sl, i) => {
+                              const setValues = [
+                                { load: sl.set1Load, reps: sl.set1Reps },
+                                { load: sl.set2Load, reps: sl.set2Reps },
+                                { load: sl.set3Load, reps: sl.set3Reps },
+                                { load: sl.set4Load, reps: sl.set4Reps },
+                                { load: sl.set5Load, reps: sl.set5Reps },
+                                { load: sl.set6Load, reps: sl.set6Reps },
+                              ];
+                              return (
+                                <tr key={i} className={cn("border-b border-gray-50 last:border-0", i % 2 === 1 && "bg-gray-50/30")}>
+                                  <td className="px-3 py-2">
+                                    <p className="font-semibold text-gray-700">{sl.movementName}</p>
+                                    <p className="text-gray-400">{sl.exerciseName}</p>
+                                    {sl.exerciseNotes && (
+                                      <p className="text-gray-400 italic mt-0.5">{'"'}{sl.exerciseNotes}{'"'}</p>
+                                    )}
+                                  </td>
+                                  {setValues.map((sv, si) => (
+                                    <td key={si} className="px-2 py-2 text-center">
+                                      {sv.load != null || sv.reps != null ? (
+                                        <div className="space-y-0.5">
+                                          {sv.load != null && <div className="font-bold text-[#f15b5c]">{sv.load}</div>}
+                                          {sv.reps != null && <div className="text-gray-600">×{sv.reps}</div>}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-200">—</span>
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-4 text-xs text-gray-300 italic">Buổi này chưa được ghi nhật ký trong tuần.</div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SessionLogHistory ──────────────────────────────────────────────────────
 
 export function SessionLogHistory({

@@ -8,7 +8,7 @@ import {
   getSlotsForSessionType,
   basePhase,
 } from "@/lib/workout-structure";
-import { LiveSessionPanel, SessionLogHistory } from "./session-log-panel";
+import { LiveSessionPanel, SessionLogHistory, WeekLogOverview } from "./session-log-panel";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -319,6 +319,7 @@ function ProgramView({
   const [isDirty, setIsDirty] = useState(false);
 
   // Session logging
+  const [showWeekLog, setShowWeekLog] = useState(false);
   const [historySessionId, setHistorySessionId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState("");
@@ -363,6 +364,18 @@ function ProgramView({
       : "";
     return type ? `${sessionLabel(i)} — ${type}` : sessionLabel(i);
   };
+
+  // Tổng quan nhật ký cả tuần: mỗi buổi kèm các log COMPLETED (mới nhất trước).
+  const weekLogSessions = currentWeekData
+    ? currentWeekData.sessions.map((s, i) => ({
+        id: s.id,
+        label: sessionLabel(i),
+        type: s.sessionName.includes("—") ? s.sessionName.split("—").slice(1).join("—").trim() : "",
+        logs: workoutLogs
+          .filter((l) => l.weekId === currentWeekData.id && l.sessionId === s.id && l.status === "COMPLETED")
+          .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime()),
+      }))
+    : [];
 
   // Show at most the 3 most recent weeks as tabs; older weeks go behind "Xem thêm".
   // The currently-selected week is always kept visible even if it's an old one.
@@ -844,6 +857,16 @@ function ProgramView({
             {/* Row 2: delete / add week — on their own line so they don't crowd the tabs */}
             {!editMode && (
               <div className="flex items-center justify-end gap-1.5">
+                {currentWeekData && (
+                  <button
+                    onClick={() => setShowWeekLog(true)}
+                    title={`Xem tổng quan nhật ký Tuần ${currentWeekData.weekNumber}`}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-[#f15b5c]/40 text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
+                  >
+                    <ClipboardList className="w-3 h-3" />
+                    Nhật ký tuần
+                  </button>
+                )}
                 {program.weeks.length > 1 && currentWeekData && currentWeekData.id === program.weeks[program.weeks.length - 1].id && (
                   <button
                     onClick={() => setConfirmDeleteWeek(true)}
@@ -1278,6 +1301,15 @@ function ProgramView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Week log overview modal ── */}
+      {showWeekLog && currentWeekData && (
+        <WeekLogOverview
+          weekNumber={currentWeekData.weekNumber}
+          sessions={weekLogSessions}
+          onClose={() => setShowWeekLog(false)}
+        />
       )}
 
       {/* ── Confirm delete week modal ── */}
