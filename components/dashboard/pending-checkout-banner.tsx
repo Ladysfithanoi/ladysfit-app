@@ -78,7 +78,7 @@ export function PendingCheckoutBanner() {
       </div>
 
       {expanded && (
-        <ul className="px-3 pb-2 space-y-0.5 border-t border-amber-100 pt-1.5">
+        <ul className="px-3 pb-2 pt-1.5 border-t border-amber-100 grid gap-x-4 gap-y-1 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
             <li key={it.id} className="text-xs text-amber-900 truncate">
               <Link
