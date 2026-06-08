@@ -265,6 +265,11 @@ function fmtClock(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Hard cap on a single session's length. Past this the timer stops and the
+// session is auto-cancelled (never counted) — guards against a PT forgetting to
+// check out, which would otherwise let the clock run forever.
+const MAX_SESSION_MINUTES = 120;
+
 export function LiveSessionPanel({
   log,
   sessionName,
@@ -303,18 +308,24 @@ export function LiveSessionPanel({
   const [collapsed, setCollapsed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // Live ticking clock for the elapsed timer.
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  const [autoCancelled, setAutoCancelled] = useState(false);
 
   const checkInMs = log.checkInAt ? new Date(log.checkInAt).getTime() : Date.now();
-  const elapsedMs = nowMs - checkInMs;
+  const maxMs = MAX_SESSION_MINUTES * 60000;
+  const rawElapsedMs = nowMs - checkInMs;
+  const overMax = rawElapsedMs >= maxMs;
+  // Freeze the displayed clock at the 2-hour cap so it never runs past it.
+  const elapsedMs = Math.min(rawElapsedMs, maxMs);
   const elapsedMin = elapsedMs / 60000;
 
   const durationMet = elapsedMin >= minSessionMinutes;
+
+  // Live ticking clock for the elapsed timer. Stops once the 2-hour cap is hit.
+  useEffect(() => {
+    if (overMax) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [overMax]);
 
   const isCardio = isCardioSession(sessionName);
   const repRange = isCardio ? null : getRepRange(phase);
@@ -453,6 +464,19 @@ export function LiveSessionPanel({
       setDeleting(false);
     }
   }
+
+  // Auto-cancel a session that runs past the 2-hour cap: show the notice, then
+  // delete the in-progress log so it is never counted (session reverts to
+  // "Check-in"). The server check-out also rejects over-cap sessions as a guard.
+  useEffect(() => {
+    if (!overMax || autoCancelled || log.status !== "IN_PROGRESS") return;
+    setAutoCancelled(true);
+    const t = setTimeout(() => {
+      void deleteLog();
+    }, 6000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overMax, autoCancelled, log.status]);
 
   // Auto-save in-progress data (notes + sets) so a refresh or accidental tab
   // close never loses what the PT has typed. The session row already lives in
@@ -662,6 +686,25 @@ export function LiveSessionPanel({
             onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
           />
         )}
+      </div>
+    );
+  }
+
+  // ── Auto-cancelled view (session ran past the 2-hour cap) ──
+  if (autoCancelled) {
+    return (
+      <div className="mt-3 border border-red-300 rounded-xl overflow-hidden bg-red-50">
+        <div className="p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+            <X className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-extrabold text-red-700">Buổi tập đã tự động hủy</p>
+            <p className="text-xs text-red-600 mt-0.5">
+              Buổi tập đã vượt quá {MAX_SESSION_MINUTES} phút (2 tiếng) nên không được tính. Vui lòng check-in lại để bắt đầu buổi mới.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }

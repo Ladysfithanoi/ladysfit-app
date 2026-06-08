@@ -98,6 +98,19 @@ export async function POST(
     const config = await prisma.systemConfig.findUnique({ where: { id: "main" } });
     const minMinutes = config?.minSessionMinutes ?? 30;
     const elapsedMin = (now.getTime() - log.checkInAt.getTime()) / 60000;
+
+    // ── Rule: maximum duration (2 hours) ──
+    // A session left running past the cap is auto-cancelled and never counted —
+    // delete it here so a stale check-out can't sneak it through.
+    const MAX_SESSION_MINUTES = 120;
+    if (elapsedMin > MAX_SESSION_MINUTES) {
+      await prisma.workoutLog.delete({ where: { id: logId } });
+      return NextResponse.json(
+        { error: `Buổi tập đã vượt quá ${MAX_SESSION_MINUTES} phút (2 tiếng) nên đã tự động hủy và không được tính. Vui lòng check-in lại.` },
+        { status: 400 }
+      );
+    }
+
     if (elapsedMin < minMinutes) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
