@@ -182,7 +182,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
           data: {
             programId: program.id,
             weekId: week.id,
-            sessionName: `Buổi ${s.key} — ${s.sessionType}`,
+            sessionName: `Buổi ${i + 1} — ${s.sessionType}`,
             order: i,
             movements: {
               create: s.movements.map((m, mi) => ({

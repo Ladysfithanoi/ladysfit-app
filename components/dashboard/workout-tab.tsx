@@ -348,6 +348,22 @@ function ProgramView({
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
 
+  // Đánh số buổi liên tục qua các tuần: buổi đầu của một tuần nối tiếp số buổi
+  // cuối của tuần trước (Buổi 1, 2, 3 … thay vì Buổi A, B, C). Tính động theo vị
+  // trí nên luôn đúng kể cả với dữ liệu cũ và khi thêm/xóa tuần.
+  const sessionNumberBase = (weekNumber: number) =>
+    program.weeks
+      .filter((w) => w.weekNumber < weekNumber)
+      .reduce((sum, w) => sum + w.sessions.length, 0);
+  const weekSessionBase = currentWeekData ? sessionNumberBase(currentWeekData.weekNumber) : 0;
+  const sessionLabel = (i: number) => `Buổi ${weekSessionBase + i + 1}`;
+  const sessionDisplayName = (s: WorkoutSession, i: number) => {
+    const type = s.sessionName.includes("—")
+      ? s.sessionName.split("—").slice(1).join("—").trim()
+      : "";
+    return type ? `${sessionLabel(i)} — ${type}` : sessionLabel(i);
+  };
+
   // Show at most the 3 most recent weeks as tabs; older weeks go behind "Xem thêm".
   // The currently-selected week is always kept visible even if it's an old one.
   const RECENT_WEEKS = 3;
@@ -483,7 +499,7 @@ function ProgramView({
       const sessions = draftSessions.map((s, idx) => {
         const isCardio = s.sessionType === "Cardio";
         return {
-          sessionName: `Buổi ${String.fromCharCode(65 + idx)} — ${s.sessionType}`,
+          sessionName: `Buổi ${weekSessionBase + idx + 1} — ${s.sessionType}`,
           order: idx,
           movements: s.movements.map((m) => ({
             movementCode: m.movementCode,
@@ -928,9 +944,7 @@ function ProgramView({
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
                         </span>
                       )}
-                      {editMode
-                        ? `Buổi ${String.fromCharCode(65 + i)}`
-                        : (s as WorkoutSession).sessionName.split("—")[0].trim()}
+                      {sessionLabel(i)}
                     </button>
                   );
                 })}
@@ -953,7 +967,7 @@ function ProgramView({
                   <div className="border border-[#f15b5c]/20 rounded-xl overflow-hidden bg-[#fff9f9]">
                     <div className="flex items-center gap-4 px-4 py-3 bg-[#fff0f0] border-b border-[#f15b5c]/10">
                       <span className="text-base font-bold text-[#f15b5c]">
-                        Buổi {String.fromCharCode(65 + activeSessionIdx)}
+                        {sessionLabel(activeSessionIdx)}
                       </span>
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Loại buổi</span>
                       <select
@@ -1024,7 +1038,7 @@ function ProgramView({
                         {inProgressLog ? (
                           <LiveSessionPanel
                             log={inProgressLog}
-                            sessionName={activeSession.sessionName}
+                            sessionName={sessionDisplayName(activeSession, activeSessionIdx)}
                             weekNumber={currentWeekData.weekNumber}
                             phase={program.phase}
                             clientId={clientId}
@@ -1073,7 +1087,7 @@ function ProgramView({
                       {/* History modal */}
                       {historySessionId === activeSession.id && (
                         <SessionLogHistory
-                          sessionName={activeSession.sessionName}
+                          sessionName={sessionDisplayName(activeSession, activeSessionIdx)}
                           logs={completedLogs}
                           phase={program.phase}
                           clientId={clientId}
@@ -1236,7 +1250,7 @@ function ProgramView({
               </div>
               <div>
                 <p className="text-sm font-extrabold text-gray-900">
-                  Xóa {currentWeekData.sessions[activeSessionIdx].sessionName.split("—")[0].trim()}?
+                  Xóa {sessionLabel(activeSessionIdx)}?
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
               </div>

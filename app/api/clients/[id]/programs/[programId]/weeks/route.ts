@@ -51,14 +51,23 @@ export async function POST(
     data: { programId: params.programId, weekNumber: newWeekNumber },
   });
 
-  // Copy sessions from previous week
+  // Copy sessions from previous week, renumbering them so the buổi count keeps
+  // running continuously (e.g. tuần trước kết thúc ở Buổi 4 → tuần mới bắt đầu Buổi 5).
   if (lastWeek) {
-    for (const s of lastWeek.sessions) {
+    const priorSessionCount = await prisma.workoutSession.count({
+      where: { programId: params.programId, weekId: { not: null } },
+    });
+    for (let i = 0; i < lastWeek.sessions.length; i++) {
+      const s = lastWeek.sessions[i];
+      const type = s.sessionName.includes("—")
+        ? s.sessionName.split("—").slice(1).join("—").trim()
+        : "";
+      const num = priorSessionCount + i + 1;
       await prisma.workoutSession.create({
         data: {
           programId: params.programId,
           weekId: newWeek.id,
-          sessionName: s.sessionName,
+          sessionName: type ? `Buổi ${num} — ${type}` : `Buổi ${num}`,
           order: s.order,
           movements: {
             create: s.movements.map((m) => ({

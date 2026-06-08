@@ -89,7 +89,10 @@ export async function PATCH(
       const sessionTypes = phaseData?.sessionTypes ?? [];
       const templateKey = phaseData?.templateKey ?? "";
 
-      for (const week of prog.weeks) {
+      // Sau khi đồng bộ, mỗi tuần có đúng newCount buổi → buổi được đánh số liên
+      // tục qua các tuần (tuần thứ wi bắt đầu từ wi * newCount + 1).
+      for (let wi = 0; wi < prog.weeks.length; wi++) {
+        const week = prog.weeks[wi];
         const currentCount = week.sessions.length;
 
         if (newCount > currentCount) {
@@ -101,7 +104,7 @@ export async function PATCH(
               data: {
                 programId: params.programId,
                 weekId: week.id,
-                sessionName: `Buổi ${String.fromCharCode(65 + i)} — ${sessionType}`,
+                sessionName: `Buổi ${wi * newCount + i + 1} — ${sessionType}`,
                 order: i,
                 movements: {
                   create: slots.map((slot, mi) => ({

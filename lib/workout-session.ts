@@ -46,38 +46,41 @@ export async function incrementPackageAndNotify(
 
   // Completion notification for the client (non-critical).
   try {
-    const [client, currentSession, program] = await Promise.all([
+    const [client, program] = await Promise.all([
       prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true } }),
-      prisma.workoutSession.findUnique({ where: { id: log.sessionId }, select: { sessionName: true, order: true } }),
       prisma.workoutProgram.findUnique({
         where: { id: log.programId },
         select: {
           phase: true,
           weeks: {
-            where: { id: log.weekId },
-            include: { sessions: { orderBy: { order: "asc" }, select: { sessionName: true, order: true } } },
+            orderBy: { weekNumber: "asc" },
+            include: { sessions: { orderBy: { order: "asc" }, select: { id: true, order: true } } },
           },
           sessions: {
             where: { weekId: null },
             orderBy: { order: "asc" },
-            select: { sessionName: true, order: true },
+            select: { id: true, order: true },
           },
         },
       }),
     ]);
 
-    if (client && currentSession && program) {
+    if (client && program) {
       const phase = program.phase;
-      const allSessions = program.weeks[0]?.sessions.length
-        ? program.weeks[0].sessions
-        : program.sessions;
-      const currentIdx = allSessions.findIndex((s) => s.order === currentSession.order);
-      const nextSession =
-        currentIdx >= 0 && currentIdx < allSessions.length - 1
-          ? allSessions[currentIdx + 1]
-          : allSessions[0];
-      const currentLabel = currentSession.sessionName.split("—")[0].trim();
-      const nextLabel = nextSession?.sessionName.split("—")[0].trim() ?? currentLabel;
+      // Buổi được đánh số liên tục qua các tuần (Buổi 1, 2, 3 …): số của một buổi =
+      // tổng số buổi các tuần trước + vị trí trong tuần hiện tại.
+      const currentWeek = program.weeks.find((w) => w.id === log.weekId) ?? null;
+      const allSessions = currentWeek?.sessions.length ? currentWeek.sessions : program.sessions;
+      const base = currentWeek
+        ? program.weeks
+            .filter((w) => w.weekNumber < currentWeek.weekNumber)
+            .reduce((sum, w) => sum + w.sessions.length, 0)
+        : 0;
+      const foundIdx = allSessions.findIndex((s) => s.id === log.sessionId);
+      const currentIdx = foundIdx >= 0 ? foundIdx : 0;
+      const nextIdx = currentIdx < allSessions.length - 1 ? currentIdx + 1 : 0;
+      const currentLabel = `Buổi ${base + currentIdx + 1}`;
+      const nextLabel = `Buổi ${base + nextIdx + 1}`;
 
       await prisma.workoutNotification.create({
         data: {

@@ -99,7 +99,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             : "Tạ 1";
         const slots = getSlotsForSessionType(sessionType, phaseData.templateKey || undefined);
         return {
-          sessionName: `Buổi ${String.fromCharCode(65 + i)} — ${sessionType}`,
+          sessionName: `Buổi ${i + 1} — ${sessionType}`,
           order: i,
           movements: slots.map((slot, mi) => ({
             movementCode: slot.code,
@@ -116,11 +116,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   for (let i = 0; i < sessions.length; i++) {
     const s = sessions[i];
+    const type = s.sessionName.includes("—")
+      ? s.sessionName.split("—").slice(1).join("—").trim()
+      : "";
     await prisma.workoutSession.create({
       data: {
         programId: program.id,
         weekId: week.id,
-        sessionName: s.sessionName,
+        sessionName: type ? `Buổi ${i + 1} — ${type}` : `Buổi ${i + 1}`,
         order: s.order,
         movements: { create: s.movements },
       },
