@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import { BarChart2, Users, Trophy, TrendingUp, Minus, X, Search } from "lucide-react";
+import { BarChart2, Users, Trophy, TrendingUp, Minus, X, Search, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -77,6 +77,7 @@ function PTSessionDetailModal({
 }) {
   const [data, setData]       = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView]       = useState<"client" | "day">("client");
 
   useEffect(() => {
     setLoading(true);
@@ -98,6 +99,38 @@ function PTSessionDetailModal({
     const rate = L1_L2_LOYAL.has(c.packageName) ? 60_000 : 100_000;
     return s + c.sessions.length * rate;
   }, 0) ?? 0;
+
+  // Gom các buổi dạy theo từng NGÀY (tính client-side từ chính dữ liệu trên,
+  // nên không đổi logic đếm buổi). Mỗi ngày biết PT đã dạy bao nhiêu khách.
+  const dayGroups = useMemo(() => {
+    if (!data) return [];
+    type DayRow = { clientId: string; clientName: string; packageName: string; sessionName: string; phase: string; notes: string | null };
+    const map = new Map<string, DayRow[]>();
+    for (const c of data.clients) {
+      for (const s of c.sessions) {
+        if (!map.has(s.date)) map.set(s.date, []);
+        map.get(s.date)!.push({
+          clientId:    c.clientId,
+          clientName:  c.clientName,
+          packageName: c.packageName,
+          sessionName: s.sessionName,
+          phase:       s.phase,
+          notes:       s.notes,
+        });
+      }
+    }
+    const toTime = (d: string) => {
+      const [dd, mm, yyyy] = d.split("/").map(Number);
+      return new Date(yyyy, mm - 1, dd).getTime();
+    };
+    return Array.from(map.entries())
+      .map(([date, rows]) => ({
+        date,
+        rows,
+        clientCount: new Set(rows.map((r) => r.clientId)).size,
+      }))
+      .sort((a, b) => toTime(a.date) - toTime(b.date));
+  }, [data]);
 
   return (
     <div
@@ -131,8 +164,34 @@ function PTSessionDetailModal({
               Không có buổi dạy nào trong tháng này
             </div>
           ) : (
-            data.clients.map((client, ci) => (
-              <div key={client.clientId}>
+            <>
+              {/* Chuyển đổi: theo khách hàng / theo ngày */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                <button
+                  onClick={() => setView("client")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
+                    view === "client" ? "bg-white text-[#f15b5c] shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Theo khách hàng
+                </button>
+                <button
+                  onClick={() => setView("day")}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
+                    view === "day" ? "bg-white text-[#f15b5c] shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Theo ngày
+                </button>
+              </div>
+
+              {view === "client" ? (
+                data.clients.map((client, ci) => (
+                  <div key={client.clientId}>
                 {ci > 0 && <div className="border-t border-gray-100 mb-4" />}
 
                 {/* Client header */}
@@ -187,21 +246,88 @@ function PTSessionDetailModal({
                   </div>
                 </div>
               </div>
-            ))
+                ))
+              ) : (
+                dayGroups.map((g) => (
+                  <div key={g.date}>
+                    {/* Day header */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+                        <CalendarDays className="w-4 h-4 text-[#f15b5c]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-extrabold text-gray-800">{g.date}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                            {g.clientCount} khách hàng
+                          </span>
+                          <span className="text-[10px] font-semibold text-gray-400">
+                            {g.rows.length} buổi dạy
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Day session table */}
+                    <div className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                              <th className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide w-10">STT</th>
+                              <th className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide">Khách hàng</th>
+                              <th className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide">Buổi</th>
+                              <th className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide">Giai đoạn</th>
+                              <th className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide">Ghi chú</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.rows.map((r, ri) => (
+                              <tr key={ri} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40">
+                                <td className="px-3 py-2.5 text-gray-400 font-bold text-center">{ri + 1}</td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-gray-700">{r.clientName}</span>
+                                    {r.packageName && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                                        {r.packageName}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 text-gray-700 font-semibold">{r.sessionName}</td>
+                                <td className="px-3 py-2.5 text-gray-500">{r.phase}</td>
+                                <td className="px-3 py-2.5 text-gray-400 max-w-[180px] truncate" title={r.notes ?? ""}>
+                                  {r.notes || <span className="text-gray-200">—</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
           )}
         </div>
 
         {/* Summary footer */}
         {!loading && data && data.clients.length > 0 && (
           <div className="flex-shrink-0 border-t border-gray-100 px-6 py-4 bg-gray-50/50 rounded-b-2xl">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="text-center">
                 <p className="text-xl font-extrabold text-gray-900">{data.clients.length}</p>
                 <p className="text-xs font-semibold text-gray-400 mt-0.5">Tổng số KH</p>
               </div>
-              <div className="text-center border-x border-gray-200">
+              <div className="text-center">
                 <p className="text-xl font-extrabold text-gray-900">{totalSessions}</p>
                 <p className="text-xs font-semibold text-gray-400 mt-0.5">Tổng buổi dạy</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-extrabold text-gray-900">{dayGroups.length}</p>
+                <p className="text-xs font-semibold text-gray-400 mt-0.5">Số ngày dạy</p>
               </div>
               <div className="text-center">
                 <p className="text-lg font-extrabold" style={{ color: "#f15b5c" }}>{vnd(estimatedPay)}</p>
