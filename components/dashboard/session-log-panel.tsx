@@ -332,9 +332,9 @@ export function LiveSessionPanel({
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
 
   // ── Rule: at least 6 exercises must each have weight (load) + reps filled for
-  // 3 sets before the session can be signed/completed. Cardio sessions don't
-  // track weight/reps, so they're exempt. (Enforced again server-side in the
-  // check-out route.)
+  // 3 sets before the session can be signed/completed. Applies to EVERY session
+  // (cardio included) — every session here has ≥6 exercises, so fewer than 6
+  // complete means data wasn't entered. (Enforced again server-side.)
   const MIN_SETS_PER_EXERCISE = 3;
   const MIN_COMPLETE_EXERCISES = 6;
   const completeExerciseCount = setLogs.filter(
@@ -342,9 +342,7 @@ export function LiveSessionPanel({
       sl.sets.filter((s) => s.load.trim() !== "" && s.reps.trim() !== "").length >=
       MIN_SETS_PER_EXERCISE
   ).length;
-  // Can't require more complete exercises than the session actually has.
-  const requiredExercises = Math.min(MIN_COMPLETE_EXERCISES, setLogs.length);
-  const setsRequirementMet = isCardio || completeExerciseCount >= requiredExercises;
+  const setsRequirementMet = completeExerciseCount >= MIN_COMPLETE_EXERCISES;
   const canFinish = durationMet && setsRequirementMet;
 
   // Build "Lần trước" + suggestion lookups from the previous week's completed log.
@@ -819,22 +817,20 @@ export function LiveSessionPanel({
             : `Cần tối thiểu ${minSessionMinutes} phút (còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút)`}
         </div>
 
-        {/* Data-quality status: ≥6 exercises need weight + reps for 3 sets (non-cardio) */}
-        {!isCardio && (
-          <div
-            className={cn(
-              "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
-              setsRequirementMet
-                ? "text-green-700 bg-green-50 border-green-100"
-                : "text-gray-500 bg-gray-50 border-gray-200"
-            )}
-          >
-            <ClipboardList className="w-4 h-4 flex-shrink-0" />
-            {setsRequirementMet
-              ? `Đã điền đủ cân nặng + reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${requiredExercises} bài tập`
-              : `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${requiredExercises} bài tập (đã có ${completeExerciseCount}/${requiredExercises})`}
-          </div>
-        )}
+        {/* Data-quality status: ≥6 exercises need weight + reps for 3 sets */}
+        <div
+          className={cn(
+            "flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border",
+            setsRequirementMet
+              ? "text-green-700 bg-green-50 border-green-100"
+              : "text-gray-500 bg-gray-50 border-gray-200"
+          )}
+        >
+          <ClipboardList className="w-4 h-4 flex-shrink-0" />
+          {setsRequirementMet
+            ? `Đã điền đủ cân nặng + reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
+            : `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập (đã có ${completeExerciseCount}/${MIN_COMPLETE_EXERCISES})`}
+        </div>
 
         {/* Session notes */}
         <div className="space-y-1">
@@ -1002,7 +998,7 @@ export function LiveSessionPanel({
               !durationMet
                 ? `Cần tối thiểu ${minSessionMinutes} phút`
                 : !setsRequirementMet
-                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${requiredExercises} bài tập`
+                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
                   : "Gửi cho khách xác nhận trên app của khách"
             }
             className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
@@ -1023,7 +1019,7 @@ export function LiveSessionPanel({
               !durationMet
                 ? `Cần tối thiểu ${minSessionMinutes} phút`
                 : !setsRequirementMet
-                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${requiredExercises} bài tập`
+                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
                   : "Khách ký xác nhận ngay trên máy này (dự phòng)"
             }
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
