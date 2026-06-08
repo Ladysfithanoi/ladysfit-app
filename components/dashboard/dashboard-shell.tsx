@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Navbar } from "@/components/dashboard/navbar";
+import { PendingCheckoutBanner } from "@/components/dashboard/pending-checkout-banner";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,7 +22,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <Navbar onMenuClick={() => setSidebarOpen((v) => !v)} />
 
       <main className="lg:ml-60 pt-16 min-h-screen">
-        <div className="p-4 md:p-6 max-w-7xl">{children}</div>
+        <div className="p-4 md:p-6 max-w-7xl">
+          <PendingCheckoutBanner />
+          {children}
+        </div>
       </main>
     </>
   );

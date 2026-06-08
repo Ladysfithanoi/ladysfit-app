@@ -644,8 +644,13 @@ model WorkoutLog {
   // First time the PT entered any set data; used to enforce the "interaction
   // within 10 minutes of check-in" rule.
   firstInteractionAt DateTime?
-  // Client's hand-drawn signature as a PNG data-URL (only for SIGNATURE fallback).
+  // Client's hand-drawn signature at CHECK-OUT (proof PT taught → counts for salary).
   signatureUrl       String?          @db.Text
+  // Client's hand-drawn signature at CHECK-IN (proof client showed up → deducts package).
+  checkInSignatureUrl String?         @db.Text
+  // Whether this log has already incremented the package's sessionsUsed. Set at
+  // check-in (when the client signs in); used to reverse exactly once on delete/void.
+  packageCounted     Boolean          @default(false)
   // How/when the client confirmed the session (drives sessionsUsed increment).
   confirmationMethod WorkoutConfirmMethod?
   confirmedAt        DateTime?

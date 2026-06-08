@@ -135,7 +135,7 @@ function toSetLogDrafts(setLogs: WorkoutLogRow["setLogs"]): EditSetLogDraft[] {
 
 // ── SignaturePad (customer signs to confirm the session) ───────────────────
 
-function SignaturePad({
+export function SignaturePad({
   onConfirm,
   onCancel,
   saving,
@@ -308,7 +308,6 @@ export function LiveSessionPanel({
   const [collapsed, setCollapsed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [autoCancelled, setAutoCancelled] = useState(false);
 
   const checkInMs = log.checkInAt ? new Date(log.checkInAt).getTime() : Date.now();
   const maxMs = MAX_SESSION_MINUTES * 60000;
@@ -481,23 +480,11 @@ export function LiveSessionPanel({
     }
   }
 
-  // Auto-cancel a session that runs past the 2-hour cap: show the notice, then
-  // delete the in-progress log so it is never counted (session reverts to
-  // "Check-in"). The server check-out also rejects over-cap sessions as a guard.
-  //
-  // NOTE: `autoCancelled` must stay OUT of this effect's deps. If it were a dep,
-  // calling setAutoCancelled(true) would re-run the effect, the cleanup would
-  // clearTimeout the pending delete, and deleteLog would never fire — leaving the
-  // panel stuck on the "đã hủy" notice with no way back to Check-in.
-  useEffect(() => {
-    if (!overMax || log.status !== "IN_PROGRESS") return;
-    setAutoCancelled(true);
-    const t = setTimeout(() => {
-      void deleteLog();
-    }, 6000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overMax, log.status]);
+  // NOTE: a session is NO LONGER auto-cancelled/deleted when it runs long. The
+  // package was already deducted at check-in (client signed in), so deleting it
+  // would wrongly refund the client and erase their check-in signature. A long
+  // session stays open until the PT gets the check-out signature; the
+  // "chưa ký check-out quá 90'" alert nudges the PT/FM instead.
 
   // Auto-save in-progress data (notes + sets) so a refresh or accidental tab
   // close never loses what the PT has typed. The session row already lives in
@@ -716,36 +703,6 @@ export function LiveSessionPanel({
             onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
           />
         )}
-      </div>
-    );
-  }
-
-  // ── Auto-cancelled view (session ran past the 2-hour cap) ──
-  if (autoCancelled) {
-    return (
-      <div className="mt-3 border border-red-300 rounded-xl overflow-hidden bg-red-50">
-        <div className="p-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-            <X className="w-5 h-5 text-red-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-extrabold text-red-700">Buổi tập đã tự động hủy</p>
-            <p className="text-xs text-red-600 mt-0.5">
-              Buổi tập đã vượt quá {MAX_SESSION_MINUTES} phút (2 tiếng) nên không được tính. Vui lòng check-in lại để bắt đầu buổi mới.
-            </p>
-            {error && <p className="text-xs text-red-500 font-medium mt-1">{error}</p>}
-            <button
-              type="button"
-              onClick={() => void deleteLog()}
-              disabled={deleting}
-              className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
-              Check-in lại
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -989,29 +946,8 @@ export function LiveSessionPanel({
         )}
         {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
 
-        {/* Actions — số liệu đã tự động lưu, nút này vừa lưu nốt vừa gửi khách xác nhận */}
+        {/* Action — khách ký check-out trên máy PT để xác nhận PT đã dạy buổi này */}
         <div className="pt-1">
-          <button
-            onClick={async () => { await saveProgress(); await checkOut("client_app"); }}
-            disabled={finishing || saving || !canFinish}
-            title={
-              !durationMet
-                ? `Cần tối thiểu ${minSessionMinutes} phút`
-                : !setsRequirementMet
-                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
-                  : "Gửi cho khách xác nhận trên app của khách"
-            }
-            className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Kết thúc & gửi khách xác nhận
-          </button>
-        </div>
-
-        {/* Fallback: customer signs on this device if they can't use their app */}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <span className="text-[11px] text-gray-400">Khách không tiện dùng app?</span>
           <button
             onClick={async () => { await saveProgress(); setShowSig(true); }}
             disabled={finishing || saving || !canFinish}
@@ -1020,13 +956,17 @@ export function LiveSessionPanel({
                 ? `Cần tối thiểu ${minSessionMinutes} phút`
                 : !setsRequirementMet
                   ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
-                  : "Khách ký xác nhận ngay trên máy này (dự phòng)"
+                  : "Khách ký check-out để xác nhận PT đã dạy buổi này"
             }
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+            style={{ backgroundColor: "#f15b5c" }}
           >
-            <PenLine className="w-3.5 h-3.5" />
-            Khách ký tại đây (dự phòng)
+            {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
+            Khách ký check-out & kết thúc buổi
           </button>
+          <p className="text-[11px] text-gray-400 mt-1.5 text-center">
+            Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT.
+          </p>
         </div>
       </div>
 

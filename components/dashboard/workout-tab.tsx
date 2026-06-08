@@ -8,7 +8,7 @@ import {
   getSlotsForSessionType,
   basePhase,
 } from "@/lib/workout-structure";
-import { LiveSessionPanel, SessionLogHistory, WeekLogOverview } from "./session-log-panel";
+import { LiveSessionPanel, SessionLogHistory, SignaturePad, WeekLogOverview } from "./session-log-panel";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -94,6 +94,8 @@ export type WorkoutLogRow = {
   checkOutAt: string | null;
   firstInteractionAt: string | null;
   signatureUrl: string | null;
+  checkInSignatureUrl?: string | null;
+  packageCounted?: boolean;
   confirmationMethod: WorkoutConfirmMethod | null;
   confirmedAt: string | null;
 };
@@ -323,26 +325,35 @@ function ProgramView({
   const [historySessionId, setHistorySessionId] = useState<string | null>(null);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
   const [checkInError, setCheckInError] = useState("");
+  // Session waiting for the client's check-in signature before it can start.
+  const [signCheckIn, setSignCheckIn] = useState<{ sessionId: string; weekId: string } | null>(null);
+  const [checkInSigning, setCheckInSigning] = useState(false);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
   const [deleteSessionError, setDeleteSessionError] = useState("");
 
-  async function handleCheckIn(sessionId: string, weekId: string) {
+  // Check-in requires the client's signature first (proof they showed up). This
+  // is also the moment the package is deducted, so the signature is mandatory.
+  async function handleCheckIn(sessionId: string, weekId: string, checkInSignatureUrl: string) {
+    setCheckInSigning(true);
     setCheckingInId(sessionId);
     setCheckInError("");
     try {
       const res = await fetch(`/api/clients/${clientId}/workout-logs/check-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ programId: program.id, weekId, sessionId }),
+        body: JSON.stringify({ programId: program.id, weekId, sessionId, checkInSignatureUrl }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
-      const log = (await res.json()) as WorkoutLogRow;
-      onLogAdded(log, null);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      const { packageUpdate, ...log } = data as WorkoutLogRow & { packageUpdate: PackageUpdate | null };
+      setSignCheckIn(null);
+      onLogAdded(log as WorkoutLogRow, packageUpdate ?? null);
     } catch (err) {
       setCheckInError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setCheckingInId(null);
+      setCheckInSigning(false);
     }
   }
 
@@ -1076,7 +1087,7 @@ function ProgramView({
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-col gap-1">
                               <button
-                                onClick={() => handleCheckIn(activeSession.id, currentWeekData.id)}
+                                onClick={() => { setCheckInError(""); setSignCheckIn({ sessionId: activeSession.id, weekId: currentWeekData.id }); }}
                                 disabled={checkingInId === activeSession.id || isArchived}
                                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
                                 style={{ backgroundColor: "#f15b5c" }}
@@ -1084,9 +1095,16 @@ function ProgramView({
                                 {checkingInId === activeSession.id
                                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   : <ClipboardList className="w-3.5 h-3.5" />}
-                                Bắt đầu buổi tập (Check-in)
+                                Khách ký check-in & bắt đầu buổi
                               </button>
                               {checkInError && <span className="text-[11px] text-[#f15b5c] font-medium">{checkInError}</span>}
+                              {signCheckIn?.sessionId === activeSession.id && (
+                                <SignaturePad
+                                  saving={checkInSigning}
+                                  onCancel={() => { if (!checkInSigning) setSignCheckIn(null); }}
+                                  onConfirm={(dataUrl) => handleCheckIn(signCheckIn.sessionId, signCheckIn.weekId, dataUrl)}
+                                />
+                              )}
                             </div>
                             {lastLog && (
                               <div className="flex items-center gap-2 text-xs text-gray-400">

@@ -81,6 +81,7 @@ export async function GET(req: Request) {
     const logs = await prisma.workoutLog.findMany({
       where: {
         clientId:    { in: clientIds },
+        status:      "COMPLETED",
         sessionDate: { gte: startDate, lt: endDate },
       },
       select: { clientId: true },

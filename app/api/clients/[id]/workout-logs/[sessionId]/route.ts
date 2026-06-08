@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { reversePackageSession } from "@/lib/workout-session";
 
 export async function GET(
   _req: Request,
@@ -118,11 +119,10 @@ export async function PUT(
 }
 
 // DELETE /api/clients/[id]/workout-logs/[logId] — remove a workout log.
-// Active logs (IN_PROGRESS / AWAITING_CONFIRMATION) were never counted, so they
-// just vanish. A COMPLETED log was counted via incrementPackageAndNotify, so we
-// reverse that here: decrement the package's sessionsUsed and re-open it if it
-// had been auto-completed. Re-recording the session later counts it again.
-// Set logs cascade-delete with the log.
+// The package's sessionsUsed is deducted at CHECK-IN now, so any log flagged
+// `packageCounted` (in-progress or completed) must reverse that deduction here:
+// decrement sessionsUsed and re-open the package if it had been auto-completed.
+// Re-recording the session later counts it again. Set logs cascade-delete.
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string; sessionId: string } }
@@ -137,30 +137,10 @@ export async function DELETE(
     });
     if (!existing) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
 
-    let packageUpdate: {
-      id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
-    } | null = null;
-
-    // Reverse the session count for a completed log.
-    if (existing.status === "COMPLETED") {
-      const pkg = await prisma.packageEnrollment.findFirst({
-        where: { clientId: params.id, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
-        orderBy: { createdAt: "desc" },
-      });
-      if (pkg) {
-        const updated = await prisma.packageEnrollment.update({
-          where: { id: pkg.id },
-          data: { sessionsUsed: pkg.sessionsUsed - 1, status: "ACTIVE" },
-        });
-        packageUpdate = {
-          id: updated.id,
-          sessionsUsed: updated.sessionsUsed,
-          sessions: updated.sessions,
-          packageName: updated.packageName,
-          status: updated.status,
-        };
-      }
-    }
+    // Reverse the session count for any log that was counted against the package.
+    const packageUpdate = existing.packageCounted
+      ? await reversePackageSession(params.id)
+      : null;
 
     await prisma.workoutLog.delete({ where: { id: logId } });
     return NextResponse.json({ ok: true, deletedId: logId, packageUpdate });

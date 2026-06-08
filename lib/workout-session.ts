@@ -9,42 +9,66 @@ export type PackageUpdate = {
   status: string;
 };
 
-// Increment sessionsUsed on the active package and create the client-facing
-// "session complete" notification. Shared by the signature check-out path and
-// the client-app confirmation path so a session is counted in exactly one place.
-export async function incrementPackageAndNotify(
-  clientId: string,
-  log: { id: string; sessionId: string; programId: string; weekId: string }
-): Promise<PackageUpdate | null> {
-  let packageUpdate: PackageUpdate | null = null;
-
+// Deduct one session from the client's active package (buổi tập của khách).
+// Called at CHECK-IN — the client's check-in signature is the proof they showed
+// up, so the package advances even if the PT never completes the check-out.
+export async function countPackageSession(clientId: string): Promise<PackageUpdate | null> {
   const activePackage = await prisma.packageEnrollment.findFirst({
     where: { clientId, status: "ACTIVE" },
     orderBy: { createdAt: "desc" },
   });
-  if (activePackage) {
-    const newSessionsUsed = activePackage.sessionsUsed + 1;
-    const newStatus = newSessionsUsed >= activePackage.sessions ? "COMPLETED" : "ACTIVE";
-    const updated = await prisma.packageEnrollment.update({
-      where: { id: activePackage.id },
-      data: { sessionsUsed: newSessionsUsed, status: newStatus },
-    });
-    packageUpdate = {
-      id: updated.id,
-      sessionsUsed: updated.sessionsUsed,
-      sessions: updated.sessions,
-      packageName: updated.packageName,
-      status: updated.status,
-    };
+  if (!activePackage) return null;
 
-    // Hết buổi: nếu gói vừa hoàn thành và khách không còn lộ trình nào khác
-    // đang chạy thì chuyển trạng thái khách sang "Nghỉ tập".
-    if (newStatus === "COMPLETED") {
-      await refreshClientChurnStatus(clientId);
-    }
+  const newSessionsUsed = activePackage.sessionsUsed + 1;
+  const newStatus = newSessionsUsed >= activePackage.sessions ? "COMPLETED" : "ACTIVE";
+  const updated = await prisma.packageEnrollment.update({
+    where: { id: activePackage.id },
+    data: { sessionsUsed: newSessionsUsed, status: newStatus },
+  });
+
+  // Hết buổi: nếu gói vừa hoàn thành và khách không còn lộ trình nào khác
+  // đang chạy thì chuyển trạng thái khách sang "Nghỉ tập".
+  if (newStatus === "COMPLETED") {
+    await refreshClientChurnStatus(clientId);
   }
 
-  // Completion notification for the client (non-critical).
+  return {
+    id: updated.id,
+    sessionsUsed: updated.sessionsUsed,
+    sessions: updated.sessions,
+    packageName: updated.packageName,
+    status: updated.status,
+  };
+}
+
+// Reverse one session on the client's package — used when a counted session is
+// deleted or voided so the client isn't charged for a session that didn't count.
+export async function reversePackageSession(clientId: string): Promise<PackageUpdate | null> {
+  const pkg = await prisma.packageEnrollment.findFirst({
+    where: { clientId, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!pkg) return null;
+
+  const updated = await prisma.packageEnrollment.update({
+    where: { id: pkg.id },
+    data: { sessionsUsed: pkg.sessionsUsed - 1, status: "ACTIVE" },
+  });
+  return {
+    id: updated.id,
+    sessionsUsed: updated.sessionsUsed,
+    sessions: updated.sessions,
+    packageName: updated.packageName,
+    status: updated.status,
+  };
+}
+
+// Create the client-facing "session complete → next session" notification.
+// Called at CHECK-OUT (when the session is actually finished). Best-effort.
+export async function notifyNextSession(
+  clientId: string,
+  log: { id: string; sessionId: string; programId: string; weekId: string }
+): Promise<void> {
   try {
     const [client, program] = await Promise.all([
       prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true } }),
@@ -96,8 +120,6 @@ export async function incrementPackageAndNotify(
   } catch {
     // ignore — notification is best-effort
   }
-
-  return packageUpdate;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

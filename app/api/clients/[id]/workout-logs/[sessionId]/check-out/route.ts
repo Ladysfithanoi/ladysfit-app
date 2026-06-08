@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { incrementPackageAndNotify, serializeWorkoutLog } from "@/lib/workout-session";
+import { countPackageSession, notifyNextSession, serializeWorkoutLog } from "@/lib/workout-session";
 
 type SetLogInput = {
   id: string;
@@ -28,9 +28,9 @@ const INCLUDE = {
 } as const;
 
 // POST /api/clients/[id]/workout-logs/[logId]/check-out
-// PT ends the session. Validates anti-cheat rules, then either:
-//   - method "client_app": moves to AWAITING_CONFIRMATION (client must confirm on their app) — NOT counted yet
-//   - method "signature":  completes now via the client's signature (fallback) — counted
+// PT ends the session. The client signs on the PT's device to confirm the PT
+// taught this session → it becomes COMPLETED and counts toward the PT's salary.
+// The package was already deducted at check-in, so it is NOT touched here.
 export async function POST(
   req: Request,
   { params }: { params: { id: string; sessionId: string } }
@@ -45,9 +45,7 @@ export async function POST(
       include: { session: { select: { sessionName: true } } },
     });
     if (!log) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
-    // Allow finishing an in-progress session, or falling back to a signature on a
-    // session already waiting for the client's app confirmation.
-    if (log.status !== "IN_PROGRESS" && log.status !== "AWAITING_CONFIRMATION") {
+    if (log.status !== "IN_PROGRESS") {
       return NextResponse.json({ error: "Buổi tập này đã được kết thúc" }, { status: 400 });
     }
     if (!log.checkInAt) {
@@ -55,12 +53,10 @@ export async function POST(
     }
 
     const body = (await req.json()) as {
-      method?: "client_app" | "signature";
       signatureUrl?: string | null;
       notes?: string | null;
       setLogs?: SetLogInput[];
     };
-    const method = body.method ?? (body.signatureUrl ? "signature" : "client_app");
     const setLogs = body.setLogs ?? [];
 
     // Persist latest set data.
@@ -100,21 +96,11 @@ export async function POST(
     const minMinutes = config?.minSessionMinutes ?? 30;
     const elapsedMin = (now.getTime() - log.checkInAt.getTime()) / 60000;
 
-    // ── Rule: maximum duration (2 hours) ──
-    // A session left running past the cap is auto-cancelled and never counted —
-    // delete it here so a stale check-out can't sneak it through.
-    const MAX_SESSION_MINUTES = 120;
-    if (elapsedMin > MAX_SESSION_MINUTES) {
-      await prisma.workoutLog.delete({ where: { id: logId } });
-      return NextResponse.json(
-        {
-          error: `Buổi tập đã vượt quá ${MAX_SESSION_MINUTES} phút (2 tiếng) nên đã tự động hủy và không được tính. Vui lòng check-in lại.`,
-          autoCancelled: true,
-          deletedId: logId,
-        },
-        { status: 400 }
-      );
-    }
+    // NOTE: there is intentionally no maximum-duration cap here. The package was
+    // already deducted at check-in (client signed in), so a session must NOT be
+    // auto-deleted for running long — that would erase the client's check-in
+    // signature and the deduction. A late check-out still counts the PT's
+    // teaching session; the "chưa ký check-out quá 90'" alert nudges the PT.
 
     if (elapsedMin < minMinutes) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
@@ -153,28 +139,24 @@ export async function POST(
       );
     }
 
-    // ── Path A: client confirms on their own app (anti-forgery) ──
-    if (method === "client_app") {
-      const pending = await prisma.workoutLog.update({
-        where: { id: logId },
-        data: {
-          status: "AWAITING_CONFIRMATION",
-          checkOutAt: now,
-          firstInteractionAt,
-          notes: body.notes ?? log.notes,
-        },
-        include: INCLUDE,
-      });
-      return NextResponse.json({ ...serializeWorkoutLog(pending), valid: true, awaitingConfirmation: true, packageUpdate: null });
-    }
-
-    // ── Path B: signature fallback (completes now, flagged as SIGNATURE) ──
+    // ── Complete via the client's check-out signature (proof PT taught) ──
+    // This is what credits the PT for the teaching session (salary). The
+    // package was already advanced at check-in, so it is not touched here.
     const sig = (body.signatureUrl ?? "").trim();
     if (!sig) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }
       return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
+    }
+
+    // Safety net for legacy/in-flight sessions checked in before the package was
+    // deducted at check-in: if this log was never counted, count it now so the
+    // client's package still advances. New sessions are already counted at
+    // check-in (packageCounted = true), so this is a no-op for them.
+    let packageUpdate = null;
+    if (!log.packageCounted) {
+      packageUpdate = await countPackageSession(params.id);
     }
 
     const completed = await prisma.workoutLog.update({
@@ -186,12 +168,14 @@ export async function POST(
         confirmationMethod: "SIGNATURE",
         firstInteractionAt,
         signatureUrl: sig,
+        packageCounted: true,
         notes: body.notes ?? log.notes,
       },
       include: INCLUDE,
     });
 
-    const packageUpdate = await incrementPackageAndNotify(params.id, completed);
+    // Notify the client of completion / next session (best-effort, no counting).
+    await notifyNextSession(params.id, completed);
 
     return NextResponse.json({ ...serializeWorkoutLog(completed), valid: true, packageUpdate });
   } catch (error: unknown) {

@@ -141,6 +141,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       packageName: updated.packageName,
       status: updated.status,
     };
+    // Flag the log as counted so a later delete reverses the deduction exactly once.
+    await prisma.workoutLog.update({ where: { id: log.id }, data: { packageCounted: true } });
   }
 
   // Create workout completion notification for client

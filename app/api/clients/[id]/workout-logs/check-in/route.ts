@@ -2,27 +2,36 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { countPackageSession } from "@/lib/workout-session";
 
 // POST /api/clients/[id]/workout-logs/check-in
-// Starts a session: creates an IN_PROGRESS workout log with a server-side
-// check-in timestamp and a scaffold of empty set logs (one per movement).
-// Does NOT increment sessionsUsed — that only happens on a valid check-out.
+// Starts a session: the client signs to confirm they showed up, then we create
+// an IN_PROGRESS workout log (with the check-in signature) and a scaffold of
+// empty set logs. The check-in signature is the proof the client trained, so
+// this is where the package's sessionsUsed is deducted (buổi tập của khách).
+// The PT's teaching session (salary) is only credited later at check-out.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { programId, weekId, sessionId } = (await req.json()) as {
+    const { programId, weekId, sessionId, checkInSignatureUrl } = (await req.json()) as {
       programId?: string;
       weekId?: string;
       sessionId?: string;
+      checkInSignatureUrl?: string | null;
     };
     if (!programId || !weekId || !sessionId) {
       return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
     }
+    const checkInSig = (checkInSignatureUrl ?? "").trim();
+    if (!checkInSig) {
+      return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng để check-in" }, { status: 400 });
+    }
 
     // Resume: if an in-progress session already exists for this client+session,
-    // return it instead of creating a duplicate (handles page reloads).
+    // return it instead of creating a duplicate (handles page reloads). The
+    // package was already deducted when that log was created — don't deduct again.
     const existing = await prisma.workoutLog.findFirst({
       where: { clientId: params.id, sessionId, status: "IN_PROGRESS" },
       include: {
@@ -32,7 +41,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       orderBy: { createdAt: "desc" },
     });
     if (existing) {
-      return NextResponse.json(serialize(existing));
+      return NextResponse.json({ ...serialize(existing), packageUpdate: null });
     }
 
     // Build the set-log scaffold from the session's current movements.
@@ -54,6 +63,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         sessionDate: now,
         status: "IN_PROGRESS",
         checkInAt: now,
+        checkInSignatureUrl: checkInSig,
+        packageCounted: true,
         createdById: session.user.id,
         setLogs: {
           create: workoutSession.movements.map((m) => ({
@@ -69,7 +80,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       },
     });
 
-    return NextResponse.json(serialize(log));
+    // Deduct one session from the client's package now (client signed in).
+    const packageUpdate = await countPackageSession(params.id);
+
+    return NextResponse.json({ ...serialize(log), packageUpdate });
   } catch (error: unknown) {
     const e = error as { message?: string };
     console.error("[workout-logs check-in]", e.message);

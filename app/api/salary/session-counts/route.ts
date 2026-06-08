@@ -49,6 +49,7 @@ export async function GET(req: Request) {
           LIMIT 1
         ) pe ON true
         WHERE c."assignedPTId" = $1
+          AND wl."status" = 'COMPLETED'
           AND wl."sessionDate" >= $2
           AND wl."sessionDate" <  $3
         `,

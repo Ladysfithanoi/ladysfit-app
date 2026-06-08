@@ -42,11 +42,12 @@ export async function DELETE(
       id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
     } | null = null;
 
-    // Reverse the session count for every completed log this session contributed.
-    const completedCount = await prisma.workoutLog.count({
-      where: { clientId: params.id, sessionId: params.sessionId, status: "COMPLETED" },
+    // Reverse the session count for every package-counted log this session had
+    // (counted at check-in, so this covers both in-progress and completed logs).
+    const countedLogs = await prisma.workoutLog.count({
+      where: { clientId: params.id, sessionId: params.sessionId, packageCounted: true },
     });
-    if (completedCount > 0) {
+    if (countedLogs > 0) {
       const pkg = await prisma.packageEnrollment.findFirst({
         where: { clientId: params.id, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
         orderBy: { createdAt: "desc" },
@@ -54,7 +55,7 @@ export async function DELETE(
       if (pkg) {
         const updated = await prisma.packageEnrollment.update({
           where: { id: pkg.id },
-          data: { sessionsUsed: Math.max(0, pkg.sessionsUsed - completedCount), status: "ACTIVE" },
+          data: { sessionsUsed: Math.max(0, pkg.sessionsUsed - countedLogs), status: "ACTIVE" },
         });
         packageUpdate = {
           id: updated.id,

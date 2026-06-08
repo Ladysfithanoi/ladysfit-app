@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
-import { incrementPackageAndNotify, serializeWorkoutLog } from "@/lib/workout-session";
+import { countPackageSession, notifyNextSession, serializeWorkoutLog } from "@/lib/workout-session";
 
 const INCLUDE = {
   setLogs: { orderBy: { id: "asc" } },
@@ -40,11 +40,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const now = new Date();
     const completed = await prisma.workoutLog.update({
       where: { id: log.id },
-      data: { status: "COMPLETED", confirmationMethod: "CLIENT_APP", confirmedAt: now },
+      // Legacy AWAITING logs weren't counted at check-in, so count + flag now.
+      data: { status: "COMPLETED", confirmationMethod: "CLIENT_APP", confirmedAt: now, packageCounted: true },
       include: INCLUDE,
     });
 
-    await incrementPackageAndNotify(clientId, completed);
+    if (!log.packageCounted) await countPackageSession(clientId);
+    await notifyNextSession(clientId, completed);
 
     return NextResponse.json({ ...serializeWorkoutLog(completed), confirmed: true });
   } catch (error: unknown) {
