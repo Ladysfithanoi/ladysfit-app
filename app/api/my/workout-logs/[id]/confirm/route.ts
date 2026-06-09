@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const now = new Date();
     // Legacy AWAITING logs weren't counted at check-in, so count + flag now and
     // remember which lộ trình was charged for correct delete/void reversal.
-    const packageUpdate = log.packageCounted ? null : await countPackageSession(clientId, log.programId);
+    const packageUpdate = log.packageCounted ? null : await countPackageSession(clientId);
     const completed = await prisma.workoutLog.update({
       where: { id: log.id },
       data: {
