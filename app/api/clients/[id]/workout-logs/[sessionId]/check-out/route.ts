@@ -161,7 +161,7 @@ export async function POST(
     // check-in (packageCounted = true), so this is a no-op for them.
     let packageUpdate = null;
     if (!log.packageCounted) {
-      packageUpdate = await countPackageSession(params.id);
+      packageUpdate = await countPackageSession(params.id, log.programId);
     }
 
     const completed = await prisma.workoutLog.update({

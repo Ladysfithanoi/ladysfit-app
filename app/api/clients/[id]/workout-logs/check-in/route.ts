@@ -81,7 +81,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     // Deduct one session from the client's package now (client signed in).
-    const packageUpdate = await countPackageSession(params.id);
+    // Pass the program so the buổi depletes the lộ trình this program belongs to
+    // (not just the oldest ACTIVE one) — matters when the client has several gói.
+    const packageUpdate = await countPackageSession(params.id, programId);
 
     // Remember which lộ trình was charged so a later delete/void refunds the
     // exact same package (the client may have several active packages).
