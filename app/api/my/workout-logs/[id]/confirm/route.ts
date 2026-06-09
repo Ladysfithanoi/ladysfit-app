@@ -38,14 +38,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const now = new Date();
+    // Legacy AWAITING logs weren't counted at check-in, so count + flag now and
+    // remember which lộ trình was charged for correct delete/void reversal.
+    const packageUpdate = log.packageCounted ? null : await countPackageSession(clientId);
     const completed = await prisma.workoutLog.update({
       where: { id: log.id },
-      // Legacy AWAITING logs weren't counted at check-in, so count + flag now.
-      data: { status: "COMPLETED", confirmationMethod: "CLIENT_APP", confirmedAt: now, packageCounted: true },
+      data: {
+        status: "COMPLETED",
+        confirmationMethod: "CLIENT_APP",
+        confirmedAt: now,
+        packageCounted: true,
+        ...(packageUpdate ? { packageEnrollmentId: packageUpdate.id } : {}),
+      },
       include: INCLUDE,
     });
 
-    if (!log.packageCounted) await countPackageSession(clientId);
     await notifyNextSession(clientId, completed);
 
     return NextResponse.json({ ...serializeWorkoutLog(completed), confirmed: true });

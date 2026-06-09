@@ -83,6 +83,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // Deduct one session from the client's package now (client signed in).
     const packageUpdate = await countPackageSession(params.id);
 
+    // Remember which lộ trình was charged so a later delete/void refunds the
+    // exact same package (the client may have several active packages).
+    if (packageUpdate) {
+      await prisma.workoutLog.update({
+        where: { id: log.id },
+        data: { packageEnrollmentId: packageUpdate.id },
+      });
+    }
+
     return NextResponse.json({ ...serialize(log), packageUpdate });
   } catch (error: unknown) {
     const e = error as { message?: string };

@@ -651,6 +651,10 @@ model WorkoutLog {
   // Whether this log has already incremented the package's sessionsUsed. Set at
   // check-in (when the client signs in); used to reverse exactly once on delete/void.
   packageCounted     Boolean          @default(false)
+  // Which package enrollment this session was charged against (the one whose
+  // sessionsUsed was incremented at check-in). Recorded so delete/void reverses
+  // the exact same lộ trình even when the client has several active packages.
+  packageEnrollmentId String?
   // How/when the client confirmed the session (drives sessionsUsed increment).
   confirmationMethod WorkoutConfirmMethod?
   confirmedAt        DateTime?

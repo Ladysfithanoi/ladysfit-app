@@ -169,6 +169,9 @@ export async function POST(
         firstInteractionAt,
         signatureUrl: sig,
         packageCounted: true,
+        // If we just counted a legacy uncounted log, remember which lộ trình it
+        // charged so a later delete/void refunds the exact same package.
+        ...(packageUpdate ? { packageEnrollmentId: packageUpdate.id } : {}),
         notes: body.notes ?? log.notes,
       },
       include: INCLUDE,

@@ -12,11 +12,19 @@ export type PackageUpdate = {
 // Deduct one session from the client's active package (buổi tập của khách).
 // Called at CHECK-IN — the client's check-in signature is the proof they showed
 // up, so the package advances even if the PT never completes the check-out.
+//
+// Packages are consumed oldest-first (FIFO): we charge the oldest ACTIVE package
+// that still has sessions left. This matters when a client has more than one
+// active lộ trình (e.g. they renewed before finishing the current one) — without
+// FIFO the brand-new package would be charged and the lộ trình the client is
+// actually finishing would never advance.
 export async function countPackageSession(clientId: string): Promise<PackageUpdate | null> {
-  const activePackage = await prisma.packageEnrollment.findFirst({
+  const activePackages = await prisma.packageEnrollment.findMany({
     where: { clientId, status: "ACTIVE" },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
   });
+  const activePackage =
+    activePackages.find((p) => p.sessionsUsed < p.sessions) ?? activePackages[0] ?? null;
   if (!activePackage) return null;
 
   const newSessionsUsed = activePackage.sessionsUsed + 1;
@@ -43,11 +51,24 @@ export async function countPackageSession(clientId: string): Promise<PackageUpda
 
 // Reverse one session on the client's package — used when a counted session is
 // deleted or voided so the client isn't charged for a session that didn't count.
-export async function reversePackageSession(clientId: string): Promise<PackageUpdate | null> {
-  const pkg = await prisma.packageEnrollment.findFirst({
-    where: { clientId, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
-    orderBy: { createdAt: "desc" },
-  });
+// Pass the exact package the session was charged against (log.packageEnrollmentId)
+// so the refund lands on the same lộ trình; falls back to the most-recently
+// charged package for legacy logs recorded before that id was tracked.
+export async function reversePackageSession(
+  clientId: string,
+  packageEnrollmentId?: string | null
+): Promise<PackageUpdate | null> {
+  let pkg = packageEnrollmentId
+    ? await prisma.packageEnrollment.findFirst({
+        where: { id: packageEnrollmentId, clientId, sessionsUsed: { gt: 0 } },
+      })
+    : null;
+  if (!pkg) {
+    pkg = await prisma.packageEnrollment.findFirst({
+      where: { clientId, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
+      orderBy: { createdAt: "desc" },
+    });
+  }
   if (!pkg) return null;
 
   const updated = await prisma.packageEnrollment.update({

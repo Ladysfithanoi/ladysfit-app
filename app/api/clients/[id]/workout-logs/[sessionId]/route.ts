@@ -137,9 +137,10 @@ export async function DELETE(
     });
     if (!existing) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
 
-    // Reverse the session count for any log that was counted against the package.
+    // Reverse the session count for any log that was counted against the package,
+    // refunding the exact lộ trình it was charged against at check-in.
     const packageUpdate = existing.packageCounted
-      ? await reversePackageSession(params.id)
+      ? await reversePackageSession(params.id, existing.packageEnrollmentId)
       : null;
 
     await prisma.workoutLog.delete({ where: { id: logId } });

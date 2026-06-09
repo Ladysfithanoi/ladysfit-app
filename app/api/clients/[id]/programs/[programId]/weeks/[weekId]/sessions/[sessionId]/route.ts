@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { reversePackageSession } from "@/lib/workout-session";
 
 const sessionInclude = {
   orderBy: { order: "asc" as const },
@@ -44,27 +45,15 @@ export async function DELETE(
 
     // Reverse the session count for every package-counted log this session had
     // (counted at check-in, so this covers both in-progress and completed logs).
-    const countedLogs = await prisma.workoutLog.count({
+    // Refund each log against the exact lộ trình it was charged so multiple
+    // active packages stay correct.
+    const countedLogs = await prisma.workoutLog.findMany({
       where: { clientId: params.id, sessionId: params.sessionId, packageCounted: true },
+      select: { packageEnrollmentId: true },
     });
-    if (countedLogs > 0) {
-      const pkg = await prisma.packageEnrollment.findFirst({
-        where: { clientId: params.id, status: { in: ["ACTIVE", "COMPLETED"] }, sessionsUsed: { gt: 0 } },
-        orderBy: { createdAt: "desc" },
-      });
-      if (pkg) {
-        const updated = await prisma.packageEnrollment.update({
-          where: { id: pkg.id },
-          data: { sessionsUsed: Math.max(0, pkg.sessionsUsed - countedLogs), status: "ACTIVE" },
-        });
-        packageUpdate = {
-          id: updated.id,
-          sessionsUsed: updated.sessionsUsed,
-          sessions: updated.sessions,
-          packageName: updated.packageName,
-          status: updated.status,
-        };
-      }
+    for (const counted of countedLogs) {
+      const reversed = await reversePackageSession(params.id, counted.packageEnrollmentId);
+      if (reversed) packageUpdate = reversed;
     }
 
     await prisma.workoutSession.delete({ where: { id: params.sessionId } });
