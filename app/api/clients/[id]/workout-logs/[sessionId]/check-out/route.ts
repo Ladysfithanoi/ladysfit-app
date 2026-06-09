@@ -87,6 +87,11 @@ export async function POST(
 
     const now = new Date();
 
+    // Client approved ending this session early (khách có việc, vẫn đồng ý tính
+    // buổi). When so, skip the min-duration and 6-exercise gates — the PT can
+    // still get the check-out signature and the teaching session counts.
+    const earlyEndApproved = log.earlyEndApprovedAt != null;
+
     // Stamp the time of first data entry (metadata only — no longer voids the session).
     let firstInteractionAt = log.firstInteractionAt;
     if (!firstInteractionAt && setLogs.some(hasData)) firstInteractionAt = now;
@@ -102,7 +107,7 @@ export async function POST(
     // signature and the deduction. A late check-out still counts the PT's
     // teaching session; the "chưa ký check-out quá 90'" alert nudges the PT.
 
-    if (elapsedMin < minMinutes) {
+    if (!earlyEndApproved && elapsedMin < minMinutes) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }
@@ -129,7 +134,7 @@ export async function POST(
       ).length;
       return n + (filledSets >= MIN_SETS_PER_EXERCISE ? 1 : 0);
     }, 0);
-    if (completeExercises < MIN_COMPLETE_EXERCISES) {
+    if (!earlyEndApproved && completeExercises < MIN_COMPLETE_EXERCISES) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }

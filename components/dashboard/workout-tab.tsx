@@ -96,6 +96,7 @@ export type WorkoutLogRow = {
   signatureUrl: string | null;
   checkInSignatureUrl?: string | null;
   packageCounted?: boolean;
+  earlyEndApprovedAt?: string | null;
   confirmationMethod: WorkoutConfirmMethod | null;
   confirmedAt: string | null;
 };

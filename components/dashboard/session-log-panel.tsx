@@ -308,6 +308,8 @@ export function LiveSessionPanel({
   const [collapsed, setCollapsed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Client approved ending early (from their own app) → check-out gates lifted.
+  const [earlyApproved, setEarlyApproved] = useState(log.earlyEndApprovedAt != null);
 
   const checkInMs = log.checkInAt ? new Date(log.checkInAt).getTime() : Date.now();
   const maxMs = MAX_SESSION_MINUTES * 60000;
@@ -342,7 +344,26 @@ export function LiveSessionPanel({
       MIN_SETS_PER_EXERCISE
   ).length;
   const setsRequirementMet = completeExerciseCount >= MIN_COMPLETE_EXERCISES;
-  const canFinish = durationMet && setsRequirementMet;
+  // Khách đồng ý kết thúc sớm thì bỏ qua ràng buộc thời gian + đủ 6 bài.
+  const canFinish = earlyApproved || (durationMet && setsRequirementMet);
+
+  // Poll for the client approving an early end from their own app. Once approved,
+  // the PT can get the check-out signature without the duration/6-exercise gates.
+  useEffect(() => {
+    if (earlyApproved || log.status !== "IN_PROGRESS") return;
+    const t = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/workout-logs?sessionId=${log.sessionId}`);
+        if (!res.ok) return;
+        const logs = (await res.json()) as WorkoutLogRow[];
+        const me = logs.find((l) => l.id === log.id);
+        if (me?.earlyEndApprovedAt) setEarlyApproved(true);
+      } catch {
+        // ignore — try again next tick
+      }
+    }, 6000);
+    return () => clearInterval(t);
+  }, [earlyApproved, log.status, clientId, log.sessionId, log.id]);
 
   // Build "Lần trước" + suggestion lookups from the previous week's completed log.
   const prevSuggestions = new Map<string, Suggestion>();
@@ -759,6 +780,17 @@ export function LiveSessionPanel({
       )}
 
       <div className={cn("p-4 space-y-3", collapsed && "hidden")}>
+        {/* Khách đã đồng ý kết thúc sớm → có thể ký check-out ngay */}
+        {earlyApproved && (
+          <div className="flex items-start gap-2 text-xs font-semibold rounded-lg px-3 py-2.5 border border-green-200 bg-green-50 text-green-700">
+            <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              Khách đã đồng ý kết thúc buổi sớm. Có thể xin chữ ký check-out để tính buổi ngay,
+              không bắt buộc đủ thời gian hay đủ 6 bài tập.
+            </span>
+          </div>
+        )}
+
         {/* Duration status */}
         <div
           className={cn(
@@ -952,11 +984,13 @@ export function LiveSessionPanel({
             onClick={async () => { await saveProgress(); setShowSig(true); }}
             disabled={finishing || saving || !canFinish}
             title={
-              !durationMet
-                ? `Cần tối thiểu ${minSessionMinutes} phút`
-                : !setsRequirementMet
-                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
-                  : "Khách ký check-out để xác nhận PT đã dạy buổi này"
+              earlyApproved
+                ? "Khách đã đồng ý kết thúc sớm — có thể ký check-out ngay"
+                : !durationMet
+                  ? `Cần tối thiểu ${minSessionMinutes} phút`
+                  : !setsRequirementMet
+                    ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
+                    : "Khách ký check-out để xác nhận PT đã dạy buổi này"
             }
             className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
             style={{ backgroundColor: "#f15b5c" }}

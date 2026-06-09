@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { Footprints, Timer, Plus, ChevronDown, ChevronUp, Dumbbell } from "lucide-react";
+import { Footprints, Timer, Plus, ChevronDown, ChevronUp, Dumbbell, Clock, Check, LogOut } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 
 type ActivityLog = {
@@ -74,6 +74,140 @@ type PendingConfirmation = {
   checkInAt: string | null;
   checkOutAt: string | null;
 };
+
+type LiveSession = {
+  id: string;
+  sessionName: string;
+  phase: string;
+  ptName: string | null;
+  checkInAt: string | null;
+  earlyEndApprovedAt: string | null;
+};
+
+// The client's currently-running session(s). Lets the client approve ending the
+// session early when they have to leave: after approving, the PT can get the
+// check-out signature and count the teaching session without the usual
+// min-duration / 6-exercise requirements. Polls so a session shows up shortly
+// after the PT checks in and disappears once it is checked out.
+function LiveSessions({ initial }: { initial: LiveSession[] }) {
+  const [items, setItems] = useState<LiveSession[]>(initial);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/my/workout-logs/live");
+      if (res.ok) setItems((await res.json()) as LiveSession[]);
+    } catch {
+      // ignore — keep showing the last known state
+    }
+  }, []);
+
+  // Poll the live list every 8s so a session appears right after the PT checks
+  // in and clears once it is checked out, without the client refreshing.
+  useEffect(() => {
+    const t = setInterval(refresh, 8000);
+    return () => clearInterval(t);
+  }, [refresh]);
+
+  // Ticking clock for the elapsed timer.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  async function approve(id: string) {
+    setBusyId(id);
+    setError("");
+    try {
+      const res = await fetch(`/api/my/workout-logs/${id}/approve-early-end`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+      setConfirmId(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="rounded-3xl border-2 border-[#f15b5c]/40 bg-[#fff5f5] p-5 mb-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#f15b5c]" />
+        </span>
+        <p className="text-sm font-extrabold text-[#f15b5c]">Buổi tập đang diễn ra</p>
+      </div>
+
+      {items.map((it) => {
+        const label = it.sessionName.split("—")[0].trim();
+        const mins = it.checkInAt
+          ? Math.max(0, Math.floor((nowMs - new Date(it.checkInAt).getTime()) / 60000))
+          : null;
+        const approved = it.earlyEndApprovedAt != null;
+        const busy = busyId === it.id;
+        const confirming = confirmId === it.id;
+
+        return (
+          <div key={it.id} className="rounded-2xl bg-white border border-[#f15b5c]/20 p-4">
+            <p className="text-sm font-bold text-gray-800">{label} — {it.phase}</p>
+            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-[#f15b5c]" />
+              PT: {it.ptName ?? "—"}{mins != null ? ` · đã tập ${mins} phút` : ""}
+            </p>
+
+            {approved ? (
+              <div className="mt-3 flex items-start gap-2 rounded-xl bg-green-50 border border-green-100 px-3 py-2.5">
+                <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-semibold text-green-700 leading-relaxed">
+                  Bạn đã đồng ý kết thúc sớm. PT sẽ xin chữ ký xác nhận để hoàn tất và tính buổi tập này.
+                </p>
+              </div>
+            ) : confirming ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                  Bạn đồng ý kết thúc buổi tập này sớm? Buổi tập vẫn được tính cho PT dù chưa đủ thời gian
+                  hoặc chưa ghi đủ bài tập. PT sẽ xin chữ ký của bạn để xác nhận.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => approve(it.id)}
+                    disabled={busy}
+                    className="flex-1 h-11 rounded-2xl bg-[#f15b5c] text-white text-sm font-bold disabled:opacity-60"
+                  >
+                    {busy ? "Đang xử lý..." : "✓ Tôi đồng ý"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(null)}
+                    disabled={busy}
+                    className="h-11 px-4 rounded-2xl border border-gray-300 text-sm font-semibold text-gray-500 disabled:opacity-60"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setError(""); setConfirmId(it.id); }}
+                className="mt-3 w-full h-11 rounded-2xl border-2 border-[#f15b5c]/40 text-[#f15b5c] text-sm font-bold flex items-center justify-center gap-1.5 hover:bg-[#fff0f0]"
+              >
+                <LogOut className="w-4 h-4" />
+                Tôi cần kết thúc sớm — đồng ý tính buổi
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+    </div>
+  );
+}
 
 // Sessions the PT finished that need THIS client to confirm on their own device.
 // Confirming here is the anti-forgery proof the client was actually present.
@@ -473,11 +607,13 @@ export function ActivityTab({
   workoutProgram = null,
   workoutLogs = [],
   pendingConfirmations = [],
+  liveSessions = [],
 }: {
   activityLogs: ActivityLog[];
   workoutProgram?: PortalProgram | null;
   workoutLogs?: WorkoutLogItem[];
   pendingConfirmations?: PendingConfirmation[];
+  liveSessions?: LiveSession[];
 }) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -541,6 +677,9 @@ export function ActivityTab({
   return (
     <>
       <h2 className="text-lg font-extrabold text-gray-900 mb-4">Tập luyện</h2>
+
+      {/* ── Live session(s): approve ending early ── */}
+      <LiveSessions initial={liveSessions} />
 
       {/* ── Pending session confirmations (anti-forgery) ── */}
       <PendingConfirmations items={pendingConfirmations} />

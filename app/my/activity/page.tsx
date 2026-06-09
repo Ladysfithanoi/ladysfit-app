@@ -11,7 +11,7 @@ export default async function ActivityPage() {
 
   const clientId = session.user.id;
 
-  const [client, activityLogs, program, rawWorkoutLogs, rawPending] = await Promise.all([
+  const [client, activityLogs, program, rawWorkoutLogs, rawPending, rawLive] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, avatarUrl: true } }),
     prisma.activityLog.findMany({ where: { clientId }, orderBy: { date: "desc" }, take: 30 }),
     prisma.workoutProgram.findFirst({
@@ -55,6 +55,17 @@ export default async function ActivityPage() {
       },
       orderBy: { checkOutAt: "desc" },
     }),
+    // Sessions currently in progress (PT checked in, not yet checked out) — the
+    // client can approve ending these early.
+    prisma.workoutLog.findMany({
+      where: { clientId, status: "IN_PROGRESS" },
+      include: {
+        session: { select: { sessionName: true } },
+        program: { select: { phase: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { checkInAt: "desc" },
+    }),
   ]);
 
   if (!client) redirect("/my/login");
@@ -66,6 +77,15 @@ export default async function ActivityPage() {
     ptName: l.createdBy.name ?? null,
     checkInAt: l.checkInAt?.toISOString() ?? null,
     checkOutAt: l.checkOutAt?.toISOString() ?? null,
+  }));
+
+  const liveSessions = rawLive.map((l) => ({
+    id: l.id,
+    sessionName: l.session.sessionName,
+    phase: l.program.phase,
+    ptName: l.createdBy.name ?? null,
+    checkInAt: l.checkInAt?.toISOString() ?? null,
+    earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
   }));
 
   const serializedLogs = activityLogs.map((l) => ({
@@ -170,6 +190,7 @@ export default async function ActivityPage() {
         workoutProgram={portalProgram}
         workoutLogs={workoutLogs}
         pendingConfirmations={pendingConfirmations}
+        liveSessions={liveSessions}
       />
     </PortalLayoutClient>
   );

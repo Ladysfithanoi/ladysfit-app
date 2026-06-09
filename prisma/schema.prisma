@@ -655,6 +655,10 @@ model WorkoutLog {
   // sessionsUsed was incremented at check-in). Recorded so delete/void reverses
   // the exact same lộ trình even when the client has several active packages.
   packageEnrollmentId String?
+  // Client tapped "đồng ý kết thúc buổi sớm" in their own app: lets the PT check
+  // out and count the teaching session without the usual min-duration / 6-exercise
+  // gates (e.g. khách có việc, chỉ tập được 30' nhưng vẫn đồng ý tính buổi).
+  earlyEndApprovedAt DateTime?
   // How/when the client confirmed the session (drives sessionsUsed increment).
   confirmationMethod WorkoutConfirmMethod?
   confirmedAt        DateTime?
