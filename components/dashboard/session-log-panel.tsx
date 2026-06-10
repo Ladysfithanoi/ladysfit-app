@@ -347,23 +347,35 @@ export function LiveSessionPanel({
   // Khách đồng ý kết thúc sớm thì bỏ qua ràng buộc thời gian + đủ 6 bài.
   const canFinish = earlyApproved || (durationMet && setsRequirementMet);
 
-  // Poll for the client approving an early end from their own app. Once approved,
-  // the PT can get the check-out signature without the duration/6-exercise gates.
+  // Poll the server while the session is in progress. Two jobs:
+  //  1. Detect the client approving an early end from their own app → unlock the
+  //     check-out signature without the duration/6-exercise gates.
+  //  2. Self-heal: if the session was already completed/voided server-side but
+  //     this screen never saw it, reconcile so the live panel closes. This is the
+  //     safety net for a lost check-out response — e.g. the PT's device dropped
+  //     the network / the mobile tab slept right as the request returned. The
+  //     server had already saved the check-out signature + COMPLETED status, so
+  //     without this the timer would keep counting forever even though the
+  //     signature is in the log. (Mirrors the AWAITING_CONFIRMATION poll.)
   useEffect(() => {
-    if (earlyApproved || log.status !== "IN_PROGRESS") return;
+    if (log.status !== "IN_PROGRESS") return;
     const t = setInterval(async () => {
       try {
         const res = await fetch(`/api/clients/${clientId}/workout-logs?sessionId=${log.sessionId}`);
         if (!res.ok) return;
         const logs = (await res.json()) as WorkoutLogRow[];
         const me = logs.find((l) => l.id === log.id);
-        if (me?.earlyEndApprovedAt) setEarlyApproved(true);
+        if (!me) return;
+        if (me.status === "COMPLETED") { onCompleted(me, null); return; }
+        if (me.status === "VOID") { onVoided(me); return; }
+        if (me.earlyEndApprovedAt) setEarlyApproved(true);
       } catch {
         // ignore — try again next tick
       }
     }, 6000);
     return () => clearInterval(t);
-  }, [earlyApproved, log.status, clientId, log.sessionId, log.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [log.status, clientId, log.sessionId, log.id]);
 
   // Build "Lần trước" + suggestion lookups from the previous week's completed log.
   const prevSuggestions = new Map<string, Suggestion>();
