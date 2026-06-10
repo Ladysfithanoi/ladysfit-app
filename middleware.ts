@@ -20,7 +20,11 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/api/my/auth")
   ) {
     const useSecureCookies = process.env.NODE_ENV === "production";
-    const cookieName = `${useSecureCookies ? "__Secure-" : ""}my-client-token`;
+    // Must match the cookie name set in lib/client-auth.ts (renamed to -v2 in
+    // commit 8bd687c). If these drift, a freshly-logged-in client has the new
+    // cookie but middleware looks for the old name → it can't find the token and
+    // bounces them straight back to /my/login (login spins, then nothing).
+    const cookieName = `${useSecureCookies ? "__Secure-" : ""}my-client-token-v2`;
     const token = await getToken({
       req: request,
       cookieName,
