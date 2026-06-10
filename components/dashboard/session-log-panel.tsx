@@ -133,6 +133,58 @@ function toSetLogDrafts(setLogs: WorkoutLogRow["setLogs"]): EditSetLogDraft[] {
   }));
 }
 
+// Previous-week weight for an exercise: the Set 1 load, falling back to the first
+// set that has a load. Used to seed Set 1 of the current week.
+function prevWeekLoad(sl: SetLogRow): string | null {
+  const loads = [sl.set1Load, sl.set2Load, sl.set3Load, sl.set4Load, sl.set5Load, sl.set6Load];
+  for (const l of loads) {
+    if (l != null && l !== "") return l;
+  }
+  return null;
+}
+
+// Build the Set-1 prefill values (load = last week's weight, reps = last week's
+// average reps) keyed by movement name, from the previous week's completed log.
+function buildPrevWeekPrefill(
+  prevWeekLogs: WorkoutLogRow[]
+): Map<string, { load: string; reps: string }> {
+  const map = new Map<string, { load: string; reps: string }>();
+  if (prevWeekLogs.length === 0) return map;
+  for (const sl of prevWeekLogs[0].setLogs) {
+    const load = prevWeekLoad(sl) ?? "";
+    const avg = avgRepsFromSetLog(sl);
+    const reps = avg != null ? String(Math.round(avg)) : "";
+    if (load !== "" || reps !== "") map.set(sl.movementName, { load, reps });
+  }
+  return map;
+}
+
+// Initial editable drafts for the live panel. From week 2 onward, Set 1 of every
+// exercise that appeared last week is pre-seeded with last week's weight + average
+// reps (still freely editable). Only fills an EMPTY Set 1 so we never clobber data
+// the PT already typed (e.g. when re-opening an in-progress session). Week 1 has no
+// previous week, so it stays blank.
+function buildInitialDrafts(
+  setLogs: WorkoutLogRow["setLogs"],
+  prevWeekLogs: WorkoutLogRow[],
+  weekNumber: number
+): EditSetLogDraft[] {
+  const drafts = toSetLogDrafts(setLogs);
+  if (weekNumber < 2) return drafts;
+  const prefill = buildPrevWeekPrefill(prevWeekLogs);
+  if (prefill.size === 0) return drafts;
+  return drafts.map((d) => {
+    const first = d.sets[0];
+    if (first.load !== "" || first.reps !== "") return d;
+    const p = prefill.get(d.movementName);
+    if (!p) return d;
+    return {
+      ...d,
+      sets: d.sets.map((s, j) => (j === 0 ? { load: p.load, reps: p.reps } : s)),
+    };
+  });
+}
+
 // ── SignaturePad (customer signs to confirm the session) ───────────────────
 
 export function SignaturePad({
@@ -296,7 +348,9 @@ export function LiveSessionPanel({
   onDeleted: (logId: string) => void;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
-  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() => toSetLogDrafts(log.setLogs));
+  const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
+    buildInitialDrafts(log.setLogs, prevWeekLogs, weekNumber)
+  );
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [finishing, setFinishing] = useState(false);
