@@ -133,10 +133,11 @@ function toSetLogDrafts(setLogs: WorkoutLogRow["setLogs"]): EditSetLogDraft[] {
   }));
 }
 
-// Previous-week weight for an exercise: the Set 1 load, falling back to the first
-// set that has a load. Used to seed Set 1 of the current week.
+// Previous-week weight for an exercise: the Set 3 load (the "working set"),
+// falling back to the first other set that has a load. Used to seed Set 1 of the
+// current week.
 function prevWeekLoad(sl: SetLogRow): string | null {
-  const loads = [sl.set1Load, sl.set2Load, sl.set3Load, sl.set4Load, sl.set5Load, sl.set6Load];
+  const loads = [sl.set3Load, sl.set1Load, sl.set2Load, sl.set4Load, sl.set5Load, sl.set6Load];
   for (const l of loads) {
     if (l != null && l !== "") return l;
   }
