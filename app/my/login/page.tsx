@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function MyLoginPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,7 +42,10 @@ export default function MyLoginPage() {
       console.log("[my/login] auth response:", data);
 
       if (data.url && !data.url.includes("error")) {
-        router.push("/my");
+        // Hard navigation (không dùng router.push) để xoá sạch Router Cache phía
+        // trình duyệt — tránh thấy dữ liệu của tài khoản khách đã đăng nhập trước
+        // đó khi dùng chung 1 máy/điện thoại.
+        window.location.href = "/my";
       } else {
         setError("Email hoặc mật khẩu không đúng");
       }

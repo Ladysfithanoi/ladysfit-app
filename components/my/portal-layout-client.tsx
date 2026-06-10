@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Home, Scale, Dumbbell, Salad, Ruler, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,11 +26,12 @@ export function PortalLayoutClient({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function handleLogout() {
     await signOut({ redirect: false, callbackUrl: "/my/login" });
-    router.push("/my/login");
+    // Hard navigation để xoá sạch Router Cache của tài khoản vừa đăng xuất —
+    // tránh tài khoản đăng nhập sau (chung máy/điện thoại) thấy dữ liệu cũ.
+    window.location.href = "/my/login";
   }
 
   return (
