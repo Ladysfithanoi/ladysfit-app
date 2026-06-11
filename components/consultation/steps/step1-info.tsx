@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { LEAD_SOURCES } from "@/lib/lead-sources";
 import type { ConsultationData } from "../consultation-wizard";
 
 type Branch = { id: string; name: string };
@@ -283,7 +284,7 @@ export function Step1Info({
             <Field label="Biết LDF qua đâu?">
               <select name="knowLDFVia" value={knowLDFVia} onChange={(e) => setKnowLDFVia(e.target.value)} disabled={fieldsDisabled} className={selectCls}>
                 <option value="">— Chọn —</option>
-                {["Walk-in", "Referral", "Thương hiệu cá nhân", "Bạn bè", "Tivi", "Hội viên cũ", "Website", "Báo, tạp chí", "Biển hiệu", "Facebook", "Tờ rơi", "Tiktok", "Instagram", "Thread", "Referral.PT"].map((v) => <option key={v}>{v}</option>)}
+                {LEAD_SOURCES.map((v) => <option key={v}>{v}</option>)}
               </select>
             </Field>
             <Field label="Tình trạng gia đình">

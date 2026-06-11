@@ -16,9 +16,8 @@ export const LEAD_STATUS_STYLE: Record<LeadStatus, string> = {
   PB: "bg-orange-100 text-orange-700",
 };
 
-export const SOURCES = [
-  "Facebook Page", "Referral", "Tiktok", "Thread", "Zalo", "Outdoor", "Website", "Renew", "Referral.PT", "Walk-in", "Thương hiệu cá nhân",
-];
+// Nguồn lead dùng chung — xem lib/lead-sources.ts
+export { LEAD_SOURCES as SOURCES } from "@/lib/lead-sources";
 
 export type PTUser = {
   id: string;
