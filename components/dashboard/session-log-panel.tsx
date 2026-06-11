@@ -144,8 +144,23 @@ function prevWeekLoad(sl: SetLogRow): string | null {
   return null;
 }
 
-// Build the Set-1 prefill values (load = last week's weight, reps = last week's
-// average reps) keyed by movement name, from the previous week's completed log.
+// Previous-week reps for an exercise: the Set 3 reps (the "working set"), falling
+// back to the first other set that has reps. Used as the prefill fallback for
+// buổi Circuit/Cardio where reps thường nhập kiểu chữ/thời lượng (vd "20-60s")
+// nên không tính được trung bình dạng số.
+function prevWeekReps(sl: SetLogRow): string | null {
+  const reps = [sl.set3Reps, sl.set1Reps, sl.set2Reps, sl.set4Reps, sl.set5Reps, sl.set6Reps];
+  for (const r of reps) {
+    if (r != null && r !== "") return r;
+  }
+  return null;
+}
+
+// Build the Set-1 prefill values keyed by movement name, from the previous week's
+// completed log. load = last week's working weight; reps = last week's average
+// reps khi reps là số (buổi tạ), ngược lại lấy thẳng reps của set làm việc tuần
+// trước (buổi Circuit/Cardio nhập reps kiểu chữ/thời lượng) — nhờ vậy Set 1 được
+// điền sẵn cho MỌI loại buổi.
 function buildPrevWeekPrefill(
   prevWeekLogs: WorkoutLogRow[]
 ): Map<string, { load: string; reps: string }> {
@@ -154,7 +169,7 @@ function buildPrevWeekPrefill(
   for (const sl of prevWeekLogs[0].setLogs) {
     const load = prevWeekLoad(sl) ?? "";
     const avg = avgRepsFromSetLog(sl);
-    const reps = avg != null ? String(Math.round(avg)) : "";
+    const reps = avg != null ? String(Math.round(avg)) : (prevWeekReps(sl) ?? "");
     if (load !== "" || reps !== "") map.set(sl.movementName, { load, reps });
   }
   return map;
