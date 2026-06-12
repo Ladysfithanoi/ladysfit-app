@@ -22,6 +22,22 @@ function fmtDate(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+// The end-of-day reflection used to be 4 separate boxes; it is now a single box.
+// For check-lists saved under the old layout, fold the legacy fields into one
+// string so nothing written before the change is lost.
+function mergeLegacyReflection(c: {
+  dailyResults: string | null;
+  dailyCompleted: string | null;
+  dailyIncomplete: string | null;
+  dailyNextPlan: string | null;
+}): string {
+  if (c.dailyResults && c.dailyResults.trim()) return c.dailyResults;
+  const parts: string[] = [];
+  if (c.dailyCompleted?.trim()) parts.push(`✅ Đã hoàn thành:\n${c.dailyCompleted.trim()}`);
+  if (c.dailyIncomplete?.trim()) parts.push(`⏳ Chưa hoàn thành:\n${c.dailyIncomplete.trim()}`);
+  if (c.dailyNextPlan?.trim()) parts.push(`➡️ Giải pháp / kế hoạch:\n${c.dailyNextPlan.trim()}`);
+  return parts.join("\n\n");
+}
 function currentMonthLabel() {
   const d = new Date();
   return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
@@ -123,6 +139,21 @@ type ChecklistData = {
     items: Array<Record<string, unknown>>;
   } | null;
   totalActual: number;
+};
+
+type OverviewStaff = {
+  userId: string;
+  name: string;
+  role: string;
+  branchName: string;
+  filled: boolean;
+  tasksTotal: number;
+  tasksCompleted: number;
+  taskRate: number;
+  teachingSetup: number;
+  teachingDone: number;
+  targetNote: string;
+  reflection: string;
 };
 
 type Props = {
@@ -504,10 +535,8 @@ export function DailyTab({
   const [totalTarget, setTotalTarget]         = useState("");
   const [totalActual, setTotalActual]         = useState(0);
   const [rows, setRows]                       = useState<Row[]>([]);
+  // Single end-of-day reflection box (replaces the former 4 boxes).
   const [dailyResults, setDailyResults]       = useState("");
-  const [dailyCompleted, setDailyCompleted]   = useState("");
-  const [dailyIncomplete, setDailyIncomplete] = useState("");
-  const [dailyNextPlan, setDailyNextPlan]     = useState("");
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
@@ -523,6 +552,11 @@ export function DailyTab({
   // Calendar overview modal state
   const [calendarOpen, setCalendarOpen] = useState(false);
 
+  // Team overview modal state (FM/Admin: all staff check-lists at a glance)
+  const [overviewOpen, setOverviewOpen]       = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewStaff, setOverviewStaff]     = useState<OverviewStaff[]>([]);
+
   // Editing is allowed only on your own current-month checklist. FM can browse
   // their own (and their team's) past months, but those are review-only.
   const dateInCurrentMonth = isCurrentMonthISO(date);
@@ -533,7 +567,7 @@ export function DailyTab({
   const draftKey = `ladysfit_draft_checklist_${currentUserId}_${ownDate}`;
   const { clearDraft: clearChecklistDraft } = useFormAutoSave(
     draftKey,
-    { position, targetNote, totalTarget, rows, dailyResults, dailyCompleted, dailyIncomplete, dailyNextPlan },
+    { position, targetNote, totalTarget, rows, dailyResults },
     canEdit && !loading && isDirty
   );
 
@@ -551,8 +585,7 @@ export function DailyTab({
       setTotalActual(data.totalActual);
       type ChecklistDraft = {
         position: string; targetNote: string; totalTarget: string;
-        rows: Row[]; dailyResults: string; dailyCompleted: string;
-        dailyIncomplete: string; dailyNextPlan: string;
+        rows: Row[]; dailyResults: string;
       };
       // Only restore draft for own checklist (not team-view)
       const isOwn = selectedUserId === currentUserId;
@@ -577,22 +610,16 @@ export function DailyTab({
         setTargetNote(draft.targetNote ?? "");
         setTotalTarget(draft.totalTarget ?? "");
         setDailyResults(draft.dailyResults ?? "");
-        setDailyCompleted(draft.dailyCompleted ?? "");
-        setDailyIncomplete(draft.dailyIncomplete ?? "");
-        setDailyNextPlan(draft.dailyNextPlan ?? "");
         setRows(draft.rows ?? dbRows);
       } else if (data.checklist) {
         setPosition(data.checklist.position ?? "");
         setTargetNote(data.checklist.targetNote ?? "");
         setTotalTarget(data.checklist.totalTarget != null ? String(data.checklist.totalTarget) : "");
-        setDailyResults(data.checklist.dailyResults ?? "");
-        setDailyCompleted(data.checklist.dailyCompleted ?? "");
-        setDailyIncomplete(data.checklist.dailyIncomplete ?? "");
-        setDailyNextPlan(data.checklist.dailyNextPlan ?? "");
+        setDailyResults(mergeLegacyReflection(data.checklist));
         setRows(dbRows);
       } else {
         setPosition(""); setTargetNote(""); setTotalTarget("");
-        setDailyResults(""); setDailyCompleted(""); setDailyIncomplete(""); setDailyNextPlan("");
+        setDailyResults("");
         setRows([]);
       }
       setIsDirty(false);
@@ -636,6 +663,21 @@ export function DailyTab({
   useEffect(() => {
     if (importOpen) fetchImportPreview(importDate);
   }, [importDate, importOpen, fetchImportPreview]);
+
+  // ── fetch team overview (FM/Admin) ─────────────────────────────────────────
+  const openOverview = useCallback(async () => {
+    setOverviewOpen(true);
+    setOverviewLoading(true);
+    setOverviewStaff([]);
+    try {
+      const res = await fetch(`/api/checklist/overview?date=${date}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { staff: OverviewStaff[] };
+      setOverviewStaff(data.staff ?? []);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [date]);
 
   function openImportModal() {
     const d = defaultImportDate(ownDate);
@@ -698,9 +740,10 @@ export function DailyTab({
           targetNote:      targetNote || undefined,
           totalTarget:     totalTarget ? parseFloat(totalTarget) : undefined,
           dailyResults:    dailyResults || undefined,
-          dailyCompleted:  dailyCompleted || undefined,
-          dailyIncomplete: dailyIncomplete || undefined,
-          dailyNextPlan:   dailyNextPlan || undefined,
+          // Legacy 3-field reflection replaced by the single box above.
+          dailyCompleted:  undefined,
+          dailyIncomplete: undefined,
+          dailyNextPlan:   undefined,
           items: sortedRows.map((r) => ({
             order: r.order,
             time: r.time || undefined,
@@ -805,6 +848,16 @@ export function DailyTab({
                   ? `👁 Xem lại · ${fmtDate(date)}`
                   : `👁 Chỉ xem · ${fmtDate(date)}`}
             </span>
+
+            {/* Tổng quan toàn bộ nhân sự cho ngày đang chọn */}
+            <button
+              onClick={openOverview}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-bold whitespace-nowrap transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Users className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Tổng quan nhân sự</span>
+            </button>
           </div>
         </div>
       )}
@@ -1108,32 +1161,25 @@ export function DailyTab({
             </span>
           )}
         </div>
-        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {(
-            [
-              { label: "Kết quả ngày hôm nay",  key: "r", value: dailyResults,    set: setDailyResults,    placeholder: "Tổng kết kết quả đạt được trong ngày..." },
-              { label: "Đã hoàn thành",          key: "c", value: dailyCompleted,  set: setDailyCompleted,  placeholder: "Liệt kê các công việc đã hoàn thành..." },
-              { label: "Chưa hoàn thành",        key: "i", value: dailyIncomplete, set: setDailyIncomplete, placeholder: "Liệt kê công việc chưa hoàn thành và lý do..." },
-              { label: "Kế hoạch tiếp theo",     key: "n", value: dailyNextPlan,   set: setDailyNextPlan,   placeholder: "Kế hoạch cho ngày/buổi làm việc tiếp theo..." },
-            ] as { label: string; key: string; value: string; set: (v: string) => void; placeholder: string }[]
-          ).map(({ label, key, value, set, placeholder }) => (
-            <div key={key} className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500">{label}</label>
-              <textarea
-                value={value}
-                onChange={(e) => { set(e.target.value); setIsDirty(true); }}
-                disabled={!canEditReflection}
-                rows={3}
-                placeholder={canEditReflection ? placeholder : ""}
-                className={cn(
-                  "w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none",
-                  canEditReflection
-                    ? "border-gray-200 bg-white"
-                    : "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
-                )}
-              />
-            </div>
-          ))}
+        <div className="p-5 space-y-1.5">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Tổng kết <span className="font-semibold text-gray-500">việc đã hoàn thành</span>,{" "}
+            <span className="font-semibold text-gray-500">việc chưa hoàn thành</span> và{" "}
+            <span className="font-semibold text-gray-500">giải pháp cho ngày mai</span>.
+          </p>
+          <textarea
+            value={dailyResults}
+            onChange={(e) => { setDailyResults(e.target.value); setIsDirty(true); }}
+            disabled={!canEditReflection}
+            rows={6}
+            placeholder={canEditReflection ? "Tổng kết việc đã hoàn thành, việc chưa hoàn thành và giải pháp cho ngày mai..." : ""}
+            className={cn(
+              "w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-y",
+              canEditReflection
+                ? "border-gray-200 bg-white"
+                : "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
+            )}
+          />
         </div>
       </div>
 
@@ -1157,6 +1203,137 @@ export function DailyTab({
             <Save className="w-4 h-4" />
             {saving ? "Đang lưu..." : "Lưu check-list"}
           </button>
+        </div>
+      )}
+
+      {/* ── Modal: Tổng quan toàn bộ check-list nhân sự ───────────────────── */}
+      {overviewOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setOverviewOpen(false); }}
+        >
+          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <p className="text-sm font-extrabold text-gray-800">Tổng quan check-list nhân sự</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Toàn bộ nhân sự · {fmtDate(date)}</p>
+              </div>
+              <button
+                onClick={() => setOverviewOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-xl hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Summary strip */}
+            {!overviewLoading && overviewStaff.length > 0 && (
+              <div className="flex items-center gap-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50/60 flex-shrink-0 text-xs">
+                <span className="text-gray-500">
+                  <span className="font-bold text-emerald-600">{overviewStaff.filter((s) => s.filled).length}</span> đã làm
+                </span>
+                <span className="text-gray-500">
+                  <span className="font-bold text-amber-500">{overviewStaff.filter((s) => !s.filled).length}</span> chưa làm
+                </span>
+                <span className="text-gray-400 ml-auto">{overviewStaff.length} nhân sự</span>
+              </div>
+            )}
+
+            {/* Body */}
+            <div
+              className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-2.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
+              style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}
+            >
+              {overviewLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-[#f15b5c]/30 border-t-[#f15b5c] animate-spin" />
+                  <p className="text-xs text-gray-400">Đang tải tổng quan...</p>
+                </div>
+              ) : overviewStaff.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <span className="text-3xl">📋</span>
+                  <p className="text-sm text-gray-400">Không có nhân sự nào</p>
+                </div>
+              ) : (
+                overviewStaff.map((s) => {
+                  const rateColor = s.taskRate >= 80 ? "bg-green-500" : s.taskRate >= 50 ? "bg-yellow-400" : "bg-[#f15b5c]";
+                  const isMe = s.userId === currentUserId;
+                  return (
+                    <div
+                      key={s.userId}
+                      className={cn(
+                        "rounded-xl border p-3.5",
+                        s.filled ? "border-gray-200 bg-white" : "border-amber-100 bg-amber-50/40"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-gray-800 truncate">{s.name}</span>
+                            <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{s.role}</span>
+                            {s.branchName && (
+                              <span className="text-[10px] text-gray-400">· {s.branchName}</span>
+                            )}
+                            {isMe && (
+                              <span className="text-[10px] font-semibold text-[#f15b5c] bg-[#f15b5c]/10 px-1.5 py-0.5 rounded-full">Bạn</span>
+                            )}
+                          </div>
+                          {s.filled && s.targetNote && (
+                            <p className="text-[11px] text-gray-400 mt-1 truncate">🎯 {s.targetNote}</p>
+                          )}
+                        </div>
+                        {s.filled ? (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                            Đã làm
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                            Chưa làm
+                          </span>
+                        )}
+                      </div>
+
+                      {s.filled && (
+                        <>
+                          {/* Progress */}
+                          <div className="mt-2.5">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[11px] font-semibold text-gray-400">Tiến độ công việc</span>
+                              <span className="text-[11px] font-bold text-gray-600">
+                                {s.tasksCompleted}/{s.tasksTotal} · {s.taskRate}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className={cn("h-full rounded-full transition-all", rateColor)} style={{ width: `${s.taskRate}%` }} />
+                            </div>
+                          </div>
+
+                          {s.teachingSetup > 0 && (
+                            <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                              <Dumbbell className="w-3.5 h-3.5 text-[#f15b5c]" />
+                              <span className="font-semibold text-gray-400">Buổi dạy:</span>
+                              <span className="font-bold text-gray-600">{s.teachingDone}/{s.teachingSetup} buổi</span>
+                            </div>
+                          )}
+
+                          {s.reflection ? (
+                            <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Tự luận cuối ngày</p>
+                              <p className="text-[12px] text-gray-600 whitespace-pre-wrap leading-relaxed">{s.reflection}</p>
+                            </div>
+                          ) : (
+                            <p className="mt-2.5 pt-2.5 border-t border-gray-100 text-[11px] text-gray-300 italic">Chưa viết tự luận cuối ngày</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
       )}
 
