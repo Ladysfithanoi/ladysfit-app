@@ -387,7 +387,7 @@ export function Step1Info({
             <textarea name="exerciseExperience" rows={2} defaultValue={(info?.exerciseExperience as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Field label="Chế độ ăn đang áp dụng">
-            <input name="currentDiet" defaultValue={(info?.currentDiet as string) ?? ""} disabled={fieldsDisabled} className={inputCls} />
+            <textarea name="currentDiet" rows={2} defaultValue={(info?.currentDiet as string) ?? ""} disabled={fieldsDisabled} className={textareaCls} />
           </Field>
           <Row half>
             <Field label="Số bữa ăn/ngày">
