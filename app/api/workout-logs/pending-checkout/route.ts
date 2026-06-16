@@ -2,20 +2,31 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { MAX_SESSION_MINUTES, voidOverCapSessions } from "@/lib/workout-session";
 
 // GET /api/workout-logs/pending-checkout
 // Sessions that were checked in (client signed in → package deducted) but have
 // run more than 90 minutes WITHOUT a check-out signature — i.e. the PT hasn't
 // confirmed teaching them yet, so they won't count toward the PT's salary.
 // Surfaced on-demand to the PT who teaches the client and the FM of the branch.
+//
+// Window is [90', 2h cap]: once a session passes the 2-hour cap it's considered
+// abandoned and auto-voided (it can no longer be legitimately checked out), so it
+// drops off this list instead of lingering for hundreds of hours.
 const OVERDUE_MINUTES = 90;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Self-heal: clear out sessions that ran past the 2-hour cap so they neither
+  // show here nor keep counting. This endpoint is polled by every open dashboard,
+  // so over-cap sessions get cleaned up promptly even between cron runs.
+  await voidOverCapSessions();
+
   const role = session.user.role;
-  const threshold = new Date(Date.now() - OVERDUE_MINUTES * 60_000);
+  const overdue = new Date(Date.now() - OVERDUE_MINUTES * 60_000);
+  const capThreshold = new Date(Date.now() - MAX_SESSION_MINUTES * 60_000);
 
   // Show which branch the client belongs to on Admin/CEO/FM dashboards so they
   // can tell clients apart. COO/PT don't need this extra column.
@@ -37,7 +48,9 @@ export async function GET() {
   const logs = await prisma.workoutLog.findMany({
     where: {
       status: "IN_PROGRESS",
-      checkInAt: { lt: threshold },
+      // Checked in 90'+ ago but still within the 2-hour cap (older ones were just
+      // voided above), so they're actionable nudges, not abandoned sessions.
+      checkInAt: { lt: overdue, gte: capThreshold },
       client: clientFilter,
     },
     select: {

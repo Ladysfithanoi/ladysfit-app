@@ -9,6 +9,32 @@ export type PackageUpdate = {
   status: string;
 };
 
+// Hard cap on a single session's length. A session checked in but never checked
+// out within this window is considered abandoned: the PT can no longer get a
+// legitimate check-out signature, so it must NOT count toward the PT's salary.
+export const MAX_SESSION_MINUTES = 120;
+
+// Reason stamped on auto-voided over-cap sessions.
+export const OVER_CAP_VOID_REASON =
+  "Quá 2 tiếng chưa ký check-out — tự động huỷ buổi (không hoàn buổi cho khách)";
+
+// Void every IN_PROGRESS session that has run past the 2-hour cap without a
+// check-out. Voiding (not deleting) means:
+//   • the buổi dạy does NOT count for the PT's salary (only COMPLETED counts);
+//   • the package buổi is NOT refunded — the client already signed the check-in,
+//     so the deduction stands (we deliberately do not call reversePackageSession);
+//   • the record + check-in signature are kept for the history.
+// Returns how many sessions were voided. Safe to call repeatedly (already-voided
+// rows no longer match the filter).
+export async function voidOverCapSessions(): Promise<number> {
+  const threshold = new Date(Date.now() - MAX_SESSION_MINUTES * 60_000);
+  const { count } = await prisma.workoutLog.updateMany({
+    where: { status: "IN_PROGRESS", checkInAt: { lt: threshold } },
+    data: { status: "VOID", voidReason: OVER_CAP_VOID_REASON },
+  });
+  return count;
+}
+
 // Deduct one session from the client's active package (buổi tập của khách).
 // Called at CHECK-IN — the client's check-in signature is the proof they showed
 // up, so the package advances even if the PT never completes the check-out.

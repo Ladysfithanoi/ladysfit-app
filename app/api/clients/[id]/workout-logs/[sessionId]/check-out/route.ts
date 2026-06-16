@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { countPackageSession, notifyNextSession, serializeWorkoutLog } from "@/lib/workout-session";
+import {
+  countPackageSession,
+  notifyNextSession,
+  serializeWorkoutLog,
+  MAX_SESSION_MINUTES,
+  OVER_CAP_VOID_REASON,
+} from "@/lib/workout-session";
 
 type SetLogInput = {
   id: string;
@@ -101,11 +107,19 @@ export async function POST(
     const minMinutes = config?.minSessionMinutes ?? 30;
     const elapsedMin = (now.getTime() - log.checkInAt.getTime()) / 60000;
 
-    // NOTE: there is intentionally no maximum-duration cap here. The package was
-    // already deducted at check-in (client signed in), so a session must NOT be
-    // auto-deleted for running long — that would erase the client's check-in
-    // signature and the deduction. A late check-out still counts the PT's
-    // teaching session; the "chưa ký check-out quá 90'" alert nudges the PT.
+    // ── Rule: maximum duration (2-hour cap) ──
+    // Past the cap the session is abandoned: the PT can no longer get a
+    // legitimate check-out signature, so it must NOT count toward their salary.
+    // Void it (keep the record + check-in signature). The package buổi is NOT
+    // refunded — the client already signed the check-in, so the deduction stands.
+    if (elapsedMin >= MAX_SESSION_MINUTES) {
+      const voided = await prisma.workoutLog.update({
+        where: { id: logId },
+        data: { status: "VOID", voidReason: OVER_CAP_VOID_REASON },
+        include: INCLUDE,
+      });
+      return NextResponse.json({ ...serializeWorkoutLog(voided), valid: false, autoCancelled: true });
+    }
 
     if (!earlyEndApproved && elapsedMin < minMinutes) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {

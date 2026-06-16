@@ -633,17 +633,12 @@ export function LiveSessionPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        // Over the 2-hour cap: the server already auto-cancelled & removed this log.
-        // Drop it from state so the session reverts to the Check-in button.
-        if (data.autoCancelled && data.deletedId) {
-          setShowSig(false);
-          onDeleted(data.deletedId as string);
-          return;
-        }
         throw new Error(data.error ?? "Có lỗi xảy ra");
       }
       setShowSig(false);
       if (!data.valid) {
+        // Includes the over-cap case (data.autoCancelled): the server voided the
+        // session instead of completing it — it won't count for the PT's salary.
         onVoided(data as WorkoutLogRow);
       } else if (data.awaitingConfirmation) {
         // Session now waits for the client to confirm on their own app.
