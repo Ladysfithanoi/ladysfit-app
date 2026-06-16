@@ -362,6 +362,12 @@ export function WeeklyReportTab({
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-3 md:p-6 space-y-4 md:space-y-6">
+            {/* Personal report header (title + vị trí/cơ sở/tuần) — this is the
+                viewer's OWN work report, so only show it to staff who actually
+                fill one. CEO/COO (and Admin browsing another branch) don't have
+                a report here; they only see the staff view tables below. */}
+            {canFill && (
+            <>
             {/* Report header */}
             <div className="text-center space-y-1">
               <h2 className="text-base font-extrabold text-gray-900 uppercase tracking-wide">
@@ -384,6 +390,8 @@ export function WeeklyReportTab({
                 <span className="font-semibold text-gray-700 text-right">Tuần {selectedWeek}{dateRange && ` (${dateRange})`}</span>
               </div>
             </div>
+            </>
+            )}
 
             {/* ── PHẦN I: SỐ LIỆU TỰ ĐỘNG ─────────────────────────────── */}
 
