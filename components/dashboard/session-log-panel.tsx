@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 
@@ -447,6 +447,31 @@ export function LiveSessionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [log.status, clientId, log.sessionId, log.id]);
 
+  // Past the 2-hour cap the session can no longer be checked out. Void it on the
+  // server (the check-out route voids — not completes — anything over the cap) and
+  // close the panel so the PT can't sign it. No refund: the buổi was already
+  // deducted at check-in, so the client is still charged. Fires once; the server
+  // sweep + cron are the fallback if this device misses it.
+  const autoVoidFired = useRef(false);
+  useEffect(() => {
+    if (!overMax || autoVoidFired.current || log.status !== "IN_PROGRESS") return;
+    autoVoidFired.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ method: "signature", signatureUrl: "" }),
+        });
+        const data = await res.json();
+        if (res.ok && data.autoCancelled) onVoided(data as WorkoutLogRow);
+      } catch {
+        // ignore — pending-checkout poll / cron will void it server-side
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overMax]);
+
   // Build "Lần trước" + suggestion lookups from the previous week's completed log.
   const prevSuggestions = new Map<string, Suggestion>();
   const prevRefs = new Map<string, string>();
@@ -801,6 +826,24 @@ export function LiveSessionPanel({
             onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
           />
         )}
+      </div>
+    );
+  }
+
+  // Over the 2-hour cap: the check-out is gone — the PT can no longer sign. Show a
+  // short notice instead of the form/button (the auto-void effect closes the panel
+  // shortly after). The buổi is still counted for the client (deducted at check-in).
+  if (overMax) {
+    return (
+      <div className="mt-3 border border-amber-200 rounded-xl overflow-hidden bg-amber-50">
+        <div className="flex items-start gap-2 px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            <span className="font-bold">Buổi tập đã quá 2 tiếng — tự động kết thúc.</span>{" "}
+            Khách vẫn được tính buổi (đã trừ lộ trình khi check-in), nhưng buổi này
+            <span className="font-semibold"> không tính buổi dạy cho PT</span> do chưa ký check-out kịp.
+          </p>
+        </div>
       </div>
     );
   }
