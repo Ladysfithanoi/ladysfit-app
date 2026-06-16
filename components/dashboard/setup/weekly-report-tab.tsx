@@ -833,7 +833,14 @@ export function WeeklyReportTab({
                     userReports.map((ur) => {
                       const open = openReportUserId === ur.userId;
                       const tasks = parseArising(ur.arisingTasks);
-                      const isEmpty = tasks.length === 0 && !ur.incompleteWork && !ur.solutions;
+                      // Full weekly report = the staff's KPI numbers + Phần II/III.
+                      const puKpi = perUserKpi.find((p) => p.userId === ur.userId);
+                      const kpiRowsForUser = (puKpi?.kpi ?? []).filter(
+                        (row) => isFitpartner || !isFitpartnerLabel(row.label)
+                      );
+                      const isEmpty =
+                        tasks.length === 0 && !ur.incompleteWork && !ur.solutions &&
+                        kpiRowsForUser.length === 0;
                       return (
                         <div key={ur.userId}>
                           <button
@@ -856,6 +863,39 @@ export function WeeklyReportTab({
                           </button>
                           {open && !isEmpty && (
                             <div className="px-4 pb-4 space-y-3">
+                              {kpiRowsForUser.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Số liệu KPI</p>
+                                  <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                    <table className="w-full border-collapse border border-gray-300 text-xs">
+                                      <thead>
+                                        <tr style={{ backgroundColor: "#6b7280" }}>
+                                          <th className={cn(thStyle, "sticky left-0 z-10 bg-[#6b7280]")}>Chỉ số</th>
+                                          <th className={cn(thStyle, "text-center w-24")}>MT tuần</th>
+                                          <th className={cn(thStyle, "text-center w-24")}>Thực đạt</th>
+                                          <th className={cn(thStyle, "text-center w-16")}>%</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {kpiRowsForUser.map((row) => (
+                                          <tr key={row.label} className="even:bg-gray-50/50">
+                                            <td className={cn(tdStyle, "font-semibold text-gray-700 sticky left-0 z-10 bg-white")}>{row.label}</td>
+                                            <td className={cn(tdStyle, "text-center text-gray-500")}>
+                                              {row.isFloat ? row.weekTarget.toFixed(1) : Math.round(row.weekTarget)}
+                                            </td>
+                                            <td className={cn(tdStyle, "text-center font-bold text-gray-800")}>
+                                              {row.isFloat ? row.weekActual.toFixed(1) : row.weekActual}
+                                            </td>
+                                            <td className={cn(tdStyle, "text-center")}>
+                                              <span className={pctColor(row.pct)}>{row.pct}%</span>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
                               {tasks.length > 0 && (
                                 <div>
                                   <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Công việc phát sinh</p>
