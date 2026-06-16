@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
 
 function computeWeekBounds(year: number, month: number) {
   const d = new Date(year, month - 1, 1);
@@ -105,10 +106,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // PT can only see their own row; others see all rows in the branch
+  // PT can only see their own row; others see all rows in the branch.
+  // CEO_FITPARTNER/COO are management, not gym staff — never list them as a row.
   const targetsWhere = isPT
     ? { branchId, month, year, userId: session.user.id, user: { deletedAt: null } }
-    : { branchId, month, year, user: { deletedAt: null } };
+    : { branchId, month, year, user: { deletedAt: null, role: { notIn: ["CEO_FITPARTNER", "COO"] as Role[] } } };
 
   // Reports are now per-user: each staff member owns their own notes for the week.
   const [targets, report] = await Promise.all([

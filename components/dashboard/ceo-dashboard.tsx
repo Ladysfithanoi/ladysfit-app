@@ -58,7 +58,13 @@ export function CEODashboard({ month, year }: { month: number; year: number }) {
         fetch("/api/staff").then((r) => r.json()),
       ]);
       setSummary(Array.isArray(s) ? s : []);
-      setStaff(Array.isArray(st) ? st : []);
+      // CEO_FITPARTNER/COO are top management, not gym staff — keep them out of
+      // the branch staff list (they have no branch and shouldn't be listed here).
+      setStaff(
+        Array.isArray(st)
+          ? (st as StaffMember[]).filter((m) => m.role !== "CEO_FITPARTNER" && m.role !== "COO")
+          : []
+      );
       setLoading(false);
     }
     load();

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
+import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
       prisma.branch.findMany({ orderBy: { name: "asc" } })
         .catch((e) => { console.error("branches query failed:", e); return []; }),
       prisma.user.findMany({
-        where: { deletedAt: null },
+        // CEO_FITPARTNER/COO are top management, not gym staff — exclude them so
+        // they never show up as a "Nhân sự phụ trách" (assigned/substitute PT).
+        where: { deletedAt: null, role: { notIn: ["CEO_FITPARTNER", "COO"] as Role[] } },
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }).catch((e) => { console.error("staff query failed:", e); return []; }),

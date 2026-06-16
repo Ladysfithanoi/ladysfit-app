@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enrichTargetsWithDynamicActuals } from "@/lib/compute-actuals";
+import type { Role } from "@prisma/client";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -29,7 +30,8 @@ export async function GET(req: Request) {
   }
 
   const targets = await prisma.monthlyTarget.findMany({
-    where: { branchId, month, year, user: { deletedAt: null } },
+    // CEO_FITPARTNER/COO are management, not gym staff — never list them as a row.
+    where: { branchId, month, year, user: { deletedAt: null, role: { notIn: ["CEO_FITPARTNER", "COO"] as Role[] } } },
     include: {
       user: { select: { id: true, name: true, email: true } },
       weeklyActuals: { orderBy: { weekNumber: "asc" } },
