@@ -9,6 +9,7 @@ type PendingItem = {
   clientId: string;
   clientName: string;
   ptName: string | null;
+  branchName: string | null;
   sessionName: string;
   checkInAt: string | null;
 };
@@ -87,6 +88,7 @@ export function PendingCheckoutBanner() {
               >
                 {it.clientName}
               </Link>
+              {it.branchName ? <span className="text-amber-700"> · {it.branchName}</span> : null}
               {it.ptName ? <span className="text-amber-600"> · {it.ptName}</span> : null}
               <span className="text-amber-500"> · {sinceLabel(it.checkInAt)}</span>
             </li>

@@ -17,6 +17,10 @@ export async function GET() {
   const role = session.user.role;
   const threshold = new Date(Date.now() - OVERDUE_MINUTES * 60_000);
 
+  // Show which branch the client belongs to on Admin/CEO/FM dashboards so they
+  // can tell clients apart. COO/PT don't need this extra column.
+  const showBranch = role === "ADMIN" || role === "CEO_FITPARTNER" || role === "FM";
+
   // Scope: PT sees their own assigned clients; FM sees their managed branches;
   // ADMIN/COO/CEO_FITPARTNER see everything.
   let clientFilter: Record<string, unknown>;
@@ -39,7 +43,14 @@ export async function GET() {
     select: {
       id: true,
       checkInAt: true,
-      client: { select: { id: true, fullName: true, assignedPT: { select: { name: true } } } },
+      client: {
+        select: {
+          id: true,
+          fullName: true,
+          assignedPT: { select: { name: true } },
+          branch: { select: { name: true } },
+        },
+      },
       session: { select: { sessionName: true } },
     },
     orderBy: { checkInAt: "asc" },
@@ -51,6 +62,7 @@ export async function GET() {
       clientId: l.client.id,
       clientName: l.client.fullName,
       ptName: l.client.assignedPT?.name ?? null,
+      branchName: showBranch ? l.client.branch?.name ?? null : null,
       sessionName: l.session?.sessionName ?? "",
       checkInAt: l.checkInAt?.toISOString() ?? null,
     }))
