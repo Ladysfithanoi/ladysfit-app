@@ -18,6 +18,7 @@ type Props = {
   userName: string;
   isReadOnly: boolean;
   ptBranchId: string | null;
+  userBranchId: string | null;
   managedBranchIds: string[];
 };
 
@@ -35,7 +36,7 @@ type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "stats" | "quart
 
 const now = new Date();
 
-export function SetupPage({ branches, currentUserId, currentUserRole, userName, isReadOnly, ptBranchId }: Props) {
+export function SetupPage({ branches, currentUserId, currentUserRole, userName, isReadOnly, ptBranchId, userBranchId }: Props) {
   const [tab, setTab] = useState<TabKey>("leads");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -209,6 +210,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           currentUserId={currentUserId}
           userName={userName}
           isReadOnly={isReadOnly}
+          userBranchId={userBranchId}
         />
       )}
       {tab === "report" && (

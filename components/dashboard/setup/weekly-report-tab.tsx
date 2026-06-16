@@ -43,6 +43,7 @@ type ReportData = {
 type UserReport = {
   userId: string;
   userName: string;
+  role: string;
   arisingTasks: string | null;
   incompleteWork: string | null;
   solutions: string | null;
@@ -57,6 +58,7 @@ type Props = {
   currentUserId: string;
   userName: string;
   isReadOnly: boolean;
+  userBranchId: string | null;
 };
 
 function getRoleDisplay(role: string): string {
@@ -102,13 +104,20 @@ function pctColor(pct: number): string {
 const isFitpartnerLabel = (label: string) => label.toLowerCase().includes("fitpartner");
 
 export function WeeklyReportTab({
-  branchId, branchName, month, year, currentUserRole, currentUserId, userName, isReadOnly,
+  branchId, branchName, month, year, currentUserRole, currentUserId, userName, isReadOnly, userBranchId,
 }: Props) {
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
-  // All active staff can fill in Part II/III of their branch report
-  const canEdit = !isReadOnly;
-  // Everyone can edit their own personal actuals
-  const canEditOwn = !isReadOnly;
+  // Who may FILL a weekly report (Phần I–III). PT/FM fill their own. CEO/COO are
+  // top management, not gym staff, so they only VIEW other staff's reports.
+  // Admin is the exception: they work fixed at one branch, so they can fill the
+  // report only for THEIR OWN branch (not other branches they're browsing).
+  const canFill =
+    currentUserRole === "PT" ||
+    currentUserRole === "FM" ||
+    (currentUserRole === "ADMIN" && !!userBranchId && branchId === userBranchId);
+  const canEdit = !isReadOnly && canFill;
+  // Everyone who can fill may edit their own personal actuals.
+  const canEditOwn = !isReadOnly && canFill;
 
   const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeek(month, year));
   const [weekBounds, setWeekBounds] = useState<WeekBound[]>([]);
@@ -378,8 +387,9 @@ export function WeeklyReportTab({
 
             {/* ── PHẦN I: SỐ LIỆU TỰ ĐỘNG ─────────────────────────────── */}
 
-            {/* Table 1a: My personal KPI (editable actuals) — visible to all roles */}
-            {myPerUserRow && (
+            {/* Table 1a: My personal KPI (editable actuals) — only for staff who
+                fill a report (PT/FM, or Admin at their own branch). */}
+            {canFill && myPerUserRow && (
               <div>
                 <div
                   className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
@@ -551,6 +561,10 @@ export function WeeklyReportTab({
               </div>
             )}
 
+            {/* Fill area (Phần II + III + nút lưu) — only staff who fill reports.
+                CEO/COO and Admin browsing another branch only see the view tables. */}
+            {canFill && (
+            <>
             {/* ── PHẦN II: CÔNG VIỆC PHÁT SINH (BẢNG ĐIỀN TAY) ─────────── */}
             <div>
               <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -790,20 +804,22 @@ export function WeeklyReportTab({
                 </button>
               </div>
             )}
+            </>
+            )}
 
-            {/* ── BÁO CÁO TUẦN CỦA PT (chỉ FM/quản lý xem được) ───────────── */}
+            {/* ── BÁO CÁO TUẦN CỦA NHÂN SỰ (PT + FM của cơ sở — quản lý xem được) ── */}
             {canViewPtReports && (
               <div className="pt-2">
                 <div
                   className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
                   style={{ backgroundColor: "#6b7280" }}
                 >
-                  BÁO CÁO TUẦN CỦA PT
+                  BÁO CÁO TUẦN CỦA NHÂN SỰ
                 </div>
                 <div className="border border-gray-200 border-t-0 rounded-b-lg divide-y divide-gray-100">
                   {userReports.length === 0 ? (
                     <p className="px-4 py-6 text-center text-xs text-gray-300 italic">
-                      Chưa có PT nào nộp báo cáo tuần này
+                      Chưa có nhân sự nào nộp báo cáo tuần này
                     </p>
                   ) : (
                     userReports.map((ur) => {
@@ -817,7 +833,15 @@ export function WeeklyReportTab({
                             onClick={() => setOpenReportUserId(open ? null : ur.userId)}
                             className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
                           >
-                            <span className="text-sm font-bold text-gray-700">{ur.userName}</span>
+                            <span className="text-sm font-bold text-gray-700">
+                              <span className={cn(
+                                "mr-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold align-middle",
+                                ur.role === "FM" ? "bg-indigo-100 text-indigo-700" : "bg-blue-100 text-blue-700"
+                              )}>
+                                {getRoleDisplay(ur.role)}
+                              </span>
+                              {ur.userName}
+                            </span>
                             <span className="text-[11px] text-gray-400">
                               {isEmpty ? "Chưa có nội dung" : open ? "Thu gọn ▲" : "Xem chi tiết ▼"}
                             </span>

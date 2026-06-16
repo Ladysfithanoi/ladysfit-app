@@ -23,15 +23,14 @@ export default async function Setup() {
     ? branches.filter((b) => managedBranchIds.includes(b.id))
     : branches;
 
-  // Get PT's branch for PT role
-  let ptBranchId: string | null = null;
-  if (isPT) {
-    const ptUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { branchId: true },
-    });
-    ptBranchId = ptUser?.branchId ?? null;
-  }
+  // The current user's home branch. Defaults the PT's branch, and lets an Admin
+  // fill their OWN branch's weekly report (Admin works fixed at one branch).
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { branchId: true },
+  });
+  const userBranchId = me?.branchId ?? null;
+  const ptBranchId = isPT ? userBranchId : null;
 
   // Read-only: no role in this app needs full read-only mode on the setup screen.
   // CEO/COO can edit arising tasks; ADMIN/FM/PT can all edit their own data.
@@ -45,6 +44,7 @@ export default async function Setup() {
       userName={session.user.name ?? session.user.email ?? "FM"}
       isReadOnly={isReadOnly}
       ptBranchId={ptBranchId}
+      userBranchId={userBranchId}
       managedBranchIds={managedBranchIds}
     />
   );

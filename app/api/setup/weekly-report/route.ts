@@ -130,28 +130,40 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // FM/CEO/COO/ADMIN can additionally read the PT reports of the branch they manage
+  // FM/CEO/COO/ADMIN can additionally read the other staff reports of the branch
   // (the managedBranchIds guard above already limits FM to their own branches).
-  // PT only ever receive their own report above, so they never see an FM's report.
+  // Includes PT and FM reports so Admin/CEO/COO can read each branch FM's report,
+  // not just the PTs'. The viewer's own report is shown in the editable area above,
+  // so it's excluded here. PT only ever receive their own report, never others'.
   const canViewOthers = role === "FM" || role === "CEO_FITPARTNER" || role === "COO" || isAdmin;
   let userReports: {
-    userId: string; userName: string;
+    userId: string; userName: string; role: string;
     arisingTasks: string | null; incompleteWork: string | null; solutions: string | null;
   }[] = [];
   if (canViewOthers) {
     const rows = await prisma.weeklyReport.findMany({
-      where: { branchId, month, year, weekNumber, user: { role: "PT", deletedAt: null } },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      where: {
+        branchId, month, year, weekNumber,
+        userId: { not: session.user.id },
+        user: { role: { in: ["PT", "FM"] as Role[] }, deletedAt: null },
+      },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
     });
     userReports = rows
       .map((r) => ({
         userId: r.userId,
         userName: r.user.name ?? r.user.email,
+        role: r.user.role,
         arisingTasks: r.arisingTasks,
         incompleteWork: r.incompleteWork,
         solutions: r.solutions,
       }))
-      .sort((a, b) => a.userName.localeCompare(b.userName, "vi"));
+      // FM first, then PT; alphabetically within each role.
+      .sort((a, b) =>
+        a.role === b.role
+          ? a.userName.localeCompare(b.userName, "vi")
+          : a.role === "FM" ? -1 : 1
+      );
   }
 
   const weekBounds = computeWeekBounds(year, month);
