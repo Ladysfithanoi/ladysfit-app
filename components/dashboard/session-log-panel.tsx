@@ -224,9 +224,10 @@ function buildPrevWeekPrefill(
     let load = prevLoad;
     let reps: string;
     if (suggestion?.type === "increase_weight") {
-      // Tăng tạ: cộng 2.5 vào mức tạ (nếu là số), giữ reps khách đã làm tuần trước.
+      // Tăng tạ: cộng 2.5 vào mức tạ (nếu là số) và đưa reps về mốc mục tiêu
+      // thấp nhất của giai đoạn (vd GĐ1 = 15, GĐ2 = 12, GĐ3 = 10).
       load = bumpLoad(prevLoad);
-      reps = prevWeekReps(sl) ?? (avg != null ? String(Math.round(avg)) : "");
+      reps = range ? String(range.min) : (prevWeekReps(sl) ?? "");
     } else if (suggestion?.type === "keep_reps") {
       // Giữ nguyên reps: điền đúng số reps đồng đều của tuần trước, tạ giữ nguyên.
       reps = suggestion.reps;
