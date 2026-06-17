@@ -35,6 +35,7 @@ function isCardioSession(sessionName: string): boolean {
 
 type Suggestion =
   | { type: "increase_weight"; avgReps: number }
+  | { type: "keep_reps"; reps: string }
   | { type: "increase_reps"; targetReps: number; avgReps: number }
   | null;
 
@@ -47,18 +48,56 @@ function avgRepsFromSetLog(sl: SetLogRow): number | null {
   return reps.reduce((a, b) => a + b, 0) / reps.length;
 }
 
+// Phân tích độ đồng đều của tạ/reps giữa các set đã nhập. Dùng để phát hiện
+// tình huống "mức tạ các set khác nhau nhưng reps giống hệt nhau" → giữ nguyên reps.
+function analyzeSets(sl: SetLogRow): {
+  loadsVary: boolean;
+  repsUniform: boolean;
+  repsValue: string | null;
+} {
+  const loads = [sl.set1Load, sl.set2Load, sl.set3Load, sl.set4Load, sl.set5Load, sl.set6Load]
+    .filter((l): l is string => l != null && l.trim() !== "")
+    .map((l) => l.trim());
+  const reps = [sl.set1Reps, sl.set2Reps, sl.set3Reps, sl.set4Reps, sl.set5Reps, sl.set6Reps]
+    .filter((r): r is string => r != null && r.trim() !== "")
+    .map((r) => r.trim());
+  const loadsVary = new Set(loads).size > 1;
+  const repsUniform = reps.length > 0 && new Set(reps).size === 1;
+  return { loadsVary, repsUniform, repsValue: repsUniform ? reps[0] : null };
+}
+
 function calcSuggestion(avgReps: number, range: { min: number; max: number }): Suggestion {
   if (avgReps > range.max) return { type: "increase_weight", avgReps };
   if (avgReps >= range.min) return { type: "increase_reps", targetReps: range.max, avgReps };
   return { type: "increase_reps", targetReps: range.min, avgReps };
 }
 
-function getSuggestionFromSetLog(sl: SetLogRow, phase: string): Suggestion {
-  const range = getRepRange(phase);
+// Gợi ý tăng tiến cho một bài tập. Ưu tiên quy tắc: nếu mức tạ giữa các set
+// KHÔNG đồng đều mà reps lại GIỐNG HỆT nhau thì giữ nguyên reps (khách đang dò
+// mức tạ với cùng số reps). Ngược lại dùng reps trung bình so với khoảng reps
+// của giai đoạn.
+function getSuggestion(sl: SetLogRow, range: { min: number; max: number } | null): Suggestion {
   if (!range) return null;
+  const { loadsVary, repsUniform, repsValue } = analyzeSets(sl);
+  if (loadsVary && repsUniform && repsValue != null) {
+    return { type: "keep_reps", reps: repsValue };
+  }
   const avg = avgRepsFromSetLog(sl);
   if (avg == null) return null;
   return calcSuggestion(avg, range);
+}
+
+function getSuggestionFromSetLog(sl: SetLogRow, phase: string): Suggestion {
+  return getSuggestion(sl, getRepRange(phase));
+}
+
+// Tăng mức tạ thêm 2.5 khi ô tạ là một con số (vd "10" → "12.5"); nếu là chữ
+// (vd "Mốc 1") thì giữ nguyên cụm chữ đó.
+function bumpLoad(load: string): string {
+  const t = load.trim();
+  if (t === "") return t;
+  const n = Number(t);
+  return isNaN(n) ? t : String(n + 2.5);
 }
 
 // Build "Lần trước" reference summary for a SetLogRow
@@ -90,6 +129,16 @@ function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
         className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 cursor-help whitespace-nowrap select-none"
       >
         💪 Nên tăng tạ
+      </span>
+    );
+  }
+  if (suggestion.type === "keep_reps") {
+    return (
+      <span
+        title={`Mức tạ các set khác nhau nhưng reps giống nhau (${suggestion.reps}) - giữ nguyên reps`}
+        className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 cursor-help whitespace-nowrap select-none"
+      >
+        ✅ Giữ nguyên {suggestion.reps} Reps
       </span>
     );
   }
@@ -162,32 +211,53 @@ function prevWeekReps(sl: SetLogRow): string | null {
 // trước (buổi Circuit/Cardio nhập reps kiểu chữ/thời lượng) — nhờ vậy Set 1 được
 // điền sẵn cho MỌI loại buổi.
 function buildPrevWeekPrefill(
-  prevWeekLogs: WorkoutLogRow[]
+  prevWeekLogs: WorkoutLogRow[],
+  range: { min: number; max: number } | null
 ): Map<string, { load: string; reps: string }> {
   const map = new Map<string, { load: string; reps: string }>();
   if (prevWeekLogs.length === 0) return map;
   for (const sl of prevWeekLogs[0].setLogs) {
-    const load = prevWeekLoad(sl) ?? "";
+    const prevLoad = prevWeekLoad(sl) ?? "";
     const avg = avgRepsFromSetLog(sl);
-    const reps = avg != null ? String(Math.round(avg)) : (prevWeekReps(sl) ?? "");
+    const suggestion = getSuggestion(sl, range);
+
+    let load = prevLoad;
+    let reps: string;
+    if (suggestion?.type === "increase_weight") {
+      // Tăng tạ: cộng 2.5 vào mức tạ (nếu là số), giữ reps khách đã làm tuần trước.
+      load = bumpLoad(prevLoad);
+      reps = prevWeekReps(sl) ?? (avg != null ? String(Math.round(avg)) : "");
+    } else if (suggestion?.type === "keep_reps") {
+      // Giữ nguyên reps: điền đúng số reps đồng đều của tuần trước, tạ giữ nguyên.
+      reps = suggestion.reps;
+    } else if (suggestion?.type === "increase_reps") {
+      // Tăng reps: điền đúng số reps mục tiêu được gợi ý, tạ giữ nguyên.
+      reps = String(suggestion.targetReps);
+    } else {
+      // Buổi cardio/không có khoảng reps → giữ cách điền cũ.
+      reps = avg != null ? String(Math.round(avg)) : (prevWeekReps(sl) ?? "");
+    }
+
     if (load !== "" || reps !== "") map.set(sl.movementName, { load, reps });
   }
   return map;
 }
 
 // Initial editable drafts for the live panel. From week 2 onward, Set 1 of every
-// exercise that appeared last week is pre-seeded with last week's weight + average
-// reps (still freely editable). Only fills an EMPTY Set 1 so we never clobber data
+// exercise that appeared last week is pre-seeded theo gợi ý tăng tiến từ tuần
+// trước: tăng tạ → +2.5 (giữ reps), giữ reps → đúng số reps, tăng reps → đúng số
+// reps mục tiêu (vẫn sửa được). Only fills an EMPTY Set 1 so we never clobber data
 // the PT already typed (e.g. when re-opening an in-progress session). Week 1 has no
 // previous week, so it stays blank.
 function buildInitialDrafts(
   setLogs: WorkoutLogRow["setLogs"],
   prevWeekLogs: WorkoutLogRow[],
-  weekNumber: number
+  weekNumber: number,
+  range: { min: number; max: number } | null
 ): EditSetLogDraft[] {
   const drafts = toSetLogDrafts(setLogs);
   if (weekNumber < 2) return drafts;
-  const prefill = buildPrevWeekPrefill(prevWeekLogs);
+  const prefill = buildPrevWeekPrefill(prevWeekLogs, range);
   if (prefill.size === 0) return drafts;
   return drafts.map((d) => {
     const first = d.sets[0];
@@ -365,7 +435,12 @@ export function LiveSessionPanel({
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
   const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
-    buildInitialDrafts(log.setLogs, prevWeekLogs, weekNumber)
+    buildInitialDrafts(
+      log.setLogs,
+      prevWeekLogs,
+      weekNumber,
+      isCardioSession(sessionName) ? null : getRepRange(phase)
+    )
   );
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -481,8 +556,8 @@ export function LiveSessionPanel({
       const ref = buildPrevRef(sl);
       if (ref) prevRefs.set(sl.movementName, ref);
       if (showSuggestions && repRange) {
-        const avg = avgRepsFromSetLog(sl);
-        if (avg != null) prevSuggestions.set(sl.movementName, calcSuggestion(avg, repRange));
+        const s = getSuggestion(sl, repRange);
+        if (s) prevSuggestions.set(sl.movementName, s);
       }
     }
   }
