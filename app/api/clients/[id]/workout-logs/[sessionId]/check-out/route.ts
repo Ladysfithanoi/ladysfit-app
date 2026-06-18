@@ -51,9 +51,14 @@ export async function POST(
       include: { session: { select: { sessionName: true } } },
     });
     if (!log) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
-    if (log.status !== "IN_PROGRESS") {
+    // Accept a still-running session (IN_PROGRESS) or a legacy orphan left in
+    // AWAITING_CONFIRMATION by the old "client confirms on their app" flow (since
+    // removed). For an orphan the PT already finished teaching, so this check-out
+    // signature is just the fallback confirmation that completes it.
+    if (log.status !== "IN_PROGRESS" && log.status !== "AWAITING_CONFIRMATION") {
       return NextResponse.json({ error: "Buổi tập này đã được kết thúc" }, { status: 400 });
     }
+    const isAwaiting = log.status === "AWAITING_CONFIRMATION";
     if (!log.checkInAt) {
       return NextResponse.json({ error: "Buổi tập thiếu thời điểm check-in" }, { status: 400 });
     }
@@ -96,7 +101,11 @@ export async function POST(
     // Client approved ending this session early (khách có việc, vẫn đồng ý tính
     // buổi). When so, skip the min-duration and 6-exercise gates — the PT can
     // still get the check-out signature and the teaching session counts.
+    // Skip the min-duration / 6-exercise gates when the client approved an early
+    // end, or when this is a legacy AWAITING orphan (session already finished —
+    // the gates only make sense while a session is genuinely in progress).
     const earlyEndApproved = log.earlyEndApprovedAt != null;
+    const skipGates = earlyEndApproved || isAwaiting;
 
     // Stamp the time of first data entry (metadata only — no longer voids the session).
     let firstInteractionAt = log.firstInteractionAt;
@@ -112,7 +121,7 @@ export async function POST(
     // legitimate check-out signature, so it must NOT count toward their salary.
     // Void it (keep the record + check-in signature). The package buổi is NOT
     // refunded — the client already signed the check-in, so the deduction stands.
-    if (elapsedMin >= MAX_SESSION_MINUTES) {
+    if (!isAwaiting && elapsedMin >= MAX_SESSION_MINUTES) {
       const voided = await prisma.workoutLog.update({
         where: { id: logId },
         data: { status: "VOID", voidReason: OVER_CAP_VOID_REASON },
@@ -121,7 +130,7 @@ export async function POST(
       return NextResponse.json({ ...serializeWorkoutLog(voided), valid: false, autoCancelled: true });
     }
 
-    if (!earlyEndApproved && elapsedMin < minMinutes) {
+    if (!skipGates && elapsedMin < minMinutes) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }
@@ -148,7 +157,7 @@ export async function POST(
       ).length;
       return n + (filledSets >= MIN_SETS_PER_EXERCISE ? 1 : 0);
     }, 0);
-    if (!earlyEndApproved && completeExercises < MIN_COMPLETE_EXERCISES) {
+    if (!skipGates && completeExercises < MIN_COMPLETE_EXERCISES) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
         await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
       }
