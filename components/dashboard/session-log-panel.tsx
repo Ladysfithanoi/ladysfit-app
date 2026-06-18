@@ -478,12 +478,13 @@ export function LiveSessionPanel({
   const repRange = isCardio ? null : getRepRange(phase);
   const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
 
-  // ── Rule: at least 6 exercises must each have weight (load) + reps filled for
+  // ── Rule: at least 5 exercises must each have weight (load) + reps filled for
   // 3 sets before the session can be signed/completed. Applies to EVERY session
-  // (cardio included) — every session here has ≥6 exercises, so fewer than 6
-  // complete means data wasn't entered. (Enforced again server-side.)
+  // (cardio included). The threshold is 5 (not 6) because some session types only
+  // have 5 movements (e.g. "Skinny Fat|Mông"), so requiring 6 made them
+  // impossible to sign off. (Enforced again server-side.)
   const MIN_SETS_PER_EXERCISE = 3;
-  const MIN_COMPLETE_EXERCISES = 6;
+  const MIN_COMPLETE_EXERCISES = 5;
   const completeExerciseCount = setLogs.filter(
     (sl) =>
       sl.sets.filter((s) => s.load.trim() !== "" && s.reps.trim() !== "").length >=

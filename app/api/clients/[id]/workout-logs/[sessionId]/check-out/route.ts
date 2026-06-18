@@ -140,12 +140,13 @@ export async function POST(
       );
     }
 
-    // ── Rule: at least 6 exercises must each have weight (load) + reps filled
+    // ── Rule: at least 5 exercises must each have weight (load) + reps filled
     // for 3 sets ── Data-quality gate so a thin/empty session can't be signed
-    // off. Applies to EVERY session (cardio included): every session has ≥6
-    // exercises, so fewer than 6 complete means the data wasn't entered.
+    // off. Applies to EVERY session (cardio included). Threshold is 5 (not 6)
+    // because some session types only have 5 movements (e.g. "Skinny Fat|Mông"),
+    // so requiring 6 made those sessions impossible to sign off.
     const MIN_SETS_PER_EXERCISE = 3;
-    const MIN_COMPLETE_EXERCISES = 6;
+    const MIN_COMPLETE_EXERCISES = 5;
     const completeExercises = setLogs.reduce((n, sl) => {
       const pairs: Array<[unknown, unknown]> = [
         [sl.set1Load, sl.set1Reps], [sl.set2Load, sl.set2Reps], [sl.set3Load, sl.set3Reps],
