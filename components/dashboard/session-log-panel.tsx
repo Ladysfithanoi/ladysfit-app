@@ -67,7 +67,7 @@ function analyzeSets(sl: SetLogRow): {
 }
 
 function calcSuggestion(avgReps: number, range: { min: number; max: number }): Suggestion {
-  if (avgReps > range.max) return { type: "increase_weight", avgReps };
+  if (avgReps >= range.max) return { type: "increase_weight", avgReps };
   if (avgReps >= range.min) return { type: "increase_reps", targetReps: range.max, avgReps };
   return { type: "increase_reps", targetReps: range.min, avgReps };
 }
@@ -125,7 +125,7 @@ function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
   if (suggestion.type === "increase_weight") {
     return (
       <span
-        title={`Trung bình ${suggestion.avgReps.toFixed(1)} reps/set - đã vượt ngưỡng tối đa, hãy tăng mức tạ`}
+        title={`Trung bình ${suggestion.avgReps.toFixed(1)} reps/set - đã đạt ngưỡng tối đa, hãy tăng mức tạ`}
         className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 cursor-help whitespace-nowrap select-none"
       >
         💪 Nên tăng tạ
