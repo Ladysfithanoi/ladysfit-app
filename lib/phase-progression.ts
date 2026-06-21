@@ -36,6 +36,7 @@ type ProgRow = {
   phaseId: string | null;
   status: string;
   sessionsPerWeek: number;
+  manualPhaseOverride: boolean;
   createdById: string;
   createdAt: Date;
 };
@@ -62,6 +63,7 @@ async function runProgression(clientId: string): Promise<void> {
       phaseId: true,
       status: true,
       sessionsPerWeek: true,
+      manualPhaseOverride: true,
       createdById: true,
       createdAt: true,
     },
@@ -122,6 +124,15 @@ async function runProgression(clientId: string): Promise<void> {
   if (currentOrder < lowestExistingOrder && completedLogs.length > 0) {
     currentOrder = lowestExistingOrder;
   }
+
+  // Tôn trọng đổi giai đoạn THỦ CÔNG của PT: lấy giai đoạn PT đã chọn làm "sàn"
+  // — engine không kéo khách xuống dưới mức đó (vẫn cho tự tiến lên khi đủ 8 tuần).
+  const manualOrders = programs
+    .filter((p) => p.manualPhaseOverride)
+    .map((p) => phaseOrderOf(p.phase))
+    .filter((o) => o >= 1);
+  const manualFloor = manualOrders.length > 0 ? Math.max(...manualOrders) : 0;
+  if (manualFloor > currentOrder) currentOrder = manualFloor;
 
   // Đảm bảo có chương trình cho giai đoạn hiện tại; nếu chưa có thì tạo từ mẫu.
   if (!byOrder.get(currentOrder)) {
@@ -236,6 +247,7 @@ async function createPhaseProgram(
     phaseId: program.phaseId,
     status: program.status,
     sessionsPerWeek: program.sessionsPerWeek,
+    manualPhaseOverride: program.manualPhaseOverride,
     createdById: program.createdById,
     createdAt: program.createdAt,
   };

@@ -55,6 +55,7 @@ export type WorkoutProgram = {
   currentWeek: number;
   notes: string | null;
   status: "ACTIVE" | "ARCHIVED" | "LOCKED";
+  manualPhaseOverride?: boolean;
   createdAt: string;
   createdBy: { id: string; name: string | null; email: string };
   packageEnrollment: { id: string; packageName: string } | null;
@@ -554,11 +555,28 @@ function ProgramView({
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       const updatedWeek: WorkoutWeek = await res.json();
 
+      // Nếu PT đổi giai đoạn trong giáo án → lưu giai đoạn vào CT + đánh dấu
+      // override để engine tự động tôn trọng (không tự kéo về).
+      const phaseChanged = editPhaseId !== (program.phaseId ?? "");
+      if (phaseChanged && editSelectedPhase) {
+        await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phase: editSelectedPhase.name,
+            phaseId: editSelectedPhase.id,
+            workoutType: editSelectedPhase.templateKey || null,
+            manualPhaseOverride: true,
+          }),
+        });
+      }
+
       onUpdate({
         id: program.id,
         phase: editSelectedPhase?.name ?? program.phase,
         phaseId: editSelectedPhase?.id ?? program.phaseId,
         workoutType: editSelectedPhase?.templateKey ?? program.workoutType,
+        ...(phaseChanged ? { manualPhaseOverride: true } : {}),
         weeks: program.weeks.map((w) => (w.id === updatedWeek.id ? updatedWeek : w)),
       });
       clearWorkoutDraft();
@@ -650,6 +668,8 @@ function ProgramView({
     setProgError("");
     try {
       const selectedPhase = phases.find((p) => p.id === progForm.phaseId);
+      // PT đổi giai đoạn thủ công → đánh dấu override để engine tôn trọng.
+      const phaseChanged = progForm.phaseId !== (program.phaseId ?? "");
       const body = {
         phase: selectedPhase?.name ?? program.phase,
         phaseId: progForm.phaseId || null,
@@ -657,6 +677,7 @@ function ProgramView({
         currentWeek: progForm.currentWeek,
         workoutType: progForm.workoutType || null,
         notes: progForm.notes || null,
+        ...(phaseChanged ? { manualPhaseOverride: true } : {}),
       };
       const res = await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
         method: "PATCH",
@@ -918,11 +939,54 @@ function ProgramView({
             <div className="px-5 pb-5 pt-3">
               {/* ── Edit mode controls ── */}
               {editMode && (
-                <div className="mb-4">
-                  <p className="text-xs font-bold text-[#f15b5c]">Đang chỉnh sửa Tuần {currentWeekData.weekNumber}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    Giai đoạn do hệ thống quản lý tự động — chỉ chỉnh loại buổi và bài tập.
-                  </p>
+                <div className="mb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#f15b5c]">Đang chỉnh sửa Tuần {currentWeekData.weekNumber}</p>
+                    <button
+                      onClick={() => setShowPhaseChange((v) => !v)}
+                      className="text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors flex items-center gap-1"
+                    >
+                      Đổi giai đoạn / loại tập
+                      {showPhaseChange ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                  </div>
+
+                  {showPhaseChange && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                      <p className="text-xs font-bold text-amber-700">
+                        ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này. Đây là thao tác thủ công — hệ thống sẽ tôn trọng giai đoạn bạn chọn (không tự kéo về).
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1 col-span-2">
+                          <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
+                          <select
+                            value={editPhaseId}
+                            onChange={(e) => handleEditPhaseChange(e.target.value)}
+                            className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                          >
+                            {phases.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={applyPhaseChange}
+                          className="h-8 px-4 rounded-lg text-xs font-bold text-white"
+                          style={{ backgroundColor: "#f15b5c" }}
+                        >
+                          Áp dụng & Reset bài tập
+                        </button>
+                        <button
+                          onClick={() => setShowPhaseChange(false)}
+                          className="h-8 px-3 rounded-lg border border-gray-200 text-xs text-gray-500 hover:bg-gray-50"
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1206,9 +1270,23 @@ function ProgramView({
             </div>
 
             <div className="px-5 py-4 space-y-4">
-              <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                Giai đoạn ({program.phase}) do hệ thống quản lý tự động và không chỉnh tại đây.
-              </p>
+              {/* Phase (đổi thủ công — hệ thống sẽ tôn trọng lựa chọn này) */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
+                <select
+                  value={progForm.phaseId}
+                  onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                >
+                  <option value="">— Chọn giai đoạn —</option>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400">
+                  Đổi thủ công sẽ ghi đè tiến trình tự động — hệ thống không tự kéo khách về giai đoạn thấp hơn nữa.
+                </p>
+              </div>
 
               {/* Sessions per week + Current week */}
               <div className="grid grid-cols-2 gap-3">

@@ -497,6 +497,7 @@ model WorkoutProgram {
   currentWeek         Int                  @default(1)
   notes               String?              @db.Text
   status              WorkoutProgramStatus @default(ACTIVE)
+  manualPhaseOverride Boolean              @default(false)
   createdById         String
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt

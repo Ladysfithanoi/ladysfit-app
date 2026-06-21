@@ -54,6 +54,7 @@ export async function PATCH(
     sessionsPerWeek?: number;
     currentWeek?: number;
     workoutType?: string | null;
+    manualPhaseOverride?: boolean;
   };
 
   // Update program metadata fields
@@ -67,6 +68,8 @@ export async function PATCH(
       ...(body.sessionsPerWeek !== undefined ? { sessionsPerWeek: body.sessionsPerWeek } : {}),
       ...(body.currentWeek !== undefined ? { currentWeek: body.currentWeek } : {}),
       ...(body.workoutType !== undefined ? { workoutType: body.workoutType } : {}),
+      // PT đổi giai đoạn thủ công → đánh dấu để engine tự động tôn trọng lựa chọn.
+      ...(body.manualPhaseOverride !== undefined ? { manualPhaseOverride: body.manualPhaseOverride } : {}),
     },
   });
 

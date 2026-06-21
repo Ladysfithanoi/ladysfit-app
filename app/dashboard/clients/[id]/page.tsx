@@ -207,6 +207,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     currentWeek: p.currentWeek,
     notes: p.notes,
     status: p.status as "ACTIVE" | "ARCHIVED" | "LOCKED",
+    manualPhaseOverride: p.manualPhaseOverride,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     createdBy: p.createdBy,
