@@ -107,6 +107,12 @@ function fmtDate(iso: string): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
+/** Thứ tự giai đoạn từ tên ("Giai đoạn 2: ..." → 2). 0 nếu không nhận diện được. */
+function parsePhaseOrder(name: string): number {
+  const m = name.match(/Giai\s*đo[aạ]n\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 // ── Style constants ────────────────────────────────────────────────────────
 
 const inputCls =
@@ -367,6 +373,14 @@ function ProgramView({
   const isLocked = program.status === "LOCKED";
   // Mọi chương trình không phải ACTIVE đều chỉ-xem (đã qua hoặc bị khoá).
   const isReadOnly = program.status !== "ACTIVE";
+
+  // Chỉ Admin được đổi giai đoạn tự do (kể cả về giai đoạn trước). PT/FM chỉ thấy
+  // giai đoạn hiện tại trở lên — không chuyển khách về giai đoạn trước đó.
+  const isAdmin = userRole === "ADMIN";
+  const currentPhaseOrder = parsePhaseOrder(program.phase);
+  const selectablePhases = isAdmin
+    ? phases
+    : phases.filter((p) => parsePhaseOrder(p.name) >= currentPhaseOrder);
 
   // Đánh số buổi liên tục qua các tuần: buổi đầu của một tuần nối tiếp số buổi
   // cuối của tuần trước (Buổi 1, 2, 3 … thay vì Buổi A, B, C). Tính động theo vị
@@ -964,7 +978,7 @@ function ProgramView({
                             onChange={(e) => handleEditPhaseChange(e.target.value)}
                             className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                           >
-                            {phases.map((p) => (
+                            {selectablePhases.map((p) => (
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
@@ -1279,12 +1293,14 @@ function ProgramView({
                   className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                 >
                   <option value="">— Chọn giai đoạn —</option>
-                  {phases.map((p) => (
+                  {selectablePhases.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
                 <p className="text-[11px] text-gray-400">
-                  Đổi thủ công sẽ ghi đè tiến trình tự động — hệ thống không tự kéo khách về giai đoạn thấp hơn nữa.
+                  {isAdmin
+                    ? "Admin được đổi tự do mọi giai đoạn. Đổi thủ công sẽ ghi đè tiến trình tự động."
+                    : "Chỉ được giữ nguyên hoặc chuyển lên giai đoạn cao hơn — không thể chuyển khách về giai đoạn trước (chỉ Admin mới được)."}
                 </p>
               </div>
 

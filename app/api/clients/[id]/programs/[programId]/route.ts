@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSlotsForSessionType } from "@/lib/workout-structure";
+import { phaseOrderOf } from "@/lib/phase-progression";
 
 const fullProgramInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -56,6 +57,23 @@ export async function PATCH(
     workoutType?: string | null;
     manualPhaseOverride?: boolean;
   };
+
+  // Chỉ Admin mới được chuyển khách VỀ giai đoạn trước đó. PT/FM chỉ được giữ
+  // nguyên hoặc tiến lên giai đoạn cao hơn.
+  if (body.phase !== undefined && session.user.role !== "ADMIN") {
+    const existing = await prisma.workoutProgram.findUnique({
+      where: { id: params.programId, clientId: params.id },
+      select: { phase: true },
+    });
+    const newOrder = phaseOrderOf(body.phase);
+    const curOrder = phaseOrderOf(existing?.phase ?? "");
+    if (existing && newOrder > 0 && curOrder > 0 && newOrder < curOrder) {
+      return NextResponse.json(
+        { error: "Chỉ Admin mới được chuyển khách về giai đoạn trước đó." },
+        { status: 403 }
+      );
+    }
+  }
 
   // Update program metadata fields
   await prisma.workoutProgram.update({
