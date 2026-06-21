@@ -54,7 +54,7 @@ export type WorkoutProgram = {
   sessionsPerWeek: number;
   currentWeek: number;
   notes: string | null;
-  status: "ACTIVE" | "ARCHIVED";
+  status: "ACTIVE" | "ARCHIVED" | "LOCKED";
   createdAt: string;
   createdBy: { id: string; name: string | null; email: string };
   packageEnrollment: { id: string; packageName: string } | null;
@@ -260,6 +260,7 @@ function ProgramView({
   isSubstitute,
   enableLevelSystem = true,
   minSessionMinutes = 30,
+  inheritedByExercise = null,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -274,6 +275,8 @@ function ProgramView({
   isSubstitute?: boolean;
   enableLevelSystem?: boolean;
   minSessionMinutes?: number;
+  /** Thông số gần nhất theo TÊN BÀI TẬP kế thừa từ giai đoạn trước (chỉ xem). */
+  inheritedByExercise?: Map<string, SetLogRow> | null;
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -360,6 +363,9 @@ function ProgramView({
 
   const currentWeekData = program.weeks[activeWeekIdx] ?? null;
   const isArchived = program.status === "ARCHIVED";
+  const isLocked = program.status === "LOCKED";
+  // Mọi chương trình không phải ACTIVE đều chỉ-xem (đã qua hoặc bị khoá).
+  const isReadOnly = program.status !== "ACTIVE";
 
   // Đánh số buổi liên tục qua các tuần: buổi đầu của một tuần nối tiếp số buổi
   // cuối của tuần trước (Buổi 1, 2, 3 … thay vì Buổi A, B, C). Tính động theo vị
@@ -688,9 +694,12 @@ function ProgramView({
               Tuần hiện tại: {program.currentWeek}
             </span>
             {isArchived && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500">Đã lưu trữ</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500">Đã lưu trữ · chỉ xem</span>
             )}
-            {!isArchived && (
+            {isLocked && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">🔒 Đã khóa</span>
+            )}
+            {!isReadOnly && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Đang áp dụng</span>
             )}
           </div>
@@ -705,9 +714,9 @@ function ProgramView({
             </span>
           </div>
         </div>
-        {/* Right: buttons */}
+        {/* Right: buttons (giai đoạn được hệ thống quản lý tự động — không sửa thủ công) */}
         <div className="flex items-center gap-1.5 w-full sm:w-auto sm:flex-shrink-0">
-          {!isArchived && !editMode && (
+          {!isReadOnly && !editMode && (
             <button
               onClick={openProgModal}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
@@ -716,7 +725,7 @@ function ProgramView({
               Thông tin CT
             </button>
           )}
-          {!isArchived && !editMode && hasWeeks && (
+          {!isReadOnly && !editMode && hasWeeks && (
             <button
               onClick={enterEditMode}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-[#f15b5c] text-[#f15b5c] hover:bg-[#f15b5c]/5 transition-colors"
@@ -725,16 +734,17 @@ function ProgramView({
               Giáo án
             </button>
           )}
-          <button
-            onClick={handleArchive}
-            disabled={archiving}
-            title={isArchived ? "Kích hoạt lại" : "Lưu trữ"}
-            className="p-2 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50 ml-auto sm:ml-0"
-          >
-            <Archive className="w-4 h-4" />
-          </button>
         </div>
       </div>
+
+      {/* Banner cho chương trình bị khóa */}
+      {isLocked && (
+        <div className="px-5 pt-3">
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            🔒 Giai đoạn này sẽ tự mở khóa sau khi khách hoàn thành tối thiểu 8 tuần tập ở giai đoạn hiện tại.
+          </p>
+        </div>
+      )}
 
       {/* ── Notes ── */}
       {program.notes && (
@@ -879,7 +889,7 @@ function ProgramView({
                     Nhật ký tuần
                   </button>
                 )}
-                {program.weeks.length > 1 && currentWeekData && currentWeekData.id === program.weeks[program.weeks.length - 1].id && (
+                {!isReadOnly && program.weeks.length > 1 && currentWeekData && currentWeekData.id === program.weeks[program.weeks.length - 1].id && (
                   <button
                     onClick={() => setConfirmDeleteWeek(true)}
                     disabled={deletingWeek}
@@ -890,14 +900,16 @@ function ProgramView({
                     Xóa tuần
                   </button>
                 )}
-                <button
-                  onClick={handleAddWeek}
-                  disabled={addingWeek}
-                  className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  {addingWeek ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                  Thêm tuần mới
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={handleAddWeek}
+                    disabled={addingWeek}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    {addingWeek ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                    Thêm tuần mới
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -906,54 +918,11 @@ function ProgramView({
             <div className="px-5 pb-5 pt-3">
               {/* ── Edit mode controls ── */}
               {editMode && (
-                <div className="mb-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-[#f15b5c]">Đang chỉnh sửa Tuần {currentWeekData.weekNumber}</p>
-                    <button
-                      onClick={() => setShowPhaseChange((v) => !v)}
-                      className="text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors flex items-center gap-1"
-                    >
-                      Đổi giai đoạn / loại tập
-                      {showPhaseChange ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                  </div>
-
-                  {showPhaseChange && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-                      <p className="text-xs font-bold text-amber-700">
-                        ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này
-                      </p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
-                          <select
-                            value={editPhaseId}
-                            onChange={(e) => handleEditPhaseChange(e.target.value)}
-                            className="w-full h-9 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                          >
-                            {phases.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={applyPhaseChange}
-                          className="h-8 px-4 rounded-lg text-xs font-bold text-white"
-                          style={{ backgroundColor: "#f15b5c" }}
-                        >
-                          Áp dụng & Reset bài tập
-                        </button>
-                        <button
-                          onClick={() => setShowPhaseChange(false)}
-                          className="h-8 px-3 rounded-lg border border-gray-200 text-xs text-gray-500 hover:bg-gray-50"
-                        >
-                          Hủy
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-[#f15b5c]">Đang chỉnh sửa Tuần {currentWeekData.weekNumber}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Giai đoạn do hệ thống quản lý tự động — chỉ chỉnh loại buổi và bài tập.
+                  </p>
                 </div>
               )}
 
@@ -984,7 +953,7 @@ function ProgramView({
                   );
                 })}
                 </div>
-                {!editMode && !isArchived && currentWeekData.sessions.length > 1 && (
+                {!editMode && !isReadOnly && currentWeekData.sessions.length > 1 && (
                   <button
                     onClick={() => { setConfirmDeleteSession(true); setDeleteSessionError(""); }}
                     title="Xóa buổi đang chọn khỏi tuần này"
@@ -1064,6 +1033,51 @@ function ProgramView({
                       )
                     : [];
 
+                  // Kế thừa từ giai đoạn TRƯỚC: ở tuần ĐẦU của chương trình (chưa có
+                  // tuần trước trong cùng CT), nếu có thông số kế thừa theo TÊN BÀI
+                  // TẬP thì dựng một "buổi tuần trước" ảo để gợi ý + điền sẵn Set 1
+                  // theo đúng bài tập đã tập ở giai đoạn trước.
+                  let effectivePrevWeekLogs = prevWeekLogs;
+                  let inheritedPrev = false;
+                  const isFirstWeek = program.weeks[0]?.id === currentWeekData.id;
+                  if (prevWeekLogs.length === 0 && isFirstWeek && inheritedByExercise && inheritedByExercise.size > 0) {
+                    const synthSetLogs = activeSession.movements
+                      .map((m) => {
+                        const src = m.selectedExercise ? inheritedByExercise.get(m.selectedExercise) : undefined;
+                        if (!src) return null;
+                        return {
+                          ...src,
+                          id: `inh-${m.id}`,
+                          movementId: m.id,
+                          movementName: m.movementName,
+                          exerciseName: m.selectedExercise,
+                        };
+                      })
+                      .filter((x): x is NonNullable<typeof x> => x !== null);
+                    if (synthSetLogs.length > 0) {
+                      const nowIso = new Date().toISOString();
+                      effectivePrevWeekLogs = [{
+                        id: `inh-${activeSession.id}`,
+                        sessionId: activeSession.id,
+                        weekId: currentWeekData.id,
+                        programId: program.id,
+                        sessionDate: nowIso,
+                        notes: null,
+                        createdBy: { id: "", name: null },
+                        createdAt: nowIso,
+                        setLogs: synthSetLogs,
+                        status: "COMPLETED",
+                        checkInAt: null,
+                        checkOutAt: null,
+                        firstInteractionAt: null,
+                        signatureUrl: null,
+                        confirmationMethod: null,
+                        confirmedAt: null,
+                      }];
+                      inheritedPrev = true;
+                    }
+                  }
+
                   return (
                     <>
                       <SessionMovementsTable session={activeSession} />
@@ -1078,7 +1092,8 @@ function ProgramView({
                             phase={program.phase}
                             clientId={clientId}
                             minSessionMinutes={minSessionMinutes}
-                            prevWeekLogs={prevWeekLogs}
+                            prevWeekLogs={effectivePrevWeekLogs}
+                            inheritedPrev={inheritedPrev}
                             onUpdated={(log) => onLogUpdated(log)}
                             onCompleted={(log, pkg) => onLogUpdated(log, pkg)}
                             onVoided={(log) => onLogUpdated(log)}
@@ -1089,7 +1104,7 @@ function ProgramView({
                             <div className="flex flex-col gap-1">
                               <button
                                 onClick={() => { setCheckInError(""); setSignCheckIn({ sessionId: activeSession.id, weekId: currentWeekData.id }); }}
-                                disabled={checkingInId === activeSession.id || isArchived}
+                                disabled={checkingInId === activeSession.id || isReadOnly}
                                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
                                 style={{ backgroundColor: "#f15b5c" }}
                               >
@@ -1191,20 +1206,9 @@ function ProgramView({
             </div>
 
             <div className="px-5 py-4 space-y-4">
-              {/* Phase */}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
-                <select
-                  value={progForm.phaseId}
-                  onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
-                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                >
-                  <option value="">— Chọn giai đoạn —</option>
-                  {phases.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
+              <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                Giai đoạn ({program.phase}) do hệ thống quản lý tự động và không chỉnh tại đây.
+              </p>
 
               {/* Sessions per week + Current week */}
               <div className="grid grid-cols-2 gap-3">
@@ -1445,6 +1449,38 @@ export function WorkoutTab({
 
   const active = programs.filter((p) => p.status === "ACTIVE");
   const archived = programs.filter((p) => p.status === "ARCHIVED");
+  const locked = programs.filter((p) => p.status === "LOCKED");
+
+  // Thứ tự giai đoạn từ tên ("Giai đoạn 2: ..." → 2) để biết đâu là giai đoạn trước.
+  const phaseOrder = (name: string) => {
+    const m = name.match(/Giai\s*đo[aạ]n\s*(\d+)/i);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+
+  // Kế thừa thông số: với chương trình giai đoạn N, lấy set-log COMPLETED gần nhất
+  // theo TÊN BÀI TẬP từ mọi chương trình giai đoạn thấp hơn (N-1, ...).
+  const inheritedFor = useCallback(
+    (program: WorkoutProgram): Map<string, SetLogRow> | null => {
+      const order = phaseOrder(program.phase);
+      if (order < 2) return null;
+      const lowerProgramIds = new Set(
+        programs.filter((p) => phaseOrder(p.phase) > 0 && phaseOrder(p.phase) < order).map((p) => p.id)
+      );
+      if (lowerProgramIds.size === 0) return null;
+      const lowerLogs = workoutLogs
+        .filter((l) => l.status === "COMPLETED" && lowerProgramIds.has(l.programId))
+        .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+      const map = new Map<string, SetLogRow>();
+      for (const log of lowerLogs) {
+        for (const sl of log.setLogs) {
+          const ex = sl.exerciseName?.trim();
+          if (ex && !map.has(ex)) map.set(ex, sl);
+        }
+      }
+      return map.size > 0 ? map : null;
+    },
+    [programs, workoutLogs]
+  );
 
   const handleUpdate = useCallback(
     (patch: Partial<WorkoutProgram> & { id: string }) => {
@@ -1493,6 +1529,7 @@ export function WorkoutTab({
           <h2 className="text-sm font-extrabold text-gray-800">Chương trình tập</h2>
           <p className="text-xs text-gray-400 mt-0.5">
             {active.length} đang áp dụng · {archived.length} đã lưu trữ
+            {locked.length > 0 ? ` · ${locked.length} đã khóa` : ""}
           </p>
         </div>
         {isSubstitute && (
@@ -1528,8 +1565,32 @@ export function WorkoutTab({
           isSubstitute={isSubstitute}
           enableLevelSystem={enableLevelSystem}
           minSessionMinutes={minSessionMinutes}
+          inheritedByExercise={inheritedFor(p)}
         />
       ))}
+
+      {locked.length > 0 && (
+        <div className="space-y-3">
+          {locked.map((p) => (
+            <ProgramView
+              key={p.id}
+              program={p}
+              clientId={clientId}
+              workoutLogs={workoutLogs.filter((l) => l.programId === p.id)}
+              onUpdate={handleUpdate}
+              onArchive={handleArchive}
+              onLogAdded={handleLogAdded}
+              onLogUpdated={handleLogUpdated}
+              onLogDeleted={handleLogDeleted}
+              onSessionDeleted={handleSessionDeleted}
+              userRole={userRole}
+              isSubstitute={isSubstitute}
+              enableLevelSystem={enableLevelSystem}
+              minSessionMinutes={minSessionMinutes}
+            />
+          ))}
+        </div>
+      )}
 
       {archived.length > 0 && (
         <div>

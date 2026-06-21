@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
+import { ensureClientPhaseProgression } from "@/lib/phase-progression";
 import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
       },
     },
   };
+
+  // Tự động cập nhật tiến trình giai đoạn (mở khoá/lưu trữ/tạo CT giai đoạn kế)
+  // trước khi đọc danh sách chương trình, để dữ liệu hiển thị luôn đúng.
+  await ensureClientPhaseProgression(params.id);
 
   let client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs, sysConfig;
   try {
@@ -201,7 +206,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     sessionsPerWeek: p.sessionsPerWeek,
     currentWeek: p.currentWeek,
     notes: p.notes,
-    status: p.status as "ACTIVE" | "ARCHIVED",
+    status: p.status as "ACTIVE" | "ARCHIVED" | "LOCKED",
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     createdBy: p.createdBy,

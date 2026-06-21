@@ -253,11 +253,11 @@ function buildPrevWeekPrefill(
 function buildInitialDrafts(
   setLogs: WorkoutLogRow["setLogs"],
   prevWeekLogs: WorkoutLogRow[],
-  weekNumber: number,
+  applyPrefill: boolean,
   range: { min: number; max: number } | null
 ): EditSetLogDraft[] {
   const drafts = toSetLogDrafts(setLogs);
-  if (weekNumber < 2) return drafts;
+  if (!applyPrefill) return drafts;
   const prefill = buildPrevWeekPrefill(prevWeekLogs, range);
   if (prefill.size === 0) return drafts;
   return drafts.map((d) => {
@@ -417,6 +417,7 @@ export function LiveSessionPanel({
   clientId,
   minSessionMinutes,
   prevWeekLogs,
+  inheritedPrev = false,
   onUpdated,
   onCompleted,
   onVoided,
@@ -429,17 +430,21 @@ export function LiveSessionPanel({
   clientId: string;
   minSessionMinutes: number;
   prevWeekLogs: WorkoutLogRow[];
+  /** Tuần đầu của giai đoạn mới: gợi ý/điền sẵn từ thông số kế thừa của GĐ trước. */
+  inheritedPrev?: boolean;
   onUpdated: (log: WorkoutLogRow) => void;
   onCompleted: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onVoided: (log: WorkoutLogRow) => void;
   onDeleted: (logId: string) => void;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
+  // Áp dụng gợi ý/điền sẵn từ tuần 2 trở đi HOẶC khi kế thừa từ giai đoạn trước.
+  const progressionActive = weekNumber >= 2 || inheritedPrev;
   const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
     buildInitialDrafts(
       log.setLogs,
       prevWeekLogs,
-      weekNumber,
+      progressionActive,
       isCardioSession(sessionName) ? null : getRepRange(phase)
     )
   );
@@ -476,7 +481,7 @@ export function LiveSessionPanel({
 
   const isCardio = isCardioSession(sessionName);
   const repRange = isCardio ? null : getRepRange(phase);
-  const showSuggestions = weekNumber >= 2 && !isCardio && repRange != null;
+  const showSuggestions = progressionActive && !isCardio && repRange != null;
 
   // ── Rule: at least 5 exercises must each have weight (load) + reps filled for
   // 3 sets before the session can be signed/completed. Applies to EVERY session

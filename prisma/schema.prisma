@@ -444,6 +444,7 @@ enum ConsultationStatus {
 enum WorkoutProgramStatus {
   ACTIVE
   ARCHIVED
+  LOCKED
 }
 
 model WorkoutExercise {

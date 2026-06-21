@@ -4,12 +4,17 @@ import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
 import { PortalLayoutClient } from "@/components/my/portal-layout-client";
 import { ActivityTab } from "@/components/my/activity-tab";
+import { ensureClientPhaseProgression } from "@/lib/phase-progression";
 
 export default async function ActivityPage() {
   const session = await getServerSession(clientAuthOptions);
   if (!session) redirect("/my/login");
 
   const clientId = session.user.id;
+
+  // Cập nhật tiến trình giai đoạn trước khi đọc CT đang áp dụng, để khách chỉ
+  // thấy đúng giai đoạn hiện tại.
+  await ensureClientPhaseProgression(clientId);
 
   const [client, activityLogs, program, rawWorkoutLogs, rawPending, rawLive] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, avatarUrl: true } }),
