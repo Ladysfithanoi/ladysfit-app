@@ -58,10 +58,28 @@ export async function GET(req: Request) {
     leads: number[];
   }>();
 
+  // Doanh số của lead không gắn PT (nhân sự đã nghỉ) gom vào "phòng tập" — vẫn tính
+  // vào tổng doanh số đội nhưng không thuộc hiệu suất của PT nào.
+  const house = {
+    revenue: Array(12).fill(0),
+    customers: Array(12).fill(0),
+    leads: Array(12).fill(0),
+  };
+  let houseHasData = false;
+
   for (const lead of leads) {
+    const m = lead.month - 1;
+    if (m < 0 || m >= 12) continue;
+
     const ptId = lead.assignedPTId;
-    // Lead không gắn PT (NS đã nghỉ) không thuộc hiệu suất của PT nào — bỏ qua.
-    if (!ptId || !lead.assignedPT) continue;
+    if (!ptId || !lead.assignedPT) {
+      house.revenue[m] += lead.actualRevenue ?? 0;
+      house.leads[m] += 1;
+      if (isWon(lead)) house.customers[m] += 1;
+      houseHasData = true;
+      continue;
+    }
+
     const name = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? {
       name,
@@ -69,12 +87,9 @@ export async function GET(req: Request) {
       customers: Array(12).fill(0),
       leads: Array(12).fill(0),
     };
-    const m = lead.month - 1;
-    if (m >= 0 && m < 12) {
-      cur.revenue[m] += lead.actualRevenue ?? 0;
-      cur.leads[m] += 1;
-      if (isWon(lead)) cur.customers[m] += 1;
-    }
+    cur.revenue[m] += lead.actualRevenue ?? 0;
+    cur.leads[m] += 1;
+    if (isWon(lead)) cur.customers[m] += 1;
     ptMap.set(ptId, cur);
   }
 
@@ -96,5 +111,10 @@ export async function GET(req: Request) {
       return br - ar;
     });
 
-  return NextResponse.json({ year, target: PT_MONTHLY_TARGET, personnel });
+  return NextResponse.json({
+    year,
+    target: PT_MONTHLY_TARGET,
+    personnel,
+    house: houseHasData ? house : null,
+  });
 }

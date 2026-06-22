@@ -11,10 +11,17 @@ type Personnel = {
   leads: number[];
 };
 
+type House = {
+  revenue: number[];
+  customers: number[];
+  leads: number[];
+};
+
 type PerfData = {
   year: number;
   target: number; // doanh số mục tiêu / PT / tháng (triệu)
   personnel: Personnel[];
+  house: House | null; // doanh số lead của nhân sự đã nghỉ → tính vào phòng tập
 };
 
 type Props = {
@@ -114,7 +121,8 @@ export function PerformanceTab({ branchId, year }: Props) {
   }
 
   const personnel = data?.personnel ?? [];
-  if (personnel.length === 0) {
+  const house = data?.house ?? null;
+  if (personnel.length === 0 && !house) {
     return (
       <div className="space-y-4 max-w-5xl">
         {filterBar}
@@ -146,9 +154,20 @@ export function PerformanceTab({ branchId, year }: Props) {
     };
   });
 
-  const teamYearRevenue = sum(overviewRows.map((r) => r.yearRevenue));
-  const teamYearCustomers = sum(overviewRows.map((r) => r.yearCustomers));
+  // Doanh số phòng tập (lead của nhân sự đã nghỉ) — tính vào tổng đội nhưng không có chủ.
+  const houseYearRevenue = house ? sum(house.revenue) : 0;
+  const houseYearCustomers = house ? sum(house.customers) : 0;
+  const houseYearLeads = house ? sum(house.leads) : 0;
+  const houseTransformPct = houseYearLeads > 0 ? (houseYearCustomers / houseYearLeads) * 100 : 0;
+
+  const staffYearRevenue = sum(overviewRows.map((r) => r.yearRevenue));
+  const staffYearCustomers = sum(overviewRows.map((r) => r.yearCustomers));
+
+  // Tổng doanh số đội = nhân sự hiện tại + phòng tập (nhân sự đã nghỉ).
+  const teamYearRevenue = staffYearRevenue + houseYearRevenue;
+  const teamYearCustomers = staffYearCustomers + houseYearCustomers;
   const teamAvgMonth = teamYearRevenue / 12;
+  // Hiệu suất đội = doanh số đội (gồm phòng tập) / mục tiêu của số nhân sự hiện tại.
   const teamPerfPct = target > 0 && personnel.length > 0
     ? (teamAvgMonth / (target * personnel.length)) * 100
     : 0;
@@ -161,15 +180,16 @@ export function PerformanceTab({ branchId, year }: Props) {
 
   const detailRows = periodMonths.map((m) => {
     const idx = m - 1;
+    // Toàn đội = nhân sự hiện tại + phòng tập (lead của nhân sự đã nghỉ).
     const revenue = selected
       ? selected.revenue[idx]
-      : sum(personnel.map((p) => p.revenue[idx]));
+      : sum(personnel.map((p) => p.revenue[idx])) + (house?.revenue[idx] ?? 0);
     const customers = selected
       ? selected.customers[idx]
-      : sum(personnel.map((p) => p.customers[idx]));
+      : sum(personnel.map((p) => p.customers[idx])) + (house?.customers[idx] ?? 0);
     const leads = selected
       ? selected.leads[idx]
-      : sum(personnel.map((p) => p.leads[idx]));
+      : sum(personnel.map((p) => p.leads[idx])) + (house?.leads[idx] ?? 0);
     const transformPct = leads > 0 ? (customers / leads) * 100 : 0;
     const perfPct = rowTarget > 0 ? (revenue / rowTarget) * 100 : 0;
     return { month: m, revenue, customers, leads, transformPct, perfPct };
@@ -237,6 +257,21 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center")}><PerfPct pct={row.perfPct} /></td>
                 </tr>
               ))}
+              {house && (houseYearRevenue > 0 || houseYearCustomers > 0) && (
+                <tr className="even:bg-[#fafafa] bg-gray-50/40">
+                  <td className={cn(td, "font-semibold text-gray-500")}>
+                    🏠 Nhân sự đã nghỉ / Phòng tập
+                  </td>
+                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 12)}</td>
+                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 4)}</td>
+                  <td className={cn(td, "text-center font-semibold text-gray-700")}>{fmtRevenue(houseYearRevenue)}</td>
+                  <td className={cn(td, "text-center font-semibold text-gray-700")}>{houseYearCustomers}</td>
+                  <td className={cn(td, "text-center")}>
+                    <span className="font-semibold text-blue-600">{fmtPct(houseTransformPct)}</span>
+                  </td>
+                  <td className={cn(td, "text-center text-gray-300")}>—</td>
+                </tr>
+              )}
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200">

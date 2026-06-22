@@ -97,13 +97,13 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
               </select>
             </div>
           )}
-          {/* Nhân sự filter — Tab 1 only, FM/CEO/ADMIN only */}
-          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT" || u.role === "ADMIN") && (
+          {/* Nhân sự filter — Tab 1 only, FM/CEO/ADMIN only (gồm cả FM trong danh sách) */}
+          {!isPT && tab === "leads" && ptList.some((u) => u.role === "PT" || u.role === "ADMIN" || u.role === "FM") && (
             <div className="w-full md:w-auto md:min-w-[160px]">
               <select value={selectedPTId} onChange={(e) => setSelectedPTId(e.target.value)} className={selectCls}>
                 <option value="">Tất cả nhân sự</option>
-                {ptList.filter((u) => u.role === "PT" || u.role === "ADMIN").map((pt) => (
-                  <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}</option>
+                {ptList.filter((u) => u.role === "PT" || u.role === "ADMIN" || u.role === "FM").map((pt) => (
+                  <option key={pt.id} value={pt.id}>{pt.name ?? pt.email}{pt.role === "FM" ? " (FM)" : ""}</option>
                 ))}
               </select>
             </div>
