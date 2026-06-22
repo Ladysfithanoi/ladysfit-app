@@ -55,7 +55,7 @@ export async function GET(req: Request) {
       actualRevenue: true,
       yearOfBirth: true,
       assignedPTId: true,
-      assignedPT: { select: { id: true, name: true, email: true } },
+      assignedPT: { select: { id: true, name: true, email: true, role: true } },
       consultation: { select: { info: { select: { currentWeight: true, height: true } } } },
     },
   });
@@ -104,6 +104,7 @@ export async function GET(req: Request) {
   // ── By PT ────────────────────────────────────────────────────────────────
   const ptMap = new Map<string, {
     name: string;
+    role: string;
     contracts: number;
     revenue: number;
     sources: Map<string, number>;
@@ -114,7 +115,7 @@ export async function GET(req: Request) {
     // Lead không gắn PT (NS đã nghỉ) chỉ tính vào tổng doanh thu phòng tập, không vào "By PT".
     if (!ptId || !lead.assignedPT) continue;
     const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
-    const cur = ptMap.get(ptId) ?? { name: ptName, contracts: 0, revenue: 0, sources: new Map() };
+    const cur = ptMap.get(ptId) ?? { name: ptName, role: lead.assignedPT.role, contracts: 0, revenue: 0, sources: new Map() };
     cur.revenue += lead.actualRevenue ?? 0;
     if (isWon(lead)) {
       const src = lead.source?.trim() || "Không rõ nguồn";
@@ -135,6 +136,7 @@ export async function GET(req: Request) {
       return {
         ptId,
         ptName: stat.name,
+        ptRole: stat.role,
         contracts: stat.contracts,
         revenue: stat.revenue,
         revenuePct: totalRevenue > 0 ? Math.round((stat.revenue / totalRevenue) * 1000) / 10 : 0,

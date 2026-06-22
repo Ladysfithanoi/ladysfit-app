@@ -441,7 +441,9 @@ export function LeadsTab({
             const collapsed    = collapsedPTs.has(ptId);
             const ptRevenue    = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
             const ptRegistered = ptLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length;
-            const isFMGroup    = ptId === currentUserId && isFM;
+            // Nhãn theo vai trò THỰC của người phụ trách (không phụ thuộc người đang xem).
+            const isFMGroup    = pt?.role === "FM";
+            const roleLabel    = pt?.role === "FM" ? "FM" : pt?.role === "ADMIN" ? "Admin" : "PT";
 
             return (
               <div key={ptId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -460,7 +462,7 @@ export function LeadsTab({
                       </span>
                     </div>
                     <span className="text-sm font-extrabold text-gray-800">
-                      {isHouse ? displayName : `${isFMGroup ? "FM" : "PT"} ${displayName}`}
+                      {isHouse ? displayName : `${roleLabel} ${displayName}`}
                     </span>
                     <span className="text-xs text-gray-400">
                       {ptLeads.length} lead · {ptRevenue.toFixed(1)} tr · {ptRegistered} đăng ký

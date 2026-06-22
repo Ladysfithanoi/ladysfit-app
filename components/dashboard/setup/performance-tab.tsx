@@ -6,10 +6,17 @@ import { cn } from "@/lib/utils";
 type Personnel = {
   ptId: string;
   ptName: string;
+  ptRole?: string;
   revenue: number[];   // 12 entries, index 0 = tháng 1 (đơn vị: triệu)
   customers: number[];
   leads: number[];
 };
+
+function nameWithRole(name: string, role?: string) {
+  if (role === "FM") return `${name} (FM)`;
+  if (role === "ADMIN") return `${name} (Admin)`;
+  return name;
+}
 
 type House = {
   revenue: number[];
@@ -145,6 +152,7 @@ export function PerformanceTab({ branchId, year }: Props) {
     return {
       ptId: p.ptId,
       ptName: p.ptName,
+      ptRole: p.ptRole,
       avgMonth,
       avgQuarter,
       yearRevenue,
@@ -246,7 +254,7 @@ export function PerformanceTab({ branchId, year }: Props) {
             <tbody>
               {overviewRows.map((row) => (
                 <tr key={row.ptId} className="even:bg-[#fafafa]">
-                  <td className={cn(td, "font-semibold text-gray-800")}>{row.ptName}</td>
+                  <td className={cn(td, "font-semibold text-gray-800")}>{nameWithRole(row.ptName, row.ptRole)}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgMonth)}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgQuarter)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-800")}>{fmtRevenue(row.yearRevenue)}</td>
@@ -294,13 +302,13 @@ export function PerformanceTab({ branchId, year }: Props) {
           <div>
             <p className="text-sm font-extrabold text-gray-800">Chi tiết theo tháng — {periodLabel}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              Doanh số, số khách hàng và tỉ lệ transform của {selected ? selected.ptName : "toàn đội"} theo từng tháng
+              Doanh số, số khách hàng và tỉ lệ transform của {selected ? nameWithRole(selected.ptName, selected.ptRole) : "toàn đội"} theo từng tháng
             </p>
           </div>
           <select value={selPT} onChange={(e) => setSelPT(e.target.value)} className={filterSelectCls}>
             <option value="">Toàn đội</option>
             {personnel.map((p) => (
-              <option key={p.ptId} value={p.ptId}>{p.ptName}</option>
+              <option key={p.ptId} value={p.ptId}>{nameWithRole(p.ptName, p.ptRole)}</option>
             ))}
           </select>
         </div>

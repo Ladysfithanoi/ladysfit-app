@@ -42,7 +42,7 @@ export async function GET(req: Request) {
       status: true,
       actualRevenue: true,
       assignedPTId: true,
-      assignedPT: { select: { id: true, name: true, email: true } },
+      assignedPT: { select: { id: true, name: true, email: true, role: true } },
     },
   });
 
@@ -53,6 +53,7 @@ export async function GET(req: Request) {
   // ptId → name + 12-month arrays of revenue / customers / leads.
   const ptMap = new Map<string, {
     name: string;
+    role: string;
     revenue: number[];   // index 0 = tháng 1
     customers: number[];
     leads: number[];
@@ -83,6 +84,7 @@ export async function GET(req: Request) {
     const name = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? {
       name,
+      role: lead.assignedPT.role,
       revenue: Array(12).fill(0),
       customers: Array(12).fill(0),
       leads: Array(12).fill(0),
@@ -97,6 +99,7 @@ export async function GET(req: Request) {
     .map(([ptId, stat]) => ({
       ptId,
       ptName: stat.name,
+      ptRole: stat.role,
       revenue: stat.revenue,
       customers: stat.customers,
       leads: stat.leads,

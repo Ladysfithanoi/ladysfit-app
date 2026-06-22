@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LeadStatus, LEAD_STATUS_LABEL, PTUser } from "./types";
 
 type Step = "idle" | "preview" | "importing" | "done";
-type RowStatus = "valid" | "error";
+type RowStatus = "valid" | "warn" | "error";
 type ImportResult = { imported: number; skipped: number; errors: { row: number; message: string }[] };
 
 type ParsedRow = {
@@ -178,10 +178,11 @@ export function LeadsImportModal({
             if (!base.customerName) return { ...base, rowStatus: "error", errorMsg: "Thiếu tên khách hàng" };
             if (!base.month || base.month < 1 || base.month > 12) return { ...base, rowStatus: "error", errorMsg: "Tháng không hợp lệ (1-12)" };
             if (!base.year) return { ...base, rowStatus: "error", errorMsg: "Thiếu năm" };
-            // Tên nhân sự có nhập nhưng không khớp ai → lỗi (tránh gõ sai tên).
+            // Tên nhân sự có nhập nhưng client chưa khớp được → cảnh báo (vẫn gửi, server
+            // sẽ tự khớp theo danh sách mới nhất; nếu vẫn sai mới báo lỗi ở kết quả).
             // Bỏ trống = lead của NS đã nghỉ → doanh thu về thẳng phòng tập (hợp lệ).
             if (!isPT && ptName && !base.assignedPTId) {
-              return { ...base, rowStatus: "error", errorMsg: `Không tìm thấy NS \"${ptName}\"` };
+              return { ...base, rowStatus: "warn", errorMsg: `Sẽ kiểm tra tên \"${ptName}\" khi nhập` };
             }
             return base;
           });
@@ -207,8 +208,9 @@ export function LeadsImportModal({
   }
 
   async function handleImport() {
-    const valid = rows.filter((r) => r.rowStatus === "valid");
-    if (valid.length === 0) return;
+    // Gửi cả dòng "warn" (tên chưa khớp ở client) để server tự resolve theo DB.
+    const sendable = rows.filter((r) => r.rowStatus !== "error");
+    if (sendable.length === 0) return;
     setStep("importing");
     try {
       const res = await fetch("/api/setup/leads/import", {
@@ -216,11 +218,12 @@ export function LeadsImportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId,
-          leads: valid.map((r) => ({
+          leads: sendable.map((r) => ({
             customerName: r.customerName,
             month: r.month,
             year: r.year,
             assignedPTId: r.assignedPTId,
+            ptName: r.ptName,
             yearOfBirth: r.yearOfBirth,
             phone: r.phone,
             source: r.source,
@@ -251,7 +254,9 @@ export function LeadsImportModal({
   if (!open) return null;
 
   const validCount = rows.filter((r) => r.rowStatus === "valid").length;
+  const warnCount = rows.filter((r) => r.rowStatus === "warn").length;
   const errorCount = rows.filter((r) => r.rowStatus === "error").length;
+  const sendableCount = validCount + warnCount;
   const templateUrl = `/api/setup/leads/template?branchId=${encodeURIComponent(branchId)}&month=${defaultMonth}&year=${defaultYear}`;
 
   return (
@@ -327,6 +332,7 @@ export function LeadsImportModal({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3 text-xs font-semibold">
                   <span className="text-emerald-600">{validCount} hợp lệ</span>
+                  {warnCount > 0 && <span className="text-amber-600">{warnCount} cần kiểm tra</span>}
                   {errorCount > 0 && <span className="text-red-500">{errorCount} lỗi (sẽ bỏ qua)</span>}
                 </div>
                 <button
@@ -350,7 +356,7 @@ export function LeadsImportModal({
                     </thead>
                     <tbody>
                       {rows.map((row, i) => (
-                        <tr key={i} className={`border-t border-gray-50 ${row.rowStatus === "error" ? "bg-red-50/40" : ""}`}>
+                        <tr key={i} className={`border-t border-gray-50 ${row.rowStatus === "error" ? "bg-red-50/40" : row.rowStatus === "warn" ? "bg-amber-50/40" : ""}`}>
                           <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                           <td className="px-3 py-2 text-gray-800 font-medium">
                             {row.customerName || <span className="text-red-400 italic">Trống</span>}
@@ -362,7 +368,7 @@ export function LeadsImportModal({
                               row.assignedPTId
                                 ? (ptList.find((p) => p.id === row.assignedPTId)?.name ?? row.ptName)
                                 : row.ptName
-                                  ? <span className="text-red-400 italic">{row.ptName}</span>
+                                  ? <span className="text-amber-600 italic">{row.ptName}</span>
                                   : <span className="text-gray-400 italic">Phòng tập (chưa phân bổ)</span>
                             )}
                           </td>
@@ -372,6 +378,11 @@ export function LeadsImportModal({
                           <td className="px-3 py-2">
                             {row.rowStatus === "valid" ? (
                               <span className="text-emerald-600 font-semibold">Hợp lệ</span>
+                            ) : row.rowStatus === "warn" ? (
+                              <span className="flex items-center gap-1 text-amber-600 font-semibold">
+                                <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                                {row.errorMsg}
+                              </span>
                             ) : (
                               <span className="flex items-center gap-1 text-red-500 font-semibold">
                                 <AlertCircle className="w-3 h-3 flex-shrink-0" />
@@ -422,12 +433,12 @@ export function LeadsImportModal({
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={validCount === 0}
+                disabled={sendableCount === 0}
                 className="h-10 rounded-xl text-white font-semibold gap-2 disabled:opacity-40"
                 style={{ backgroundColor: "#f15b5c" }}
               >
                 <Upload className="w-4 h-4" />
-                Nhập {validCount} lead
+                Nhập {sendableCount} lead
               </Button>
             </>
           )}

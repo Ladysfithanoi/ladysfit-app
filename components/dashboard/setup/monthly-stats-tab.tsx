@@ -31,6 +31,7 @@ type BucketStat = {
 type PTStat = {
   ptId: string;
   ptName: string;
+  ptRole?: string;
   contracts: number;
   revenue: number;
   revenuePct: number;
@@ -402,7 +403,9 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
             <tbody>
               {byPT.map((row) => (
                 <tr key={row.ptId} className="even:bg-[#fafafa]">
-                  <td className={cn(td, "font-semibold text-gray-800")}>{row.ptName}</td>
+                  <td className={cn(td, "font-semibold text-gray-800")}>
+                    {row.ptName}{row.ptRole === "FM" ? " (FM)" : row.ptRole === "ADMIN" ? " (Admin)" : ""}
+                  </td>
                   <td className={cn(td, "text-center font-semibold")}>{row.contracts}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.revenue)}</td>
                   <td className={cn(td, "text-center")}>

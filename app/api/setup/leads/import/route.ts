@@ -15,6 +15,7 @@ type ImportRow = {
   month?: number | string;
   year?: number | string;
   assignedPTId?: string;
+  ptName?: string; // tên nhân sự gõ trong Excel — server tự resolve (nguồn chuẩn)
   yearOfBirth?: number | string | null;
   phone?: string | null;
   source?: string | null;
@@ -34,6 +35,14 @@ function num(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : parseFloat(String(v));
   return isNaN(n) ? null : n;
+}
+
+// Chuẩn hóa tên để so khớp: bỏ dấu, đ→d, gộp khoảng trắng, viết thường.
+function normalizeName(s: string): string {
+  return s.trim().toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/\s+/g, " ");
 }
 
 export async function POST(req: Request) {
@@ -57,8 +66,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Resolve which PTs the caller is allowed to assign leads to (one branch query).
+  // Resolve which staff the caller can assign leads to (one branch query). Build a
+  // name/email → id map so we can resolve names server-side — the client's staff
+  // list can be stale or missing an FM, which previously made FM rows fail to import.
   const allowedPTs = new Set<string>();
+  const nameToId = new Map<string, string>();
   if (isPT) {
     allowedPTs.add(session.user.id);
   } else {
@@ -71,9 +83,13 @@ export async function POST(req: Request) {
           { role: "FM", managedBranches: { some: { branchId } } },
         ],
       },
-      select: { id: true },
+      select: { id: true, name: true, email: true },
     });
-    staff.forEach((s) => allowedPTs.add(s.id));
+    for (const s of staff) {
+      allowedPTs.add(s.id);
+      if (s.name) nameToId.set(normalizeName(s.name), s.id);
+      if (s.email) nameToId.set(normalizeName(s.email), s.id);
+    }
   }
 
   let imported = 0;
@@ -87,16 +103,28 @@ export async function POST(req: Request) {
     const customerName = String(r.customerName ?? "").trim();
     const month = parseInt(String(r.month ?? ""));
     const year = parseInt(String(r.year ?? ""));
-    // Blank staff (e.g. lead của PT đã nghỉ việc) → null: doanh thu về thẳng phòng tập.
-    const rawPT = String(r.assignedPTId ?? "").trim();
-    const assignedPTId = isPT ? session.user.id : (rawPT || null);
 
     if (!customerName) { errors.push({ row: rowNo, message: "Thiếu tên khách hàng" }); continue; }
     if (!month || month < 1 || month > 12) { errors.push({ row: rowNo, message: "Tháng không hợp lệ" }); continue; }
     if (!year) { errors.push({ row: rowNo, message: "Thiếu năm" }); continue; }
-    if (assignedPTId && !allowedPTs.has(assignedPTId)) {
-      errors.push({ row: rowNo, message: "Nhân sự phụ trách không hợp lệ" });
-      continue;
+
+    // Resolve nhân sự: ưu tiên id do client gửi (nếu hợp lệ), nếu không thì khớp theo
+    // tên/email server-side. Bỏ trống = lead của NS đã nghỉ → doanh thu về phòng tập.
+    let assignedPTId: string | null;
+    if (isPT) {
+      assignedPTId = session.user.id;
+    } else {
+      const hint = String(r.assignedPTId ?? "").trim();
+      const ptName = String(r.ptName ?? "").trim();
+      if (hint && allowedPTs.has(hint)) {
+        assignedPTId = hint;
+      } else if (ptName) {
+        const found = nameToId.get(normalizeName(ptName));
+        if (!found) { errors.push({ row: rowNo, message: `Không tìm thấy nhân sự "${ptName}"` }); continue; }
+        assignedPTId = found;
+      } else {
+        assignedPTId = null;
+      }
     }
 
     const status: LeadStatus = VALID_STATUS.includes(String(r.status) as LeadStatus)
