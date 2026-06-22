@@ -10,7 +10,7 @@ import * as XLSX from "xlsx";
 const ALLOWED = ["ADMIN", "FM", "COO", "PT"];
 
 // Header order MUST stay in sync with the parser in leads-import-modal.tsx
-export const TEMPLATE_HEADERS = [
+const TEMPLATE_HEADERS = [
   "Khách hàng *",
   "Tháng *",
   "Năm *",
