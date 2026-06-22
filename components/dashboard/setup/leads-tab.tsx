@@ -122,12 +122,16 @@ export function LeadsTab({
   const [bulkSending, setBulkSending]             = useState(false);
   const [syncingLeadId, setSyncingLeadId]         = useState<string | null>(null);
   const [importOpen, setImportOpen]               = useState(false);
+  const [selectedIds, setSelectedIds]             = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen]       = useState(false);
+  const [bulkDeleting, setBulkDeleting]           = useState(false);
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
   const fetchLeads = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
+    setSelectedIds(new Set());
     try {
       const res = await fetch(`/api/setup/leads?branchId=${branchId}&month=${month}&year=${year}`);
       if (res.ok) setLeads(await res.json());
@@ -322,6 +326,58 @@ export function LeadsTab({
     });
   }
 
+  // Ai được xóa lead này (giống điều kiện nút xóa từng dòng).
+  function canDeleteLead(l: SalesLead) {
+    return isFM || isAdmin || isCOO || l.assignedPTId === currentUserId;
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // Tích / bỏ tích tất cả lead (được phép xóa) của một nhân sự.
+  function toggleSelectGroup(groupLeads: SalesLead[]) {
+    const ids = groupLeads.filter(canDeleteLead).map(l => l.id);
+    const allSelected = ids.length > 0 && ids.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/setup/leads/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) {
+        const { deleted, deletedIds } = await res.json() as { deleted: number; skipped: number; deletedIds: string[] };
+        const removed = new Set(deletedIds);
+        setLeads(prev => prev.filter(l => !removed.has(l.id)));
+        setSelectedIds(new Set());
+        setBulkDeleteOpen(false);
+        showToast(`Đã xóa ${deleted} lead`);
+      } else {
+        showToast("Không thể xóa các lead đã chọn", true);
+      }
+    } catch {
+      showToast("Lỗi kết nối!", true);
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   // Leads của nhân sự đã nghỉ (assignedPTId = null) gom vào 1 nhóm "phòng tập".
   const HOUSE_GROUP = "__house__";
   const grouped = leads.reduce<Record<string, SalesLead[]>>((acc, l) => {
@@ -444,6 +500,9 @@ export function LeadsTab({
             // Nhãn theo vai trò THỰC của người phụ trách (không phụ thuộc người đang xem).
             const isFMGroup    = pt?.role === "FM";
             const roleLabel    = pt?.role === "FM" ? "FM" : pt?.role === "ADMIN" ? "Admin" : "PT";
+            // Chọn nhiều để xóa — chỉ tính các lead user được phép xóa.
+            const deletableIds = ptLeads.filter(canDeleteLead).map(l => l.id);
+            const groupAllSelected = deletableIds.length > 0 && deletableIds.every(id => selectedIds.has(id));
 
             return (
               <div key={ptId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -494,7 +553,20 @@ export function LeadsTab({
                                 i === 1 && "sticky left-0 sm:left-10 z-10 bg-[#f5f5f5]",
                               )}
                             >
-                              {h}
+                              {i === 0 && canMutate && deletableIds.length > 0 ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={groupAllSelected}
+                                    onChange={() => toggleSelectGroup(ptLeads)}
+                                    title="Chọn tất cả"
+                                    className="w-3.5 h-3.5 accent-[#f15b5c] cursor-pointer"
+                                  />
+                                  {h}
+                                </div>
+                              ) : (
+                                h
+                              )}
                             </th>
                           ))}
                         </tr>
@@ -514,7 +586,22 @@ export function LeadsTab({
                                 warnRow && "border-l-[3px] border-l-amber-400"
                               )}
                             >
-                              <td className="px-3 py-2.5 text-gray-400 sm:sticky sm:left-0 z-10 bg-white">{idx + 1}</td>
+                              <td className={cn(
+                                "px-3 py-2.5 text-gray-400 sm:sticky sm:left-0 z-10",
+                                selectedIds.has(l.id) ? "bg-[#f15b5c]/5" : "bg-white"
+                              )}>
+                                <div className="flex items-center gap-2">
+                                  {canMutate && canDeleteLead(l) && (
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedIds.has(l.id)}
+                                      onChange={() => toggleSelect(l.id)}
+                                      className="w-3.5 h-3.5 accent-[#f15b5c] cursor-pointer"
+                                    />
+                                  )}
+                                  <span>{idx + 1}</span>
+                                </div>
+                              </td>
 
                               {/* Customer name + badges — bề rộng giới hạn để badge xuống dòng,
                                   tránh cell phình ra che cả bảng trên điện thoại; vẫn ghim trái */}
@@ -722,6 +809,19 @@ export function LeadsTab({
         loading={bulkSending}
       />
 
+      {/* Bulk delete confirm dialog */}
+      <AlertDialog
+        open={bulkDeleteOpen}
+        onClose={() => { if (!bulkDeleting) setBulkDeleteOpen(false); }}
+        title="Xóa nhiều lead"
+        description={`Bạn có chắc muốn xóa ${selectedIds.size} lead đã chọn?\nHành động này không thể hoàn tác.`}
+        confirmLabel={`Xóa ${selectedIds.size} lead`}
+        cancelLabel="Hủy"
+        variant="danger"
+        onConfirm={handleBulkDelete}
+        loading={bulkDeleting}
+      />
+
       {/* Import from Excel */}
       <LeadsImportModal
         open={importOpen}
@@ -736,10 +836,32 @@ export function LeadsTab({
         defaultYear={year}
       />
 
+      {/* Floating bulk-select action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white border border-gray-200 shadow-xl rounded-2xl pl-4 pr-2 py-2">
+          <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+            Đã chọn {selectedIds.size} lead
+          </span>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm font-medium text-gray-500 hover:text-gray-700 px-2 py-1.5"
+          >
+            Bỏ chọn
+          </button>
+          <button
+            onClick={() => setBulkDeleteOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-bold bg-red-600 hover:bg-red-700 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" /> Xóa đã chọn
+          </button>
+        </div>
+      )}
+
       {/* Toast */}
       {successToast && (
         <div className={cn(
-          "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg",
+          "fixed left-1/2 -translate-x-1/2 z-50 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg",
+          selectedIds.size > 0 ? "bottom-24" : "bottom-6",
           toastIsError ? "bg-red-600" : "bg-gray-900"
         )}>
           {successToast}
