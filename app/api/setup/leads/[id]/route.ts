@@ -66,16 +66,18 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   });
 
   if (["PIF", "DE", "PB"].includes(updated.status) && updated.signDate) {
-    await syncLeadRevenueToWeeklyActuals(newAssignedPTId, lead.branchId, lead.month, lead.year);
-    if (newAssignedPTId !== lead.assignedPTId) {
+    if (newAssignedPTId) {
+      await syncLeadRevenueToWeeklyActuals(newAssignedPTId, lead.branchId, lead.month, lead.year);
+    }
+    if (newAssignedPTId !== lead.assignedPTId && lead.assignedPTId) {
       await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, lead.month, lead.year);
     }
   }
   await syncLeadToTransaction(updated);
 
-  // Auto-sync to client profile when status is PIF/DE/PB
+  // Auto-sync to client profile when status is PIF/DE/PB (skip leads with no PT assigned)
   let syncedClientId = updated.syncedClientId ?? null;
-  if (["PIF", "DE", "PB"].includes(updated.status) && !syncedClientId) {
+  if (["PIF", "DE", "PB"].includes(updated.status) && !syncedClientId && updated.assignedPTId) {
     try {
       const clientId = await syncLeadToClient({
         id: updated.id,

@@ -60,6 +60,8 @@ export async function GET(req: Request) {
 
   for (const lead of leads) {
     const ptId = lead.assignedPTId;
+    // Lead không gắn PT (NS đã nghỉ) không thuộc hiệu suất của PT nào — bỏ qua.
+    if (!ptId || !lead.assignedPT) continue;
     const name = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? {
       name,

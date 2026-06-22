@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     },
   });
 
-  if (["PIF", "DE", "PB"].includes(lead.status) && lead.signDate) {
+  if (lead.assignedPTId && ["PIF", "DE", "PB"].includes(lead.status) && lead.signDate) {
     await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, lead.month, lead.year);
   }
   await syncLeadToTransaction(lead);

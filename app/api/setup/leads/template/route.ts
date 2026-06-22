@@ -95,7 +95,7 @@ export async function GET(req: Request) {
       ["• Mỗi dòng là 1 lead/khách hàng. Xóa 2 dòng ví dụ ở sheet \"Setup\" trước khi điền."],
       ["• Cột có dấu * là bắt buộc: Khách hàng, Tháng, Năm."],
       ["• Cột \"Tháng\" (1-12) và \"Năm\" quyết định lead được lọc theo Tháng / Quý / Năm trong bảng."],
-      ["• \"Nhân sự phụ trách\": gõ đúng tên PT bên dưới. Để trống = gán cho người tải lên."],
+      ["• \"Nhân sự phụ trách\": gõ đúng tên PT bên dưới. Để trống = lead của NS đã nghỉ, doanh thu tính vào phòng tập (không chia cho PT)."],
       ["• \"Referral đến từ đâu\" chỉ cần khi Phân nguồn = Referral."],
       ["• Doanh thu / Còn thiếu / DT Fitpartner: nhập theo đơn vị TRIỆU (vd 10.5)."],
       ["• Ngày ký: định dạng dd/mm/yyyy (vd 15/06/2026)."],

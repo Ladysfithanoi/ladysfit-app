@@ -87,12 +87,14 @@ export async function POST(req: Request) {
     const customerName = String(r.customerName ?? "").trim();
     const month = parseInt(String(r.month ?? ""));
     const year = parseInt(String(r.year ?? ""));
-    const assignedPTId = isPT ? session.user.id : String(r.assignedPTId ?? "").trim();
+    // Blank staff (e.g. lead của PT đã nghỉ việc) → null: doanh thu về thẳng phòng tập.
+    const rawPT = String(r.assignedPTId ?? "").trim();
+    const assignedPTId = isPT ? session.user.id : (rawPT || null);
 
     if (!customerName) { errors.push({ row: rowNo, message: "Thiếu tên khách hàng" }); continue; }
     if (!month || month < 1 || month > 12) { errors.push({ row: rowNo, message: "Tháng không hợp lệ" }); continue; }
     if (!year) { errors.push({ row: rowNo, message: "Thiếu năm" }); continue; }
-    if (!assignedPTId || !allowedPTs.has(assignedPTId)) {
+    if (assignedPTId && !allowedPTs.has(assignedPTId)) {
       errors.push({ row: rowNo, message: "Nhân sự phụ trách không hợp lệ" });
       continue;
     }
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
       });
       imported++;
 
-      if (REGISTERED.includes(lead.status) && lead.signDate) {
+      if (lead.assignedPTId && REGISTERED.includes(lead.status) && lead.signDate) {
         revenueSyncKeys.add(`${lead.assignedPTId}|${lead.month}|${lead.year}`);
       }
       await syncLeadToTransaction(lead);

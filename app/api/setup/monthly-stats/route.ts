@@ -111,6 +111,8 @@ export async function GET(req: Request) {
 
   for (const lead of allLeads) {
     const ptId = lead.assignedPTId;
+    // Lead không gắn PT (NS đã nghỉ) chỉ tính vào tổng doanh thu phòng tập, không vào "By PT".
+    if (!ptId || !lead.assignedPT) continue;
     const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
     const cur = ptMap.get(ptId) ?? { name: ptName, contracts: 0, revenue: 0, sources: new Map() };
     cur.revenue += lead.actualRevenue ?? 0;

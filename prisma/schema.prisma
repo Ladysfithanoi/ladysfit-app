@@ -827,7 +827,9 @@ enum LeadStatus {
 model SalesLead {
   id                String     @id @default(cuid())
   branchId          String
-  assignedPTId      String
+  // Nullable: lead của nhân sự đã nghỉ việc (import từ Excel) không gắn PT nào —
+  // doanh thu vẫn tính cho phòng tập nhưng không chia cho PT.
+  assignedPTId      String?
   createdById       String
   customerName      String
   yearOfBirth       Int?
@@ -851,7 +853,7 @@ model SalesLead {
   updatedAt         DateTime   @updatedAt
 
   branch       Branch        @relation(fields: [branchId], references: [id])
-  assignedPT   User          @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
+  assignedPT   User?         @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
   createdBy    User          @relation("CreatedLeads", fields: [createdById], references: [id])
   consultation Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
 

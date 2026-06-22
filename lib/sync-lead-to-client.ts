@@ -8,7 +8,7 @@ type LeadForSync = {
   packageRegistered: string | null;
   actualRevenue: number | null;
   signDate: Date | null;
-  assignedPTId: string;
+  assignedPTId: string | null;
 };
 
 // A lead's registered-package field can hold several packages ("L1+L3",

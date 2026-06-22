@@ -29,7 +29,7 @@ export type PTUser = {
 export type SalesLead = {
   id: string;
   branchId: string;
-  assignedPTId: string;
+  assignedPTId: string | null;
   consultationId: string | null;
   customerName: string;
   yearOfBirth: number | null;
@@ -48,7 +48,7 @@ export type SalesLead = {
   month: number;
   year: number;
   syncedClientId: string | null;
-  assignedPT: PTUser;
+  assignedPT: PTUser | null;
   createdBy: { id: string; name: string | null };
 };
 

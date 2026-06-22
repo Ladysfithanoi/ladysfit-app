@@ -265,7 +265,7 @@ export function LeadsTab({
         body:    JSON.stringify({ assignedPTId: lead.assignedPTId, customerName: lead.customerName }),
       });
       if (res.ok) {
-        const ptName = lead.assignedPT.name ?? lead.assignedPT.email;
+        const ptName = lead.assignedPT?.name ?? lead.assignedPT?.email ?? "PT";
         showToast(`Đã gửi nhắc nhở đến ${ptName} về KH ${lead.customerName}`);
       } else {
         const data = await res.json().catch(() => ({})) as { error?: string; message?: string; code?: string; role?: string };
@@ -289,7 +289,7 @@ export function LeadsTab({
     try {
       const entries = Object.values(visibleGrouped)
         .flat()
-        .filter(l => l.assignedPTId !== currentUserId && l.status !== "PIF" && l.status !== "PB" && needsReminder(l.notes))
+        .filter(l => l.assignedPTId && l.assignedPTId !== currentUserId && l.status !== "PIF" && l.status !== "PB" && needsReminder(l.notes))
         .map(l => ({ assignedPTId: l.assignedPTId, customerName: l.customerName }));
 
       const res = await fetch("/api/notifications/lead-reminder", {
@@ -322,9 +322,12 @@ export function LeadsTab({
     });
   }
 
+  // Leads của nhân sự đã nghỉ (assignedPTId = null) gom vào 1 nhóm "phòng tập".
+  const HOUSE_GROUP = "__house__";
   const grouped = leads.reduce<Record<string, SalesLead[]>>((acc, l) => {
-    if (!acc[l.assignedPTId]) acc[l.assignedPTId] = [];
-    acc[l.assignedPTId].push(l);
+    const key = l.assignedPTId ?? HOUSE_GROUP;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(l);
     return acc;
   }, {});
 
@@ -358,7 +361,7 @@ export function LeadsTab({
   // Leads that need a reminder (FM can send) — excludes FM's own leads
   const reminderLeads = isFM
     ? Object.values(visibleGrouped).flat().filter(l =>
-        l.assignedPTId !== currentUserId &&
+        l.assignedPTId && l.assignedPTId !== currentUserId &&
         l.status !== "PIF" && l.status !== "PB" &&
         needsReminder(l.notes)
       )
@@ -433,6 +436,8 @@ export function LeadsTab({
         <div className="space-y-6">
           {Object.entries(visibleGrouped).map(([ptId, ptLeads]) => {
             const pt           = ptLeads[0].assignedPT;
+            const isHouse      = ptId === HOUSE_GROUP || !pt;
+            const displayName  = isHouse ? "Nhân sự đã nghỉ / Phòng tập" : (pt!.name ?? pt!.email);
             const collapsed    = collapsedPTs.has(ptId);
             const ptRevenue    = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
             const ptRegistered = ptLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length;
@@ -448,14 +453,14 @@ export function LeadsTab({
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
-                      isFMGroup ? "bg-purple-100" : "bg-[#f15b5c]/10"
+                      isHouse ? "bg-gray-200" : isFMGroup ? "bg-purple-100" : "bg-[#f15b5c]/10"
                     )}>
-                      <span className={cn("text-xs font-black", isFMGroup ? "text-purple-600" : "text-[#f15b5c]")}>
-                        {(pt.name ?? pt.email)[0].toUpperCase()}
+                      <span className={cn("text-xs font-black", isHouse ? "text-gray-500" : isFMGroup ? "text-purple-600" : "text-[#f15b5c]")}>
+                        {isHouse ? "🏠" : displayName[0].toUpperCase()}
                       </span>
                     </div>
                     <span className="text-sm font-extrabold text-gray-800">
-                      {isFMGroup ? "FM" : "PT"} {pt.name ?? pt.email}
+                      {isHouse ? displayName : `${isFMGroup ? "FM" : "PT"} ${displayName}`}
                     </span>
                     <span className="text-xs text-gray-400">
                       {ptLeads.length} lead · {ptRevenue.toFixed(1)} tr · {ptRegistered} đăng ký
@@ -611,8 +616,8 @@ export function LeadsTab({
                                         </button>
                                       </>
                                     )}
-                                    {/* Nhắc PT — FM only, not for FM's own leads */}
-                                    {isFM && !isOwnLead && warnBanner && (
+                                    {/* Nhắc PT — FM only, not for FM's own leads, không áp dụng lead NS đã nghỉ */}
+                                    {isFM && l.assignedPTId && !isOwnLead && warnBanner && (
                                       <button
                                         onClick={() => handleSendReminder(l)}
                                         disabled={sendingReminderId === l.id}
@@ -621,8 +626,8 @@ export function LeadsTab({
                                         {sendingReminderId === l.id ? "..." : "🔔 Nhắc PT"}
                                       </button>
                                     )}
-                                    {/* Sync to client — FM only, contract leads not yet synced */}
-                                    {isFM && REGISTERED_STATUSES.includes(l.status) && l.phone && !l.syncedClientId && (
+                                    {/* Sync to client — FM only, contract leads not yet synced (cần có PT) */}
+                                    {isFM && l.assignedPTId && REGISTERED_STATUSES.includes(l.status) && l.phone && !l.syncedClientId && (
                                       <button
                                         onClick={() => handleSyncLead(l.id)}
                                         disabled={syncingLeadId === l.id}
@@ -972,7 +977,7 @@ function CareNotesPopup({
   const [saving, setSaving]   = useState(false);
 
   const entries = parseNoteEntries(lead.notes ?? "");
-  const ptName  = lead.assignedPT.name ?? lead.assignedPT.email;
+  const ptName  = lead.assignedPT?.name ?? lead.assignedPT?.email ?? "Nhân sự đã nghỉ";
 
   async function handleAddNote() {
     const text = newText.trim();

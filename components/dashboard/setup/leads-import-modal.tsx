@@ -178,8 +178,10 @@ export function LeadsImportModal({
             if (!base.customerName) return { ...base, rowStatus: "error", errorMsg: "Thiếu tên khách hàng" };
             if (!base.month || base.month < 1 || base.month > 12) return { ...base, rowStatus: "error", errorMsg: "Tháng không hợp lệ (1-12)" };
             if (!base.year) return { ...base, rowStatus: "error", errorMsg: "Thiếu năm" };
-            if (!isPT && !base.assignedPTId) {
-              return { ...base, rowStatus: "error", errorMsg: ptName ? `Không tìm thấy NS \"${ptName}\"` : "Thiếu nhân sự phụ trách" };
+            // Tên nhân sự có nhập nhưng không khớp ai → lỗi (tránh gõ sai tên).
+            // Bỏ trống = lead của NS đã nghỉ → doanh thu về thẳng phòng tập (hợp lệ).
+            if (!isPT && ptName && !base.assignedPTId) {
+              return { ...base, rowStatus: "error", errorMsg: `Không tìm thấy NS \"${ptName}\"` };
             }
             return base;
           });
@@ -275,8 +277,9 @@ export function LeadsImportModal({
                 <p className="text-sm font-semibold text-amber-800 mb-1">Tải file mẫu</p>
                 <p className="text-xs text-amber-700 mb-3">
                   Bắt buộc: <strong>Khách hàng, Tháng, Năm</strong>. Cột <strong>Tháng / Năm</strong> quyết
-                  định lead được lọc theo tháng / quý. Xem sheet <strong>Hướng dẫn</strong> trong file để biết
-                  giá trị Tình trạng và tên Nhân sự hợp lệ.
+                  định lead được lọc theo tháng / quý. Để trống cột <strong>Nhân sự phụ trách</strong> nếu là
+                  lead của nhân sự đã nghỉ — doanh thu sẽ tính vào phòng tập, không chia cho PT nào. Xem sheet{" "}
+                  <strong>Hướng dẫn</strong> trong file để biết giá trị Tình trạng và tên Nhân sự hợp lệ.
                 </p>
                 <a
                   href={templateUrl}
@@ -358,7 +361,9 @@ export function LeadsImportModal({
                             {isPT ? currentUserName : (
                               row.assignedPTId
                                 ? (ptList.find((p) => p.id === row.assignedPTId)?.name ?? row.ptName)
-                                : <span className="text-red-400 italic">{row.ptName || "Trống"}</span>
+                                : row.ptName
+                                  ? <span className="text-red-400 italic">{row.ptName}</span>
+                                  : <span className="text-gray-400 italic">Phòng tập (chưa phân bổ)</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-gray-600">{row.source || "–"}</td>
