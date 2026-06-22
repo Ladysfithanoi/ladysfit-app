@@ -58,8 +58,8 @@ export async function PUT(req: Request) {
   const isPT = role === "PT";
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
-  const isCEO = role === "CEO_FITPARTNER" || role === "COO";
-  if (!isPT && !isFM && !isAdmin && !isCEO) {
+  // CEO_FitPartner & COO chỉ được XEM mục tiêu — không đặt/sửa.
+  if (!isPT && !isFM && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

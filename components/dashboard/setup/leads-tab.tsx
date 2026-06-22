@@ -100,8 +100,7 @@ export function LeadsTab({
   ptList, selectedPTId, selectedSource, selectedStatus,
 }: Props) {
   const isAdmin = currentUserRole === "ADMIN";
-  const isCOO   = currentUserRole === "COO";
-  const isCEO   = currentUserRole === "CEO_FITPARTNER";
+  // CEO_FitPartner và COO chỉ được XEM Setup doanh số — không thêm/sửa/xóa lead.
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const [leads, setLeads]                   = useState<SalesLead[]>([]);
   const [loading, setLoading]               = useState(true);
@@ -329,7 +328,7 @@ export function LeadsTab({
 
   // Ai được xóa lead này (giống điều kiện nút xóa từng dòng).
   function canDeleteLead(l: SalesLead) {
-    return isFM || isAdmin || isCOO || isCEO || l.assignedPTId === currentUserId;
+    return isFM || isAdmin || l.assignedPTId === currentUserId;
   }
 
   function toggleSelect(id: string) {
@@ -410,7 +409,7 @@ export function LeadsTab({
     total:             visibleLeads.length,
   };
 
-  const canMutate    = isPT || isFM || isAdmin || isCOO || isCEO;
+  const canMutate    = isPT || isFM || isAdmin;
   const nextMonth    = month === 12 ? 1 : month + 1;
   const nextYear     = month === 12 ? year + 1 : year;
   const carryableLeads = leads.filter(l => l.status === "TAKECARE" || l.status === "DE");
@@ -446,7 +445,7 @@ export function LeadsTab({
       </div>
 
       {/* Action bar */}
-      {(isPT || isFM || isAdmin || isCOO || isCEO) && (
+      {(isPT || isFM || isAdmin) && (
         <div className="flex flex-wrap justify-end gap-3 mb-4">
           {/* Bulk remind — FM only */}
           {isFM && reminderLeads.length > 0 && (
@@ -696,7 +695,7 @@ export function LeadsTab({
                               {canMutate && (
                                 <td className="px-3 py-2.5 whitespace-nowrap">
                                   <div className="flex items-center gap-2">
-                                    {(isFM || isOwnLead || isAdmin || isCOO || isCEO) && (
+                                    {(isFM || isOwnLead || isAdmin) && (
                                       <>
                                         <button onClick={() => openEdit(l)} className="text-gray-400 hover:text-[#f15b5c]">
                                           <Pencil className="w-3.5 h-3.5" />
@@ -873,7 +872,7 @@ export function LeadsTab({
       {careNotesLead && (
         <CareNotesPopup
           lead={careNotesLead}
-          canEdit={isFM || isAdmin || isCOO || isCEO || (isPT && careNotesLead.assignedPTId === currentUserId)}
+          canEdit={isFM || isAdmin || (isPT && careNotesLead.assignedPTId === currentUserId)}
           onClose={() => setCareNotesLead(null)}
           onUpdated={(id, newNotes) => {
             setLeads(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));

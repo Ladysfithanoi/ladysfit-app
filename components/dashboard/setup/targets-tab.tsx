@@ -503,6 +503,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   }
 
   const isManagerView = currentUserRole === "ADMIN" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
+  // CEO_FitPartner & COO chỉ được XEM mục tiêu/KPI — không đặt/sửa cho nhân sự.
+  const canEditTargets = !isReadOnly && currentUserRole !== "CEO_FITPARTNER" && currentUserRole !== "COO";
   const hasMultipleRoles = allPTs.some((pt) => pt.role === "FM") || allPTs.some((pt) => pt.role === "ADMIN");
 
   return (
@@ -616,7 +618,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
                   <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Chưa đặt mục tiêu</span>
                 </div>
-                {!isReadOnly && (
+                {canEditTargets && (
                   <button
                     onClick={() => openTargetModal(pt.id, ptName)}
                     className="px-3 py-1 rounded-lg text-xs font-bold text-white"
@@ -637,7 +639,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm font-extrabold text-gray-800">{ptName}</p>
-            {!isReadOnly && (
+            {canEditTargets && (
               <button
                 onClick={() => openTargetModal(pt.id, ptName)}
                 className="px-3 py-1 rounded-lg text-xs font-bold text-white"
@@ -660,7 +662,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                         <div>W{w}</div>
                         <div className="text-[9px] font-bold text-gray-400 normal-case">MT · Đạt</div>
                         <div className="text-[10px] font-normal text-gray-400 normal-case">{String(ws.getDate()).padStart(2,"0")}/{String(ws.getMonth()+1).padStart(2,"0")} - {String(we.getDate()).padStart(2,"0")}/{String(we.getMonth()+1).padStart(2,"0")}</div>
-                        {!isReadOnly && (
+                        {canEditTargets && (
                           <button onClick={() => openWeeklyEdit(t.id, w)} className="text-[#f15b5c] opacity-60 hover:opacity-100 text-[10px]">✎ sửa</button>
                         )}
                       </th>

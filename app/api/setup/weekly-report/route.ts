@@ -280,7 +280,8 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["FM", "CEO_FITPARTNER", "COO", "ADMIN", "PT"].includes(role)) {
+  // CEO_FitPartner & COO chỉ được XEM báo cáo tuần — không ghi.
+  if (!["FM", "ADMIN", "PT"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
