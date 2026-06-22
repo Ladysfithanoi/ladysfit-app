@@ -7,6 +7,7 @@ import { TargetsTab } from "./targets-tab";
 import { WeeklyReportTab } from "./weekly-report-tab";
 import { ReportTab } from "./report-tab";
 import { MonthlyStatsTab } from "./monthly-stats-tab";
+import { PerformanceTab } from "./performance-tab";
 import { PTUser, SOURCES, LEAD_STATUS_LABEL, LeadStatus } from "./types";
 
 type Branch = { id: string; name: string };
@@ -30,9 +31,10 @@ const TABS = [
   { key: "stats", label: "Thống kê tháng" },
   { key: "quarterStats", label: "Thống kê quý" },
   { key: "yearStats", label: "Thống kê năm" },
+  { key: "performance", label: "Hiệu suất làm việc" },
 ] as const;
 
-type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "stats" | "quarterStats" | "yearStats";
+type TabKey = "leads" | "targets" | "weeklyReport" | "report" | "stats" | "quarterStats" | "yearStats" | "performance";
 
 const now = new Date();
 
@@ -128,8 +130,8 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
               </select>
             </div>
           )}
-          {/* Tháng & Năm — ẩn ở tab Thống kê quý / năm (2 tab này có bộ lọc kỳ riêng trong bảng) */}
-          {tab !== "quarterStats" && tab !== "yearStats" && (
+          {/* Tháng & Năm — ẩn ở tab Thống kê quý / năm / Hiệu suất (các tab này có bộ lọc kỳ riêng trong bảng) */}
+          {tab !== "quarterStats" && tab !== "yearStats" && tab !== "performance" && (
             <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto md:gap-2">
               <div className="w-full md:w-[100px]">
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
@@ -250,6 +252,13 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           month={month}
           year={year}
           period="year"
+        />
+      )}
+      {tab === "performance" && (
+        <PerformanceTab
+          branchId={branchId}
+          branchName={branchName}
+          year={year}
         />
       )}
     </div>
