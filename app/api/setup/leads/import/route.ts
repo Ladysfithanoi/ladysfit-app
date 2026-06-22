@@ -6,7 +6,7 @@ import { LeadStatus } from "@prisma/client";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 
-const ALLOWED = ["ADMIN", "FM", "COO", "PT"];
+const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"];
 const VALID_STATUS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED = ["PIF", "DE", "PB"];
 

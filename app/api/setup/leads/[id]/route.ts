@@ -15,9 +15,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
   const isCOO = role === "COO";
+  const isCEO = role === "CEO_FITPARTNER";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (!isPT && !isFM && !isAdmin && !isCOO) {
+  if (!isPT && !isFM && !isAdmin && !isCOO && !isCEO) {
     return NextResponse.json({ error: "Không có quyền sửa lead" }, { status: 403 });
   }
 
@@ -34,7 +35,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const body = await req.json() as Record<string, unknown>;
 
   // FM/ADMIN/COO can reassign the staff; PT cannot change assignedPTId
-  const canReassign = isFM || isAdmin || isCOO;
+  const canReassign = isFM || isAdmin || isCOO || isCEO;
   const newAssignedPTId = (canReassign && body.assignedPTId) ? String(body.assignedPTId) : lead.assignedPTId;
 
   // Partial update: fall back to existing lead values for any field not present in the
@@ -111,9 +112,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
   const isCOO = role === "COO";
+  const isCEO = role === "CEO_FITPARTNER";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (!isPT && !isFM && !isAdmin && !isCOO) {
+  if (!isPT && !isFM && !isAdmin && !isCOO && !isCEO) {
     return NextResponse.json({ error: "Không có quyền xóa lead" }, { status: 403 });
   }
 

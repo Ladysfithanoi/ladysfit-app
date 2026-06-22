@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 // Xóa nhiều lead cùng lúc. Kiểm tra quyền theo từng lead giống route xóa đơn lẻ:
 //  - PT: chỉ xóa lead của chính mình
 //  - FM: chỉ xóa lead thuộc cơ sở mình quản lý
-//  - ADMIN/COO: xóa mọi lead
+//  - ADMIN/COO/CEO: xóa mọi lead
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,9 +16,10 @@ export async function POST(req: Request) {
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
   const isCOO = role === "COO";
+  const isCEO = role === "CEO_FITPARTNER";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (!isPT && !isFM && !isAdmin && !isCOO) {
+  if (!isPT && !isFM && !isAdmin && !isCOO && !isCEO) {
     return NextResponse.json({ error: "Không có quyền xóa lead" }, { status: 403 });
   }
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
 
   const deletableIds = leads
     .filter((l) => {
-      if (isAdmin || isCOO) return true;
+      if (isAdmin || isCOO || isCEO) return true;
       if (isFM) return managedBranchIds.includes(l.branchId);
       if (isPT) return l.assignedPTId === session.user.id;
       return false;
