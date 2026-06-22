@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // Sales target for one PT: 38 triệu/tháng (used to score work performance).
-export const PT_MONTHLY_TARGET = 38;
+const PT_MONTHLY_TARGET = 38;
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
