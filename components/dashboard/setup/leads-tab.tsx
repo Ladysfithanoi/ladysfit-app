@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SalesLead, LeadStatus, LEAD_STATUS_LABEL, LEAD_STATUS_STYLE, SOURCES, PTUser,
 } from "./types";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
+import { LeadsImportModal } from "./leads-import-modal";
 import { fmtDate } from "@/lib/format-date";
 
 type Props = {
@@ -120,6 +121,7 @@ export function LeadsTab({
   const [bulkConfirmOpen, setBulkConfirmOpen]     = useState(false);
   const [bulkSending, setBulkSending]             = useState(false);
   const [syncingLeadId, setSyncingLeadId]         = useState<string | null>(null);
+  const [importOpen, setImportOpen]               = useState(false);
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
@@ -403,6 +405,12 @@ export function LeadsTab({
               📤 Đẩy sang tháng sau
             </button>
           )}
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Tải lên Excel
+          </button>
           <button
             onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-sm"
@@ -705,6 +713,20 @@ export function LeadsTab({
         cancelLabel="Hủy"
         onConfirm={handleBulkReminder}
         loading={bulkSending}
+      />
+
+      {/* Import from Excel */}
+      <LeadsImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => fetchLeads()}
+        branchId={branchId}
+        isPT={isPT}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        ptList={ptList}
+        defaultMonth={month}
+        defaultYear={year}
       />
 
       {/* Toast */}
