@@ -91,13 +91,24 @@ function getSuggestionFromSetLog(sl: SetLogRow, phase: string): Suggestion {
   return getSuggestion(sl, getRepRange(phase));
 }
 
-// Tăng mức tạ thêm 2.5 khi ô tạ là một con số (vd "10" → "12.5"); nếu là chữ
-// (vd "Mốc 1") thì giữ nguyên cụm chữ đó.
+// Tăng mức tạ thêm 2.5 khi ô tạ là một con số (vd "10" → "12.5", "12,5" → "15");
+// nếu là chữ/ký hiệu (vd "Mốc 1", "Nấc 12", "1V") thì giữ nguyên cụm đó.
+// Chấp nhận dấu phẩy thập phân kiểu VN ("12,5") và hậu tố đơn vị "kg" ("12,5kg")
+// vì PT thường nhập tay theo kiểu này — nếu không xử lý sẽ bị Number() trả về NaN
+// khiến tạ KHÔNG được cộng thêm và "kẹt" mãi ở mức cũ thay vì tăng tiến.
 function bumpLoad(load: string): string {
   const t = load.trim();
   if (t === "") return t;
-  const n = Number(t);
-  return isNaN(n) ? t : String(n + 2.5);
+  // Chỉ bump khi toàn bộ ô là một con số (có thể kèm dấu phẩy thập phân + "kg").
+  const m = t.match(/^(\d+(?:[.,]\d+)?)\s*(kg)?$/i);
+  if (!m) return t; // chữ/ký hiệu → giữ nguyên
+  const usesComma = m[1].includes(",");
+  const n = parseFloat(m[1].replace(",", "."));
+  if (isNaN(n)) return t;
+  // Giữ nguyên kiểu dấu thập phân (phẩy/chấm) và hậu tố đơn vị như khách nhập.
+  let out = String(n + 2.5);
+  if (usesComma) out = out.replace(".", ",");
+  return m[2] ? `${out}${m[2]}` : out;
 }
 
 // Build "Lần trước" reference summary for a SetLogRow
