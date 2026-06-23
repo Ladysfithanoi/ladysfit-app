@@ -9,9 +9,10 @@ export async function POST(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  // CEO_FitPartner & COO chỉ được XEM — không chuyển lead sang tháng sau.
-  if (!isFM) {
-    return NextResponse.json({ error: "Chỉ FM mới có thể chuyển lead" }, { status: 403 });
+  const isCOO = role === "COO";
+  // CEO_FitPartner chỉ được XEM — không chuyển lead sang tháng sau. (COO ngang quyền Admin)
+  if (!isFM && !isCOO) {
+    return NextResponse.json({ error: "Chỉ FM hoặc COO mới có thể chuyển lead" }, { status: 403 });
   }
 
   const { branchId, month, year } = await req.json() as { branchId: string; month: number; year: number };

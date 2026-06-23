@@ -12,7 +12,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  if (role !== "ADMIN" && !isFM) {
+  if (role !== "ADMIN" && role !== "COO" && !isFM) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

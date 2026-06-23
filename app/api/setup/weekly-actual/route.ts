@@ -33,19 +33,20 @@ export async function PUT(req: Request) {
 
   const isFM = role === "FM";
   const isAdmin = role === "ADMIN";
+  const isCOO = role === "COO";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   // FM can always update their OWN row; otherwise restricted to managed branches
   if (isFM && target.userId !== session.user.id && !managedBranchIds.includes(target.branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  // CEO_FitPartner & COO chỉ được XEM — không ghi số liệu/ghi chú tuần.
-  // Non-FM/Admin can only update their own row.
-  if (!isFM && !isAdmin && target.userId !== session.user.id) {
+  // CEO_FitPartner chỉ được XEM — không ghi số liệu/ghi chú tuần. (COO ngang quyền Admin)
+  // Non-FM/Admin/COO can only update their own row.
+  if (!isFM && !isAdmin && !isCOO && target.userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const canWriteNotes = isFM || isAdmin;
+  const canWriteNotes = isFM || isAdmin || isCOO;
 
   // Build partial update — only include fields that were explicitly sent
   const updateFields: Record<string, unknown> = {};

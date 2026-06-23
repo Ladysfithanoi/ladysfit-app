@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { LEAD_SOURCES } from "@/lib/lead-sources";
 import * as XLSX from "xlsx";
 
-const ALLOWED = ["ADMIN", "FM", "PT"];
+const ALLOWED = ["ADMIN", "FM", "COO", "PT"];
 
 // Header order MUST stay in sync with the parser in leads-import-modal.tsx
 const TEMPLATE_HEADERS = [

@@ -41,10 +41,10 @@ export function ReportTab({ branchId, branchName, month, year, currentUserRole, 
   const isFitpartner = branchName.toLowerCase().includes("fitpartner");
   const KPI_ROWS = isFitpartner ? [BASE_KPI_ROWS[0], FITPARTNER_KPI_ROW, ...BASE_KPI_ROWS.slice(1)] : BASE_KPI_ROWS;
   // Everyone (PT included) can now write their own monthly note.
-  // CEO_FitPartner & COO chỉ được XEM Setup doanh số — không chỉnh sửa.
+  // CEO_FitPartner chỉ được XEM Setup doanh số — không chỉnh sửa. (COO ngang quyền Admin)
   const canEdit =
     !isReadOnly &&
-    (currentUserRole === "FM" || currentUserRole === "PT");
+    (currentUserRole === "FM" || currentUserRole === "COO" || currentUserRole === "PT");
   // FM/CEO/COO/ADMIN can view the PT reports of the branch (PT cannot see theirs).
   const canViewPtReports =
     currentUserRole === "FM" || currentUserRole === "CEO_FITPARTNER" ||

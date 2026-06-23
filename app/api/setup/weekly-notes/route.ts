@@ -8,9 +8,9 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  // CEO_FitPartner & COO chỉ được XEM — không cập nhật ghi chú.
-  if (role !== "FM") {
-    return NextResponse.json({ error: "Chỉ FM có thể cập nhật ghi chú" }, { status: 403 });
+  // CEO_FitPartner chỉ được XEM — không cập nhật ghi chú. (COO ngang quyền Admin)
+  if (role !== "FM" && role !== "COO") {
+    return NextResponse.json({ error: "Chỉ FM hoặc COO có thể cập nhật ghi chú" }, { status: 403 });
   }
 
   const body = await req.json() as {

@@ -55,8 +55,8 @@ export async function POST(req: Request) {
   const isFM = role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  // CEO_FitPartner & COO chỉ được XEM lead — không được thêm.
-  if (role === "CEO_FITPARTNER" || role === "COO") {
+  // CEO_FitPartner chỉ được XEM lead — không được thêm. (COO ngang quyền Admin)
+  if (role === "CEO_FITPARTNER") {
     return NextResponse.json({ error: "Không có quyền thêm lead" }, { status: 403 });
   }
 

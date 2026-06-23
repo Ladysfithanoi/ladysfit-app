@@ -503,8 +503,8 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   }
 
   const isManagerView = currentUserRole === "ADMIN" || currentUserRole === "CEO_FITPARTNER" || currentUserRole === "COO";
-  // CEO_FitPartner & COO chỉ được XEM mục tiêu/KPI — không đặt/sửa cho nhân sự.
-  const canEditTargets = !isReadOnly && currentUserRole !== "CEO_FITPARTNER" && currentUserRole !== "COO";
+  // CEO_FitPartner chỉ được XEM mục tiêu/KPI — không đặt/sửa cho nhân sự. (COO ngang quyền Admin)
+  const canEditTargets = !isReadOnly && currentUserRole !== "CEO_FITPARTNER";
   const hasMultipleRoles = allPTs.some((pt) => pt.role === "FM") || allPTs.some((pt) => pt.role === "ADMIN");
 
   return (
