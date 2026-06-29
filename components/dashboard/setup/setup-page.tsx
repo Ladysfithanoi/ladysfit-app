@@ -252,6 +252,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           month={month}
           year={year}
           period="year"
+          branches={isPT ? branches.filter((b) => b.id === branchId) : branches}
         />
       )}
       {tab === "performance" && (

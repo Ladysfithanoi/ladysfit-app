@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
+import { ChevronDown, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { downloadYearStatsExcel, type BranchYearStats } from "@/lib/year-stats-excel";
 
 type SourceStat = {
   source: string;
@@ -38,7 +40,7 @@ type PTStat = {
   mainSource: string;
 };
 
-type StatsData = {
+export type StatsData = {
   bySource: SourceStat[];
   bySourceAll: SourceConvStat[];
   byAge: BucketStat[];
@@ -49,6 +51,8 @@ type StatsData = {
   totalRevenue: number;
 };
 
+type Branch = { id: string; name: string };
+
 type Props = {
   branchId: string;
   branchName: string;
@@ -56,6 +60,8 @@ type Props = {
   year: number;
   period?: "month" | "quarter" | "year";
   quarter?: number;
+  /** Danh sách cơ sở được phép xem (đã lọc quyền) — dùng cho xuất Excel ở tab năm. */
+  branches?: Branch[];
 };
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -84,7 +90,7 @@ const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
 const filterSelectCls =
   "h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer";
 
-export function MonthlyStatsTab({ branchId, month, year, period = "month", quarter = 1 }: Props) {
+export function MonthlyStatsTab({ branchId, month, year, period = "month", quarter = 1, branches = [] }: Props) {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selYear, setSelYear] = useState(year);
@@ -92,6 +98,48 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
 
   const isPeriod = period === "quarter" || period === "year";
   const effYear = isPeriod ? selYear : year;
+
+  // ── Xuất Excel (chỉ tab Thống kê năm) ──────────────────────────────────────
+  const canExport = period === "year" && branches.length > 0;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Mặc định tích sẵn cơ sở đang xem (nếu có), không thì tích cơ sở đầu tiên.
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(
+    () => (branchId ? [branchId] : branches[0] ? [branches[0].id] : [])
+  );
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+
+  const allSelected = branches.length > 0 && selectedBranchIds.length === branches.length;
+  const toggleBranch = (id: string) =>
+    setSelectedBranchIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAll = () =>
+    setSelectedBranchIds(allSelected ? [] : branches.map((b) => b.id));
+
+  async function handleExport() {
+    if (selectedBranchIds.length === 0) return;
+    setExporting(true);
+    setExportError("");
+    try {
+      // Tải song song thống kê năm của từng cơ sở đã chọn, giữ đúng thứ tự danh sách.
+      const ordered = branches.filter((b) => selectedBranchIds.includes(b.id));
+      const results = await Promise.all(
+        ordered.map(async (b): Promise<BranchYearStats | null> => {
+          const res = await fetch(`/api/setup/monthly-stats?branchId=${b.id}&period=year&year=${effYear}`);
+          if (!res.ok) return null;
+          const d = (await res.json()) as StatsData;
+          return { branchName: b.name, data: d };
+        })
+      );
+      const valid = results.filter((r): r is BranchYearStats => r !== null);
+      if (valid.length === 0) throw new Error("Không tải được dữ liệu cơ sở đã chọn");
+      await downloadYearStatsExcel(effYear, valid);
+      setPickerOpen(false);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Xuất Excel thất bại");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const periodLabel =
     period === "quarter" ? `Quý ${selQuarter}/${effYear}` : period === "year" ? `Năm ${effYear}` : `Tháng ${month}/${year}`;
@@ -126,6 +174,66 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
       <select value={selYear} onChange={(e) => setSelYear(parseInt(e.target.value))} className={filterSelectCls}>
         {YEAR_OPTIONS.map((y) => <option key={y} value={y}>Năm {y}</option>)}
       </select>
+
+      {/* Xuất Excel — chọn 1 hoặc nhiều cơ sở; nhiều cơ sở → mỗi cơ sở 1 sheet. */}
+      {canExport && (
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-sm font-bold text-white bg-[#f15b5c] hover:bg-[#e04a4b] transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Tải Excel
+            <span className="text-xs font-semibold opacity-90">({selectedBranchIds.length})</span>
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          {pickerOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setPickerOpen(false)} />
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-64 bg-white rounded-xl border border-gray-200 shadow-lg p-2">
+                <p className="px-2 pt-1 pb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+                  Chọn cơ sở để tải năm {effYear}
+                </p>
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-[#f15b5c] w-4 h-4" />
+                  <span className="text-sm font-bold text-gray-800">Chọn tất cả</span>
+                </label>
+                <div className="my-1 border-t border-gray-100" />
+                <div className="max-h-60 overflow-y-auto space-y-0.5">
+                  {branches.map((b) => (
+                    <label key={b.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedBranchIds.includes(b.id)}
+                        onChange={() => toggleBranch(b.id)}
+                        className="accent-[#f15b5c] w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+                {exportError && <p className="px-2 pt-1.5 text-[11px] text-[#f15b5c] font-medium">{exportError}</p>}
+                <div className="mt-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    disabled={exporting || selectedBranchIds.length === 0}
+                    className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-xl text-sm font-bold text-white bg-[#f15b5c] hover:bg-[#e04a4b] transition-colors disabled:opacity-50"
+                  >
+                    {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {exporting
+                      ? "Đang tạo file..."
+                      : selectedBranchIds.length > 1
+                        ? `Tải ${selectedBranchIds.length} cơ sở (mỗi cơ sở 1 sheet)`
+                        : "Tải xuống"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   ) : null;
 
