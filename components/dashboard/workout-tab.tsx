@@ -1099,18 +1099,25 @@ function ProgramView({
                   ) ?? null;
                   const lastLog = completedLogs[0] ?? null;
 
-                  // Previous week data for progressive overload suggestions.
-                  // Each week has its own session IDs, so we match by position index
-                  // (same slot = "Buổi B" in week 1 vs "Buổi B" in week 2).
-                  const prevWeek = program.weeks.find(
-                    (w) => w.weekNumber === currentWeekData.weekNumber - 1
-                  );
-                  const prevWeekSession = prevWeek?.sessions[activeSessionIdx];
-                  const prevWeekLogs = prevWeek && prevWeekSession
-                    ? workoutLogs.filter(
-                        (l) => l.weekId === prevWeek.id && l.sessionId === prevWeekSession.id && l.status === "COMPLETED"
-                      )
-                    : [];
+                  // Thông số tuần trước để gợi ý tăng tiến + điền sẵn Set 1. Khớp
+                  // buổi theo VỊ TRÍ (mỗi tuần có session ID riêng), nhưng duyệt
+                  // NGƯỢC qua MỌI tuần trước — không chỉ tuần liền kề — và lấy buổi
+                  // ở cùng vị trí có nhật ký COMPLETED gần nhất. Nhờ vậy các buổi
+                  // mới thêm (vd nâng 3→5 buổi/tuần, buổi 4-5 bị thêm rỗng vào tuần
+                  // đã tập xong nên tuần liền kề không có log) vẫn kế thừa được từ
+                  // lần gần nhất khách thực sự tập buổi đó.
+                  const priorWeeks = program.weeks
+                    .filter((w) => w.weekNumber < currentWeekData.weekNumber)
+                    .sort((a, b) => b.weekNumber - a.weekNumber);
+                  let prevWeekLogs: WorkoutLogRow[] = [];
+                  for (const pw of priorWeeks) {
+                    const pwSession = pw.sessions[activeSessionIdx];
+                    if (!pwSession) continue;
+                    const logs = workoutLogs
+                      .filter((l) => l.weekId === pw.id && l.sessionId === pwSession.id && l.status === "COMPLETED")
+                      .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+                    if (logs.length > 0) { prevWeekLogs = logs; break; }
+                  }
 
                   // Kế thừa từ giai đoạn TRƯỚC: ở tuần ĐẦU của chương trình (chưa có
                   // tuần trước trong cùng CT), nếu có thông số kế thừa theo TÊN BÀI
