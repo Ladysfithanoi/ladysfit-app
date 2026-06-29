@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -1537,6 +1538,7 @@ export function WorkoutTab({
   enableLevelSystem?: boolean;
   minSessionMinutes?: number;
 }) {
+  const router = useRouter();
   const [programs, setPrograms] = useState(initialPrograms);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
   const [showArchived, setShowArchived] = useState(false);
@@ -1576,29 +1578,39 @@ export function WorkoutTab({
     [programs, workoutLogs]
   );
 
+  // Sau mỗi thay đổi cấu trúc (thêm/xóa tuần, sửa giáo án, hoàn thành buổi…) phải
+  // làm mới Router Cache của Next.js. Nếu không, dữ liệu chỉ nằm trong state cục
+  // bộ — rời tab rồi quay lại sẽ thấy bản RSC cũ (tuần mới "biến mất") cho tới khi
+  // cache hết hạn. KHÔNG gọi khi đang autosave buổi dở (tránh refresh liên tục).
   const handleUpdate = useCallback(
     (patch: Partial<WorkoutProgram> & { id: string }) => {
       setPrograms((prev) =>
         prev.map((p) => (p.id === patch.id ? { ...p, ...patch } : p))
       );
+      router.refresh();
     },
-    []
+    [router]
   );
 
   const handleLogAdded = useCallback((log: WorkoutLogRow, pkg: PackageUpdate | null) => {
     setWorkoutLogs((prev) => [log, ...prev]);
     if (pkg) onPackageUpdated?.(pkg);
-  }, [onPackageUpdated]);
+    router.refresh();
+  }, [onPackageUpdated, router]);
 
   const handleLogUpdated = useCallback((updated: WorkoutLogRow, pkg?: PackageUpdate | null) => {
     setWorkoutLogs((prev) => prev.map((l) => l.id === updated.id ? updated : l));
     if (pkg) onPackageUpdated?.(pkg);
-  }, [onPackageUpdated]);
+    // Chỉ refresh khi buổi đã chốt (hoàn thành/hủy) — không refresh ở mỗi lần
+    // autosave số liệu đang nhập (gọi mỗi ~1.2s) để khỏi nện server.
+    if (updated.status === "COMPLETED" || updated.status === "VOID") router.refresh();
+  }, [onPackageUpdated, router]);
 
   const handleLogDeleted = useCallback((logId: string, pkg?: PackageUpdate | null) => {
     setWorkoutLogs((prev) => prev.filter((l) => l.id !== logId));
     if (pkg) onPackageUpdated?.(pkg);
-  }, [onPackageUpdated]);
+    router.refresh();
+  }, [onPackageUpdated, router]);
 
   const handleSessionDeleted = useCallback((week: WorkoutWeek, sessionId: string, pkg?: PackageUpdate | null) => {
     // Replace the week that owns this session and drop the deleted session's logs.
@@ -1610,10 +1622,12 @@ export function WorkoutTab({
     );
     setWorkoutLogs((prev) => prev.filter((l) => l.sessionId !== sessionId));
     if (pkg) onPackageUpdated?.(pkg);
-  }, [onPackageUpdated]);
+    router.refresh();
+  }, [onPackageUpdated, router]);
 
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
     setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+    router.refresh();
   }
 
   return (
