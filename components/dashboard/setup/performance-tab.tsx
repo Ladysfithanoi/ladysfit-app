@@ -10,6 +10,8 @@ type Personnel = {
   revenue: number[];   // 12 entries, index 0 = tháng 1 (đơn vị: triệu)
   customers: number[];
   leads: number[];
+  clientCount: number;        // số khách hàng thực tế PT phụ trách (đếm Client)
+  transformedCount: number;   // số khách đã gán mác đạt transform
 };
 
 function nameWithRole(name: string, role?: string) {
@@ -143,11 +145,13 @@ export function PerformanceTab({ branchId, year }: Props) {
   // ── Tổng quan: tính trên cả năm cho mỗi nhân sự ──────────────────────────
   const overviewRows = personnel.map((p) => {
     const yearRevenue = sum(p.revenue);
-    const yearCustomers = sum(p.customers);
-    const yearLeads = sum(p.leads);
     const avgMonth = yearRevenue / 12;
     const avgQuarter = yearRevenue / 4;
-    const transformPct = yearLeads > 0 ? (yearCustomers / yearLeads) * 100 : 0;
+    // Khách hàng = số Client thực tế PT phụ trách (không cộng dồn lead won theo tháng).
+    // Tỉ lệ transform = khách đã đạt transform / tổng khách của chính PT đó.
+    const clientCount = p.clientCount;
+    const transformedCount = p.transformedCount;
+    const transformPct = clientCount > 0 ? (transformedCount / clientCount) * 100 : 0;
     const perfPct = target > 0 ? (avgMonth / target) * 100 : 0;
     return {
       ptId: p.ptId,
@@ -156,7 +160,8 @@ export function PerformanceTab({ branchId, year }: Props) {
       avgMonth,
       avgQuarter,
       yearRevenue,
-      yearCustomers,
+      clientCount,
+      transformedCount,
       transformPct,
       perfPct,
     };
@@ -165,15 +170,15 @@ export function PerformanceTab({ branchId, year }: Props) {
   // Doanh số phòng tập (lead của nhân sự đã nghỉ) — tính vào tổng đội nhưng không có chủ.
   const houseYearRevenue = house ? sum(house.revenue) : 0;
   const houseYearCustomers = house ? sum(house.customers) : 0;
-  const houseYearLeads = house ? sum(house.leads) : 0;
-  const houseTransformPct = houseYearLeads > 0 ? (houseYearCustomers / houseYearLeads) * 100 : 0;
 
   const staffYearRevenue = sum(overviewRows.map((r) => r.yearRevenue));
-  const staffYearCustomers = sum(overviewRows.map((r) => r.yearCustomers));
+  // Tổng khách hàng đội = tổng khách thực tế các PT phụ trách (không đếm lead won).
+  const teamClientCount = sum(overviewRows.map((r) => r.clientCount));
+  const teamTransformedCount = sum(overviewRows.map((r) => r.transformedCount));
+  const teamTransformPct = teamClientCount > 0 ? (teamTransformedCount / teamClientCount) * 100 : 0;
 
   // Tổng doanh số đội = nhân sự hiện tại + phòng tập (nhân sự đã nghỉ).
   const teamYearRevenue = staffYearRevenue + houseYearRevenue;
-  const teamYearCustomers = staffYearCustomers + houseYearCustomers;
   const teamAvgMonth = teamYearRevenue / 12;
   // Hiệu suất đội = doanh số đội (gồm phòng tập) / mục tiêu của số nhân sự hiện tại.
   const teamPerfPct = target > 0 && personnel.length > 0
@@ -226,7 +231,7 @@ export function PerformanceTab({ branchId, year }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <SummaryCard label="Doanh số đội (năm)" value={fmtRevenue(teamYearRevenue)} />
         <SummaryCard label="TB doanh số/tháng" value={fmtRevenue(teamAvgMonth)} />
-        <SummaryCard label="Tổng khách hàng (năm)" value={`${teamYearCustomers}`} />
+        <SummaryCard label="Tổng khách hàng phụ trách" value={`${teamClientCount}`} />
         <SummaryCard label="Hiệu suất đội" value={fmtPct(teamPerfPct)} highlight={teamPerfPct} />
       </div>
 
@@ -258,9 +263,11 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgMonth)}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgQuarter)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-800")}>{fmtRevenue(row.yearRevenue)}</td>
-                  <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.yearCustomers}</td>
+                  <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.clientCount}</td>
                   <td className={cn(td, "text-center")}>
-                    <span className="font-semibold text-blue-600">{fmtPct(row.transformPct)}</span>
+                    <span className="font-semibold text-blue-600" title={`${row.transformedCount}/${row.clientCount} khách đạt transform`}>
+                      {fmtPct(row.transformPct)}
+                    </span>
                   </td>
                   <td className={cn(td, "text-center")}><PerfPct pct={row.perfPct} /></td>
                 </tr>
@@ -273,10 +280,8 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 12)}</td>
                   <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 4)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-700")}>{fmtRevenue(houseYearRevenue)}</td>
-                  <td className={cn(td, "text-center font-semibold text-gray-700")}>{houseYearCustomers}</td>
-                  <td className={cn(td, "text-center")}>
-                    <span className="font-semibold text-blue-600">{fmtPct(houseTransformPct)}</span>
-                  </td>
+                  <td className={cn(td, "text-center text-gray-300")}>—</td>
+                  <td className={cn(td, "text-center text-gray-300")}>—</td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
                 </tr>
               )}
@@ -287,8 +292,8 @@ export function PerformanceTab({ branchId, year }: Props) {
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamAvgMonth)}</td>
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamYearRevenue / 4)}</td>
                 <td className={cn(td, "text-center font-extrabold text-gray-900")}>{fmtRevenue(teamYearRevenue)}</td>
-                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{teamYearCustomers}</td>
-                <td className={cn(td, "text-center")}>—</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{teamClientCount}</td>
+                <td className={cn(td, "text-center font-bold text-blue-600")} title={`${teamTransformedCount}/${teamClientCount} khách đạt transform`}>{fmtPct(teamTransformPct)}</td>
                 <td className={cn(td, "text-center font-bold text-emerald-600")}>{fmtPct(teamPerfPct)}</td>
               </tr>
             </tfoot>
@@ -302,7 +307,7 @@ export function PerformanceTab({ branchId, year }: Props) {
           <div>
             <p className="text-sm font-extrabold text-gray-800">Chi tiết theo tháng — {periodLabel}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              Doanh số, số khách hàng và tỉ lệ transform của {selected ? nameWithRole(selected.ptName, selected.ptRole) : "toàn đội"} theo từng tháng
+              Doanh số, số khách chốt và tỉ lệ chốt (khách mua / lead) của {selected ? nameWithRole(selected.ptName, selected.ptRole) : "toàn đội"} theo từng tháng
             </p>
           </div>
           <select value={selPT} onChange={(e) => setSelPT(e.target.value)} className={filterSelectCls}>
@@ -318,9 +323,9 @@ export function PerformanceTab({ branchId, year }: Props) {
               <tr className="bg-[#f5f5f5]">
                 <th className={cn(th, "text-left")}>Tháng</th>
                 <th className={cn(th, "text-center")}>Doanh số</th>
-                <th className={cn(th, "text-center")}>Khách hàng</th>
+                <th className={cn(th, "text-center")}>Khách chốt</th>
                 <th className={cn(th, "text-center")}>Số lead</th>
-                <th className={cn(th, "text-center")}>Tỉ lệ transform</th>
+                <th className={cn(th, "text-center")}>Tỉ lệ chốt</th>
                 <th className={cn(th, "text-center")}>Hiệu suất</th>
               </tr>
             </thead>

@@ -59,6 +59,38 @@ export async function GET(req: Request) {
     leads: number[];
   }>();
 
+  // Số khách hàng thực tế PT phụ trách (đếm Client, không cộng dồn lead won theo tháng
+  // — 1 khách gia hạn nhiều lần chỉ tính 1) + số khách đã gán mác đạt transform.
+  const clientRows = await prisma.client.findMany({
+    where: {
+      branchId,
+      ...(isPT ? { assignedPTId: session.user.id } : {}),
+    },
+    select: {
+      assignedPTId: true,
+      hasTransformed: true,
+      assignedPT: { select: { name: true, email: true, role: true } },
+    },
+  });
+
+  const clientStat = new Map<string, {
+    name: string;
+    role: string;
+    clientCount: number;
+    transformedCount: number;
+  }>();
+  for (const c of clientRows) {
+    const s = clientStat.get(c.assignedPTId) ?? {
+      name: c.assignedPT.name ?? c.assignedPT.email,
+      role: c.assignedPT.role,
+      clientCount: 0,
+      transformedCount: 0,
+    };
+    s.clientCount += 1;
+    if (c.hasTransformed) s.transformedCount += 1;
+    clientStat.set(c.assignedPTId, s);
+  }
+
   // Doanh số của lead không gắn PT (nhân sự đã nghỉ) gom vào "phòng tập" — vẫn tính
   // vào tổng doanh số đội nhưng không thuộc hiệu suất của PT nào.
   const house = {
@@ -95,18 +127,30 @@ export async function GET(req: Request) {
     ptMap.set(ptId, cur);
   }
 
-  const personnel = Array.from(ptMap.entries())
-    .map(([ptId, stat]) => ({
-      ptId,
-      ptName: stat.name,
-      ptRole: stat.role,
-      revenue: stat.revenue,
-      customers: stat.customers,
-      leads: stat.leads,
-    }))
-    // Drop personnel with no activity at all in the year.
+  // Tập PT = có hoạt động lead/doanh số trong năm HOẶC đang phụ trách khách hàng.
+  const allPtIds = new Set<string>([
+    ...Array.from(ptMap.keys()),
+    ...Array.from(clientStat.keys()),
+  ]);
+
+  const personnel = Array.from(allPtIds)
+    .map((ptId) => {
+      const stat = ptMap.get(ptId);
+      const cStat = clientStat.get(ptId);
+      return {
+        ptId,
+        ptName: stat?.name ?? cStat?.name ?? "",
+        ptRole: stat?.role ?? cStat?.role ?? "",
+        revenue: stat?.revenue ?? Array(12).fill(0),
+        customers: stat?.customers ?? Array(12).fill(0),
+        leads: stat?.leads ?? Array(12).fill(0),
+        clientCount: cStat?.clientCount ?? 0,
+        transformedCount: cStat?.transformedCount ?? 0,
+      };
+    })
+    // Drop personnel with no activity at all in the year and no clients.
     .filter((p) =>
-      p.revenue.some((v) => v > 0) || p.leads.some((v) => v > 0)
+      p.revenue.some((v) => v > 0) || p.leads.some((v) => v > 0) || p.clientCount > 0
     )
     .sort((a, b) => {
       const ar = a.revenue.reduce((s, v) => s + v, 0);
