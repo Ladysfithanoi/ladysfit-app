@@ -200,8 +200,8 @@ function getAvailablePackages(
   const hasAny = existingPackages.length > 0;
 
   const weightDiff = currentWeight - (height - 100);
-  const eligibleL2 = weightDiff > 6;
-  const eligibleL1 = weightDiff > 3 && weightDiff <= 6;
+  const eligibleL2 = weightDiff >= 7;
+  const eligibleL1 = weightDiff >= 3 && weightDiff < 7;
 
   let names: string[] = ["L3", "L4", "L5"];
   if (hasAny) names.push("Loyalfit");
@@ -214,14 +214,14 @@ function getAvailablePackages(
     note = "ℹ️ Đã sử dụng gói Giai đoạn 1";
   } else if (eligibleL2) {
     names = ["L1", "L2", ...names];
-    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 6 kg) — có thể chọn L1 hoặc L2`;
+    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 7 kg) — có thể chọn L1 hoặc L2`;
     noteOk = true;
   } else if (eligibleL1) {
     names = ["L1", ...names];
-    note = `✓ Đủ điều kiện L1 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg > 3 kg)`;
+    note = `✓ Đủ điều kiện L1 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 3 kg)`;
     noteOk = true;
   } else {
-    note = `ℹ️ Không đủ điều kiện L1/L2, bắt đầu từ Giai đoạn 2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≤ 3 kg)`;
+    note = `ℹ️ Không đủ điều kiện L1/L2, bắt đầu từ Giai đoạn 2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg < 3 kg)`;
   }
 
   return { names, note, noteOk };

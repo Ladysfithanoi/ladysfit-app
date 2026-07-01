@@ -121,8 +121,8 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
   const phase1Key: string | null = (() => {
     if (height > 0 && weight > 0) {
       const diff = weight - height + 100;
-      if (diff > 6) return "L2";
-      if (diff > 3) return "L1";
+      if (diff >= 7) return "L2";
+      if (diff >= 3) return "L1";
     }
     return null;
   })();
@@ -417,11 +417,11 @@ export function Step5Sales({
               <p className="text-sm font-semibold text-blue-800">
                 {initialWeight} − {infoHeight} + 100 = <span className="font-extrabold">{weightDiff.toFixed(1)} kg</span>
               </p>
-              {weightDiff > 6 ? (
+              {weightDiff >= 7 ? (
                 <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
                   <Check className="w-3 h-3" /> Đủ điều kiện L2 ✓
                 </span>
-              ) : weightDiff > 3 ? (
+              ) : weightDiff >= 3 ? (
                 <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
                   <Check className="w-3 h-3" /> Đủ điều kiện L1 ✓
                 </span>
