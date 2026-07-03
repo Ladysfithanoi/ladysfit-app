@@ -26,7 +26,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -42,6 +42,8 @@ export async function POST(req: Request) {
     color?: string;
     retestIntervalDays?: number;
     monthlyTarget?: number;
+    promoteMinAvgRevenue?: number;
+    promoteMinTransform?: number;
     isDefault?: boolean;
     phaseIds?: string[];
   };
@@ -64,6 +66,8 @@ export async function POST(req: Request) {
       color: body.color ?? "#6b7280",
       retestIntervalDays: body.retestIntervalDays ?? 30,
       monthlyTarget: body.monthlyTarget != null && body.monthlyTarget > 0 ? Math.round(body.monthlyTarget) : 38,
+      promoteMinAvgRevenue: body.promoteMinAvgRevenue != null && body.promoteMinAvgRevenue >= 0 ? body.promoteMinAvgRevenue : 0,
+      promoteMinTransform: body.promoteMinTransform != null && body.promoteMinTransform >= 0 ? Math.round(body.promoteMinTransform) : 0,
       isDefault: body.isDefault ?? false,
       phaseAccess: body.phaseIds?.length
         ? { create: body.phaseIds.map((phaseId) => ({ phaseId, hasAccess: true })) }

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
-  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen,
+  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -52,6 +52,7 @@ const NAV_SECTIONS: NavSection[] = [
     header: "DỮ LIỆU NHÂN SỰ",
     items: [
       { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
+      { href: "/dashboard/practical", icon: Award,       label: "Thực hành & Thăng hạng", show: forAdminFM },
     ],
   },
   {

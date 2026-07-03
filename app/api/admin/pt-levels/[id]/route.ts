@@ -17,6 +17,8 @@ export async function PUT(
     color?: string;
     retestIntervalDays?: number;
     monthlyTarget?: number;
+    promoteMinAvgRevenue?: number;
+    promoteMinTransform?: number;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -32,6 +34,8 @@ export async function PUT(
       ...(body.color !== undefined && { color: body.color }),
       ...(body.retestIntervalDays !== undefined && { retestIntervalDays: body.retestIntervalDays }),
       ...(body.monthlyTarget !== undefined && body.monthlyTarget > 0 && { monthlyTarget: Math.round(body.monthlyTarget) }),
+      ...(body.promoteMinAvgRevenue !== undefined && body.promoteMinAvgRevenue >= 0 && { promoteMinAvgRevenue: body.promoteMinAvgRevenue }),
+      ...(body.promoteMinTransform !== undefined && body.promoteMinTransform >= 0 && { promoteMinTransform: Math.round(body.promoteMinTransform) }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

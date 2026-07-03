@@ -80,6 +80,8 @@ model User {
   kocContracts            KOCContract[]                @relation("PTKOCContracts")
   substituteRequestsMade     SubstituteRequest[]          @relation("RequesterSub")
   substituteRequestsReceived SubstituteRequest[]          @relation("SubstituteSub")
+  practicalAssessments       PracticalAssessment[]        @relation("PTPracticalAssessments")
+  assessedPracticals         PracticalAssessment[]        @relation("AssessorPracticals")
 
   @@map("users")
 }
@@ -1231,6 +1233,11 @@ model PTLevel {
   // KPI doanh số/tháng (triệu) của cấp độ — dùng để tính hiệu suất doanh số (hiệu suất = doanh số thực / KPI).
   // Cấp độ "Thử việc" đặt 15, các cấp PT chính thức để 38.
   monthlyTarget      Int                  @default(38)
+  // Điều kiện để PT ở cấp này được THĂNG lên cấp kế tiếp:
+  // - promoteMinAvgRevenue: TB doanh số/tháng tối thiểu (triệu). VD Thử việc 15, Cấp 1-3 = 80%×38 = 30.4
+  // - promoteMinTransform: số khách đạt transform tối thiểu. VD Thử việc 0, Cấp 1-3 = 1
+  promoteMinAvgRevenue Float              @default(0)
+  promoteMinTransform  Int                @default(0)
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]
@@ -1258,9 +1265,33 @@ model SystemConfig {
   enableLevelSystem Boolean  @default(true)
   // Minimum minutes between check-in and signature for a session to count.
   minSessionMinutes Int      @default(30)
+  // Ngưỡng % điểm để ĐẠT bài kiểm tra thực hành (rubric FM chấm).
+  practicalPassPercent Int   @default(70)
   updatedAt         DateTime @updatedAt
 
   @@map("system_config")
+}
+
+// ── Bài kiểm tra thực hành (rubric do FM/Admin chấm) ──────────────────────────
+model PracticalAssessment {
+  id             String   @id @default(cuid())
+  ptId           String
+  assessorId     String
+  levelName      String?  // cấp độ của PT tại thời điểm chấm (lưu vết)
+  exercisesCount Int      @default(6)
+  scores         String   @db.Text // JSON các tiêu chí cố định: { [code]: 1|3|5 }
+  exercises      String   @db.Text // JSON các bài tập: [{ name, scores: { [code]: 1|3|5 } }]
+  totalScore     Int
+  maxScore       Int
+  passed         Boolean
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  pt       User @relation("PTPracticalAssessments", fields: [ptId], references: [id], onDelete: Cascade)
+  assessor User @relation("AssessorPracticals", fields: [assessorId], references: [id])
+
+  @@index([ptId])
+  @@map("practical_assessments")
 }
 
 // ── Substitute Teaching ───────────────────────────────────────────────────────

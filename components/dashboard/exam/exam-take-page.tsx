@@ -19,6 +19,7 @@ type ExamResult = {
   correctCount: number;
   total: number;
   passed: boolean;
+  promoted: boolean;
 };
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
@@ -70,6 +71,7 @@ export function ExamTakePage() {
           correctCount: data.correctCount,
           total: data.total,
           passed: data.passed,
+          promoted: !!data.promoted,
         });
       }
     } finally {
@@ -131,7 +133,9 @@ export function ExamTakePage() {
             </p>
             <p className="text-sm font-semibold text-gray-500 mt-1">
               {result.passed
-                ? "Tài khoản của bạn đã được nâng cấp lên cấp Cơ bản"
+                ? result.promoted
+                  ? "Bạn đã đủ điều kiện và được thăng lên cấp độ mới!"
+                  : "Bạn đã đạt phần lý thuyết. Cần đạt thêm thực hành, doanh số và transform để được thăng hạng."
                 : "Bạn có thể thử lại sau"}
             </p>
           </div>

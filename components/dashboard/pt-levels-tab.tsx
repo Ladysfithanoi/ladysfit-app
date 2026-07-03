@@ -25,6 +25,8 @@ type PTLevel = {
   color: string;
   retestIntervalDays: number;
   monthlyTarget: number;
+  promoteMinAvgRevenue: number;
+  promoteMinTransform: number;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -82,6 +84,8 @@ export function PTLevelsTab() {
     color: "#f97316",
     retestIntervalDays: 30,
     monthlyTarget: 38,
+    promoteMinAvgRevenue: 30.4,
+    promoteMinTransform: 1,
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -163,7 +167,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -174,6 +178,8 @@ export function PTLevelsTab() {
       color: level.color,
       retestIntervalDays: level.retestIntervalDays,
       monthlyTarget: level.monthlyTarget,
+      promoteMinAvgRevenue: level.promoteMinAvgRevenue,
+      promoteMinTransform: level.promoteMinTransform,
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -195,6 +201,8 @@ export function PTLevelsTab() {
             color: form.color,
             retestIntervalDays: form.retestIntervalDays,
             monthlyTarget: form.monthlyTarget,
+            promoteMinAvgRevenue: form.promoteMinAvgRevenue,
+            promoteMinTransform: form.promoteMinTransform,
             isDefault: form.isDefault,
           }),
         });
@@ -526,6 +534,43 @@ export function PTLevelsTab() {
                 />
                 <p className="text-[11px] text-gray-400">
                   Dùng để tính hiệu suất doanh số của nhân sự ở cấp độ này (VD: Thử việc 15, PT chính thức 38).
+                </p>
+              </div>
+
+              {/* Điều kiện thăng hạng */}
+              <div className="space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50">
+                <p className="text-xs font-bold text-gray-600">Điều kiện để thăng lên cấp kế tiếp</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-500">DS TB tối thiểu (triệu/tháng)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={form.promoteMinAvgRevenue}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, promoteMinAvgRevenue: parseFloat(e.target.value) || 0 }))
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-500">Số transform tối thiểu</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.promoteMinTransform}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, promoteMinTransform: parseInt(e.target.value) || 0 }))
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  PT ở cấp này phải đạt các mốc trên (kèm đậu lý thuyết & thực hành) mới được thăng. VD: Thử việc 15tr / 0, Cấp 1–3 là 30,4tr / 1. Cấp cao nhất bỏ trống.
                 </p>
               </div>
 

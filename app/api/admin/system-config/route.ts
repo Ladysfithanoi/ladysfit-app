@@ -22,13 +22,17 @@ export async function PUT(req: Request) {
   const body = (await req.json()) as {
     enableLevelSystem?: boolean;
     minSessionMinutes?: number;
+    practicalPassPercent?: number;
   };
 
   // Build a partial update so callers can change either field independently.
-  const update: { enableLevelSystem?: boolean; minSessionMinutes?: number } = {};
+  const update: { enableLevelSystem?: boolean; minSessionMinutes?: number; practicalPassPercent?: number } = {};
   if (typeof body.enableLevelSystem === "boolean") update.enableLevelSystem = body.enableLevelSystem;
   if (typeof body.minSessionMinutes === "number" && body.minSessionMinutes > 0) {
     update.minSessionMinutes = Math.round(body.minSessionMinutes);
+  }
+  if (typeof body.practicalPassPercent === "number" && body.practicalPassPercent > 0 && body.practicalPassPercent <= 100) {
+    update.practicalPassPercent = Math.round(body.practicalPassPercent);
   }
 
   const config = await prisma.systemConfig.upsert({
@@ -38,6 +42,7 @@ export async function PUT(req: Request) {
       id: "main",
       enableLevelSystem: update.enableLevelSystem ?? true,
       minSessionMinutes: update.minSessionMinutes ?? 30,
+      practicalPassPercent: update.practicalPassPercent ?? 70,
     },
   });
 

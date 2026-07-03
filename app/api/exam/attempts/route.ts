@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { tryPromotePt } from "@/lib/pt-promotion";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -70,33 +71,21 @@ export async function POST(req: NextRequest) {
 
   const userName = session.user.name ?? session.user.email ?? "PT";
 
+  let promoted = false;
   if (passed) {
-    // Upgrade to next ptLevel if one exists above the current level
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { ptLevelId: true, ptLevel: { select: { order: true } } },
-    });
-    const nextLevel = await prisma.pTLevel.findFirst({
-      where: {
-        isActive: true,
-        order: { gt: currentUser?.ptLevel?.order ?? -1 },
-      },
-      orderBy: { order: "asc" },
-    });
-    if (nextLevel) {
-      await prisma.user.update({
-        where: { id: session.user.id },
-        data: { ptLevelId: nextLevel.id },
+    // Đậu lý thuyết CHỈ là một trong các điều kiện — chỉ thăng hạng nếu đủ cả
+    // (thực hành đạt + doanh số + transform). Ngược lại vẫn ghi nhận đậu để chờ.
+    promoted = await tryPromotePt(session.user.id);
+    if (!promoted) {
+      await prisma.upgradeNotification.create({
+        data: { userId: session.user.id, userName, passed: true },
       });
     }
-    await prisma.upgradeNotification.create({
-      data: { userId: session.user.id, userName, passed: true },
-    });
   } else {
     await prisma.upgradeNotification.create({
       data: { userId: session.user.id, userName, passed: false },
     });
   }
 
-  return NextResponse.json({ attempt, scorePct, passed, correctCount, total });
+  return NextResponse.json({ attempt, scorePct, passed, promoted, correctCount, total });
 }
