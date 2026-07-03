@@ -32,7 +32,7 @@ type Row = {
 };
 type OverviewData = { rows: Row[]; branches: Branch[]; passPercent: number; enableLevelSystem: boolean };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 4;
 
 function emptyExercises(n: number): PracticalExercise[] {
   return Array.from({ length: n }, () => ({ name: "", scores: {} }));
