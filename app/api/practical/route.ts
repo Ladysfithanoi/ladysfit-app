@@ -41,6 +41,7 @@ const ptSelect = {
   email: true,
   role: true,
   branchId: true,
+  branch: { select: { id: true, name: true } },
   ptLevel: {
     select: {
       name: true,
@@ -62,12 +63,19 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const pts = await ptsInScope(role, session.user.managedBranchIds ?? []);
+  const managedBranchIds = session.user.managedBranchIds ?? [];
+  const pts = await ptsInScope(role, managedBranchIds);
   const year = new Date().getFullYear();
-  const [levels, stats, sys] = await Promise.all([
+  const [levels, stats, sys, branches] = await Promise.all([
     getActiveLevels(),
     computePtStats(pts.map((p) => p.id), year),
     prisma.systemConfig.findUnique({ where: { id: "main" } }),
+    // Danh sách cơ sở để lọc: ADMIN xem tất cả, FM chỉ cơ sở mình quản lý.
+    prisma.branch.findMany({
+      where: role === "ADMIN" ? {} : { id: { in: managedBranchIds } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const passPercent = sys?.practicalPassPercent ?? 70;
   const enableLevelSystem = sys?.enableLevelSystem !== false;
@@ -89,6 +97,8 @@ export async function GET() {
       return {
         ptId: p.id,
         name: p.name ?? p.email,
+        branchId: p.branchId,
+        branchName: p.branch?.name ?? null,
         levelName: p.ptLevel?.name ?? null,
         levelColor: p.ptLevel?.color ?? null,
         nextLevelName: ev.nextLevelName,
@@ -102,7 +112,7 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ rows, passPercent, enableLevelSystem });
+  return NextResponse.json({ rows, branches, passPercent, enableLevelSystem });
 }
 
 // POST: lưu 1 lần chấm thực hành cho 1 PT.

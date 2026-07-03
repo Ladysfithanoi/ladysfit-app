@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Check, X, ClipboardCheck, Plus, Trash2, ChevronUp, Loader2, Award } from "lucide-react";
+import { Check, X, ClipboardCheck, Plus, Trash2, ChevronUp, Loader2, Award, Search } from "lucide-react";
 import {
   FIXED_SECTIONS,
   PER_EXERCISE_SECTIONS,
@@ -16,9 +16,12 @@ import {
 } from "@/lib/practical-rubric";
 
 type Condition = { key: string; label: string; ok: boolean; detail: string };
+type Branch = { id: string; name: string };
 type Row = {
   ptId: string;
   name: string;
+  branchId: string | null;
+  branchName: string | null;
   levelName: string | null;
   levelColor: string | null;
   nextLevelName: string | null;
@@ -27,7 +30,9 @@ type Row = {
   eligible: boolean;
   lastPractical: { passed: boolean; totalScore: number; maxScore: number; createdAt: string } | null;
 };
-type OverviewData = { rows: Row[]; passPercent: number; enableLevelSystem: boolean };
+type OverviewData = { rows: Row[]; branches: Branch[]; passPercent: number; enableLevelSystem: boolean };
+
+const PAGE_SIZE = 8;
 
 function emptyExercises(n: number): PracticalExercise[] {
   return Array.from({ length: n }, () => ({ name: "", scores: {} }));
@@ -101,6 +106,11 @@ export function PracticalPage() {
   const [loading, setLoading] = useState(true);
   const [promoting, setPromoting] = useState<string | null>(null);
 
+  // Filters
+  const [branchFilter, setBranchFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
   // Scoring modal state
   const [scoring, setScoring] = useState<Row | null>(null);
   const [fixedScores, setFixedScores] = useState<PracticalScores>({});
@@ -121,6 +131,22 @@ export function PracticalPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Lọc theo cơ sở + tìm theo tên + phân trang ──────────────────────────
+  const allRows = data?.rows ?? [];
+  const branches = data?.branches ?? [];
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allRows.filter((r) => {
+      const matchBranch = !branchFilter || r.branchId === branchFilter;
+      const matchSearch = !q || r.name.toLowerCase().includes(q);
+      return matchBranch && matchSearch;
+    });
+  }, [allRows, branchFilter, search]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  useEffect(() => { setPage(1); }, [search, branchFilter]);
 
   function openScoring(row: Row) {
     setScoring(row);
@@ -225,18 +251,47 @@ export function PracticalPage() {
         </div>
       )}
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {branches.length > 1 && (
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 min-w-[180px]"
+          >
+            <option value="">Tất cả cơ sở</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Tìm theo tên nhân sự..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white"
+          />
+        </div>
+        <p className="text-xs text-gray-400 font-semibold">
+          Hiển thị <span className="text-gray-700">{filtered.length}</span> / <span className="text-gray-700">{allRows.length}</span> nhân sự
+        </p>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[860px] border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                {["PT", "Cấp hiện tại", "Lý thuyết", "Thực hành", "Doanh số", "Transform", "Thăng lên", ""].map((h) => (
+                {["PT", "Cơ sở", "Cấp hiện tại", "Lý thuyết", "Thực hành", "Doanh số", "Transform", "Thăng lên", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(data?.rows ?? []).map((row) => {
+              {paged.map((row) => {
                 const cond = (k: string) => row.conditions.find((c) => c.key === k);
                 return (
                   <tr key={row.ptId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40">
@@ -247,6 +302,9 @@ export function PracticalPage() {
                           TH gần nhất: {row.lastPractical.totalScore}/{row.lastPractical.maxScore} · {row.lastPractical.passed ? "Đạt" : "Chưa đạt"}
                         </p>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-600">{row.branchName ?? "—"}</span>
                     </td>
                     <td className="px-4 py-3">
                       {row.levelName ? (
@@ -297,13 +355,52 @@ export function PracticalPage() {
                   </tr>
                 );
               })}
-              {(data?.rows.length ?? 0) === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-300">Chưa có PT nào</td></tr>
+              {paged.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-gray-300">
+                  {allRows.length === 0 ? "Chưa có PT nào" : "Không tìm thấy nhân sự phù hợp"}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400 font-semibold">
+            Trang <span className="text-gray-700">{currentPage}</span> / {totalPages}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="h-8 px-3 rounded-lg text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Trước
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={cn(
+                  "h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold border",
+                  p === currentPage ? "bg-[#f15b5c] text-white border-[#f15b5c]" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="h-8 px-3 rounded-lg text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Scoring modal */}
       {scoring && (
