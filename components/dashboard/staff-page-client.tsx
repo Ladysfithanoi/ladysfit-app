@@ -357,6 +357,9 @@ export function StaffPageClient({
       router.refresh();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      // Luôn reset loading — trước đây thiếu ở nhánh thành công nên nút bị khóa
+      // tới khi tải lại trang mới thao tác tiếp được.
       setLoading(false);
     }
   }
