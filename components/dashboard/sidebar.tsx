@@ -52,7 +52,7 @@ const NAV_SECTIONS: NavSection[] = [
     header: "DỮ LIỆU NHÂN SỰ",
     items: [
       { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
-      { href: "/dashboard/practical", icon: Award,       label: "Thực hành & Thăng hạng", show: forAdminFM },
+      { href: "/dashboard/practical", icon: Award,       label: "Thăng hạng", show: forAdminFM },
     ],
   },
   {
