@@ -144,11 +144,25 @@ export function PerformanceTab({ branchId, year }: Props) {
     );
   }
 
+  // ── Số tháng đã kết thúc để tính trung bình ───────────────────────────────
+  // Năm quá khứ: đủ 12 tháng. Năm hiện tại: chỉ các tháng ĐÃ kết thúc (tháng đang
+  // diễn ra chưa xong nên loại ra — vd đang tháng 7 thì tính TB của tháng 1→6).
+  // Năm tương lai: chưa có tháng nào.
+  const now = new Date();
+  const monthsElapsed =
+    selYear < now.getFullYear() ? 12 :
+    selYear > now.getFullYear() ? 0 :
+    now.getMonth(); // getMonth() 0-11 = đúng số tháng đã kết thúc (đang tháng 7 → 6)
+  const avgDivisor = Math.max(monthsElapsed, 1); // tránh chia 0 (đầu tháng 1 / năm tương lai)
+  const isElapsedMonth = (m: number) => m <= monthsElapsed; // m: 1-12
+  // Trung bình doanh số/tháng = tổng doanh số các tháng đã kết thúc / số tháng đã kết thúc.
+  const avgElapsed = (arr: number[]) => sum(arr.slice(0, avgDivisor)) / avgDivisor;
+
   // ── Tổng quan: tính trên cả năm cho mỗi nhân sự ──────────────────────────
   const overviewRows = personnel.map((p) => {
     const yearRevenue = sum(p.revenue);
-    const avgMonth = yearRevenue / 12;
-    const avgQuarter = yearRevenue / 4;
+    const avgMonth = avgElapsed(p.revenue);
+    const avgQuarter = avgMonth * 3; // 1 quý = 3 tháng
     // Khách hàng = số Client thực tế PT phụ trách (không cộng dồn lead won theo tháng).
     // Tỉ lệ transform = khách đã đạt transform / tổng khách của chính PT đó.
     const clientCount = p.clientCount;
@@ -185,7 +199,11 @@ export function PerformanceTab({ branchId, year }: Props) {
 
   // Tổng doanh số đội = nhân sự hiện tại + phòng tập (nhân sự đã nghỉ).
   const teamYearRevenue = staffYearRevenue + houseYearRevenue;
-  const teamAvgMonth = teamYearRevenue / 12;
+  // TB doanh số/tháng của đội = tổng doanh số các tháng đã kết thúc / số tháng đã kết thúc.
+  const teamElapsedRevenue =
+    sum(personnel.map((p) => sum(p.revenue.slice(0, avgDivisor)))) +
+    (house ? sum(house.revenue.slice(0, avgDivisor)) : 0);
+  const teamAvgMonth = teamElapsedRevenue / avgDivisor;
   // KPI đội = tổng KPI theo vị trí của các nhân sự hiện tại (PT 38tr, Thử việc 15tr).
   const teamMonthlyTarget = sum(personnel.map((p) => p.salesTarget));
   // Hiệu suất đội = doanh số đội (gồm phòng tập) / tổng KPI của nhân sự hiện tại.
@@ -219,7 +237,11 @@ export function PerformanceTab({ branchId, year }: Props) {
   const detCustomers = sum(detailRows.map((r) => r.customers));
   const detLeads = sum(detailRows.map((r) => r.leads));
   const detTransformPct = detLeads > 0 ? (detCustomers / detLeads) * 100 : 0;
-  const detAvgRevenue = detailRows.length > 0 ? detRevenue / detailRows.length : 0;
+  // TB doanh số chỉ tính trên các tháng đã kết thúc trong kỳ đang xem (bỏ tháng đang diễn ra & tháng tương lai).
+  const elapsedDetailRows = detailRows.filter((r) => isElapsedMonth(r.month));
+  const detElapsedRevenue = sum(elapsedDetailRows.map((r) => r.revenue));
+  const detAvgMonths = elapsedDetailRows.length;
+  const detAvgRevenue = detAvgMonths > 0 ? detElapsedRevenue / detAvgMonths : 0;
   const detPerfPct = rowTarget > 0 ? (detAvgRevenue / rowTarget) * 100 : 0;
 
   return (
@@ -247,7 +269,7 @@ export function PerformanceTab({ branchId, year }: Props) {
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Tổng quan hiệu suất — Năm {selYear}</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Trung bình doanh số tháng / quý và tổng doanh số năm của từng nhân sự (hiệu suất = TB doanh số tháng / KPI theo cấp độ PT)
+            TB doanh số tháng chỉ tính trên {avgDivisor} tháng đã kết thúc trong năm (bỏ tháng đang diễn ra) • hiệu suất = TB doanh số tháng / KPI theo cấp độ PT
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
@@ -287,8 +309,8 @@ export function PerformanceTab({ branchId, year }: Props) {
                     🏠 Nhân sự đã nghỉ / Phòng tập
                   </td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
-                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 12)}</td>
-                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 4)}</td>
+                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(house ? avgElapsed(house.revenue) : 0)}</td>
+                  <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(house ? avgElapsed(house.revenue) * 3 : 0)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-700")}>{fmtRevenue(houseYearRevenue)}</td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
@@ -301,7 +323,7 @@ export function PerformanceTab({ branchId, year }: Props) {
                 <td className={cn(td, "font-extrabold text-gray-900")}>Toàn đội</td>
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamMonthlyTarget)}</td>
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamAvgMonth)}</td>
-                <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamYearRevenue / 4)}</td>
+                <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamAvgMonth * 3)}</td>
                 <td className={cn(td, "text-center font-extrabold text-gray-900")}>{fmtRevenue(teamYearRevenue)}</td>
                 <td className={cn(td, "text-center font-extrabold text-gray-900")}>{teamClientCount}</td>
                 <td className={cn(td, "text-center font-bold text-blue-600")} title={`${teamTransformedCount}/${teamClientCount} khách đạt transform`}>{fmtPct(teamTransformPct)}</td>
@@ -369,7 +391,7 @@ export function PerformanceTab({ branchId, year }: Props) {
           </table>
         </div>
         <div className="px-5 py-2.5 border-t border-gray-100 text-[11px] text-gray-400">
-          TB doanh số {detailRows.length} tháng: <span className="font-semibold text-gray-600">{fmtRevenue(detAvgRevenue)}</span>
+          TB doanh số {detAvgMonths} tháng đã kết thúc: <span className="font-semibold text-gray-600">{fmtRevenue(detAvgRevenue)}</span>
           {" • "}Mục tiêu: <span className="font-semibold text-gray-600">{fmtRevenue(rowTarget)}/tháng</span>
         </div>
       </div>
