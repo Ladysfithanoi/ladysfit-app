@@ -16,6 +16,7 @@ export async function PUT(
     name?: string;
     color?: string;
     retestIntervalDays?: number;
+    monthlyTarget?: number;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -30,6 +31,7 @@ export async function PUT(
       ...(body.name !== undefined && { name: body.name.trim() }),
       ...(body.color !== undefined && { color: body.color }),
       ...(body.retestIntervalDays !== undefined && { retestIntervalDays: body.retestIntervalDays }),
+      ...(body.monthlyTarget !== undefined && body.monthlyTarget > 0 && { monthlyTarget: Math.round(body.monthlyTarget) }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

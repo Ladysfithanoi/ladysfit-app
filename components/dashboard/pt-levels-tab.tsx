@@ -24,6 +24,7 @@ type PTLevel = {
   order: number;
   color: string;
   retestIntervalDays: number;
+  monthlyTarget: number;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -80,6 +81,7 @@ export function PTLevelsTab() {
     name: "",
     color: "#f97316",
     retestIntervalDays: 30,
+    monthlyTarget: 38,
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -161,7 +163,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -171,6 +173,7 @@ export function PTLevelsTab() {
       name: level.name,
       color: level.color,
       retestIntervalDays: level.retestIntervalDays,
+      monthlyTarget: level.monthlyTarget,
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -191,6 +194,7 @@ export function PTLevelsTab() {
             name: form.name,
             color: form.color,
             retestIntervalDays: form.retestIntervalDays,
+            monthlyTarget: form.monthlyTarget,
             isDefault: form.isDefault,
           }),
         });
@@ -371,6 +375,7 @@ export function PTLevelsTab() {
                     <th className="text-left px-5 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">STT</th>
                     <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Tên cấp độ</th>
                     <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Thi lại sau</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">KPI/tháng</th>
                     <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Giai đoạn tiếp cận</th>
                     <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Nhân sự</th>
                     <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 whitespace-nowrap">Mặc định</th>
@@ -386,6 +391,7 @@ export function PTLevelsTab() {
                         <LevelBadge name={level.name} color={level.color} />
                       </td>
                       <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{level.retestIntervalDays} ngày</td>
+                      <td className="px-4 py-3.5 text-xs font-semibold text-gray-700 whitespace-nowrap">{level.monthlyTarget} tr</td>
                       <td className="px-4 py-3.5">
                         {level.phaseAccess.length === 0 ? (
                           <span className="text-xs text-gray-400 whitespace-nowrap">Tất cả</span>
@@ -503,6 +509,24 @@ export function PTLevelsTab() {
                   }
                   className={inputCls}
                 />
+              </div>
+
+              {/* KPI doanh số */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-500">KPI doanh số (triệu/tháng)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.monthlyTarget}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, monthlyTarget: parseInt(e.target.value) || 0 }))
+                  }
+                  className={inputCls}
+                />
+                <p className="text-[11px] text-gray-400">
+                  Dùng để tính hiệu suất doanh số của nhân sự ở cấp độ này (VD: Thử việc 15, PT chính thức 38).
+                </p>
               </div>
 
               {/* Phase access */}

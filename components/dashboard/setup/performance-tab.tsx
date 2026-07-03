@@ -7,6 +7,8 @@ type Personnel = {
   ptId: string;
   ptName: string;
   ptRole?: string;
+  ptLevelName?: string | null; // cấp độ PT (vd: "Thử việc", "L1"…) — quyết định KPI
+  salesTarget: number;        // KPI doanh số/tháng (triệu) theo cấp độ, do server tính
   revenue: number[];   // 12 entries, index 0 = tháng 1 (đơn vị: triệu)
   customers: number[];
   leads: number[];
@@ -14,9 +16,10 @@ type Personnel = {
   transformedCount: number;   // số khách đã gán mác đạt transform
 };
 
-function nameWithRole(name: string, role?: string) {
+function nameWithRole(name: string, role?: string, levelName?: string | null) {
   if (role === "FM") return `${name} (FM)`;
   if (role === "ADMIN") return `${name} (Admin)`;
+  if (levelName) return `${name} (${levelName})`;
   return name;
 }
 
@@ -28,7 +31,7 @@ type House = {
 
 type PerfData = {
   year: number;
-  target: number; // doanh số mục tiêu / PT / tháng (triệu)
+  target: number; // KPI doanh số mặc định / tháng (triệu) khi PT chưa gán cấp độ
   personnel: Personnel[];
   house: House | null; // doanh số lead của nhân sự đã nghỉ → tính vào phòng tập
 };
@@ -104,7 +107,6 @@ export function PerformanceTab({ branchId, year }: Props) {
 
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
-  const target = data?.target ?? 38;
   const periodMonths = useMemo(() => monthsOfPeriod(selQuarter), [selQuarter]);
   const periodLabel = selQuarter >= 1 ? `Quý ${selQuarter}/${selYear}` : `Cả năm ${selYear}`;
 
@@ -152,11 +154,15 @@ export function PerformanceTab({ branchId, year }: Props) {
     const clientCount = p.clientCount;
     const transformedCount = p.transformedCount;
     const transformPct = clientCount > 0 ? (transformedCount / clientCount) * 100 : 0;
-    const perfPct = target > 0 ? (avgMonth / target) * 100 : 0;
+    // Hiệu suất doanh số = TB doanh số tháng / KPI theo cấp độ PT (Thử việc 15tr, PT 38tr).
+    const kpi = p.salesTarget;
+    const perfPct = kpi > 0 ? (avgMonth / kpi) * 100 : 0;
     return {
       ptId: p.ptId,
       ptName: p.ptName,
       ptRole: p.ptRole,
+      ptLevelName: p.ptLevelName,
+      kpi,
       avgMonth,
       avgQuarter,
       yearRevenue,
@@ -180,16 +186,17 @@ export function PerformanceTab({ branchId, year }: Props) {
   // Tổng doanh số đội = nhân sự hiện tại + phòng tập (nhân sự đã nghỉ).
   const teamYearRevenue = staffYearRevenue + houseYearRevenue;
   const teamAvgMonth = teamYearRevenue / 12;
-  // Hiệu suất đội = doanh số đội (gồm phòng tập) / mục tiêu của số nhân sự hiện tại.
-  const teamPerfPct = target > 0 && personnel.length > 0
-    ? (teamAvgMonth / (target * personnel.length)) * 100
+  // KPI đội = tổng KPI theo vị trí của các nhân sự hiện tại (PT 38tr, Thử việc 15tr).
+  const teamMonthlyTarget = sum(personnel.map((p) => p.salesTarget));
+  // Hiệu suất đội = doanh số đội (gồm phòng tập) / tổng KPI của nhân sự hiện tại.
+  const teamPerfPct = teamMonthlyTarget > 0
+    ? (teamAvgMonth / teamMonthlyTarget) * 100
     : 0;
 
   // ── Chi tiết từng tháng theo nhân sự (hoặc toàn đội) ──────────────────────
   const selected = personnel.find((p) => p.ptId === selPT) ?? null;
-  // Số nhân sự dùng để quy đổi mục tiêu khi xem toàn đội.
-  const headcount = selected ? 1 : personnel.length;
-  const rowTarget = target * headcount;
+  // KPI dòng: 1 nhân sự → KPI vị trí của họ; toàn đội → tổng KPI cả đội.
+  const rowTarget = selected ? selected.salesTarget : teamMonthlyTarget;
 
   const detailRows = periodMonths.map((m) => {
     const idx = m - 1;
@@ -223,7 +230,7 @@ export function PerformanceTab({ branchId, year }: Props) {
       <div>
         <h2 className="text-base font-extrabold text-gray-900">Hiệu suất làm việc nhân sự</h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Đánh giá theo doanh số cá nhân, số lượng khách hàng và tỉ lệ transform • Mục tiêu {target} tr/PT/tháng
+          Đánh giá theo doanh số cá nhân, số lượng khách hàng và tỉ lệ transform • Hiệu suất doanh số = doanh số thực / KPI theo cấp độ PT
         </p>
       </div>
 
@@ -240,7 +247,7 @@ export function PerformanceTab({ branchId, year }: Props) {
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Tổng quan hiệu suất — Năm {selYear}</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Trung bình doanh số tháng / quý và tổng doanh số năm của từng nhân sự (hiệu suất = TB tháng / mục tiêu {target} tr)
+            Trung bình doanh số tháng / quý và tổng doanh số năm của từng nhân sự (hiệu suất = TB doanh số tháng / KPI theo cấp độ PT)
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
@@ -248,6 +255,7 @@ export function PerformanceTab({ branchId, year }: Props) {
             <thead>
               <tr className="bg-[#f5f5f5]">
                 <th className={cn(th, "text-left")}>Nhân sự</th>
+                <th className={cn(th, "text-center")}>KPI/tháng</th>
                 <th className={cn(th, "text-center")}>TB DS/tháng</th>
                 <th className={cn(th, "text-center")}>TB DS/quý</th>
                 <th className={cn(th, "text-center")}>DS cả năm</th>
@@ -259,7 +267,8 @@ export function PerformanceTab({ branchId, year }: Props) {
             <tbody>
               {overviewRows.map((row) => (
                 <tr key={row.ptId} className="even:bg-[#fafafa]">
-                  <td className={cn(td, "font-semibold text-gray-800")}>{nameWithRole(row.ptName, row.ptRole)}</td>
+                  <td className={cn(td, "font-semibold text-gray-800")}>{nameWithRole(row.ptName, row.ptRole, row.ptLevelName)}</td>
+                  <td className={cn(td, "text-center font-semibold text-gray-500")}>{fmtRevenue(row.kpi)}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgMonth)}</td>
                   <td className={cn(td, "text-center")}>{fmtRevenue(row.avgQuarter)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-800")}>{fmtRevenue(row.yearRevenue)}</td>
@@ -277,6 +286,7 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "font-semibold text-gray-500")}>
                     🏠 Nhân sự đã nghỉ / Phòng tập
                   </td>
+                  <td className={cn(td, "text-center text-gray-300")}>—</td>
                   <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 12)}</td>
                   <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(houseYearRevenue / 4)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-700")}>{fmtRevenue(houseYearRevenue)}</td>
@@ -289,6 +299,7 @@ export function PerformanceTab({ branchId, year }: Props) {
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200">
                 <td className={cn(td, "font-extrabold text-gray-900")}>Toàn đội</td>
+                <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamMonthlyTarget)}</td>
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamAvgMonth)}</td>
                 <td className={cn(td, "text-center font-bold text-gray-700")}>{fmtRevenue(teamYearRevenue / 4)}</td>
                 <td className={cn(td, "text-center font-extrabold text-gray-900")}>{fmtRevenue(teamYearRevenue)}</td>
@@ -307,13 +318,13 @@ export function PerformanceTab({ branchId, year }: Props) {
           <div>
             <p className="text-sm font-extrabold text-gray-800">Chi tiết theo tháng — {periodLabel}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              Doanh số, số khách chốt và tỉ lệ chốt (khách mua / lead) của {selected ? nameWithRole(selected.ptName, selected.ptRole) : "toàn đội"} theo từng tháng
+              Doanh số, số khách chốt và tỉ lệ chốt (khách mua / lead) của {selected ? nameWithRole(selected.ptName, selected.ptRole, selected.ptLevelName) : "toàn đội"} theo từng tháng
             </p>
           </div>
           <select value={selPT} onChange={(e) => setSelPT(e.target.value)} className={filterSelectCls}>
             <option value="">Toàn đội</option>
             {personnel.map((p) => (
-              <option key={p.ptId} value={p.ptId}>{nameWithRole(p.ptName, p.ptRole)}</option>
+              <option key={p.ptId} value={p.ptId}>{nameWithRole(p.ptName, p.ptRole, p.ptLevelName)}</option>
             ))}
           </select>
         </div>

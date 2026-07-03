@@ -1228,6 +1228,9 @@ model PTLevel {
   order              Int
   color              String               @default("#6b7280")
   retestIntervalDays Int                  @default(30)
+  // KPI doanh số/tháng (triệu) của cấp độ — dùng để tính hiệu suất doanh số (hiệu suất = doanh số thực / KPI).
+  // Cấp độ "Thử việc" đặt 15, các cấp PT chính thức để 38.
+  monthlyTarget      Int                  @default(38)
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]

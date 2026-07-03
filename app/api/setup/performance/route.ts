@@ -4,9 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-// Sales target for one PT: 38 triệu/tháng (used to score work performance).
-const PT_MONTHLY_TARGET = 38;
+import { DEFAULT_SALES_TARGET, salesTargetFor } from "@/lib/roles";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -42,7 +40,12 @@ export async function GET(req: Request) {
       status: true,
       actualRevenue: true,
       assignedPTId: true,
-      assignedPT: { select: { id: true, name: true, email: true, role: true } },
+      assignedPT: {
+        select: {
+          id: true, name: true, email: true, role: true,
+          ptLevel: { select: { name: true, monthlyTarget: true } },
+        },
+      },
     },
   });
 
@@ -54,6 +57,8 @@ export async function GET(req: Request) {
   const ptMap = new Map<string, {
     name: string;
     role: string;
+    levelName: string | null;
+    salesTarget: number;   // KPI doanh số/tháng (triệu) theo cấp độ PT
     revenue: number[];   // index 0 = tháng 1
     customers: number[];
     leads: number[];
@@ -69,13 +74,20 @@ export async function GET(req: Request) {
     select: {
       assignedPTId: true,
       hasTransformed: true,
-      assignedPT: { select: { name: true, email: true, role: true } },
+      assignedPT: {
+        select: {
+          name: true, email: true, role: true,
+          ptLevel: { select: { name: true, monthlyTarget: true } },
+        },
+      },
     },
   });
 
   const clientStat = new Map<string, {
     name: string;
     role: string;
+    levelName: string | null;
+    salesTarget: number;
     clientCount: number;
     transformedCount: number;
   }>();
@@ -83,6 +95,8 @@ export async function GET(req: Request) {
     const s = clientStat.get(c.assignedPTId) ?? {
       name: c.assignedPT.name ?? c.assignedPT.email,
       role: c.assignedPT.role,
+      levelName: c.assignedPT.ptLevel?.name ?? null,
+      salesTarget: salesTargetFor(c.assignedPT.ptLevel?.monthlyTarget),
       clientCount: 0,
       transformedCount: 0,
     };
@@ -117,6 +131,8 @@ export async function GET(req: Request) {
     const cur = ptMap.get(ptId) ?? {
       name,
       role: lead.assignedPT.role,
+      levelName: lead.assignedPT.ptLevel?.name ?? null,
+      salesTarget: salesTargetFor(lead.assignedPT.ptLevel?.monthlyTarget),
       revenue: Array(12).fill(0),
       customers: Array(12).fill(0),
       leads: Array(12).fill(0),
@@ -141,6 +157,9 @@ export async function GET(req: Request) {
         ptId,
         ptName: stat?.name ?? cStat?.name ?? "",
         ptRole: stat?.role ?? cStat?.role ?? "",
+        ptLevelName: stat?.levelName ?? cStat?.levelName ?? null,
+        // KPI doanh số/tháng (triệu) theo cấp độ PT — dùng để tính hiệu suất doanh số.
+        salesTarget: stat?.salesTarget ?? cStat?.salesTarget ?? DEFAULT_SALES_TARGET,
         revenue: stat?.revenue ?? Array(12).fill(0),
         customers: stat?.customers ?? Array(12).fill(0),
         leads: stat?.leads ?? Array(12).fill(0),
@@ -160,8 +179,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     year,
-    target: PT_MONTHLY_TARGET,
-    personnel,
+    target: DEFAULT_SALES_TARGET, // KPI mặc định (triệu/tháng) khi PT chưa gán cấp độ
+    personnel,                    // mỗi nhân sự mang salesTarget theo cấp độ riêng
     house: houseHasData ? house : null,
   });
 }
