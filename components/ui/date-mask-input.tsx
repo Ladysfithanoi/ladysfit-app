@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,23 @@ function formatFromDigits(cleaned: string): string {
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+/**
+ * Given a formatted string and a number of digits that should sit BEFORE the
+ * caret, return the caret index in the formatted string (placed right after the
+ * n-th digit, so it naturally lands past any auto-inserted slash).
+ */
+function caretForDigitCount(formatted: string, digitsBefore: number): number {
+  if (digitsBefore <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (/\d/.test(formatted[i])) {
+      seen++;
+      if (seen === digitsBefore) return i + 1;
+    }
+  }
+  return formatted.length;
 }
 
 /**
@@ -94,6 +111,9 @@ export function DateMaskInput({
 
   // Guard: never overwrite the field with external data while the user is typing
   const isFocused = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Caret index (in the formatted string) to restore after the value updates.
+  const pendingCaret = useRef<number | null>(null);
 
   // Sync from parent (controlled mode) — only when the field is not active
   useEffect(() => {
@@ -104,16 +124,32 @@ export function DateMaskInput({
     }
   }, [value]);
 
+  // Restore the caret after each reformat so editing in the MIDDLE (day / month /
+  // year) keeps the cursor where the user is working instead of jumping to the end.
+  useLayoutEffect(() => {
+    if (pendingCaret.current !== null && inputRef.current && isFocused.current) {
+      const pos = pendingCaret.current;
+      inputRef.current.setSelectionRange(pos, pos);
+    }
+    pendingCaret.current = null;
+  }, [dateInput]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    // 1. Strip everything that isn't a digit — this is the core of the algorithm.
-    //    Whether the user typed a digit, deleted a digit, or deleted a slash,
-    //    we always reformat from the clean digit string, so there is nothing
-    //    to "jump back" to. No cursor-position arithmetic required.
-    const cleaned = e.target.value.replace(/\D/g, "");
+    // 1. Strip everything that isn't a digit and reformat from the clean digit
+    //    string (Backspace/insert are all handled uniformly).
+    const el = e.target;
+    const raw = el.value;
+    // How many DIGITS are before the caret in the raw value — this is the stable
+    // anchor we keep the caret at across reformatting.
+    const selStart = el.selectionStart ?? raw.length;
+    const digitsBefore = raw.slice(0, selStart).replace(/\D/g, "").length;
+
+    const cleaned = raw.replace(/\D/g, "");
     const formatted = formatFromDigits(cleaned);
 
+    pendingCaret.current = caretForDigitCount(formatted, digitsBefore);
     setDateInput(formatted);
     setError("");
 
@@ -155,6 +191,7 @@ export function DateMaskInput({
   return (
     <>
       <input
+        ref={inputRef}
         type="text"
         inputMode="numeric"
         value={dateInput}
