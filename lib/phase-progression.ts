@@ -22,6 +22,9 @@ import {
 
 export const PHASE_MIN_COMPLETED_WEEKS = 8;
 export const MAX_PHASE_ORDER = 3;
+// Số buổi tập (buổi khác nhau, có Nhật ký COMPLETED) tối thiểu để một tuần được
+// tính là "đã hoàn thành". Không vượt quá số buổi/tuần thực tế của chương trình.
+export const MIN_WEEK_SESSIONS = 3;
 
 /** Lấy thứ tự giai đoạn từ tên ("Giai đoạn 2: Skinny Fat" → 2). 0 nếu không khớp. */
 export function phaseOrderOf(phaseName: string | null | undefined): number {
@@ -71,27 +74,41 @@ async function runProgression(clientId: string): Promise<void> {
   });
   if (programs.length === 0) return;
 
-  // Đếm số tuần đã hoàn thành (có ≥1 buổi COMPLETED) cho mỗi chương trình.
+  // Đếm số tuần đã hoàn thành cho mỗi chương trình. Một tuần CHỈ được tính khi có
+  // đủ tối thiểu số buổi tập (buổi khác nhau) đã ghi Nhật ký (COMPLETED) — mặc định
+  // 3 buổi/tuần, nhưng không vượt quá số buổi/tuần của CT (để CT 2 buổi/tuần vẫn
+  // tiến được). Tuần chỉ có 1–2 buổi lẻ sẽ KHÔNG được cộng.
   const completedLogs = await prisma.workoutLog.findMany({
     where: { clientId, status: "COMPLETED" },
-    select: { programId: true, weekId: true },
+    select: { programId: true, weekId: true, sessionId: true },
   });
-  const weeksByProgram = new Map<string, Set<string>>();
+  // programId → weekId → tập hợp sessionId khác nhau đã hoàn thành
+  const sessionsByProgramWeek = new Map<string, Map<string, Set<string>>>();
   for (const l of completedLogs) {
-    if (!l.weekId) continue;
-    let set = weeksByProgram.get(l.programId);
-    if (!set) weeksByProgram.set(l.programId, (set = new Set()));
-    set.add(l.weekId);
+    if (!l.weekId || !l.sessionId) continue;
+    let weeks = sessionsByProgramWeek.get(l.programId);
+    if (!weeks) sessionsByProgramWeek.set(l.programId, (weeks = new Map()));
+    let sess = weeks.get(l.weekId);
+    if (!sess) weeks.set(l.weekId, (sess = new Set()));
+    sess.add(l.sessionId);
   }
-  const completedWeeks = (pid: string) => weeksByProgram.get(pid)?.size ?? 0;
+  const spwByProgram = new Map(programs.map((p) => [p.id, p.sessionsPerWeek]));
+  const completedWeeks = (pid: string) => {
+    const weeks = sessionsByProgramWeek.get(pid);
+    if (!weeks) return 0;
+    const spw = spwByProgram.get(pid) ?? MIN_WEEK_SESSIONS;
+    const need = Math.min(MIN_WEEK_SESSIONS, spw > 0 ? spw : MIN_WEEK_SESSIONS);
+    let count = 0;
+    for (const sess of Array.from(weeks.values())) if (sess.size >= need) count++;
+    return count;
+  };
 
   // Số tuần GĐ1 phải hoàn thành trước khi mở khoá GĐ2 — mặc định 8 tuần cho khách
-  // mới. NHƯNG với khách CŨ của phòng (mới nhập lên app) đã tập một phần GĐ1 ngoài
-  // đời, xét lịch sử gói tập đã xác nhận:
-  //   • Đã từng có gói L2 (bất kể trạng thái) → coi như đã xong GĐ1, khỏi cần tập
-  //     lại (0 tuần) → tự mở khoá GĐ2 ngay.
-  //   • Đã từng có gói L1 đã hết hạn/hoàn thành → chỉ cần tập thêm 4 tuần GĐ1.
-  //   • Còn lại → giữ nguyên 8 tuần.
+  // mới. NHƯNG với khách CŨ của phòng (mới nhập lên app) đã tập xong một phần GĐ1
+  // ngoài đời, xét lịch sử gói tập ĐÃ KẾT THÚC (hết hạn/hoàn thành):
+  //   • Đã có gói L2 đã kết thúc → coi như đã xong GĐ1, khỏi tập lại (0 tuần).
+  //   • Đã có gói L1 đã kết thúc → chỉ cần tập thêm 4 tuần GĐ1.
+  //   • Còn lại (kể cả khách đang tập gói L1/L2 hiện hành) → giữ nguyên 8 tuần.
   const packages = await prisma.packageEnrollment.findMany({
     where: { clientId },
     select: { packageName: true, status: true, endDate: true },
@@ -100,11 +117,13 @@ async function runProgression(clientId: string): Promise<void> {
     p.status === "EXPIRED" ||
     p.status === "COMPLETED" ||
     (p.endDate != null && p.endDate.getTime() < Date.now());
-  const hasL2 = packages.some((p) => p.packageName === "L2");
+  const hasFinishedL2 = packages.some(
+    (p) => p.packageName === "L2" && isPackageFinished(p)
+  );
   const hasFinishedL1 = packages.some(
     (p) => p.packageName === "L1" && isPackageFinished(p)
   );
-  const phase1RequiredWeeks = hasL2 ? 0 : hasFinishedL1 ? 4 : PHASE_MIN_COMPLETED_WEEKS;
+  const phase1RequiredWeeks = hasFinishedL2 ? 0 : hasFinishedL1 ? 4 : PHASE_MIN_COMPLETED_WEEKS;
   const requiredWeeksFor = (order: number) =>
     order === 1 ? phase1RequiredWeeks : PHASE_MIN_COMPLETED_WEEKS;
 
