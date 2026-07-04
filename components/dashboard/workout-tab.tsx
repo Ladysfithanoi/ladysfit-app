@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ChevronDown, ChevronUp, ClipboardList, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -317,6 +317,8 @@ function ProgramView({
   const [deletingWeek, setDeletingWeek] = useState(false);
   const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [copyingTemplate, setCopyingTemplate] = useState(false);
+  const [copyTemplateMsg, setCopyTemplateMsg] = useState("");
   const [error, setError] = useState("");
 
   // Edit program metadata modal
@@ -524,6 +526,49 @@ function ProgramView({
           : s
       )
     );
+  }
+
+  // Điền nhanh bài tập cho buổi đang chọn từ "Lịch tập mẫu" admin thiết lập.
+  // Chỉ ghi đè bài tập cho các chuyển động có trong lịch mẫu; giữ nguyên phần còn
+  // lại. PT vẫn tự đổi bài tập khác được sau khi copy.
+  async function copyFromTemplate() {
+    const draft = draftSessions[activeSessionIdx];
+    if (!draft) return;
+    const phaseKey = editSelectedPhase?.name ?? program.phase;
+    setCopyingTemplate(true);
+    setCopyTemplateMsg("");
+    try {
+      const params = new URLSearchParams({ phaseKey, sessionType: draft.sessionType });
+      const res = await fetch(`/api/workout-templates?${params}`);
+      const rows: { movement: string; exercise: string }[] = res.ok ? await res.json() : [];
+      const byMovement = new Map(rows.map((r) => [r.movement, r.exercise]));
+      let filled = 0;
+      setDraftSessions((prev) =>
+        prev.map((s, si) =>
+          si === activeSessionIdx
+            ? {
+                ...s,
+                movements: s.movements.map((m) => {
+                  const ex = byMovement.get(m.movementCode);
+                  if (!ex) return m;
+                  filled++;
+                  return { ...m, selectedExercise: ex, customExercise: "" };
+                }),
+              }
+            : s
+        )
+      );
+      if (filled > 0) setIsDirty(true);
+      setCopyTemplateMsg(
+        filled > 0 ? `Đã điền ${filled} bài tập từ lịch mẫu` : "Lịch mẫu chưa có bài tập cho buổi này"
+      );
+      setTimeout(() => setCopyTemplateMsg(""), 2500);
+    } catch {
+      setCopyTemplateMsg("Không tải được lịch mẫu");
+      setTimeout(() => setCopyTemplateMsg(""), 2500);
+    } finally {
+      setCopyingTemplate(false);
+    }
   }
 
   function updateMovement(sessionIdx: number, movIdx: number, updated: DraftMovement) {
@@ -1062,6 +1107,21 @@ function ProgramView({
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
+                      <div className="ml-auto flex items-center gap-2">
+                        {copyTemplateMsg && (
+                          <span className="text-xs font-semibold text-gray-500 hidden sm:inline">{copyTemplateMsg}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={copyFromTemplate}
+                          disabled={copyingTemplate}
+                          title="Điền bài tập từ Lịch tập mẫu admin thiết lập"
+                          className="flex-shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-bold border border-[#f15b5c]/30 text-[#f15b5c] bg-white hover:bg-[#fff0f0] transition-colors disabled:opacity-50"
+                        >
+                          {copyingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                          Copy từ lịch mẫu
+                        </button>
+                      </div>
                     </div>
                     <div className="px-4 pb-3 pt-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
                       <table className="w-full min-w-[480px]">

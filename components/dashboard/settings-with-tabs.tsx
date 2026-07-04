@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Images, ShieldCheck, BookOpen, Utensils } from "lucide-react";
+import { Building2, Images, ShieldCheck, BookOpen, Utensils, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsPageClient } from "./settings-page-client";
 import { TransformPhotosTab } from "./transform-photos-tab";
 import { PTLevelsTab } from "./pt-levels-tab";
 import { UserGuidesTab } from "./user-guides-tab";
 import { FoodManagementTab } from "./food-management-tab";
+import { WorkoutScheduleTemplateTab } from "./workout-schedule-template-tab";
 
 type BranchRow = {
   id: string;
@@ -19,6 +20,7 @@ type BranchRow = {
 const TABS = [
   { key: "branches",  label: "Cơ sở",              icon: Building2   },
   { key: "foods",     label: "Quản lý Thực phẩm",  icon: Utensils    },
+  { key: "schedule",  label: "Lịch tập mẫu",        icon: ClipboardList },
   { key: "transform", label: "Ảnh Transform",       icon: Images      },
   { key: "ptlevels",  label: "Cấp độ PT",           icon: ShieldCheck },
   { key: "guides",    label: "Hướng dẫn",           icon: BookOpen    },
@@ -50,6 +52,7 @@ export function SettingsWithTabs({ initialBranches }: { initialBranches: BranchR
 
       {tab === "branches"  && <SettingsPageClient initialBranches={initialBranches} />}
       {tab === "foods"     && <FoodManagementTab />}
+      {tab === "schedule"  && <WorkoutScheduleTemplateTab />}
       {tab === "transform" && <TransformPhotosTab />}
       {tab === "ptlevels"  && <PTLevelsTab />}
       {tab === "guides"    && <UserGuidesTab />}

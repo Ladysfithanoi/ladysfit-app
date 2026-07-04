@@ -471,6 +471,21 @@ model WorkoutMovementTemplate {
   @@map("workout_movement_templates")
 }
 
+// Lịch tập mẫu do admin thiết lập: bài tập mặc định cho mỗi chuyển động của từng
+// loại buổi trong mỗi giai đoạn. PT dùng nút "Copy từ lịch mẫu" để điền nhanh.
+model WorkoutScheduleTemplate {
+  id          String   @id @default(cuid())
+  phaseKey    String // = WorkoutPhase.name (khoá SESSION_TYPES), vd "Giai đoạn 2: Skinny Fat"
+  sessionType String // vd "Full 1"
+  movement    String // mã chuyển động (slot code), vd "A1. Squat"
+  exercise    String // tên bài tập mặc định
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([phaseKey, sessionType, movement])
+  @@map("workout_schedule_templates")
+}
+
 model WorkoutPhase {
   id           String               @id @default(cuid())
   name         String
