@@ -588,6 +588,12 @@ export function ClientDetailPage({
     return (first.weight - last.weight) / weeks;
   })();
 
+  // % trọng lượng cơ thể giảm được mỗi tuần = mức giảm TB / cân nặng khởi đầu
+  const lossRatePct =
+    lossRate !== null && client.initialWeight > 0
+      ? (lossRate / client.initialWeight) * 100
+      : null;
+
   function generatePassword() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
     return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
@@ -1914,9 +1920,9 @@ export function ClientDetailPage({
                 <p className="text-xs text-gray-400 font-semibold mb-1">Tốc độ giảm</p>
                 <p className={cn(
                   "text-lg font-extrabold",
-                  lossRate !== null && lossRate > 0 ? "text-emerald-500" : "text-gray-300"
+                  lossRatePct !== null && lossRatePct > 0 ? "text-emerald-500" : "text-gray-300"
                 )}>
-                  {lossRate !== null ? `${lossRate.toFixed(2)} kg/tuần` : "—"}
+                  {lossRatePct !== null ? `${lossRatePct.toFixed(2)} %/tuần` : "—"}
                 </p>
               </div>
             </div>
