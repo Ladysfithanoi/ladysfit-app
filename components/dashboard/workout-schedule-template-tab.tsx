@@ -37,54 +37,37 @@ function basePhase(name: string): string {
 const rowKey = (phaseKey: string, sessionType: string, movement: string) =>
   `${phaseKey}|||${sessionType}|||${movement}`;
 
-// Cache danh sách bài tập theo `${basePhase}|${movement}` để không gọi lại nhiều lần.
-const optionsCache = new Map<string, Promise<string[]>>();
-
+// Lấy danh sách bài tập của (giai đoạn gốc, chuyển động) TỪ "Danh sách bài tập".
+// Không cache lâu dài để mỗi lần mở trang luôn phản ánh đúng thư viện hiện tại.
 async function fetchExerciseNames(phaseName: string, movement: string): Promise<string[]> {
   const base = basePhase(phaseName);
-  const key = `${base}|${movement}`;
-  let p = optionsCache.get(key);
-  if (!p) {
-    p = fetch(
+  try {
+    const res = await fetch(
       `/api/exercises?phase=${encodeURIComponent(base)}&movement=${encodeURIComponent(movement)}`
-    )
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: { name: string }[]) =>
-        Array.isArray(data) ? Array.from(new Set(data.map((e) => e.name))) : []
-      )
-      .catch(() => []);
-    optionsCache.set(key, p);
+    );
+    if (!res.ok) return [];
+    const data: { name: string }[] = await res.json();
+    return Array.isArray(data) ? Array.from(new Set(data.map((e) => e.name))) : [];
+  } catch {
+    return [];
   }
-  return p;
 }
 
 // ── Exercise picker (một chuyển động) ────────────────────────────────────────
 
 function ExercisePicker({
-  phaseName,
-  movement,
+  options,
+  optionsLoading,
   value,
   onChange,
   status,
 }: {
-  phaseName: string;
-  movement: string;
+  options: string[];
+  optionsLoading: boolean;
   value: string;
   onChange: (v: string) => void;
   status: "idle" | "saving" | "saved";
 }) {
-  const [options, setOptions] = useState<string[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    fetchExerciseNames(phaseName, movement).then((names) => {
-      if (active) setOptions(names);
-    });
-    return () => {
-      active = false;
-    };
-  }, [phaseName, movement]);
-
   // Nếu bài tập đã lưu không còn trong thư viện, vẫn hiển thị để không mất dữ liệu.
   const showValue = value && !options.includes(value);
 
@@ -95,7 +78,7 @@ function ExercisePicker({
         onChange={(e) => onChange(e.target.value)}
         className="w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
       >
-        <option value="">— Chưa chọn —</option>
+        <option value="">{optionsLoading ? "Đang tải bài tập…" : "— Chưa chọn —"}</option>
         {showValue && <option value={value}>{value} (ngoài thư viện)</option>}
         {options.map((name) => (
           <option key={name} value={name}>
@@ -173,6 +156,38 @@ export function WorkoutScheduleTemplateTab() {
       movements: (byType.get(sessionType) ?? []).slice(),
     }));
   }, [phase, templates]);
+
+  // Bài tập cho từng chuyển động của giai đoạn đang chọn — tải TRỰC TIẾP từ "Danh
+  // sách bài tập" mỗi khi đổi giai đoạn / mở lại trang, nên luôn đúng thư viện hiện
+  // tại (không bị fix cứng). Gộp theo mã chuyển động để tránh gọi trùng.
+  const [optionsByMovement, setOptionsByMovement] = useState<Map<string, string[]>>(new Map());
+  const [optionsLoading, setOptionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!phase) {
+      setOptionsByMovement(new Map());
+      return;
+    }
+    const uniqMovements = Array.from(
+      new Set(sessionGroups.flatMap((g) => g.movements.map((m) => m.movement)))
+    );
+    if (uniqMovements.length === 0) {
+      setOptionsByMovement(new Map());
+      return;
+    }
+    let active = true;
+    setOptionsLoading(true);
+    Promise.all(
+      uniqMovements.map(async (mv) => [mv, await fetchExerciseNames(phase.name, mv)] as const)
+    ).then((entries) => {
+      if (!active) return;
+      setOptionsByMovement(new Map(entries));
+      setOptionsLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [phase, sessionGroups]);
 
   async function saveRow(sessionType: string, movement: string, exercise: string) {
     if (!phase) return;
@@ -271,8 +286,8 @@ export function WorkoutScheduleTemplateTab() {
                       </span>
                       <div className="flex-1 w-full">
                         <ExercisePicker
-                          phaseName={phase.name}
-                          movement={m.movement}
+                          options={optionsByMovement.get(m.movement) ?? []}
+                          optionsLoading={optionsLoading}
                           value={schedule.get(key) ?? ""}
                           onChange={(v) => saveRow(sessionType, m.movement, v)}
                           status={rowStatus.get(key) ?? "idle"}
