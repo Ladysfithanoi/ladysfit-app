@@ -104,9 +104,13 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-gray-100 flex-shrink-0">
-        <span className="text-2xl font-extrabold text-[#f15b5c] tracking-tight flex-1">
+        <Link
+          href="/dashboard"
+          onClick={onClose}
+          className="text-2xl font-extrabold text-[#f15b5c] tracking-tight flex-1 hover:opacity-80 transition-opacity"
+        >
           Ladysfit
-        </span>
+        </Link>
         {/* Close button — mobile only */}
         <button
           onClick={onClose}
@@ -161,7 +165,7 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0">
-        <p className="text-xs text-gray-300 font-medium">v1.0.0</p>
+        <p className="text-xs text-gray-300 font-medium">v10.0</p>
       </div>
     </aside>
   );
