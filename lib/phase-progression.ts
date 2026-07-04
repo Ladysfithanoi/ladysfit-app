@@ -85,6 +85,29 @@ async function runProgression(clientId: string): Promise<void> {
   }
   const completedWeeks = (pid: string) => weeksByProgram.get(pid)?.size ?? 0;
 
+  // Số tuần GĐ1 phải hoàn thành trước khi mở khoá GĐ2 — mặc định 8 tuần cho khách
+  // mới. NHƯNG với khách CŨ của phòng (mới nhập lên app) đã tập một phần GĐ1 ngoài
+  // đời, xét lịch sử gói tập đã xác nhận:
+  //   • Đã từng có gói L2 (bất kể trạng thái) → coi như đã xong GĐ1, khỏi cần tập
+  //     lại (0 tuần) → tự mở khoá GĐ2 ngay.
+  //   • Đã từng có gói L1 đã hết hạn/hoàn thành → chỉ cần tập thêm 4 tuần GĐ1.
+  //   • Còn lại → giữ nguyên 8 tuần.
+  const packages = await prisma.packageEnrollment.findMany({
+    where: { clientId },
+    select: { packageName: true, status: true, endDate: true },
+  });
+  const isPackageFinished = (p: (typeof packages)[number]) =>
+    p.status === "EXPIRED" ||
+    p.status === "COMPLETED" ||
+    (p.endDate != null && p.endDate.getTime() < Date.now());
+  const hasL2 = packages.some((p) => p.packageName === "L2");
+  const hasFinishedL1 = packages.some(
+    (p) => p.packageName === "L1" && isPackageFinished(p)
+  );
+  const phase1RequiredWeeks = hasL2 ? 0 : hasFinishedL1 ? 4 : PHASE_MIN_COMPLETED_WEEKS;
+  const requiredWeeksFor = (order: number) =>
+    order === 1 ? phase1RequiredWeeks : PHASE_MIN_COMPLETED_WEEKS;
+
   // Chọn một chương trình đại diện cho mỗi thứ tự giai đoạn (ưu tiên ACTIVE > LOCKED
   // > còn lại; cùng hạng thì lấy mới nhất).
   const rank = (s: string) => (s === "ACTIVE" ? 3 : s === "LOCKED" ? 2 : 1);
@@ -106,11 +129,15 @@ async function runProgression(clientId: string): Promise<void> {
   const creatorId = programs[0].createdById;
   const baseSessionsPerWeek = (byOrder.get(1) ?? programs[0]).sessionsPerWeek;
 
-  // Xác định giai đoạn hiện tại: tiến lên khi giai đoạn hiện tại đã đủ 8 tuần.
+  // Xác định giai đoạn hiện tại: tiến lên khi giai đoạn hiện tại đã đủ số tuần yêu
+  // cầu. Khi yêu cầu = 0 tuần (khách đã có L2 → coi như xong GĐ1) thì tiến lên
+  // ngay, kể cả khi chưa tồn tại CT của giai đoạn đó (khỏi tạo GĐ1 thừa).
   let currentOrder = 1;
   while (currentOrder < MAX_PHASE_ORDER) {
     const prog = byOrder.get(currentOrder);
-    if (prog && completedWeeks(prog.id) >= PHASE_MIN_COMPLETED_WEEKS) {
+    const required = requiredWeeksFor(currentOrder);
+    const enough = prog ? completedWeeks(prog.id) >= required : required === 0;
+    if (enough) {
       currentOrder++;
     } else {
       break;
