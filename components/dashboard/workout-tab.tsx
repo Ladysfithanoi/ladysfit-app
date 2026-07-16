@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -112,6 +112,20 @@ function fmtDate(iso: string): string {
 function parsePhaseOrder(name: string): number {
   const m = name.match(/Giai\s*đo[aạ]n\s*(\d+)/i);
   return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Chỉ số buổi "hôm nay" trong một tuần: buổi đang tập dở (nếu có), nếu không thì
+ *  buổi đầu tiên chưa có nhật ký hoàn thành. Trả -1 nếu cả tuần đã tập xong. */
+function nextSessionIndex(week: WorkoutWeek | null, logs: WorkoutLogRow[]): number {
+  if (!week) return -1;
+  const active = week.sessions.findIndex((s) =>
+    logs.some((l) => l.sessionId === s.id && (l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION"))
+  );
+  if (active >= 0) return active;
+  const completed = new Set(
+    logs.filter((l) => l.weekId === week.id && l.status === "COMPLETED").map((l) => l.sessionId)
+  );
+  return week.sessions.findIndex((s) => !completed.has(s.id));
 }
 
 // ── Style constants ────────────────────────────────────────────────────────
@@ -292,7 +306,11 @@ function ProgramView({
     program.weeks.findIndex((w) => w.weekNumber === program.currentWeek)
   );
   const [activeWeekIdx, setActiveWeekIdx] = useState(initialWeekIdx);
-  const [activeSessionIdx, setActiveSessionIdx] = useState(0);
+  // Mở sẵn đúng "buổi hôm nay" (buổi kế tiếp cần tập) của tuần hiện tại thay vì
+  // luôn nhảy về buổi 1 — PT không phải dò từng buổi để biết đang tới buổi nào.
+  const [activeSessionIdx, setActiveSessionIdx] = useState(() =>
+    Math.max(0, nextSessionIndex(program.weeks[initialWeekIdx] ?? null, workoutLogs))
+  );
 
   // Week navigation: only the most recent few weeks show as tabs; the rest live
   // behind a searchable "Xem thêm" picker so the bar doesn't grow endlessly.
@@ -451,6 +469,13 @@ function ProgramView({
       .filter((l) => l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION")
       .map((l) => l.sessionId)
   );
+  // Buổi đã tập xong trong tuần đang xem + chỉ số "buổi hôm nay" (buổi kế tiếp).
+  const currentWeekCompletedIds = new Set(
+    currentWeekData
+      ? workoutLogs.filter((l) => l.weekId === currentWeekData.id && l.status === "COMPLETED").map((l) => l.sessionId)
+      : []
+  );
+  const todaySessionIdx = nextSessionIndex(currentWeekData, workoutLogs);
   const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
   const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
 
@@ -877,7 +902,7 @@ function ProgramView({
                   return (
                     <button
                       key={w.id}
-                      onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(0); if (editMode) exitEditModeOnly(); }}
+                      onClick={() => { setActiveWeekIdx(wi); setActiveSessionIdx(Math.max(0, nextSessionIndex(program.weeks[wi] ?? null, workoutLogs))); if (editMode) exitEditModeOnly(); }}
                       className={cn(
                         "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
                         isActiveTab
@@ -930,7 +955,7 @@ function ProgramView({
                                 key={w.id}
                                 onClick={() => {
                                   setActiveWeekIdx(wi);
-                                  setActiveSessionIdx(0);
+                                  setActiveSessionIdx(Math.max(0, nextSessionIndex(program.weeks[wi] ?? null, workoutLogs)));
                                   if (editMode) exitEditModeOnly();
                                   setShowWeekPicker(false);
                                   setWeekSearch("");
@@ -1050,29 +1075,59 @@ function ProgramView({
                 </div>
               )}
 
+              {/* Tổng quan tiến độ tuần: đã tập bao nhiêu buổi + buổi kế tiếp là buổi nào */}
+              {!editMode && currentWeekData.sessions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 text-xs">
+                  <span className="text-gray-500">Tuần {currentWeekData.weekNumber}:</span>
+                  <span className="font-bold text-emerald-600">
+                    Đã tập {currentWeekCompletedIds.size}/{currentWeekData.sessions.length} buổi
+                  </span>
+                  {todaySessionIdx >= 0 ? (
+                    <span className="font-semibold text-amber-600">· Hôm nay: {sessionLabel(todaySessionIdx)}</span>
+                  ) : (
+                    <span className="font-semibold text-emerald-600">· Đã hoàn thành tuần này 🎉</span>
+                  )}
+                </div>
+              )}
+
               {/* Session tabs */}
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
                 {(editMode ? draftSessions : currentWeekData.sessions).map((s, i) => {
-                  const sessionActive = !editMode && activeSessionIds.has((s as WorkoutSession).id);
+                  const sid = (s as WorkoutSession).id;
+                  const sessionActive = !editMode && activeSessionIds.has(sid);
+                  const isDone = !editMode && currentWeekCompletedIds.has(sid);
+                  const isToday = !editMode && !sessionActive && i === todaySessionIdx;
+                  const isSelected = i === activeSessionIdx;
                   return (
                     <button
                       key={i}
                       onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
                       className={cn(
                         "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
-                        i === activeSessionIdx
+                        isSelected
                           ? "border-[#f15b5c] text-[#f15b5c] bg-white"
-                          : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
+                          : isToday
+                            ? "border-transparent text-amber-600 bg-amber-50 hover:text-amber-700"
+                            : isDone
+                              ? "border-transparent text-emerald-600 bg-emerald-50/60 hover:text-emerald-700"
+                              : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
                       )}
                     >
-                      {sessionActive && (
+                      {sessionActive ? (
                         <span className="relative flex h-2 w-2" title="Khách đang tập buổi này">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
                         </span>
-                      )}
+                      ) : isDone ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : null}
                       {sessionLabel(i)}
+                      {isToday && (
+                        <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none">
+                          Hôm nay
+                        </span>
+                      )}
                     </button>
                   );
                 })}
