@@ -338,6 +338,8 @@ export function ClientDetailPage({
   // Modal chi tiết % giảm theo từng tuần (mở khi bấm ô "Tốc độ giảm")
   const [lossDetailOpen, setLossDetailOpen] = useState(false);
   const [lossDetailPage, setLossDetailPage] = useState(1);
+  // Tuần đang được mở rộng để xem chi tiết các ngày cân (theo key = ngày thứ 2)
+  const [expandedLossWeek, setExpandedLossWeek] = useState<string | null>(null);
 
   // Edit weight log modal
   const [editingWeightLog, setEditingWeightLog] = useState<WeightLog | null>(null);
@@ -630,7 +632,9 @@ export function ClientDetailPage({
         const avgWeight = g.logs.reduce((s, l) => s + l.weight, 0) / g.logs.length;
         const end = new Date(g.start);
         end.setDate(g.start.getDate() + 6);
-        return { start: g.start, end, avgWeight, count: g.logs.length };
+        // Các lần cân trong tuần, ngày mới nhất trước — để xem chi tiết khi mở tuần.
+        const logs = [...g.logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return { start: g.start, end, avgWeight, count: g.logs.length, logs };
       });
     const base = client.initialWeight > 0 ? client.initialWeight : weeksAsc[0]?.avgWeight ?? 0;
     return weeksAsc.map((w, i) => {
@@ -1975,7 +1979,7 @@ export function ClientDetailPage({
               </div>
               <button
                 type="button"
-                onClick={() => { setLossDetailPage(1); setLossDetailOpen(true); }}
+                onClick={() => { setLossDetailPage(1); setExpandedLossWeek(null); setLossDetailOpen(true); }}
                 disabled={weeklyLossRows.length === 0}
                 title="Bấm để xem % giảm theo từng tuần"
                 className={cn(
@@ -3008,32 +3012,71 @@ export function ClientDetailPage({
                   {pagedLossWeeks.map((w) => {
                     const lost = w.deltaKg !== null && w.deltaKg > 0;
                     const gained = w.deltaKg !== null && w.deltaKg < 0;
+                    const weekKey = w.start.toISOString();
+                    const isExpanded = expandedLossWeek === weekKey;
                     return (
-                      <div key={w.start.toISOString()} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-gray-800">
-                            {formatDate(w.start.toISOString())} – {formatDate(w.end.toISOString())}
-                          </p>
-                          <p className="text-[11px] text-gray-400">
-                            TB {parseFloat(w.avgWeight.toFixed(2))} kg · {w.count} lần cân
-                          </p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className={cn(
-                            "text-base font-extrabold",
-                            lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-300"
-                          )}>
-                            {w.pct !== null ? `${w.pct.toFixed(2)}%` : "—"}
-                          </p>
-                          {w.deltaKg !== null && (
+                      <div key={weekKey} className="rounded-xl border border-gray-100 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedLossWeek(isExpanded ? null : weekKey)}
+                          title="Bấm để xem các ngày cân trong tuần"
+                          className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-gray-50/70 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <ChevronRight className={cn("w-4 h-4 text-gray-300 flex-shrink-0 transition-transform", isExpanded && "rotate-90")} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-gray-800">
+                                {formatDate(w.start.toISOString())} – {formatDate(w.end.toISOString())}
+                              </p>
+                              <p className="text-[11px] text-gray-400">
+                                TB {parseFloat(w.avgWeight.toFixed(2))} kg · {w.count} lần cân
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
                             <p className={cn(
-                              "text-[11px] font-semibold",
-                              lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-400"
+                              "text-base font-extrabold",
+                              lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-300"
                             )}>
-                              {lost ? "▼" : gained ? "▲" : ""} {Math.abs(w.deltaKg).toFixed(2)} kg
+                              {w.pct !== null ? `${w.pct.toFixed(2)}%` : "—"}
                             </p>
-                          )}
-                        </div>
+                            {w.deltaKg !== null && (
+                              <p className={cn(
+                                "text-[11px] font-semibold",
+                                lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-400"
+                              )}>
+                                {lost ? "▼" : gained ? "▲" : ""} {Math.abs(w.deltaKg).toFixed(2)} kg
+                              </p>
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Chi tiết các ngày cân trong tuần */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-2">
+                            {w.logs.map((log, li) => {
+                              // So với lần cân kế trước (cũ hơn) trong cùng tuần.
+                              const older = w.logs[li + 1];
+                              const dayChange = older ? log.weight - older.weight : null;
+                              return (
+                                <div key={log.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                                  <span className="text-xs font-medium text-gray-500">{formatDate(log.date)}</span>
+                                  <div className="flex items-center gap-2">
+                                    {dayChange !== null && dayChange !== 0 && (
+                                      <span className={cn(
+                                        "text-[11px] font-semibold",
+                                        dayChange < 0 ? "text-emerald-500" : "text-red-400"
+                                      )}>
+                                        {dayChange < 0 ? "▼" : "▲"} {Math.abs(dayChange).toFixed(2)}
+                                      </span>
+                                    )}
+                                    <span className="text-sm font-bold text-gray-800">{parseFloat(log.weight.toFixed(2))} kg</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -3048,7 +3091,7 @@ export function ClientDetailPage({
                 </span>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setLossDetailPage((p) => Math.max(1, p - 1))}
+                    onClick={() => { setExpandedLossWeek(null); setLossDetailPage((p) => Math.max(1, p - 1)); }}
                     disabled={safeLossPage <= 1}
                     className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     aria-label="Trang trước"
@@ -3056,7 +3099,7 @@ export function ClientDetailPage({
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setLossDetailPage((p) => Math.min(lossTotalPages, p + 1))}
+                    onClick={() => { setExpandedLossWeek(null); setLossDetailPage((p) => Math.min(lossTotalPages, p + 1)); }}
                     disabled={safeLossPage >= lossTotalPages}
                     className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     aria-label="Trang sau"
