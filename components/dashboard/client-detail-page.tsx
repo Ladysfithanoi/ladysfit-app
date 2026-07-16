@@ -275,6 +275,22 @@ export function ClientDetailPage({
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
+
+  // Giữ nguyên tab đang xem khi refresh: lưu tab vào hash URL (#workout…) và khôi
+  // phục lúc tải trang. Khởi tạo vẫn là "overview" để khớp SSR (tránh lỗi hydrate),
+  // sau khi mount mới đọc hash và chuyển sang tab đúng.
+  const changeView = (v: "overview" | "detail" | "workout" | "nutrition") => {
+    setView(v);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${v}`);
+    }
+  };
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (hash === "detail" || hash === "workout" || hash === "nutrition" || hash === "overview") {
+      setView(hash);
+    }
+  }, []);
   const [editOpen, setEditOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1039,7 +1055,7 @@ export function ClientDetailPage({
           <div className="relative block sm:hidden w-full">
             <select
               value={view}
-              onChange={(e) => setView(e.target.value as "overview" | "detail" | "workout" | "nutrition")}
+              onChange={(e) => changeView(e.target.value as "overview" | "detail" | "workout" | "nutrition")}
               className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-3 pr-9 text-sm font-semibold text-gray-700 appearance-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
             >
               <option value="overview">Tổng quan</option>
@@ -1055,7 +1071,7 @@ export function ClientDetailPage({
               {(["overview", "detail", "workout", "nutrition"] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => setView(v)}
+                  onClick={() => changeView(v)}
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
                     view === v
@@ -1175,7 +1191,7 @@ export function ClientDetailPage({
                 <h3 className="text-sm font-bold text-gray-700">Chương trình tập</h3>
               </div>
               <button
-                onClick={() => setView("workout")}
+                onClick={() => changeView("workout")}
                 className="text-xs font-semibold text-[#f15b5c] hover:underline"
               >
                 Xem tất cả →
@@ -1245,7 +1261,7 @@ export function ClientDetailPage({
                   </ul>
                 )}
                 <button
-                  onClick={() => setView("nutrition")}
+                  onClick={() => changeView("nutrition")}
                   className="text-xs font-semibold text-[#f15b5c] hover:underline"
                 >
                   Xem chi tiết →
@@ -1256,7 +1272,7 @@ export function ClientDetailPage({
                 <Salad className="w-6 h-6 text-gray-200" />
                 <p className="text-xs text-gray-300 font-semibold">Chưa có chế độ ăn</p>
                 <button
-                  onClick={() => setView("nutrition")}
+                  onClick={() => changeView("nutrition")}
                   className="text-xs font-semibold text-[#f15b5c] border border-[#f15b5c]/30 rounded-lg px-3 py-1 hover:bg-[#f15b5c]/5 transition-colors"
                 >
                   Tạo chế độ ăn
@@ -1274,7 +1290,7 @@ export function ClientDetailPage({
                 </div>
                 <h3 className="text-sm font-bold text-gray-700">Vận động hôm nay</h3>
               </div>
-              <button onClick={() => setView("detail")} className="text-xs font-semibold text-[#f15b5c] hover:underline">
+              <button onClick={() => changeView("detail")} className="text-xs font-semibold text-[#f15b5c] hover:underline">
                 Xem lịch sử →
               </button>
             </div>
