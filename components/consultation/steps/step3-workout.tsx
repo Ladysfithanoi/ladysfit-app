@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
   getSlotsForSessionType,
   basePhase,
 } from "@/lib/workout-structure";
+import { CopyFromClientModal, type CopiedSession } from "@/components/dashboard/copy-from-client-modal";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -221,6 +222,8 @@ export function Step3Workout({
   );
   const [activeSession, setActiveSession] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [showCopyClient, setShowCopyClient] = useState(false);
+  const [copyMsg, setCopyMsg] = useState("");
 
   const selectedPhase = phases.find((p) => p.id === phaseId) ?? phases[0] ?? null;
   const sessionTypeOptions = selectedPhase?.sessionTypes ?? [];
@@ -276,6 +279,36 @@ export function Step3Workout({
           )
         : prev
     );
+  }
+
+  // Sao chép giáo án 1 tuần từ khách khác: khớp buổi theo VỊ TRÍ, điền bài tập cho
+  // các chuyển động trùng mã; giữ nguyên phần còn lại để PT tự chỉnh sau.
+  function handleCopyFromClient(clientName: string, srcSessions: CopiedSession[]) {
+    let filled = 0;
+    setDraftSessions((prev) =>
+      prev
+        ? prev.map((s, si) => {
+            const src = srcSessions[si];
+            if (!src) return s;
+            const byCode = new Map(
+              src.movements.filter((m) => m.selectedExercise).map((m) => [m.movementCode, m.selectedExercise])
+            );
+            return {
+              ...s,
+              movements: s.movements.map((m) => {
+                const ex = byCode.get(m.movementCode);
+                if (!ex) return m;
+                filled++;
+                return { ...m, selectedExercise: ex, customExercise: "" };
+              }),
+            };
+          })
+        : prev
+    );
+    setCopyMsg(
+      filled > 0 ? `Đã sao chép ${filled} bài tập từ lịch của ${clientName}` : "Không có bài tập phù hợp để sao chép"
+    );
+    setTimeout(() => setCopyMsg(""), 3000);
   }
 
   async function handleSave() {
@@ -466,15 +499,28 @@ export function Step3Workout({
     <div className="divide-y divide-gray-50">
       <div className="p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between gap-2 mb-1">
           <h3 className="text-sm font-extrabold text-gray-800">Chọn bài tập</h3>
-          <button
-            onClick={() => setDraftSessions(null)}
-            className="text-xs text-[#f15b5c] hover:underline font-semibold"
-          >
-            ← Đổi cấu hình
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCopyClient(true)}
+              title="Sao chép giáo án 1 tuần từ khách hàng khác của bạn"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold border border-[#f15b5c]/30 text-[#f15b5c] bg-white hover:bg-[#fff0f0] transition-colors"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Sao chép lịch khách
+            </button>
+            <button
+              onClick={() => setDraftSessions(null)}
+              className="text-xs text-[#f15b5c] hover:underline font-semibold whitespace-nowrap"
+            >
+              ← Đổi cấu hình
+            </button>
+          </div>
         </div>
+        {copyMsg && (
+          <p className="text-xs font-semibold text-emerald-600 mb-2">{copyMsg}</p>
+        )}
         <div className="flex flex-wrap gap-2 mb-5">
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700">
             {selectedPhase?.name}
@@ -567,6 +613,13 @@ export function Step3Workout({
           Bỏ qua
         </button>
       </div>
+
+      {/* Sao chép lịch tập từ khách khác của PT */}
+      <CopyFromClientModal
+        open={showCopyClient}
+        onClose={() => setShowCopyClient(false)}
+        onApply={handleCopyFromClient}
+      />
     </div>
   );
 }

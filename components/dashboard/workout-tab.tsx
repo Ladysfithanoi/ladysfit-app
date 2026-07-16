@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -10,6 +10,7 @@ import {
   basePhase,
 } from "@/lib/workout-structure";
 import { LiveSessionPanel, SessionLogHistory, SignaturePad, WeekLogOverview } from "./session-log-panel";
+import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-modal";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -337,6 +338,7 @@ function ProgramView({
   const [archiving, setArchiving] = useState(false);
   const [copyingTemplate, setCopyingTemplate] = useState(false);
   const [copyTemplateMsg, setCopyTemplateMsg] = useState("");
+  const [showCopyClient, setShowCopyClient] = useState(false);
   const [error, setError] = useState("");
 
   // Edit program metadata modal
@@ -594,6 +596,36 @@ function ProgramView({
     } finally {
       setCopyingTemplate(false);
     }
+  }
+
+  // Sao chép giáo án 1 tuần từ khách khác của PT: khớp buổi theo VỊ TRÍ, trong mỗi
+  // buổi điền bài tập cho các chuyển động trùng mã. Chỉ ghi đè chuyển động có bài
+  // tập ở nguồn; giữ nguyên phần còn lại — PT vẫn tự sửa lại sau.
+  function handleCopyFromClient(clientName: string, srcSessions: CopiedSession[]) {
+    let filled = 0;
+    setDraftSessions((prev) =>
+      prev.map((s, si) => {
+        const src = srcSessions[si];
+        if (!src) return s;
+        const byCode = new Map(
+          src.movements.filter((m) => m.selectedExercise).map((m) => [m.movementCode, m.selectedExercise])
+        );
+        return {
+          ...s,
+          movements: s.movements.map((m) => {
+            const ex = byCode.get(m.movementCode);
+            if (!ex) return m;
+            filled++;
+            return { ...m, selectedExercise: ex, customExercise: "" };
+          }),
+        };
+      })
+    );
+    if (filled > 0) setIsDirty(true);
+    setCopyTemplateMsg(
+      filled > 0 ? `Đã sao chép ${filled} bài tập từ lịch của ${clientName}` : "Không có bài tập phù hợp để sao chép"
+    );
+    setTimeout(() => setCopyTemplateMsg(""), 3000);
   }
 
   function updateMovement(sessionIdx: number, movIdx: number, updated: DraftMovement) {
@@ -1176,6 +1208,15 @@ function ProgramView({
                           {copyingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
                           Copy từ lịch mẫu
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCopyClient(true)}
+                          title="Sao chép giáo án 1 tuần từ khách hàng khác của bạn"
+                          className="flex-shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-bold border border-[#f15b5c]/30 text-[#f15b5c] bg-white hover:bg-[#fff0f0] transition-colors"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          Sao chép lịch khách
+                        </button>
                       </div>
                     </div>
                     <div className="px-4 pb-3 pt-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -1551,6 +1592,14 @@ function ProgramView({
           onClose={() => setShowWeekLog(false)}
         />
       )}
+
+      {/* ── Sao chép lịch tập từ khách khác ── */}
+      <CopyFromClientModal
+        open={showCopyClient}
+        onClose={() => setShowCopyClient(false)}
+        onApply={handleCopyFromClient}
+        excludeClientId={clientId}
+      />
 
       {/* ── Confirm delete week modal ── */}
       {confirmDeleteWeek && currentWeekData && (
