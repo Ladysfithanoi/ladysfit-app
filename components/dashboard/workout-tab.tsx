@@ -1083,7 +1083,7 @@ function ProgramView({
                     Đã tập {currentWeekCompletedIds.size}/{currentWeekData.sessions.length} buổi
                   </span>
                   {todaySessionIdx >= 0 ? (
-                    <span className="font-semibold text-amber-600">· Hôm nay: {sessionLabel(todaySessionIdx)}</span>
+                    <span className="font-semibold text-amber-600">· Buổi kế: {sessionLabel(todaySessionIdx)}</span>
                   ) : (
                     <span className="font-semibold text-emerald-600">· Đã hoàn thành tuần này 🎉</span>
                   )}
@@ -1125,7 +1125,7 @@ function ProgramView({
                       {sessionLabel(i)}
                       {isToday && (
                         <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none">
-                          Hôm nay
+                          Buổi kế
                         </span>
                       )}
                     </button>
