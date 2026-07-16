@@ -335,6 +335,9 @@ export function ClientDetailPage({
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>(client.weightLogs);
   // Weight-log table pagination — max 5 weigh-in days per page
   const [weightLogPage, setWeightLogPage] = useState(1);
+  // Modal chi tiết % giảm theo từng tuần (mở khi bấm ô "Tốc độ giảm")
+  const [lossDetailOpen, setLossDetailOpen] = useState(false);
+  const [lossDetailPage, setLossDetailPage] = useState(1);
 
   // Edit weight log modal
   const [editingWeightLog, setEditingWeightLog] = useState<WeightLog | null>(null);
@@ -609,6 +612,44 @@ export function ClientDetailPage({
     lossRate !== null && client.initialWeight > 0
       ? (lossRate / client.initialWeight) * 100
       : null;
+
+  // Chi tiết % giảm theo TỪNG TUẦN: gom log theo tuần (thứ 2 đầu tuần), lấy cân
+  // nặng trung bình mỗi tuần rồi tính % trọng lượng cơ thể giảm so với tuần liền
+  // trước (tuần đầu tiên so với cân nặng khởi đầu). Chỉ gồm các tuần có cân.
+  const weeklyLossRows = useMemo(() => {
+    const groups = new Map<string, { start: Date; logs: WeightLog[] }>();
+    for (const l of sortedLogsAsc) {
+      const mon = getMonday(new Date(l.date));
+      const key = mon.toISOString().slice(0, 10);
+      if (!groups.has(key)) groups.set(key, { start: mon, logs: [] });
+      groups.get(key)!.logs.push(l);
+    }
+    const weeksAsc = Array.from(groups.values())
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((g) => {
+        const avgWeight = g.logs.reduce((s, l) => s + l.weight, 0) / g.logs.length;
+        const end = new Date(g.start);
+        end.setDate(g.start.getDate() + 6);
+        return { start: g.start, end, avgWeight, count: g.logs.length };
+      });
+    const base = client.initialWeight > 0 ? client.initialWeight : weeksAsc[0]?.avgWeight ?? 0;
+    return weeksAsc.map((w, i) => {
+      const prevAvg = i === 0 ? client.initialWeight : weeksAsc[i - 1].avgWeight;
+      const deltaKg = prevAvg > 0 ? prevAvg - w.avgWeight : null; // > 0 = giảm
+      const pct = deltaKg !== null && base > 0 ? (deltaKg / base) * 100 : null;
+      return { ...w, deltaKg, pct };
+    });
+  }, [sortedLogsAsc, client.initialWeight]);
+
+  // Hiển thị tuần mới nhất trước; phân trang 4 tuần / trang.
+  const weeklyLossDesc = [...weeklyLossRows].reverse();
+  const LOSS_WEEKS_PER_PAGE = 4;
+  const lossTotalPages = Math.max(1, Math.ceil(weeklyLossDesc.length / LOSS_WEEKS_PER_PAGE));
+  const safeLossPage = Math.min(lossDetailPage, lossTotalPages);
+  const pagedLossWeeks = weeklyLossDesc.slice(
+    (safeLossPage - 1) * LOSS_WEEKS_PER_PAGE,
+    (safeLossPage - 1) * LOSS_WEEKS_PER_PAGE + LOSS_WEEKS_PER_PAGE
+  );
 
   function generatePassword() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -1932,15 +1973,34 @@ export function ClientDetailPage({
                   <p className="text-lg font-extrabold text-gray-300">—</p>
                 )}
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-400 font-semibold mb-1">Tốc độ giảm</p>
+              <button
+                type="button"
+                onClick={() => { setLossDetailPage(1); setLossDetailOpen(true); }}
+                disabled={weeklyLossRows.length === 0}
+                title="Bấm để xem % giảm theo từng tuần"
+                className={cn(
+                  "group text-left bg-gray-50 rounded-xl p-3 transition-all",
+                  weeklyLossRows.length > 0
+                    ? "cursor-pointer hover:bg-[#f15b5c]/5 hover:ring-2 hover:ring-[#f15b5c]/30 hover:shadow-sm"
+                    : "cursor-default"
+                )}
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <p className="text-xs text-gray-400 font-semibold">Tốc độ giảm</p>
+                  {weeklyLossRows.length > 0 && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#f15b5c] opacity-60 group-hover:opacity-100 transition-opacity">
+                      <BarChart2 className="w-3 h-3" />
+                      <span className="hidden sm:inline">Chi tiết</span>
+                    </span>
+                  )}
+                </div>
                 <p className={cn(
                   "text-lg font-extrabold",
                   lossRatePct !== null && lossRatePct > 0 ? "text-emerald-500" : "text-gray-300"
                 )}>
                   {lossRatePct !== null ? `${lossRatePct.toFixed(2)} %/tuần` : "—"}
                 </p>
-              </div>
+              </button>
             </div>
 
             {/* Log table */}
@@ -2911,6 +2971,101 @@ export function ClientDetailPage({
                 Hủy
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal chi tiết % giảm theo tuần ── */}
+      {lossDetailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setLossDetailOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl" style={{ backgroundColor: "#f15b5c15" }}>
+                  <BarChart2 className="w-4 h-4" style={{ color: "#f15b5c" }} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-gray-900 leading-tight">Tốc độ giảm theo tuần</h3>
+                  <p className="text-[11px] text-gray-400">% trọng lượng cơ thể giảm mỗi tuần</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setLossDetailOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {pagedLossWeeks.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-300 font-semibold">
+                  Chưa đủ dữ liệu để tính tốc độ giảm theo tuần
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pagedLossWeeks.map((w) => {
+                    const lost = w.deltaKg !== null && w.deltaKg > 0;
+                    const gained = w.deltaKg !== null && w.deltaKg < 0;
+                    return (
+                      <div key={w.start.toISOString()} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-800">
+                            {formatDate(w.start.toISOString())} – {formatDate(w.end.toISOString())}
+                          </p>
+                          <p className="text-[11px] text-gray-400">
+                            TB {parseFloat(w.avgWeight.toFixed(2))} kg · {w.count} lần cân
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className={cn(
+                            "text-base font-extrabold",
+                            lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-300"
+                          )}>
+                            {w.pct !== null ? `${w.pct.toFixed(2)}%` : "—"}
+                          </p>
+                          {w.deltaKg !== null && (
+                            <p className={cn(
+                              "text-[11px] font-semibold",
+                              lost ? "text-emerald-500" : gained ? "text-red-400" : "text-gray-400"
+                            )}>
+                              {lost ? "▼" : gained ? "▲" : ""} {Math.abs(w.deltaKg).toFixed(2)} kg
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {lossTotalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+                <span className="text-xs font-semibold text-gray-400">
+                  Trang {safeLossPage}/{lossTotalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLossDetailPage((p) => Math.max(1, p - 1))}
+                    disabled={safeLossPage <= 1}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang trước"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setLossDetailPage((p) => Math.min(lossTotalPages, p + 1))}
+                    disabled={safeLossPage >= lossTotalPages}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang sau"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
