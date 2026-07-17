@@ -211,8 +211,11 @@ export async function GET(req: Request) {
 
   // Ensure the logged-in user always has an entry in perUserKpi so they can enter
   // their own actuals even if no MonthlyTarget has been created for them yet.
+  // CEO_FITPARTNER/COO are management, not gym staff — they don't run KPI and never
+  // fill a report, so never inject them as a per-user row.
+  const isManagement = role === "CEO_FITPARTNER" || role === "COO";
   const currentUserInList = perUserKpi.some((p) => p.userId === session.user.id);
-  if (!currentUserInList) {
+  if (!currentUserInList && !isManagement) {
     const wb = weekBounds.find((b) => b.weekNumber === weekNumber);
     perUserKpi.push({
       monthlyTargetId: null as unknown as string, // sentinel: auto-create on first save
