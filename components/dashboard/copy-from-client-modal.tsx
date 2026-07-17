@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -103,8 +104,11 @@ export function CopyFromClientModal({
 }: {
   open: boolean;
   onClose: () => void;
-  /** Được gọi khi PT xác nhận sao chép; trả về tên khách + các buổi trong tuần. */
-  onApply: (clientName: string, sessions: CopiedSession[]) => void;
+  /**
+   * Được gọi khi PT xác nhận sao chép; trả về tên khách, các buổi trong tuần và
+   * danh sách VỊ TRÍ buổi được chọn (chỉ những buổi này mới được điền sang).
+   */
+  onApply: (clientName: string, sessions: CopiedSession[], sessionIndices: number[]) => void;
   /** Ẩn 1 khách khỏi danh sách (thường là khách đang được soạn giáo án). */
   excludeClientId?: string;
 }) {
@@ -124,6 +128,8 @@ export function CopyFromClientModal({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<ClientWeek | null>(null);
   const [previewSessionIdx, setPreviewSessionIdx] = useState(0);
+  // Vị trí các buổi được chọn để sao chép (mặc định chọn tất cả khi mở preview).
+  const [selectedSessions, setSelectedSessions] = useState<Set<number>>(new Set());
 
   // Hộp xác nhận nhỏ trước khi sao chép
   const [pendingClient, setPendingClient] = useState<PTClient | null>(null);
@@ -152,6 +158,7 @@ export function CopyFromClientModal({
       setPage(0);
       setPreviewClient(null);
       setPendingClient(null);
+      setSelectedSessions(new Set());
     }
   }, [open]);
 
@@ -200,10 +207,31 @@ export function CopyFromClientModal({
     setPreviewClient(client);
     setPreviewSessionIdx(0);
     setPreviewData(null);
+    setSelectedSessions(new Set());
     setPreviewLoading(true);
     loadClientWeek(client.id)
-      .then((data) => setPreviewData(data))
+      .then((data) => {
+        setPreviewData(data);
+        // Mặc định chọn tất cả các buổi.
+        setSelectedSessions(new Set((data?.sessions ?? []).map((_, i) => i)));
+      })
       .finally(() => setPreviewLoading(false));
+  }
+
+  function toggleSession(i: number) {
+    setSelectedSessions((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  function toggleAllSessions() {
+    const total = previewData?.sessions.length ?? 0;
+    setSelectedSessions((prev) =>
+      prev.size >= total ? new Set() : new Set(Array.from({ length: total }, (_, i) => i))
+    );
   }
 
   async function confirmCopy() {
@@ -211,7 +239,8 @@ export function CopyFromClientModal({
     setCopying(true);
     setConfirmError("");
     try {
-      const data = previewData && previewClient?.id === pendingClient.id
+      const fromPreview = previewClient?.id === pendingClient.id;
+      const data = fromPreview && previewData
         ? previewData
         : await loadClientWeek(pendingClient.id);
       if (!data || data.sessions.length === 0) {
@@ -219,7 +248,13 @@ export function CopyFromClientModal({
         setCopying(false);
         return;
       }
-      onApply(pendingClient.fullName, data.sessions);
+      // Sao chép từ preview: dùng các buổi đã chọn. Sao chép nhanh từ danh sách:
+      // chọn tất cả các buổi.
+      const indices =
+        fromPreview && selectedSessions.size > 0
+          ? Array.from(selectedSessions).sort((a, b) => a - b)
+          : data.sessions.map((_, i) => i);
+      onApply(pendingClient.fullName, data.sessions, indices);
       setPendingClient(null);
       setPreviewClient(null);
       onClose();
@@ -395,23 +430,84 @@ export function CopyFromClientModal({
                 </div>
               ) : (
                 <>
-                  {/* Session tabs */}
-                  <div className="flex gap-1 overflow-x-auto pb-1 mb-3">
-                    {previewData.sessions.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPreviewSessionIdx(i)}
+                  {/* Chọn buổi để sao chép */}
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      onClick={toggleAllSessions}
+                      className="flex items-center gap-1.5 text-xs font-bold text-gray-600 hover:text-gray-800"
+                    >
+                      <span
                         className={cn(
-                          "flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all whitespace-nowrap",
-                          i === previewSessionIdx
-                            ? "text-white border-transparent"
-                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          "w-4 h-4 rounded-[5px] border flex items-center justify-center transition-colors",
+                          selectedSessions.size >= previewData.sessions.length
+                            ? "border-transparent"
+                            : "border-gray-300 bg-white"
                         )}
-                        style={i === previewSessionIdx ? { backgroundColor: BRAND } : undefined}
+                        style={
+                          selectedSessions.size >= previewData.sessions.length
+                            ? { backgroundColor: BRAND }
+                            : undefined
+                        }
                       >
-                        Buổi {i + 1}
-                      </button>
-                    ))}
+                        {selectedSessions.size >= previewData.sessions.length && (
+                          <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                        )}
+                      </span>
+                      Chọn tất cả
+                    </button>
+                    <span className="text-[11px] text-gray-400">
+                      Đã chọn {selectedSessions.size}/{previewData.sessions.length} buổi
+                    </span>
+                  </div>
+
+                  {/* Session tabs (bấm tên để xem, bấm ô vuông để chọn/bỏ chọn) */}
+                  <div className="flex gap-1 overflow-x-auto pb-1 mb-3">
+                    {previewData.sessions.map((s, i) => {
+                      const active = i === previewSessionIdx;
+                      const checked = selectedSessions.has(i);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => setPreviewSessionIdx(i)}
+                          className={cn(
+                            "flex-shrink-0 flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl text-xs font-bold border transition-all whitespace-nowrap cursor-pointer",
+                            active
+                              ? "text-white border-transparent"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          )}
+                          style={active ? { backgroundColor: BRAND } : undefined}
+                        >
+                          <span
+                            role="checkbox"
+                            aria-checked={checked}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSession(i);
+                            }}
+                            className={cn(
+                              "w-4 h-4 rounded-[5px] border flex items-center justify-center transition-colors",
+                              checked
+                                ? active
+                                  ? "bg-white border-white"
+                                  : "border-transparent"
+                                : active
+                                  ? "border-white/70 bg-transparent"
+                                  : "border-gray-300 bg-white"
+                            )}
+                            style={checked && !active ? { backgroundColor: BRAND } : undefined}
+                          >
+                            {checked && (
+                              <Check
+                                className="w-3 h-3"
+                                strokeWidth={3}
+                                style={{ color: active ? BRAND : "#fff" }}
+                              />
+                            )}
+                          </span>
+                          Buổi {i + 1}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {previewData.sessions[previewSessionIdx] && (
@@ -454,12 +550,14 @@ export function CopyFromClientModal({
             <div className="flex gap-3 px-5 py-4 border-t border-gray-50">
               <button
                 onClick={() => { setPendingClient(previewClient); setConfirmError(""); }}
-                disabled={!previewData || previewData.sessions.length === 0}
+                disabled={!previewData || previewData.sessions.length === 0 || selectedSessions.size === 0}
                 className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ backgroundColor: BRAND }}
               >
                 <Copy className="w-4 h-4" />
-                Sao chép lịch này
+                {selectedSessions.size > 0 && previewData && selectedSessions.size < previewData.sessions.length
+                  ? `Sao chép ${selectedSessions.size} buổi`
+                  : "Sao chép lịch này"}
               </button>
               <button
                 onClick={() => setPreviewClient(null)}

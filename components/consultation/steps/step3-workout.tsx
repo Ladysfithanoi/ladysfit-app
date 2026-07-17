@@ -283,11 +283,17 @@ export function Step3Workout({
 
   // Sao chép giáo án 1 tuần từ khách khác: khớp buổi theo VỊ TRÍ, điền bài tập cho
   // các chuyển động trùng mã; giữ nguyên phần còn lại để PT tự chỉnh sau.
-  function handleCopyFromClient(clientName: string, srcSessions: CopiedSession[]) {
+  function handleCopyFromClient(
+    clientName: string,
+    srcSessions: CopiedSession[],
+    sessionIndices: number[]
+  ) {
     let filled = 0;
+    const chosen = new Set(sessionIndices);
     setDraftSessions((prev) =>
       prev
         ? prev.map((s, si) => {
+            if (!chosen.has(si)) return s;
             const src = srcSessions[si];
             if (!src) return s;
             const byCode = new Map(

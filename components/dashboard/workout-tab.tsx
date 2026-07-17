@@ -601,10 +601,16 @@ function ProgramView({
   // Sao chép giáo án 1 tuần từ khách khác của PT: khớp buổi theo VỊ TRÍ, trong mỗi
   // buổi điền bài tập cho các chuyển động trùng mã. Chỉ ghi đè chuyển động có bài
   // tập ở nguồn; giữ nguyên phần còn lại — PT vẫn tự sửa lại sau.
-  function handleCopyFromClient(clientName: string, srcSessions: CopiedSession[]) {
+  function handleCopyFromClient(
+    clientName: string,
+    srcSessions: CopiedSession[],
+    sessionIndices: number[]
+  ) {
     let filled = 0;
+    const chosen = new Set(sessionIndices);
     setDraftSessions((prev) =>
       prev.map((s, si) => {
+        if (!chosen.has(si)) return s;
         const src = srcSessions[si];
         if (!src) return s;
         const byCode = new Map(
