@@ -192,16 +192,18 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function getAvailablePackages(
-  currentWeight: number,
+  intakeWeight: number,
   height: number,
   existingPackages: PackageEnrollment[]
 ): { names: string[]; note: string; noteOk: boolean } {
   const hasL1orL2 = existingPackages.some((p) => p.packageName === "L1" || p.packageName === "L2");
   const hasAny = existingPackages.length > 0;
 
-  const weightDiff = currentWeight - (height - 100);
-  const eligibleL2 = weightDiff >= 7;
-  const eligibleL1 = weightDiff >= 3 && weightDiff < 7;
+  // Điều kiện L1/L2 tính theo cân ĐẦU VÀO, không dùng cân hiện tại
+  // (cân hiện tại giảm dần khi khách tập nên sẽ tụt dưới ngưỡng dù ban đầu đủ điều kiện)
+  const weightDiff = intakeWeight - (height - 100);
+  const eligibleL2 = weightDiff >= 6;
+  const eligibleL1 = weightDiff >= 3 && weightDiff < 6;
 
   let names: string[] = ["L3", "L4", "L5"];
   if (hasAny) names.push("Loyalfit");
@@ -214,14 +216,14 @@ function getAvailablePackages(
     note = "ℹ️ Đã sử dụng gói Giai đoạn 1";
   } else if (eligibleL2) {
     names = ["L1", "L2", ...names];
-    note = `✓ Đủ điều kiện L2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 7 kg) — có thể chọn L1 hoặc L2`;
+    note = `✓ Đủ điều kiện L2 (${intakeWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 6 kg) — có thể chọn L1 hoặc L2`;
     noteOk = true;
   } else if (eligibleL1) {
     names = ["L1", ...names];
-    note = `✓ Đủ điều kiện L1 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 3 kg)`;
+    note = `✓ Đủ điều kiện L1 (${intakeWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg ≥ 3 kg)`;
     noteOk = true;
   } else {
-    note = `ℹ️ Không đủ điều kiện L1/L2, bắt đầu từ Giai đoạn 2 (${currentWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg < 3 kg)`;
+    note = `ℹ️ Không đủ điều kiện L1/L2, bắt đầu từ Giai đoạn 2 (${intakeWeight} − ${height} + 100 = ${weightDiff.toFixed(1)} kg < 3 kg)`;
   }
 
   return { names, note, noteOk };
@@ -2678,7 +2680,7 @@ export function ClientDetailPage({
           <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-semibold text-gray-500">Thêm gói tập</p>
             {(() => {
-              const { names, note, noteOk } = getAvailablePackages(client.currentWeight, client.height, packages);
+              const { names, note, noteOk } = getAvailablePackages(client.initialWeight, client.height, packages);
               return (
                 <>
                   <p className={cn("text-[11px] font-semibold px-3 py-2 rounded-lg", noteOk ? "text-green-700 bg-green-50" : "text-gray-500 bg-gray-50")}>
