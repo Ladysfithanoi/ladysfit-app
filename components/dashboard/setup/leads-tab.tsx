@@ -126,6 +126,10 @@ export function LeadsTab({
   const [selectedIds, setSelectedIds]             = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen]       = useState(false);
   const [bulkDeleting, setBulkDeleting]           = useState(false);
+  // Phân lại Lead của nhân sự đã nghỉ trước khi đẩy sang tháng sau
+  const [reassignDialogOpen, setReassignDialogOpen]     = useState(false);
+  const [quitStaffToReassign, setQuitStaffToReassign]   = useState<{ id: string; name: string; leadCount: number }[]>([]);
+  const [reassignMap, setReassignMap]                   = useState<Record<string, string>>({});
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
@@ -216,23 +220,49 @@ export function LeadsTab({
     }
   }
 
-  async function handleCarryOver() {
+  async function handleCarryOver(reassignments?: Record<string, string>) {
     setCarrying(true);
     try {
       const res = await fetch("/api/setup/carry-over", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId, month, year }),
+        body: JSON.stringify({ branchId, month, year, reassignments }),
       });
+      // NS đã nghỉ việc có lead → yêu cầu FM phân Lead cho PT khác trước khi đẩy.
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({})) as { error?: string; quitStaff?: { id: string; name: string; leadCount: number }[] };
+        if (data.error === "NEEDS_REASSIGNMENT" && data.quitStaff) {
+          setCarryOverDialogOpen(false);
+          setQuitStaffToReassign(data.quitStaff);
+          setReassignMap({});
+          setReassignDialogOpen(true);
+        } else {
+          showToast(data.error ?? "Không thể chuyển lead", true);
+        }
+        return;
+      }
       if (res.ok) {
         const { carried, nextMonth, nextYear } = await res.json() as { carried: number; skipped: number; nextMonth: number; nextYear: number };
         setCarryOverDialogOpen(false);
-        setSuccessToast(`Đã chuyển ${carried} lead sang tháng ${nextMonth}/${nextYear}`);
-        setTimeout(() => setSuccessToast(""), 4000);
+        setReassignDialogOpen(false);
+        setQuitStaffToReassign([]);
+        setReassignMap({});
+        showToast(`Đã chuyển ${carried} lead sang tháng ${nextMonth}/${nextYear}`);
+      } else {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        showToast(data.error ?? "Không thể chuyển lead", true);
       }
+    } catch {
+      showToast("Lỗi kết nối!", true);
     } finally {
       setCarrying(false);
     }
+  }
+
+  // FM chọn xong PT thay thế cho từng NS đã nghỉ → đẩy lại kèm mapping.
+  function handleConfirmReassign() {
+    if (quitStaffToReassign.some(g => !reassignMap[g.id])) return;
+    handleCarryOver(reassignMap);
   }
 
   function showToast(msg: string, isError = false) {
@@ -794,9 +824,71 @@ export function LeadsTab({
         description={`Chuyển tất cả lead đang chăm sóc và đặt cọc sang tháng ${nextMonth}/${nextYear}?\nSẽ có ${carryableLeads.length} lead được chuyển (đã có ở tháng sau sẽ bỏ qua).`}
         confirmLabel="Đẩy sang tháng sau"
         cancelLabel="Hủy"
-        onConfirm={handleCarryOver}
+        onConfirm={() => handleCarryOver()}
         loading={carrying}
       />
+
+      {/* Phân lại Lead của nhân sự đã nghỉ việc trước khi đẩy sang tháng sau */}
+      {reassignDialogOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40"
+            onClick={() => { if (!carrying) setReassignDialogOpen(false); }}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+            <div className="bg-white w-full sm:max-w-[520px] rounded-t-2xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl">
+              <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
+                <p className="text-base font-extrabold text-gray-900">⚠️ Cần phân lại Lead</p>
+                <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                  Một số Lead đang chăm sóc thuộc nhân sự <b>đã nghỉ việc</b>. Vui lòng phân
+                  các Lead này cho PT khác thì mới đẩy sang tháng {nextMonth}/{nextYear} được.
+                  Sau khi đẩy, Lead sẽ về đúng bảng Setup doanh số của người được chọn.
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                {quitStaffToReassign.map(g => (
+                  <div key={g.id} className="space-y-1.5">
+                    <label className="text-sm font-semibold text-gray-700">
+                      Lead của <span className="text-[#f15b5c]">{g.name}</span>
+                      <span className="text-gray-400 font-normal"> · {g.leadCount} lead</span>
+                    </label>
+                    <select
+                      value={reassignMap[g.id] ?? ""}
+                      onChange={e => setReassignMap(m => ({ ...m, [g.id]: e.target.value }))}
+                      className={cn(inputCls, !reassignMap[g.id] && "border-amber-300 focus:ring-amber-300/30")}
+                    >
+                      <option value="">— Chọn PT tiếp nhận —</option>
+                      {ptList.map(pt => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.name ?? pt.email}{pt.role === "FM" ? " (FM)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
+                <button
+                  onClick={handleConfirmReassign}
+                  disabled={carrying || quitStaffToReassign.some(g => !reassignMap[g.id])}
+                  className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-50"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  {carrying ? "Đang đẩy..." : "Phân Lead & đẩy sang tháng sau"}
+                </button>
+                <button
+                  onClick={() => { if (!carrying) setReassignDialogOpen(false); }}
+                  className="h-11 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Bulk reminder confirm dialog */}
       <AlertDialog
