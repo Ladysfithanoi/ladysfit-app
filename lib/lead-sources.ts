@@ -17,7 +17,7 @@ export const LEAD_SOURCES = [
   "Referral.PT",
   "Bạn bè",
   "Hội viên cũ",
-  "Tờ rơi (Vouche)",
+  "Tờ rơi (Voucher)",
   "Biển hiệu",
   "Tivi",
   "Báo, tạp chí",
