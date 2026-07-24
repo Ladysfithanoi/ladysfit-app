@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search, ChevronRight, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
@@ -109,6 +110,7 @@ export function ClientsPageClient({
   currentUserBranchId?: string | null;
   managedBranchIds?: string[];
 }) {
+  const router = useRouter();
   const [clients, setClients] = useState<ClientRow[]>(initialClients);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"ALL" | "ACTIVE" | "PAUSED" | "RESERVED">("ALL");
@@ -449,7 +451,8 @@ export function ClientsPageClient({
                 {pageRows.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle"
+                    onClick={() => router.push(`/dashboard/clients/${c.id}`)}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle cursor-pointer"
                   >
                     <td className="px-5 py-3.5 min-w-[180px]">
                       <div className="flex items-center gap-3">
@@ -540,7 +543,7 @@ export function ClientsPageClient({
                         </Link>
                         {canDelete && (
                           <button
-                            onClick={() => setDeleteTarget(c)}
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
                             className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                             title="Xóa khách hàng"
                           >
