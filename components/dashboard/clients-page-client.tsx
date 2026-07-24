@@ -89,6 +89,9 @@ function dmyToDate(dmy: string): Date | null {
 const inputCls =
   "h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
+// Ghi nhớ lựa chọn cơ sở + nhân sự phụ trách qua các lần tải lại trang.
+const FILTER_STORAGE_KEY = "clients-filter-staff-v1";
+
 export function ClientsPageClient({
   initialClients,
   branches,
@@ -190,6 +193,33 @@ export function ClientsPageClient({
       setPtFilter("");
     }
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Khôi phục lựa chọn cơ sở + nhân sự đã lưu (chỉ chạy 1 lần khi mở trang).
+  // Chỉ khôi phục giá trị còn hợp lệ để tránh lọc theo PT/cơ sở đã bị xoá.
+  const restoredFilters = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { branchFilter?: string; ptFilter?: string };
+        if (saved.branchFilter && visibleBranches.some((b) => b.id === saved.branchFilter)) {
+          setBranchFilter(saved.branchFilter);
+        }
+        if (saved.ptFilter && (staffList ?? []).some((s) => s.id === saved.ptFilter)) {
+          setPtFilter(saved.ptFilter);
+        }
+      }
+    } catch { /* ignore parse/storage errors */ }
+    restoredFilters.current = true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lưu lại mỗi khi đổi cơ sở/nhân sự (bỏ qua lần đầu trước khi khôi phục xong).
+  useEffect(() => {
+    if (!restoredFilters.current) return;
+    try {
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({ branchFilter, ptFilter }));
+    } catch { /* ignore storage errors */ }
+  }, [branchFilter, ptFilter]);
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
