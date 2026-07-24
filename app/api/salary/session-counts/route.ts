@@ -28,9 +28,12 @@ export async function GET(req: Request) {
 
   await Promise.all(
     userIds.map(async userId => {
-      // Sessions attributed to PT via client.assignedPTId (ADMIN logs on behalf of PTs).
-      // Use raw SQL to read contractType (may not be in stale Prisma client types).
-      // KOL sessions are excluded — they are paid via kolCommission (60k flat), not showPay.
+      // Show được tính cho NGƯỜI THỰC SỰ DẠY buổi (wl."createdById" — người ký
+      // check-in/check-out buổi đó), KHÔNG theo client."assignedPTId". Nhờ vậy khi
+      // một PT dạy hộ (substitute) khách của PT khác, buổi ký check-out xong sẽ ghi
+      // công cho đúng người dạy hộ. Phân loại gói (L1/L2/Loyal vs còn lại) và loại
+      // trừ KOL vẫn dựa trên gói ACTIVE của KHÁCH được dạy.
+      // Raw SQL để đọc contractType (có thể chưa có trong Prisma client cũ).
       const rows = await prisma.$queryRawUnsafe<{
         contractType: string;
         packageName:  string;
@@ -48,7 +51,7 @@ export async function GET(req: Request) {
           ORDER BY pe."createdAt" DESC
           LIMIT 1
         ) pe ON true
-        WHERE c."assignedPTId" = $1
+        WHERE wl."createdById" = $1
           AND wl."status" = 'COMPLETED'
           AND wl."sessionDate" >= $2
           AND wl."sessionDate" <  $3

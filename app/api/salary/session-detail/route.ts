@@ -46,8 +46,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Fetch active enrollments for this PT's clients via raw SQL (camelCase columns)
-    const allEnrollments = await prisma.$queryRawUnsafe<{
+    type EnrollmentRow = {
       id: string;
       clientId: string;
       contractCode: string | null;
@@ -57,7 +56,31 @@ export async function GET(req: Request) {
       sessionsUsed: number;
       contractType: string;
       fullName: string;
-    }[]>(
+    };
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate   = new Date(year, month, 1);
+
+    // Đếm buổi theo NGƯỜI THỰC SỰ DẠY (wl."createdById"), không theo assignedPTId.
+    // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi
+    // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ.
+    const taughtLogs = await prisma.workoutLog.findMany({
+      where: {
+        createdById: ptId,
+        status:      "COMPLETED",
+        sessionDate: { gte: startDate, lt: endDate },
+      },
+      select: { clientId: true },
+    });
+
+    const logCountByClient = new Map<string, number>();
+    for (const log of taughtLogs) {
+      logCountByClient.set(log.clientId, (logCountByClient.get(log.clientId) ?? 0) + 1);
+    }
+
+    // Hợp đồng ACTIVE của khách được GÁN cho PT này (hiện luôn cả khi tháng này
+    // chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
+    const assignedEnrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
       `
       SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
              pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
@@ -70,27 +93,33 @@ export async function GET(req: Request) {
       ptId
     );
 
+    // Thêm khách mà PT này DẠY HỘ tháng này (có buổi dạy nhưng không phải khách
+    // được gán cho mình) → để buổi dạy hộ hiện ra và được tính giá trị.
+    const assignedClientIds = new Set(assignedEnrollments.map(e => e.clientId));
+    const substituteClientIds = Array.from(logCountByClient.keys()).filter(
+      cid => !assignedClientIds.has(cid)
+    );
+    const substituteEnrollments = substituteClientIds.length > 0
+      ? await prisma.$queryRawUnsafe<EnrollmentRow[]>(
+          `
+          SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
+                 pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
+                 c."fullName"
+          FROM package_enrollments pe
+          JOIN clients c ON c.id = pe."clientId"
+          WHERE pe.status = 'ACTIVE' AND c.id = ANY($1::text[])
+          ORDER BY c."fullName" ASC, pe."createdAt" ASC
+          `,
+          substituteClientIds
+        )
+      : [];
+
+    const allEnrollments = [
+      ...assignedEnrollments.map(e => ({ ...e, isSubstitute: false })),
+      ...substituteEnrollments.map(e => ({ ...e, isSubstitute: true })),
+    ];
+
     if (allEnrollments.length === 0) return NextResponse.json({ rows: [] });
-
-    const clientIds = Array.from(new Set(allEnrollments.map(e => e.clientId)));
-    const startDate = new Date(year, month - 1, 1);
-    const endDate   = new Date(year, month, 1);
-
-    // Count WorkoutLogs per client for this PT's clients in the selected month.
-    // Attribute sessions by client.assignedPTId so logs recorded by ADMIN are included.
-    const logs = await prisma.workoutLog.findMany({
-      where: {
-        clientId:    { in: clientIds },
-        status:      "COMPLETED",
-        sessionDate: { gte: startDate, lt: endDate },
-      },
-      select: { clientId: true },
-    });
-
-    const logCountByClient = new Map<string, number>();
-    for (const log of logs) {
-      logCountByClient.set(log.clientId, (logCountByClient.get(log.clientId) ?? 0) + 1);
-    }
 
     const enrollmentIds = allEnrollments.map(e => e.id);
 
@@ -135,6 +164,7 @@ export async function GET(req: Request) {
         contractCode: e.contractCode,
         clientId: e.clientId,
         clientName: e.fullName,
+        isSubstitute: e.isSubstitute,
         packageName: e.packageName,
         totalSessions: Number(e.sessions),
         sessionsUsed: Number(e.sessionsUsed),
