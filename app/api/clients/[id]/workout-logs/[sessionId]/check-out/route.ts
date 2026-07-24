@@ -9,6 +9,7 @@ import {
   MAX_SESSION_MINUTES,
   OVER_CAP_VOID_REASON,
 } from "@/lib/workout-session";
+import { buildNextSessionSuggestion, isValidSurvey } from "@/lib/session-evaluation";
 
 type SetLogInput = {
   id: string;
@@ -67,6 +68,7 @@ export async function POST(
       signatureUrl?: string | null;
       notes?: string | null;
       setLogs?: SetLogInput[];
+      survey?: unknown;
     };
     const setLogs = body.setLogs ?? [];
 
@@ -179,6 +181,27 @@ export async function POST(
       return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
     }
 
+    // ── Bắt buộc đánh giá buổi tập trước khi ký check-out ──
+    // PT phải hoàn thành bảng đánh giá 3 trục (hiệu suất / RIR / hồi phục). Từ đó
+    // sinh gợi ý điều chỉnh tải cho buổi sau. Bỏ qua cho log AWAITING tồn dư (luồng
+    // cũ đã gỡ — không có survey để không chặn việc đối soát log cũ).
+    let nextSessionSuggestion: string | null = null;
+    let surveyData: { performance: string; rirFeel: string; recovery: string } | null = null;
+    if (!isAwaiting) {
+      if (!isValidSurvey(body.survey)) {
+        return NextResponse.json(
+          { error: "Cần hoàn thành đánh giá buổi tập trước khi ký check-out." },
+          { status: 400 }
+        );
+      }
+      nextSessionSuggestion = buildNextSessionSuggestion(body.survey);
+      surveyData = {
+        performance: body.survey.performance,
+        rirFeel: body.survey.rirFeel,
+        recovery: body.survey.recovery,
+      };
+    }
+
     // Safety net for legacy/in-flight sessions checked in before the package was
     // deducted at check-in: if this log was never counted, count it now so the
     // client's package still advances. New sessions are already counted at
@@ -201,6 +224,15 @@ export async function POST(
         // If we just counted a legacy uncounted log, remember which lộ trình it
         // charged so a later delete/void refunds the exact same package.
         ...(packageUpdate ? { packageEnrollmentId: packageUpdate.id } : {}),
+        // Đánh giá buổi tập + gợi ý cho buổi sau (chỉ có ở luồng ký thường).
+        ...(surveyData
+          ? {
+              surveyPerformance: surveyData.performance,
+              surveyRirFeel: surveyData.rirFeel,
+              surveyRecovery: surveyData.recovery,
+              nextSessionSuggestion,
+            }
+          : {}),
         notes: body.notes ?? log.notes,
       },
       include: INCLUDE,

@@ -102,6 +102,11 @@ export type WorkoutLogRow = {
   earlyEndApprovedAt?: string | null;
   confirmationMethod: WorkoutConfirmMethod | null;
   confirmedAt: string | null;
+  // Đánh giá buổi tập + gợi ý cho buổi sau (autoregulation).
+  surveyPerformance?: string | null;
+  surveyRirFeel?: string | null;
+  surveyRecovery?: string | null;
+  nextSessionSuggestion?: string | null;
 };
 
 function fmtDate(iso: string): string {

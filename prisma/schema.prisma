@@ -684,6 +684,15 @@ model WorkoutLog {
   // Reason a session was voided (e.g. no interaction within 10 minutes).
   voidReason         String?
 
+  // ── Đánh giá buổi tập (autoregulation) — PT bắt buộc làm trước khi ký
+  // check-out. 3 trục: hiệu suất / cảm giác nỗ lực (RIR) / hồi phục. Từ đó sinh
+  // gợi ý điều chỉnh tải cho BUỔI SAU (lưu ở nextSessionSuggestion, hiển thị đầu
+  // buổi kế tiếp cùng loại). Xem lib/session-evaluation.ts.
+  surveyPerformance     String?
+  surveyRirFeel         String?
+  surveyRecovery        String?
+  nextSessionSuggestion String? @db.Text
+
   client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   program   WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
   week      WorkoutWeek    @relation(fields: [weekId], references: [id], onDelete: Cascade)

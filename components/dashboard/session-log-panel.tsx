@@ -4,6 +4,30 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
+import {
+  buildNextSessionSuggestion,
+  type SessionSurvey,
+  type SurveyPerformance,
+  type SurveyRirFeel,
+  type SurveyRecovery,
+} from "@/lib/session-evaluation";
+
+// ── Đánh giá buổi tập (autoregulation) — lựa chọn cho 3 trục khảo sát ──
+const PERFORMANCE_OPTIONS: { value: SurveyPerformance; label: string; icon: string }[] = [
+  { value: "exceed", label: "Vượt mục tiêu", icon: "🔥" },
+  { value: "meet", label: "Đạt mục tiêu", icon: "✅" },
+  { value: "miss", label: "Trượt mục tiêu", icon: "📉" },
+];
+const RIR_OPTIONS: { value: SurveyRirFeel; label: string; icon: string }[] = [
+  { value: "easier", label: "Khỏe hơn dự kiến", icon: "💪" },
+  { value: "on_target", label: "Đúng RIR", icon: "🎯" },
+  { value: "too_hard", label: "Quá nặng", icon: "😮‍💨" },
+];
+const RECOVERY_OPTIONS: { value: SurveyRecovery; label: string; icon: string }[] = [
+  { value: "great", label: "Khỏe mạnh", icon: "⚡" },
+  { value: "normal", label: "Bình thường", icon: "😐" },
+  { value: "sore", label: "Đau nhức", icon: "🤕" },
+];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -406,6 +430,51 @@ export function SignaturePad({
   );
 }
 
+// ── SurveyQuestion (1 câu hỏi đánh giá buổi tập, 3 lựa chọn) ────────────────
+
+function SurveyQuestion({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: { value: string; label: string; icon: string }[];
+  selected: string | null;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">{label}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onSelect(opt.value)}
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-xl border py-2.5 px-1 text-center transition-all",
+              selected === opt.value
+                ? "border-[#f15b5c] bg-[#f15b5c]/8 shadow-sm"
+                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+            )}
+          >
+            <span className="text-lg leading-none">{opt.icon}</span>
+            <span
+              className={cn(
+                "text-[11px] font-semibold leading-tight",
+                selected === opt.value ? "text-[#f15b5c]" : "text-gray-600"
+              )}
+            >
+              {opt.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── LiveSessionPanel (check-in → ghi số liệu → khách ký) ───────────────────
 
 function fmtClock(ms: number): string {
@@ -472,6 +541,9 @@ export function LiveSessionPanel({
   const [deleting, setDeleting] = useState(false);
   // Client approved ending early (from their own app) → check-out gates lifted.
   const [earlyApproved, setEarlyApproved] = useState(log.earlyEndApprovedAt != null);
+  // Đánh giá buổi tập — PT phải làm trước khi ký check-out (autoregulation).
+  const [survey, setSurvey] = useState<Partial<SessionSurvey>>({});
+  const surveyComplete = !!(survey.performance && survey.rirFeel && survey.recovery);
 
   const checkInMs = log.checkInAt ? new Date(log.checkInAt).getTime() : Date.now();
   const maxMs = MAX_SESSION_MINUTES * 60000;
@@ -747,7 +819,15 @@ export function LiveSessionPanel({
       const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method, signatureUrl, notes: notes || null, setLogs: buildSetLogPayload() }),
+        body: JSON.stringify({
+          method,
+          signatureUrl,
+          notes: notes || null,
+          setLogs: buildSetLogPayload(),
+          // Kèm đánh giá buổi tập (server sinh gợi ý cho buổi sau). Log AWAITING
+          // tồn dư không có survey — server bỏ qua yêu cầu này cho luồng đó.
+          survey: surveyComplete ? survey : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -993,6 +1073,19 @@ export function LiveSessionPanel({
       )}
 
       <div className={cn("p-4 space-y-3", collapsed && "hidden")}>
+        {/* Gợi ý cho buổi này — lấy từ đánh giá buổi cùng loại gần nhất */}
+        {prevWeekLogs[0]?.nextSessionSuggestion && (
+          <div className="flex items-start gap-2 text-xs rounded-lg px-3 py-2.5 border border-amber-200 bg-amber-50">
+            <span className="text-base shrink-0">📋</span>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-0.5">
+                Gợi ý từ đánh giá buổi trước
+              </p>
+              <p className="text-amber-800 leading-relaxed">{prevWeekLogs[0].nextSessionSuggestion}</p>
+            </div>
+          </div>
+        )}
+
         {/* Khách đã đồng ý kết thúc sớm → có thể ký check-out ngay */}
         {earlyApproved && (
           <div className="flex items-start gap-2 text-xs font-semibold rounded-lg px-3 py-2.5 border border-green-200 bg-green-50 text-green-700">
@@ -1191,18 +1284,79 @@ export function LiveSessionPanel({
         )}
         {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
 
+        {/* Đánh giá buổi tập — bắt buộc làm trước khi ký check-out (khi đã đủ ĐK) */}
+        {canFinish && (
+          <div className="rounded-xl border border-[#f15b5c]/20 bg-white overflow-hidden">
+            <div className="px-3.5 pt-3 pb-2.5 border-b border-gray-100">
+              <p className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5">
+                <ClipboardList className="w-4 h-4 text-[#f15b5c]" />
+                Đánh giá buổi tập
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Bắt buộc trước khi ký check-out — dùng để gợi ý điều chỉnh tải cho buổi sau.
+              </p>
+            </div>
+            <div className="p-3.5 space-y-4">
+              <SurveyQuestion
+                label="1 · Hiệu suất thực hiện"
+                options={PERFORMANCE_OPTIONS}
+                selected={survey.performance ?? null}
+                onSelect={(v) => setSurvey((s) => ({ ...s, performance: v as SurveyPerformance }))}
+              />
+              <SurveyQuestion
+                label="2 · Cảm giác nỗ lực (RIR)"
+                options={RIR_OPTIONS}
+                selected={survey.rirFeel ?? null}
+                onSelect={(v) => setSurvey((s) => ({ ...s, rirFeel: v as SurveyRirFeel }))}
+              />
+              <SurveyQuestion
+                label="3 · Tình trạng cơ thể & khớp"
+                options={RECOVERY_OPTIONS}
+                selected={survey.recovery ?? null}
+                onSelect={(v) => setSurvey((s) => ({ ...s, recovery: v as SurveyRecovery }))}
+              />
+              {surveyComplete ? (
+                <div
+                  className={cn(
+                    "rounded-xl border px-3 py-2.5 flex items-start gap-2",
+                    survey.performance === "miss" || survey.rirFeel === "too_hard" || survey.recovery === "sore"
+                      ? "border-red-200 bg-red-50"
+                      : survey.performance === "exceed" || survey.rirFeel === "easier"
+                        ? "border-green-200 bg-green-50"
+                        : "border-gray-200 bg-gray-50"
+                  )}
+                >
+                  <span className="text-base shrink-0">📋</span>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-0.5">
+                      Gợi ý cho buổi sau
+                    </p>
+                    <p className="text-xs text-gray-700 leading-relaxed">
+                      {buildNextSessionSuggestion(survey as SessionSurvey)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-400 text-center">
+                  Trả lời đủ 3 câu để xem gợi ý và mở nút ký check-out.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Action — khách ký check-out trên máy PT để xác nhận PT đã dạy buổi này */}
         <div className="pt-1">
           <button
             onClick={async () => { await saveProgress(); setShowSig(true); }}
-            disabled={finishing || saving || !canFinish}
+            disabled={finishing || saving || !canFinish || !surveyComplete}
             title={
-              earlyApproved
-                ? "Khách đã đồng ý kết thúc sớm — có thể ký check-out ngay"
-                : !durationMet
-                  ? `Cần tối thiểu ${minSessionMinutes} phút`
-                  : !setsRequirementMet
-                    ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
+              !earlyApproved && !durationMet
+                ? `Cần tối thiểu ${minSessionMinutes} phút`
+                : !earlyApproved && !setsRequirementMet
+                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
+                  : !surveyComplete
+                    ? "Hoàn thành đánh giá buổi tập trước khi ký check-out"
                     : "Khách ký check-out để xác nhận PT đã dạy buổi này"
             }
             className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
@@ -1212,7 +1366,9 @@ export function LiveSessionPanel({
             Khách ký check-out & kết thúc buổi
           </button>
           <p className="text-[11px] text-gray-400 mt-1.5 text-center">
-            Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT.
+            {canFinish && !surveyComplete
+              ? "Hoàn thành đánh giá buổi tập ở trên để mở nút ký check-out."
+              : "Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT."}
           </p>
         </div>
       </div>
