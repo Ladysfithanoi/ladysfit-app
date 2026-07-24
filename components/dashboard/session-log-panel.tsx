@@ -20,7 +20,7 @@ const PERFORMANCE_OPTIONS: { value: SurveyPerformance; label: string; icon: stri
 ];
 const RIR_OPTIONS: { value: SurveyRirFeel; label: string; icon: string }[] = [
   { value: "easier", label: "Khỏe hơn dự kiến", icon: "💪" },
-  { value: "on_target", label: "Đúng RIR", icon: "🎯" },
+  { value: "on_target", label: "Đúng sức", icon: "🎯" },
   { value: "too_hard", label: "Quá nặng", icon: "😮‍💨" },
 ];
 const RECOVERY_OPTIONS: { value: SurveyRecovery; label: string; icon: string }[] = [
