@@ -1345,32 +1345,36 @@ export function LiveSessionPanel({
           </div>
         )}
 
-        {/* Action — khách ký check-out trên máy PT để xác nhận PT đã dạy buổi này */}
-        <div className="pt-1">
-          <button
-            onClick={async () => { await saveProgress(); setShowSig(true); }}
-            disabled={finishing || saving || !canFinish || !surveyComplete}
-            title={
-              !earlyApproved && !durationMet
-                ? `Cần tối thiểu ${minSessionMinutes} phút`
-                : !earlyApproved && !setsRequirementMet
-                  ? `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập`
-                  : !surveyComplete
-                    ? "Hoàn thành đánh giá buổi tập trước khi ký check-out"
-                    : "Khách ký check-out để xác nhận PT đã dạy buổi này"
-            }
-            className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
-            Khách ký check-out & kết thúc buổi
-          </button>
-          <p className="text-[11px] text-gray-400 mt-1.5 text-center">
-            {canFinish && !surveyComplete
-              ? "Hoàn thành đánh giá buổi tập ở trên để mở nút ký check-out."
-              : "Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT."}
-          </p>
-        </div>
+        {/* Action — nút ký check-out CHỈ hiện sau khi đã đánh giá xong buổi tập.
+            Khi chưa đủ điều kiện / chưa đánh giá: hiện dòng hướng dẫn thay cho nút,
+            để không bao giờ có cảnh "thấy nút mà không thấy bảng đánh giá". */}
+        {surveyComplete ? (
+          <div className="pt-1">
+            <button
+              onClick={async () => { setError(""); await saveProgress(); setShowSig(true); }}
+              disabled={finishing || saving || !canFinish}
+              title="Khách ký check-out để xác nhận PT đã dạy buổi này"
+              className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
+              Khách ký check-out & kết thúc buổi
+            </button>
+            <p className="text-[11px] text-gray-400 mt-1.5 text-center">
+              Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT.
+            </p>
+          </div>
+        ) : (
+          <div className="pt-1">
+            <p className="text-[11px] text-gray-500 text-center rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5 leading-relaxed">
+              {canFinish
+                ? "Hoàn thành đánh giá buổi tập ở trên để hiện nút ký check-out."
+                : !earlyApproved && !durationMet
+                  ? `Còn ${Math.max(0, Math.ceil(minSessionMinutes - elapsedMin))} phút nữa mới đủ thời gian tối thiểu — sau đó sẽ hiện bảng đánh giá & nút ký check-out.`
+                  : `Cần điền cân nặng + số reps cho ${MIN_SETS_PER_EXERCISE} set ở tối thiểu ${MIN_COMPLETE_EXERCISES} bài tập — sau đó sẽ hiện bảng đánh giá & nút ký check-out.`}
+            </p>
+          </div>
+        )}
       </div>
 
       {showSig && (
