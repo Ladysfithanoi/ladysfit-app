@@ -1,0 +1,332 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Trophy, Crown, Medal, Award, GraduationCap, TrendingUp, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { RANK_WEIGHTS, type RankRow } from "@/lib/ranking-config";
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+
+// Trang trí riêng cho top 3
+const PODIUM = [
+  {
+    icon: Crown,
+    card: "bg-gradient-to-b from-amber-50 to-yellow-100/60 border-amber-200 ring-2 ring-amber-300/60 shadow-lg shadow-amber-200/40",
+    badge: "bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-md shadow-amber-300/50",
+    label: "text-amber-700",
+    title: "Quán quân",
+  },
+  {
+    icon: Medal,
+    card: "bg-gradient-to-b from-slate-50 to-slate-100 border-slate-200 ring-1 ring-slate-300/60 shadow-md shadow-slate-200/50",
+    badge: "bg-gradient-to-br from-slate-300 to-slate-400 text-white shadow-md shadow-slate-300/50",
+    label: "text-slate-600",
+    title: "Á quân",
+  },
+  {
+    icon: Award,
+    card: "bg-gradient-to-b from-orange-50 to-orange-100/70 border-orange-200 ring-1 ring-orange-300/60 shadow-md shadow-orange-200/50",
+    badge: "bg-gradient-to-br from-orange-400 to-amber-600 text-white shadow-md shadow-orange-300/50",
+    label: "text-orange-700",
+    title: "Hạng ba",
+  },
+];
+
+function fmtRevenue(v: number) {
+  if (v <= 0) return "0";
+  return v >= 1 ? `${v.toFixed(1)} tr` : `${(v * 1000).toFixed(0)} k`;
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const last = parts[parts.length - 1] ?? "";
+  return last.charAt(0).toUpperCase() || "?";
+}
+
+export function RankingPage({
+  rows,
+  year,
+  myId,
+}: {
+  rows: RankRow[];
+  year: number;
+  myId: string;
+}) {
+  const router = useRouter();
+  const top3 = rows.slice(0, 3);
+  const rest = rows.slice(3);
+  const me = rows.find((r) => r.ptId === myId);
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-[#f15b5c]/10">
+            <Trophy className="w-5 h-5 text-[#f15b5c]" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900">Xếp hạng nhân sự</h1>
+            <p className="text-sm text-gray-400 font-medium mt-0.5">
+              Tính theo điểm thi, doanh số trung bình và số khách transform
+            </p>
+          </div>
+        </div>
+        <select
+          value={year}
+          onChange={(e) => router.push(`/dashboard/ranking?year=${e.target.value}`)}
+          className="h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer"
+        >
+          {YEAR_OPTIONS.map((y) => (
+            <option key={y} value={y}>
+              Năm {y}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Cách tính điểm */}
+      <div className="flex items-center gap-2 flex-wrap px-4 py-3 mb-5 rounded-2xl bg-gray-50 border border-gray-100">
+        <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Cách tính</span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
+          <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+          Điểm thi {Math.round(RANK_WEIGHTS.exam * 100)}%
+        </span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+          Doanh số {Math.round(RANK_WEIGHTS.revenue * 100)}%
+        </span>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
+          <Sparkles className="w-3.5 h-3.5 text-[#f15b5c]" />
+          Transform {Math.round(RANK_WEIGHTS.transform * 100)}%
+        </span>
+        <span className="text-xs text-gray-400 font-medium">
+          · Doanh số và transform chấm theo tương quan với người cao nhất trong kỳ · Chưa thi tính 0đ
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-2">
+          <Trophy className="w-8 h-8 text-gray-200" />
+          <p className="text-sm text-gray-300 font-semibold">Chưa có dữ liệu xếp hạng</p>
+        </div>
+      ) : (
+        <>
+          {/* Hạng của tôi */}
+          {me && (
+            <div className="flex items-center gap-4 px-5 py-4 mb-5 rounded-2xl bg-white border border-[#f15b5c]/20 shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-[#f15b5c]/10 flex items-center justify-center shrink-0">
+                <span className="text-lg font-extrabold text-[#f15b5c]">#{me.rank}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-gray-900">
+                  Hạng của bạn: {me.rank}/{rows.length}
+                </p>
+                <p className="text-xs text-gray-400 font-medium mt-0.5">
+                  {me.points} điểm · Thi {me.examScore}% · Doanh số TB{" "}
+                  {fmtRevenue(me.avgMonthlyRevenue)}/tháng · {me.transformedCount} transform
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Top 3 ─── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 md:items-end">
+            {top3.map((row, i) => {
+              const deco = PODIUM[i];
+              const Icon = deco.icon;
+              return (
+                <div
+                  key={row.ptId}
+                  className={cn(
+                    "relative rounded-2xl border p-5 transition-transform hover:-translate-y-0.5",
+                    deco.card,
+                    // Quán quân nổi hơn: cao hơn và nằm giữa bục
+                    i === 0 ? "md:order-2 md:pb-7" : i === 1 ? "md:order-1" : "md:order-3"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span
+                      className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center text-base font-extrabold",
+                        deco.badge
+                      )}
+                    >
+                      {row.rank}
+                    </span>
+                    <span
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide",
+                        deco.label
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {deco.title}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-full bg-white/80 border border-white flex items-center justify-center shrink-0">
+                      <span className="text-base font-extrabold text-gray-700">
+                        {initials(row.name)}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-base font-extrabold text-gray-900 truncate">{row.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {row.levelName && (
+                          <span
+                            className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: (row.levelColor || "#6b7280") + "22",
+                              color: row.levelColor || "#6b7280",
+                            }}
+                          >
+                            {row.levelName}
+                          </span>
+                        )}
+                        {row.branchName && (
+                          <span className="text-[11px] font-semibold text-gray-500 truncate">
+                            {row.branchName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-end gap-1.5">
+                    <p className="text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+                      {row.points}
+                    </p>
+                    <p className="text-xs font-bold text-gray-400 mb-0.5">điểm</p>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl bg-white/70 py-2">
+                      <p className="text-sm font-extrabold text-gray-800">{row.examScore}%</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Thi</p>
+                    </div>
+                    <div className="rounded-xl bg-white/70 py-2">
+                      <p className="text-sm font-extrabold text-gray-800">
+                        {fmtRevenue(row.avgMonthlyRevenue)}
+                      </p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">DS/tháng</p>
+                    </div>
+                    <div className="rounded-xl bg-white/70 py-2">
+                      <p className="text-sm font-extrabold text-gray-800">{row.transformedCount}</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">Transform</p>
+                    </div>
+                  </div>
+
+                  {row.ptId === myId && (
+                    <span className="absolute -top-2 left-4 px-2 py-0.5 rounded-full bg-[#f15b5c] text-white text-[10px] font-extrabold">
+                      Bạn
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ─── Bảng xếp hạng còn lại ─── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <p className="text-base font-extrabold text-gray-900">Bảng xếp hạng — Năm {year}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{rows.length} nhân sự</p>
+            </div>
+
+            {rest.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm text-gray-300 font-semibold">Không còn nhân sự nào khác</p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-50 bg-gray-50/50">
+                      {["Hạng", "Nhân sự", "Cấp độ", "Điểm thi", "Doanh số TB", "Transform", "Tổng điểm"].map(
+                        (h, i) => (
+                          <th
+                            key={h}
+                            className={cn(
+                              "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
+                              i === 1 ? "text-left" : "text-center"
+                            )}
+                          >
+                            {h}
+                          </th>
+                        )
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rest.map((row) => (
+                      <tr
+                        key={row.ptId}
+                        className={cn(
+                          "border-b border-gray-50 last:border-0 transition-colors",
+                          row.ptId === myId ? "bg-[#f15b5c]/5" : "hover:bg-gray-50/40"
+                        )}
+                      >
+                        <td className="px-5 py-3.5 text-center">
+                          <span className="inline-flex w-8 h-8 rounded-full bg-gray-100 items-center justify-center text-sm font-extrabold text-gray-600">
+                            {row.rank}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold text-gray-800">{row.name}</p>
+                            {row.ptId === myId && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-[#f15b5c] text-white text-[10px] font-extrabold">
+                                Bạn
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400">{row.branchName ?? row.email}</p>
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <span
+                            className="text-xs font-semibold px-2 py-1 rounded-full"
+                            style={{
+                              backgroundColor: (row.levelColor || "#6b7280") + "22",
+                              color: row.levelColor || "#6b7280",
+                            }}
+                          >
+                            {row.levelName ?? "—"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <span
+                            className={cn(
+                              "text-sm font-bold",
+                              row.hasExam ? "text-gray-800" : "text-gray-300"
+                            )}
+                          >
+                            {row.examScore}%
+                          </span>
+                          {!row.hasExam && (
+                            <p className="text-[10px] text-gray-400 font-semibold">Chưa thi</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800">
+                          {fmtRevenue(row.avgMonthlyRevenue)}
+                        </td>
+                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800">
+                          {row.transformedCount}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <span className="text-sm font-extrabold text-[#f15b5c]">{row.points}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

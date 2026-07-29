@@ -1,4 +1,5 @@
-import { Users, Flame, Trophy, TrendingDown } from "lucide-react";
+import Link from "next/link";
+import { Users, Flame, Trophy, TrendingDown, Crown, Medal, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WeightChart, WeekDayData } from "./weight-chart";
 import { UpgradeCard } from "./exam/upgrade-card";
@@ -28,16 +29,44 @@ export type PTStats = {
   weeklyChart: WeekDayData[];
 };
 
+// Huy hiệu hạng hiển thị ngay trên tên — top 3 có trang trí riêng.
+function RankBadge({ rank, total, points }: { rank: number; total: number; points: number }) {
+  const deco =
+    rank === 1
+      ? { Icon: Crown, cls: "bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-sm shadow-amber-300/50" }
+      : rank === 2
+        ? { Icon: Medal, cls: "bg-gradient-to-r from-slate-300 to-slate-400 text-white shadow-sm shadow-slate-300/50" }
+        : rank === 3
+          ? { Icon: Award, cls: "bg-gradient-to-r from-orange-400 to-amber-600 text-white shadow-sm shadow-orange-300/50" }
+          : { Icon: Trophy, cls: "bg-gray-100 text-gray-600" };
+
+  return (
+    <Link
+      href="/dashboard/ranking"
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold hover:opacity-90 transition-opacity",
+        deco.cls
+      )}
+    >
+      <deco.Icon className="w-3.5 h-3.5" />
+      Hạng {rank}/{total}
+      <span className="opacity-70 font-bold">· {points} điểm</span>
+    </Link>
+  );
+}
+
 export function PTDashboard({
   stats,
   greeting,
   userName,
   role,
+  myRank,
 }: {
   stats: PTStats;
   greeting: string;
   userName: string;
   role?: string;
+  myRank?: { rank: number; total: number; points: number } | null;
 }) {
   const cards = [
     {
@@ -73,6 +102,11 @@ export function PTDashboard({
     <div>
       {/* Greeting */}
       <div className="mb-6">
+        {myRank && (
+          <div className="mb-2">
+            <RankBadge rank={myRank.rank} total={myRank.total} points={myRank.points} />
+          </div>
+        )}
         <h1 className="text-2xl font-extrabold text-gray-900">
           {greeting}, {userName} 👋
         </h1>

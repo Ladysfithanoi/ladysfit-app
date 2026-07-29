@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
-  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award,
+  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award, Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -36,6 +36,7 @@ const NAV_SECTIONS: NavSection[] = [
     header: "THỐNG KÊ",
     items: [
       { href: "/dashboard",          icon: LayoutDashboard,      label: "Tổng quan",          show: forAll },
+      { href: "/dashboard/ranking",  icon: Trophy,                label: "Xếp hạng",           show: forNotCEO },
       { href: "/dashboard/reports",  icon: BarChart2,             label: "Transform",          show: forAdminFMCEO },
       { href: "/dashboard/setup",    icon: TrendingUp,            label: "Setup Doanh số",     show: forAll },
     ],

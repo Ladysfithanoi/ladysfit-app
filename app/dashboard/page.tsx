@@ -6,6 +6,7 @@ import { AdminDashboard, AdminStats } from "@/components/dashboard/admin-dashboa
 import { PTDashboard, PTStats } from "@/components/dashboard/pt-dashboard";
 import { WeekDayData } from "@/components/dashboard/weight-chart";
 import { CEODashboard } from "@/components/dashboard/ceo-dashboard";
+import { getMyRank } from "@/lib/ranking";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -270,7 +271,7 @@ export default async function DashboardPage() {
   // PT view
   const ptId = session.user.id;
 
-  const [myClients, chartLogs, rawRecentLogs] = await Promise.all([
+  const [myClients, chartLogs, rawRecentLogs, myRank] = await Promise.all([
     prisma.client.findMany({
       where: { assignedPTId: ptId },
       select: {
@@ -293,6 +294,7 @@ export default async function DashboardPage() {
       orderBy: { date: "desc" },
       take: 30,
     }),
+    getMyRank(ptId, new Date().getFullYear()),
   ]);
 
   // Pass all recent logs (newest first) so the dashboard can paginate them client-side.
@@ -333,5 +335,13 @@ export default async function DashboardPage() {
     weeklyChart: getLast8WeeksData(chartLogs),
   };
 
-  return <PTDashboard stats={stats} greeting={greet} userName={userName} role={role} />;
+  return (
+    <PTDashboard
+      stats={stats}
+      greeting={greet}
+      userName={userName}
+      role={role}
+      myRank={myRank}
+    />
+  );
 }
