@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 import {
@@ -37,6 +37,61 @@ function fmtDate(iso: string): string {
 }
 
 const SETS = [1, 2, 3, 4, 5, 6] as const;
+
+// ── Kết luận đánh giá buổi tập, hiển thị lại trong nhật ký ─────────────────
+// Buổi tập cũ (trước khi có bảng đánh giá) không có dữ liệu này nên bỏ qua.
+
+function optionLabel(
+  options: { value: string; label: string; icon: string }[],
+  value: string | null | undefined
+): { label: string; icon: string } | null {
+  if (!value) return null;
+  const found = options.find((o) => o.value === value);
+  return found ? { label: found.label, icon: found.icon } : null;
+}
+
+function SessionEvaluation({ log, compact }: { log: WorkoutLogRow; compact?: boolean }) {
+  const axes = [
+    { title: "Hiệu suất", opt: optionLabel(PERFORMANCE_OPTIONS, log.surveyPerformance) },
+    { title: "Nỗ lực", opt: optionLabel(RIR_OPTIONS, log.surveyRirFeel) },
+    { title: "Hồi phục", opt: optionLabel(RECOVERY_OPTIONS, log.surveyRecovery) },
+  ].filter((a) => a.opt !== null);
+
+  if (axes.length === 0 && !log.nextSessionSuggestion) return null;
+
+  return (
+    <div className={cn("rounded-lg border border-indigo-100 bg-indigo-50/40 px-3 py-2.5", compact ? "mb-2.5" : "mb-3")}>
+      <p className="flex items-center gap-1.5 text-[11px] font-extrabold text-indigo-900 uppercase tracking-wide mb-2">
+        <ClipboardCheck className="w-3.5 h-3.5" />
+        Đánh giá buổi tập
+      </p>
+
+      {axes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {axes.map(({ title, opt }) => (
+            <span
+              key={title}
+              className="inline-flex items-center gap-1 rounded-full bg-white border border-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600"
+            >
+              <span className="text-gray-400">{title}:</span>
+              <span>{opt!.icon}</span>
+              <span className="font-bold text-gray-700">{opt!.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {log.nextSessionSuggestion && (
+        <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+          <p className="text-[11px] font-extrabold text-amber-700 uppercase tracking-wide mb-0.5">
+            Gợi ý cho buổi sau
+          </p>
+          <p className="text-xs text-amber-900 leading-relaxed">{log.nextSessionSuggestion}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Progressive overload logic ─────────────────────────────────────────────
 
@@ -1660,6 +1715,7 @@ export function WeekLogOverview({
                           {latest.notes}
                         </p>
                       )}
+                      <SessionEvaluation log={latest} compact />
                       <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
                         <table className="w-full text-xs" style={{ minWidth: 520 }}>
                           <thead>
@@ -1874,6 +1930,7 @@ export function SessionLogHistory({
                             {log.notes}
                           </p>
                         )}
+                        <SessionEvaluation log={log} />
                         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full rounded-lg border border-gray-100">
                           <table className="w-full text-xs" style={{ minWidth: 520 }}>
                             <thead>
