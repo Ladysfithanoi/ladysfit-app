@@ -426,17 +426,23 @@ function ProgramView({
     return type ? `${sessionLabel(i)} — ${type}` : sessionLabel(i);
   };
 
-  // Tổng quan nhật ký cả tuần: mỗi buổi kèm các log COMPLETED (mới nhất trước).
-  const weekLogSessions = currentWeekData
-    ? currentWeekData.sessions.map((s, i) => ({
+  // Tổng quan nhật ký: dựng cho MỌI tuần để xem chéo ngay trong modal, khỏi
+  // phải thoát ra chọn từng tuần. Mỗi buổi kèm các log COMPLETED (mới nhất trước).
+  const allWeekLogs = program.weeks.map((w) => {
+    const base = sessionNumberBase(w.weekNumber);
+    return {
+      weekId: w.id,
+      weekNumber: w.weekNumber,
+      sessions: w.sessions.map((s, i) => ({
         id: s.id,
-        label: sessionLabel(i),
+        label: `Buổi ${base + i + 1}`,
         type: s.sessionName.includes("—") ? s.sessionName.split("—").slice(1).join("—").trim() : "",
         logs: workoutLogs
-          .filter((l) => l.weekId === currentWeekData.id && l.sessionId === s.id && l.status === "COMPLETED")
+          .filter((l) => l.weekId === w.id && l.sessionId === s.id && l.status === "COMPLETED")
           .sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime()),
-      }))
-    : [];
+      })),
+    };
+  });
 
   // Show at most the 3 most recent weeks as tabs; older weeks go behind "Xem thêm".
   // The currently-selected week is always kept visible even if it's an old one.
@@ -1598,8 +1604,8 @@ function ProgramView({
       {/* ── Week log overview modal ── */}
       {showWeekLog && currentWeekData && (
         <WeekLogOverview
-          weekNumber={currentWeekData.weekNumber}
-          sessions={weekLogSessions}
+          weeks={allWeekLogs}
+          initialWeekId={currentWeekData.id}
           onClose={() => setShowWeekLog(false)}
         />
       )}

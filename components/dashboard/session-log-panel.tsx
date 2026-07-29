@@ -1645,15 +1645,33 @@ export type WeekOverviewSession = {
   logs: WorkoutLogRow[]; // các log COMPLETED của buổi này trong tuần, mới nhất trước
 };
 
-export function WeekLogOverview({
-  weekNumber,
-  sessions,
-  onClose,
-}: {
+export type WeekOverviewWeek = {
+  weekId: string;
   weekNumber: number;
   sessions: WeekOverviewSession[];
+};
+
+export function WeekLogOverview({
+  weeks,
+  initialWeekId,
+  onClose,
+}: {
+  weeks: WeekOverviewWeek[];
+  initialWeekId: string;
   onClose: () => void;
 }) {
+  // Mở ở tuần đang đứng, nhưng xem chéo được mọi tuần mà không phải thoát ra.
+  const [weekId, setWeekId] = useState(initialWeekId);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const current = weeks.find((w) => w.weekId === weekId) ?? weeks.find((w) => w.weekId === initialWeekId) ?? weeks[0] ?? null;
+
+  // Chương trình dài thì tuần đang đứng có thể nằm ngoài tầm nhìn — kéo vào giữa.
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector<HTMLElement>(`[data-week-id="${initialWeekId}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [initialWeekId]);
+  const sessions = current?.sessions ?? [];
   const trainedCount = sessions.filter((s) => s.logs.length > 0).length;
 
   return (
@@ -1663,13 +1681,60 @@ export function WeekLogOverview({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <h3 className="text-sm font-extrabold text-gray-900">Nhật ký tập — Tuần {weekNumber}</h3>
+            <h3 className="text-sm font-extrabold text-gray-900">
+              Nhật ký tập — Tuần {current?.weekNumber ?? "—"}
+            </h3>
             <p className="text-xs text-gray-400 mt-0.5">{trainedCount}/{sessions.length} buổi đã tập trong tuần</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600">
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Chọn tuần — xem chéo ngay trong modal */}
+        {weeks.length > 1 && (
+          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-gray-50/60">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide shrink-0">
+              Tuần
+            </span>
+            <div
+              ref={stripRef}
+              className="flex gap-1.5 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full pb-0.5"
+            >
+              {weeks.map((w) => {
+                const done = w.sessions.filter((s) => s.logs.length > 0).length;
+                const isCurrent = w.weekId === current?.weekId;
+                return (
+                  <button
+                    key={w.weekId}
+                    data-week-id={w.weekId}
+                    onClick={() => setWeekId(w.weekId)}
+                    title={`Tuần ${w.weekNumber} — ${done}/${w.sessions.length} buổi đã tập`}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all",
+                      isCurrent
+                        ? "bg-[#f15b5c] text-white shadow-sm"
+                        : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                    )}
+                  >
+                    T{w.weekNumber}
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold",
+                        isCurrent ? "text-white/80" : done > 0 ? "text-emerald-500" : "text-gray-300"
+                      )}
+                    >
+                      {done}/{w.sessions.length}
+                    </span>
+                    {w.weekId === initialWeekId && !isCurrent && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#f15b5c]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-4 space-y-4">
