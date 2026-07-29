@@ -149,6 +149,11 @@ export function ExamAdminPage({
   const [configSaved, setConfigSaved] = useState(false);
   const [configError, setConfigError] = useState("");
 
+  // Danh sách dự thi — phân trang
+  const [rosterPage, setRosterPage] = useState(0);
+  const rosterTotalPages = Math.max(1, Math.ceil(roster.length / PAGE_SIZE));
+  const pageRoster = roster.slice(rosterPage * PAGE_SIZE, rosterPage * PAGE_SIZE + PAGE_SIZE);
+
   // Kết quả thi — phân trang
   const [resultsPage, setResultsPage] = useState(0);
   const resultsTotalPages = Math.max(1, Math.ceil(attempts.length / PAGE_SIZE));
@@ -663,7 +668,7 @@ export function ExamAdminPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {roster.map((r) => (
+                      {pageRoster.map((r) => (
                         <tr
                           key={r.userId}
                           className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors"
@@ -732,6 +737,32 @@ export function ExamAdminPage({
                     </tbody>
                   </table>
                 </div>
+
+                {rosterTotalPages > 1 && (
+                  <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+                    <span className="text-xs font-semibold text-gray-400">
+                      Trang {rosterPage + 1}/{rosterTotalPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setRosterPage((p) => Math.max(0, p - 1))}
+                        disabled={rosterPage === 0}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Trang trước"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setRosterPage((p) => Math.min(rosterTotalPages - 1, p + 1))}
+                        disabled={rosterPage >= rosterTotalPages - 1}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Trang sau"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
