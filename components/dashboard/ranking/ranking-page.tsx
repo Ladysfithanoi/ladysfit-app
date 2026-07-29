@@ -1,12 +1,24 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Trophy, Crown, Medal, Award, GraduationCap, TrendingUp, Sparkles } from "lucide-react";
+import {
+  Trophy,
+  Crown,
+  Medal,
+  Award,
+  GraduationCap,
+  TrendingUp,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RANK_WEIGHTS, type RankRow } from "@/lib/ranking-config";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const PAGE_SIZE = 10;
 
 // Trang trí riêng cho top 3
 const PODIUM = [
@@ -57,6 +69,14 @@ export function RankingPage({
   const top3 = rows.slice(0, 3);
   const rest = rows.slice(3);
   const me = rows.find((r) => r.ptId === myId);
+
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
+  const pageItems = rest.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  // Đổi năm thì danh sách đổi theo, đưa về trang đầu
+  useEffect(() => { setPage(0); }, [year]);
+  useEffect(() => { if (page > totalPages - 1) setPage(0); }, [page, totalPages]);
 
   return (
     <div>
@@ -233,7 +253,10 @@ export function RankingPage({
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
               <p className="text-base font-extrabold text-gray-900">Bảng xếp hạng — Năm {year}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{rows.length} nhân sự</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {rows.length} nhân sự
+                {rest.length > 0 && ` · hạng ${top3.length + 1}–${rows.length}`}
+              </p>
             </div>
 
             {rest.length === 0 ? (
@@ -261,7 +284,7 @@ export function RankingPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {rest.map((row) => (
+                    {pageItems.map((row) => (
                       <tr
                         key={row.ptId}
                         className={cn(
@@ -322,6 +345,32 @@ export function RankingPage({
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+                <span className="text-xs font-semibold text-gray-400">
+                  Trang {page + 1}/{totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang trước"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Trang sau"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
