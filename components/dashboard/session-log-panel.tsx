@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 import {
@@ -1645,6 +1645,9 @@ export type WeekOverviewSession = {
   logs: WorkoutLogRow[]; // các log COMPLETED của buổi này trong tuần, mới nhất trước
 };
 
+/** Số tuần hiện mỗi lần trên dải chọn tuần của Nhật ký tuần. */
+const WEEK_CHUNK = 5;
+
 export type WeekOverviewWeek = {
   weekId: string;
   weekNumber: number;
@@ -1664,6 +1667,16 @@ export function WeekLogOverview({
   const [weekId, setWeekId] = useState(initialWeekId);
   const stripRef = useRef<HTMLDivElement>(null);
   const current = weeks.find((w) => w.weekId === weekId) ?? weeks.find((w) => w.weekId === initialWeekId) ?? weeks[0] ?? null;
+
+  // Dải tuần chỉ hiện WEEK_CHUNK tuần gần nhất cho đỡ rối; "Xem thêm" lùi thêm
+  // WEEK_CHUNK tuần nữa. Nếu tuần đang đứng nằm sâu phía trước thì mở sẵn đủ
+  // số tuần để nó xuất hiện ngay.
+  const initialIdx = Math.max(0, weeks.findIndex((w) => w.weekId === initialWeekId));
+  const [visibleCount, setVisibleCount] = useState(() =>
+    Math.max(WEEK_CHUNK, Math.ceil((weeks.length - initialIdx) / WEEK_CHUNK) * WEEK_CHUNK)
+  );
+  const visibleWeeks = weeks.slice(Math.max(0, weeks.length - visibleCount));
+  const hiddenCount = weeks.length - visibleWeeks.length;
 
   // Chương trình dài thì tuần đang đứng có thể nằm ngoài tầm nhìn — kéo vào giữa.
   useEffect(() => {
@@ -1697,11 +1710,22 @@ export function WeekLogOverview({
             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide shrink-0">
               Tuần
             </span>
+            {hiddenCount > 0 && (
+              <button
+                onClick={() => setVisibleCount((c) => c + WEEK_CHUNK)}
+                title={`Còn ${hiddenCount} tuần trước đó`}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 bg-white border border-gray-200 text-gray-500 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Xem thêm
+                <span className="text-[10px] font-semibold text-gray-400">({hiddenCount})</span>
+              </button>
+            )}
             <div
               ref={stripRef}
               className="flex gap-1.5 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full pb-0.5"
             >
-              {weeks.map((w) => {
+              {visibleWeeks.map((w) => {
                 const done = w.sessions.filter((s) => s.logs.length > 0).length;
                 const isCurrent = w.weekId === current?.weekId;
                 return (
