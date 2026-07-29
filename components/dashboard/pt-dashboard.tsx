@@ -43,6 +43,7 @@ function RankBadge({ rank, total, points }: { rank: number; total: number; point
   return (
     <Link
       href="/dashboard/ranking"
+      title="Xếp hạng cả năm — bấm để xem theo tháng / quý"
       className={cn(
         "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold hover:opacity-90 transition-opacity",
         deco.cls

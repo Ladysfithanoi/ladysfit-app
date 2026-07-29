@@ -2,12 +2,18 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { computeRanking, getRankWeights } from "@/lib/ranking";
+import { currentPeriod, type RankPeriod, type RankPeriodType } from "@/lib/ranking-config";
 import { RankingPage } from "@/components/dashboard/ranking/ranking-page";
+
+function clamp(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams: { year?: string };
+  searchParams: { period?: string; year?: string; month?: string; quarter?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
@@ -15,12 +21,23 @@ export default async function Page({
   const role = session.user.role;
   if (role === "CEO_FITPARTNER" || role === "COO") redirect("/dashboard");
 
-  const currentYear = new Date().getFullYear();
-  const parsed = parseInt(searchParams.year ?? "", 10);
-  const year = Number.isFinite(parsed) ? parsed : currentYear;
+  const now = currentPeriod();
+  const type: RankPeriodType =
+    searchParams.period === "month" || searchParams.period === "quarter"
+      ? searchParams.period
+      : "year";
+
+  const period: RankPeriod = {
+    type,
+    year: clamp(parseInt(searchParams.year ?? "", 10), 2000, 2100, now.year),
+    month: clamp(parseInt(searchParams.month ?? "", 10), 1, 12, now.month),
+    quarter: clamp(parseInt(searchParams.quarter ?? "", 10), 1, 4, now.quarter),
+  };
 
   const weights = await getRankWeights();
-  const rows = await computeRanking(year, weights);
+  const rows = await computeRanking(period, weights);
 
-  return <RankingPage rows={rows} year={year} myId={session.user.id} weights={weights} />;
+  return (
+    <RankingPage rows={rows} period={period} myId={session.user.id} weights={weights} />
+  );
 }

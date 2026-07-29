@@ -1,21 +1,122 @@
 import { prisma } from "@/lib/prisma";
-import { computePtStats } from "@/lib/pt-promotion";
 import {
   DEFAULT_RANK_WEIGHTS,
   isValidWeights,
+  periodMonths,
+  type RankPeriod,
   type RankRow,
   type RankWeights,
 } from "@/lib/ranking-config";
 
 // ── Xếp hạng nhân sự ─────────────────────────────────────────────────────────
 // Điểm xếp hạng gộp 3 tiêu chí, mỗi tiêu chí quy về thang 100 rồi nhân trọng số:
-//   1. Điểm thi   — % bài thi gần nhất trong năm (chưa thi = 0đ)
-//   2. Doanh số   — TB doanh số/tháng, so với người cao nhất trong kỳ
-//   3. Transform  — số khách transform, so với người cao nhất trong kỳ
+//   1. Điểm thi   — % bài thi gần nhất trong kỳ (chưa thi = 0đ)
+//   2. Doanh số   — TB doanh số/tháng trong kỳ, so với người cao nhất
+//   3. Transform  — số khách transform trong kỳ, so với người cao nhất
 // Doanh số và transform chấm theo tương quan nội bộ nên hạng luôn phản ánh
 // đúng mặt bằng của kỳ đang xét. Trọng số do admin chỉnh ở Đề thi > Cấu hình.
+// Kỳ có thể là tháng, quý hoặc năm — chỉ dữ liệu phát sinh trong kỳ được tính.
 
 export type { RankRow, RankWeights } from "@/lib/ranking-config";
+
+/** Khoảng thời gian [start, end) của kỳ. */
+function periodRange(period: RankPeriod): { start: Date; end: Date } {
+  const months = periodMonths(period);
+  const first = months[0];
+  const last = months[months.length - 1];
+  return {
+    start: new Date(period.year, first - 1, 1),
+    end: new Date(period.year, last, 1), // đầu tháng kế tiếp
+  };
+}
+
+/**
+ * Các tháng thực sự được tính vào TB doanh số. Tháng đang diễn ra bị loại để
+ * số liệu dở dang không kéo trung bình xuống — trừ khi kỳ chỉ có mỗi tháng đó.
+ */
+function countedMonths(period: RankPeriod, now: Date = new Date()): number[] {
+  const all = periodMonths(period);
+  if (period.year < now.getFullYear()) return all;
+  if (period.year > now.getFullYear()) return [];
+
+  const currentMonth = now.getMonth() + 1;
+  if (period.type === "month") return all; // xem tháng nào thì lấy đúng tháng đó
+  const elapsed = all.filter((m) => m < currentMonth);
+  return elapsed.length > 0 ? elapsed : all.filter((m) => m === currentMonth);
+}
+
+type PtPeriodStat = { avgMonthlyRevenue: number; transformedCount: number };
+
+/**
+ * TB doanh số/tháng (triệu) + số khách transform của từng PT trong kỳ.
+ * Transform lấy mốc là lần cân đầu tiên giảm đủ 7 kg; khách chưa có log cân
+ * nào đạt mốc thì dùng thời điểm cập nhật gần nhất (giống trang Tổng quan).
+ */
+export async function computePtPeriodStats(
+  ptIds: string[],
+  period: RankPeriod
+): Promise<Map<string, PtPeriodStat>> {
+  const stats = new Map<string, PtPeriodStat>();
+  if (ptIds.length === 0) return stats;
+
+  const months = countedMonths(period);
+  const { start, end } = periodRange(period);
+
+  const [leads, clients] = await Promise.all([
+    months.length > 0
+      ? prisma.salesLead.findMany({
+          where: { assignedPTId: { in: ptIds }, year: period.year, month: { in: months } },
+          select: { assignedPTId: true, actualRevenue: true },
+        })
+      : Promise.resolve([]),
+    prisma.client.findMany({
+      where: { assignedPTId: { in: ptIds }, hasTransformed: true },
+      select: { id: true, assignedPTId: true, initialWeight: true, updatedAt: true },
+    }),
+  ]);
+
+  const revenueByPt = new Map<string, number>();
+  for (const l of leads) {
+    if (!l.assignedPTId) continue;
+    revenueByPt.set(l.assignedPTId, (revenueByPt.get(l.assignedPTId) ?? 0) + (l.actualRevenue ?? 0));
+  }
+
+  // Mốc transform của từng khách = lần cân đầu tiên giảm ≥ 7 kg
+  const clientIds = clients.map((c) => c.id);
+  const logs =
+    clientIds.length > 0
+      ? await prisma.weightLog.findMany({
+          where: { clientId: { in: clientIds } },
+          select: { clientId: true, date: true, weight: true },
+          orderBy: { date: "asc" },
+        })
+      : [];
+
+  const initialWeightById = new Map(clients.map((c) => [c.id, c.initialWeight]));
+  const transformDate = new Map<string, Date>();
+  for (const log of logs) {
+    if (transformDate.has(log.clientId)) continue;
+    const initial = initialWeightById.get(log.clientId);
+    if (initial != null && initial - log.weight >= 7) transformDate.set(log.clientId, log.date);
+  }
+
+  const transformByPt = new Map<string, number>();
+  for (const c of clients) {
+    if (!c.assignedPTId) continue;
+    const when = transformDate.get(c.id) ?? c.updatedAt;
+    if (when < start || when >= end) continue;
+    transformByPt.set(c.assignedPTId, (transformByPt.get(c.assignedPTId) ?? 0) + 1);
+  }
+
+  const divisor = Math.max(months.length, 1);
+  for (const id of ptIds) {
+    stats.set(id, {
+      avgMonthlyRevenue: (revenueByPt.get(id) ?? 0) / divisor,
+      transformedCount: transformByPt.get(id) ?? 0,
+    });
+  }
+  return stats;
+}
 
 /** Trọng số đang cấu hình; sai lệch (dữ liệu cũ) thì rơi về mặc định. */
 export async function getRankWeights(): Promise<RankWeights> {
@@ -32,8 +133,11 @@ export async function getRankWeights(): Promise<RankWeights> {
   return isValidWeights(weights) ? weights : DEFAULT_RANK_WEIGHTS;
 }
 
-/** Bảng xếp hạng toàn bộ PT đang hoạt động trong 1 năm. */
-export async function computeRanking(year: number, weights?: RankWeights): Promise<RankRow[]> {
+/** Bảng xếp hạng toàn bộ PT đang hoạt động trong 1 kỳ. */
+export async function computeRanking(
+  period: RankPeriod,
+  weights?: RankWeights
+): Promise<RankRow[]> {
   const w = weights ?? (await getRankWeights());
   const pts = await prisma.user.findMany({
     where: { role: "PT", deletedAt: null },
@@ -50,19 +154,18 @@ export async function computeRanking(year: number, weights?: RankWeights): Promi
   if (pts.length === 0) return [];
 
   const ptIds = pts.map((p) => p.id);
-  const yearStart = new Date(year, 0, 1);
-  const yearEnd = new Date(year + 1, 0, 1);
+  const { start, end } = periodRange(period);
 
   const [stats, attempts] = await Promise.all([
-    computePtStats(ptIds, year),
+    computePtPeriodStats(ptIds, period),
     prisma.examAttempt.findMany({
-      where: { userId: { in: ptIds }, createdAt: { gte: yearStart, lt: yearEnd } },
+      where: { userId: { in: ptIds }, createdAt: { gte: start, lt: end } },
       select: { userId: true, score: true, total: true, createdAt: true },
       orderBy: { createdAt: "desc" },
     }),
   ]);
 
-  // Lần thi gần nhất trong năm của mỗi PT
+  // Lần thi gần nhất trong kỳ của mỗi PT
   const lastExam = new Map<string, { score: number; total: number }>();
   for (const a of attempts) {
     if (!lastExam.has(a.userId)) lastExam.set(a.userId, { score: a.score, total: a.total });
@@ -127,10 +230,10 @@ export async function computeRanking(year: number, weights?: RankWeights): Promi
 /** Hạng của 1 người trong kỳ — dùng cho thẻ hiển thị ở trang Tổng quan. */
 export async function getMyRank(
   userId: string,
-  year: number,
+  period: RankPeriod,
   weights?: RankWeights
 ): Promise<{ rank: number; total: number; points: number } | null> {
-  const rows = await computeRanking(year, weights);
+  const rows = await computeRanking(period, weights);
   const me = rows.find((r) => r.ptId === userId);
   if (!me) return null;
   return { rank: me.rank, total: rows.length, points: me.points };

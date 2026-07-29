@@ -15,6 +15,44 @@ export function isValidWeights(w: RankWeights): boolean {
   return vals.reduce((a, b) => a + b, 0) === WEIGHT_TOTAL;
 }
 
+// ── Kỳ xếp hạng ──────────────────────────────────────────────────────────────
+// Tháng / quý chỉ tính doanh số và transform phát sinh trong kỳ đó.
+
+export type RankPeriodType = "month" | "quarter" | "year";
+
+export type RankPeriod = {
+  type: RankPeriodType;
+  year: number;
+  month: number; // 1-12, chỉ dùng khi type = "month"
+  quarter: number; // 1-4, chỉ dùng khi type = "quarter"
+};
+
+export function periodLabel(p: RankPeriod): string {
+  if (p.type === "month") return `Tháng ${p.month}/${p.year}`;
+  if (p.type === "quarter") return `Quý ${p.quarter}/${p.year}`;
+  return `Năm ${p.year}`;
+}
+
+/** Các tháng (1-12) thuộc kỳ. */
+export function periodMonths(p: RankPeriod): number[] {
+  if (p.type === "month") return [p.month];
+  if (p.type === "quarter") {
+    const start = (p.quarter - 1) * 3 + 1;
+    return [start, start + 1, start + 2];
+  }
+  return Array.from({ length: 12 }, (_, i) => i + 1);
+}
+
+export function currentPeriod(now: Date = new Date()): RankPeriod {
+  const month = now.getMonth() + 1;
+  return {
+    type: "year",
+    year: now.getFullYear(),
+    month,
+    quarter: Math.floor((month - 1) / 3) + 1,
+  };
+}
+
 export type RankRow = {
   ptId: string;
   name: string;

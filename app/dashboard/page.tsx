@@ -7,6 +7,7 @@ import { PTDashboard, PTStats } from "@/components/dashboard/pt-dashboard";
 import { WeekDayData } from "@/components/dashboard/weight-chart";
 import { CEODashboard } from "@/components/dashboard/ceo-dashboard";
 import { getMyRank } from "@/lib/ranking";
+import { currentPeriod } from "@/lib/ranking-config";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -294,7 +295,8 @@ export default async function DashboardPage() {
       orderBy: { date: "desc" },
       take: 30,
     }),
-    getMyRank(ptId, new Date().getFullYear()),
+    // Huy hiệu ở Tổng quan lấy hạng của cả năm
+    getMyRank(ptId, currentPeriod()),
   ]);
 
   // Pass all recent logs (newest first) so the dashboard can paginate them client-side.

@@ -14,11 +14,29 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { RankRow, RankWeights } from "@/lib/ranking-config";
+import {
+  periodLabel,
+  type RankPeriod,
+  type RankPeriodType,
+  type RankRow,
+  type RankWeights,
+} from "@/lib/ranking-config";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
 const PAGE_SIZE = 10;
+
+const PERIOD_TYPES: { key: RankPeriodType; label: string }[] = [
+  { key: "month", label: "Tháng" },
+  { key: "quarter", label: "Quý" },
+  { key: "year", label: "Năm" },
+];
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const QUARTERS = [1, 2, 3, 4];
+
+const selectCls =
+  "h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer";
 
 // Trang trí riêng cho top 3
 const PODIUM = [
@@ -58,16 +76,23 @@ function initials(name: string) {
 
 export function RankingPage({
   rows,
-  year,
+  period,
   myId,
   weights,
 }: {
   rows: RankRow[];
-  year: number;
+  period: RankPeriod;
   myId: string;
   weights: RankWeights;
 }) {
   const router = useRouter();
+
+  function goTo(next: Partial<RankPeriod>) {
+    const p = { ...period, ...next };
+    router.push(
+      `/dashboard/ranking?period=${p.type}&year=${p.year}&month=${p.month}&quarter=${p.quarter}`
+    );
+  }
   const top3 = rows.slice(0, 3);
   const rest = rows.slice(3);
   const me = rows.find((r) => r.ptId === myId);
@@ -76,8 +101,10 @@ export function RankingPage({
   const totalPages = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
   const pageItems = rest.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  // Đổi năm thì danh sách đổi theo, đưa về trang đầu
-  useEffect(() => { setPage(0); }, [year]);
+  // Đổi kỳ thì danh sách đổi theo, đưa về trang đầu
+  useEffect(() => {
+    setPage(0);
+  }, [period.type, period.year, period.month, period.quarter]);
   useEffect(() => { if (page > totalPages - 1) setPage(0); }, [page, totalPages]);
 
   return (
@@ -91,21 +118,71 @@ export function RankingPage({
           <div>
             <h1 className="text-2xl font-extrabold text-gray-900">Xếp hạng nhân sự</h1>
             <p className="text-sm text-gray-400 font-medium mt-0.5">
-              Tính theo điểm thi, doanh số trung bình và số khách transform
+              {periodLabel(period)} — tính theo điểm thi, doanh số trung bình và số khách
+              transform
             </p>
           </div>
         </div>
-        <select
-          value={year}
-          onChange={(e) => router.push(`/dashboard/ranking?year=${e.target.value}`)}
-          className="h-9 px-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 cursor-pointer"
-        >
-          {YEAR_OPTIONS.map((y) => (
-            <option key={y} value={y}>
-              Năm {y}
-            </option>
-          ))}
-        </select>
+
+        {/* Chọn kỳ: tháng / quý / năm */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {PERIOD_TYPES.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => goTo({ type: key })}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-semibold transition-all",
+                  period.type === key
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {period.type === "month" && (
+            <select
+              value={period.month}
+              onChange={(e) => goTo({ month: parseInt(e.target.value, 10) })}
+              className={selectCls}
+            >
+              {MONTHS.map((m) => (
+                <option key={m} value={m}>
+                  Tháng {m}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {period.type === "quarter" && (
+            <select
+              value={period.quarter}
+              onChange={(e) => goTo({ quarter: parseInt(e.target.value, 10) })}
+              className={selectCls}
+            >
+              {QUARTERS.map((q) => (
+                <option key={q} value={q}>
+                  Quý {q}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <select
+            value={period.year}
+            onChange={(e) => goTo({ year: parseInt(e.target.value, 10) })}
+            className={selectCls}
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>
+                Năm {y}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Cách tính điểm */}
@@ -124,7 +201,8 @@ export function RankingPage({
           Transform {weights.transform}%
         </span>
         <span className="text-xs text-gray-400 font-medium">
-          · Doanh số và transform chấm theo tương quan với người cao nhất trong kỳ · Chưa thi tính 0đ
+          · Chỉ tính doanh số và transform phát sinh trong {periodLabel(period).toLowerCase()},
+          chấm theo tương quan với người cao nhất · Chưa thi tính 0đ
         </span>
       </div>
 
@@ -254,7 +332,9 @@ export function RankingPage({
           {/* ─── Bảng xếp hạng còn lại ─── */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
-              <p className="text-base font-extrabold text-gray-900">Bảng xếp hạng — Năm {year}</p>
+              <p className="text-base font-extrabold text-gray-900">
+                Bảng xếp hạng — {periodLabel(period)}
+              </p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {rows.length} nhân sự
                 {rest.length > 0 && ` · hạng ${top3.length + 1}–${rows.length}`}
