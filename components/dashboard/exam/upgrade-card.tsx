@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, CalendarClock, Lock } from "lucide-react";
+import { fmtExamDate, type ExamWindowState } from "@/lib/exam-schedule";
 
 type ExamStatus = {
   role: string;
@@ -24,6 +25,14 @@ type ExamStatus = {
   passingScore: number;
   numQuestions: number;
   enableLevelSystem: boolean;
+  exam: {
+    state: ExamWindowState;
+    open: boolean;
+    message: string;
+    examDate: string | null;
+    examStartTime: string;
+    examEndTime: string;
+  };
 };
 
 export function UpgradeCard() {
@@ -42,6 +51,14 @@ export function UpgradeCard() {
   if (!status.nextLevelName) return null; // already at top level
 
   const targetColor = status.nextLevelColor || "#f15b5c";
+  const exam = status.exam ?? {
+    state: "DISABLED" as ExamWindowState,
+    open: false,
+    message: "Kỳ thi đang đóng. Vui lòng chờ quản lý mở lịch thi.",
+    examDate: null,
+    examStartTime: "00:00",
+    examEndTime: "23:59",
+  };
   const lastFailed = status.lastAttempt && !status.lastAttempt.passed;
   const currentLevelName = status.ptLevelName;
   const currentLevelColor = status.ptLevelColor;
@@ -85,14 +102,30 @@ export function UpgradeCard() {
               Lần trước: {Math.round((status.lastAttempt.score / status.lastAttempt.total) * 100)}% — Chưa đạt
             </p>
           )}
-          <Link
-            href="/dashboard/exam/take"
-            className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            {lastFailed ? "Thi lại ngay" : "Bắt đầu thi"}
-          </Link>
+
+          {/* Lịch thi: chỉ mở nút thi trong đúng khung giờ */}
+          {exam.state === "BEFORE" && exam.examDate && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-blue-500">
+              <CalendarClock className="w-3.5 h-3.5" />
+              Lịch thi: {fmtExamDate(exam.examDate)} · {exam.examStartTime}–{exam.examEndTime}
+            </p>
+          )}
+
+          {exam.open ? (
+            <Link
+              href="/dashboard/exam/take"
+              className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-opacity"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              {lastFailed ? "Thi lại ngay" : "Bắt đầu thi"}
+            </Link>
+          ) : (
+            <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
+              <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-gray-500">{exam.message}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

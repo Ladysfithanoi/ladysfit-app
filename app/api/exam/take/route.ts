@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getExamWindow } from "@/lib/exam-schedule";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -16,6 +17,20 @@ export async function GET() {
   const numQuestions = config?.numQuestions ?? 10;
   const passingScore = config?.passingScore ?? 80;
   const shuffleQuestions = config?.shuffleQuestions ?? true;
+
+  // Chỉ mở đề trong đúng khung giờ thi đã đặt
+  const window = getExamWindow({
+    scheduleEnabled: config?.scheduleEnabled ?? false,
+    examDate: config?.examDate ?? null,
+    examStartTime: config?.examStartTime ?? "00:00",
+    examEndTime: config?.examEndTime ?? "23:59",
+  });
+  if (!window.open) {
+    return NextResponse.json(
+      { error: window.message, scheduleState: window.state },
+      { status: 403 }
+    );
+  }
 
   const allQuestions = await prisma.examQuestion.findMany({ orderBy: { order: "asc" } });
 
@@ -38,5 +53,10 @@ export async function GET() {
     optionD,
   }));
 
-  return NextResponse.json({ questions, passingScore });
+  return NextResponse.json({
+    questions,
+    passingScore,
+    closesAt: window.endAt?.toISOString() ?? null,
+    scheduleNote: window.message,
+  });
 }

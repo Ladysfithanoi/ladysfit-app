@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tryPromotePt } from "@/lib/pt-promotion";
+import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -42,6 +43,21 @@ export async function POST(req: NextRequest) {
 
   if (sysConfig?.enableLevelSystem === false) {
     return NextResponse.json({ error: "Hệ thống phân cấp độ đang tắt" }, { status: 403 });
+  }
+
+  // Chỉ nhận bài trong khung giờ thi (cộng thêm ít phút cho bài đang làm dở)
+  const window = getExamWindow({
+    scheduleEnabled: config?.scheduleEnabled ?? false,
+    examDate: config?.examDate ?? null,
+    examStartTime: config?.examStartTime ?? "00:00",
+    examEndTime: config?.examEndTime ?? "23:59",
+  });
+  const withinGrace =
+    window.state === "AFTER" &&
+    !!window.endAt &&
+    Date.now() - window.endAt.getTime() <= SUBMIT_GRACE_MS;
+  if (!window.open && !withinGrace) {
+    return NextResponse.json({ error: window.message }, { status: 403 });
   }
 
   // Fetch the actual questions to grade

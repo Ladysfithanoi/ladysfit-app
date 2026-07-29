@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getExamWindow } from "@/lib/exam-schedule";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -29,6 +30,13 @@ export async function GET() {
   const enableLevelSystem = sysConfig?.enableLevelSystem ?? true;
 
   const retestIntervalDays = user?.ptLevel?.retestIntervalDays ?? 30;
+
+  const examWindow = getExamWindow({
+    scheduleEnabled: config?.scheduleEnabled ?? false,
+    examDate: config?.examDate ?? null,
+    examStartTime: config?.examStartTime ?? "00:00",
+    examEndTime: config?.examEndTime ?? "23:59",
+  });
 
   // Next level above the PT's current level
   const nextLevel = user?.ptLevel
@@ -61,5 +69,13 @@ export async function GET() {
     passingScore,
     numQuestions,
     enableLevelSystem,
+    exam: {
+      state: examWindow.state,
+      open: examWindow.open,
+      message: examWindow.message,
+      examDate: config?.examDate ?? null,
+      examStartTime: config?.examStartTime ?? "00:00",
+      examEndTime: config?.examEndTime ?? "23:59",
+    },
   });
 }

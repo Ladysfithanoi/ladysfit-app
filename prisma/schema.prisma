@@ -579,6 +579,12 @@ model ExamConfig {
   numQuestions     Int      @default(10)
   passingScore     Int      @default(80)
   shuffleQuestions Boolean  @default(true)
+  // Lịch thi: tắt => không ai vào thi được. Bật => chỉ thi được đúng ngày, trong khung giờ.
+  // Ngày/giờ lưu dạng chuỗi theo giờ VN (UTC+7) để không lệch múi giờ server.
+  scheduleEnabled  Boolean  @default(false)
+  examDate         String?
+  examStartTime    String   @default("00:00")
+  examEndTime      String   @default("23:59")
   updatedAt        DateTime @updatedAt
 
   @@map("exam_config")

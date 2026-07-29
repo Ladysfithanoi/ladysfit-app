@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, XCircle, ArrowLeft, Send } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, Send, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Question = {
@@ -30,8 +30,10 @@ export function ExamTakePage() {
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [passingScore, setPassingScore] = useState(80);
+  const [scheduleNote, setScheduleNote] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<ExamResult | null>(null);
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function ExamTakePage() {
         const data = await res.json();
         setQuestions(data.questions);
         setPassingScore(data.passingScore);
+        setScheduleNote(data.scheduleNote ?? "");
       } catch {
         setError("Có lỗi xảy ra khi tải đề thi");
       } finally {
@@ -58,13 +61,17 @@ export function ExamTakePage() {
   async function handleSubmit() {
     if (Object.keys(answers).length < questions.length) return;
     setSubmitting(true);
+    setSubmitError("");
     try {
       const res = await fetch("/api/exam/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers }),
       });
-      if (res.ok) {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
+      } else {
         const data = await res.json();
         setResult({
           scorePct: data.scorePct,
@@ -187,6 +194,15 @@ export function ExamTakePage() {
         </div>
       </div>
 
+      {scheduleNote && (
+        <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-xl bg-amber-50 border border-amber-100">
+          <CalendarClock className="w-4 h-4 text-amber-500 shrink-0" />
+          <p className="text-xs font-semibold text-amber-700">
+            {scheduleNote} Hết giờ sẽ không nộp được bài.
+          </p>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="h-2 bg-gray-100 rounded-full mb-6 overflow-hidden">
         <div
@@ -262,6 +278,9 @@ export function ExamTakePage() {
         <p className="text-xs text-gray-400 text-right mt-2">
           Còn {questions.length - answeredCount} câu chưa trả lời
         </p>
+      )}
+      {submitError && (
+        <p className="text-xs font-semibold text-red-500 text-right mt-2">{submitError}</p>
       )}
     </div>
   );
