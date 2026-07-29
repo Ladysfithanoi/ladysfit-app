@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { computePtStats } from "@/lib/pt-promotion";
-import { RANK_WEIGHTS, type RankRow } from "@/lib/ranking-config";
+import {
+  DEFAULT_RANK_WEIGHTS,
+  isValidWeights,
+  type RankRow,
+  type RankWeights,
+} from "@/lib/ranking-config";
 
 // ── Xếp hạng nhân sự ─────────────────────────────────────────────────────────
 // Điểm xếp hạng gộp 3 tiêu chí, mỗi tiêu chí quy về thang 100 rồi nhân trọng số:
@@ -8,13 +13,28 @@ import { RANK_WEIGHTS, type RankRow } from "@/lib/ranking-config";
 //   2. Doanh số   — TB doanh số/tháng, so với người cao nhất trong kỳ
 //   3. Transform  — số khách transform, so với người cao nhất trong kỳ
 // Doanh số và transform chấm theo tương quan nội bộ nên hạng luôn phản ánh
-// đúng mặt bằng của kỳ đang xét.
+// đúng mặt bằng của kỳ đang xét. Trọng số do admin chỉnh ở Đề thi > Cấu hình.
 
-export { RANK_WEIGHTS } from "@/lib/ranking-config";
-export type { RankRow } from "@/lib/ranking-config";
+export type { RankRow, RankWeights } from "@/lib/ranking-config";
+
+/** Trọng số đang cấu hình; sai lệch (dữ liệu cũ) thì rơi về mặc định. */
+export async function getRankWeights(): Promise<RankWeights> {
+  const config = await prisma.examConfig.findFirst({
+    select: { rankWeightExam: true, rankWeightRevenue: true, rankWeightTransform: true },
+  });
+  if (!config) return DEFAULT_RANK_WEIGHTS;
+
+  const weights: RankWeights = {
+    exam: config.rankWeightExam,
+    revenue: config.rankWeightRevenue,
+    transform: config.rankWeightTransform,
+  };
+  return isValidWeights(weights) ? weights : DEFAULT_RANK_WEIGHTS;
+}
 
 /** Bảng xếp hạng toàn bộ PT đang hoạt động trong 1 năm. */
-export async function computeRanking(year: number): Promise<RankRow[]> {
+export async function computeRanking(year: number, weights?: RankWeights): Promise<RankRow[]> {
+  const w = weights ?? (await getRankWeights());
   const pts = await prisma.user.findMany({
     where: { role: "PT", deletedAt: null },
     select: {
@@ -73,10 +93,9 @@ export async function computeRanking(year: number): Promise<RankRow[]> {
     const examPoints = b.examScore;
     const revenuePoints = maxRevenue > 0 ? (b.avgMonthlyRevenue / maxRevenue) * 100 : 0;
     const transformPoints = maxTransform > 0 ? (b.transformedCount / maxTransform) * 100 : 0;
+    // Trọng số lưu theo % nên chia 100 khi gộp điểm
     const points =
-      examPoints * RANK_WEIGHTS.exam +
-      revenuePoints * RANK_WEIGHTS.revenue +
-      transformPoints * RANK_WEIGHTS.transform;
+      (examPoints * w.exam + revenuePoints * w.revenue + transformPoints * w.transform) / 100;
     return {
       ...b,
       examPoints: Math.round(examPoints * 10) / 10,
@@ -108,9 +127,10 @@ export async function computeRanking(year: number): Promise<RankRow[]> {
 /** Hạng của 1 người trong kỳ — dùng cho thẻ hiển thị ở trang Tổng quan. */
 export async function getMyRank(
   userId: string,
-  year: number
+  year: number,
+  weights?: RankWeights
 ): Promise<{ rank: number; total: number; points: number } | null> {
-  const rows = await computeRanking(year);
+  const rows = await computeRanking(year, weights);
   const me = rows.find((r) => r.ptId === userId);
   if (!me) return null;
   return { rank: me.rank, total: rows.length, points: me.points };

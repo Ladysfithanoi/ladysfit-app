@@ -16,6 +16,9 @@ import {
   Lock,
   Unlock,
   AlertCircle,
+  Trophy,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -42,6 +45,9 @@ type Config = {
   examDate: string | null;
   examStartTime: string;
   examEndTime: string;
+  rankWeightExam: number;
+  rankWeightRevenue: number;
+  rankWeightTransform: number;
 };
 
 type RosterRow = {
@@ -83,6 +89,15 @@ const TABS = [
 ] as const;
 
 type Tab = typeof TABS[number]["key"];
+
+const PAGE_SIZE = 10;
+
+// Ba tiêu chí tính điểm xếp hạng — chỉnh trọng số ngay tại đây
+const WEIGHT_FIELDS = [
+  { key: "rankWeightExam", label: "Điểm thi lý thuyết", hint: "% bài thi gần nhất trong năm" },
+  { key: "rankWeightRevenue", label: "Doanh số trung bình", hint: "TB doanh số/tháng so với người cao nhất" },
+  { key: "rankWeightTransform", label: "Số khách transform", hint: "So với người có nhiều transform nhất" },
+] as const;
 
 const WINDOW_BADGE: Record<ExamWindowState, { label: string; cls: string }> = {
   DISABLED: { label: "Đang đóng", cls: "bg-gray-100 text-gray-500" },
@@ -132,6 +147,19 @@ export function ExamAdminPage({
   const [configForm, setConfigForm] = useState(initialConfig);
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
+  const [configError, setConfigError] = useState("");
+
+  // Kết quả thi — phân trang
+  const [resultsPage, setResultsPage] = useState(0);
+  const resultsTotalPages = Math.max(1, Math.ceil(attempts.length / PAGE_SIZE));
+  const pageAttempts = attempts.slice(
+    resultsPage * PAGE_SIZE,
+    resultsPage * PAGE_SIZE + PAGE_SIZE
+  );
+
+  const weightTotal =
+    configForm.rankWeightExam + configForm.rankWeightRevenue + configForm.rankWeightTransform;
+  const weightValid = weightTotal === 100;
 
   // Schedule state
   const [scheduleForm, setScheduleForm] = useState({
@@ -193,6 +221,11 @@ export function ExamAdminPage({
   }
 
   async function handleSaveConfig() {
+    setConfigError("");
+    if (!weightValid) {
+      setConfigError(`Tổng 3 trọng số phải bằng 100% (hiện tại ${weightTotal}%)`);
+      return;
+    }
     setConfigSaving(true);
     try {
       const res = await fetch("/api/exam/config", {
@@ -203,19 +236,28 @@ export function ExamAdminPage({
           numQuestions: configForm.numQuestions,
           passingScore: configForm.passingScore,
           shuffleQuestions: configForm.shuffleQuestions,
+          rankWeightExam: configForm.rankWeightExam,
+          rankWeightRevenue: configForm.rankWeightRevenue,
+          rankWeightTransform: configForm.rankWeightTransform,
         }),
       });
-      if (res.ok) {
-        const updated = await res.json();
-        setConfigForm((prev) => ({
-          ...prev,
-          numQuestions: updated.numQuestions,
-          passingScore: updated.passingScore,
-          shuffleQuestions: updated.shuffleQuestions,
-        }));
-        setConfigSaved(true);
-        setTimeout(() => setConfigSaved(false), 2000);
+      const updated = await res.json();
+      if (!res.ok) {
+        setConfigError(updated.error ?? "Không lưu được cấu hình");
+        return;
       }
+      setConfigForm((prev) => ({
+        ...prev,
+        numQuestions: updated.numQuestions,
+        passingScore: updated.passingScore,
+        shuffleQuestions: updated.shuffleQuestions,
+        rankWeightExam: updated.rankWeightExam,
+        rankWeightRevenue: updated.rankWeightRevenue,
+        rankWeightTransform: updated.rankWeightTransform,
+      }));
+      setConfigSaved(true);
+      setTimeout(() => setConfigSaved(false), 2000);
+      router.refresh();
     } finally {
       setConfigSaving(false);
     }
@@ -774,10 +816,69 @@ export function ExamAdminPage({
               </p>
             </div>
 
+            {/* ── Trọng số tính điểm xếp hạng ── */}
+            <div className="pt-1 border-t border-gray-100">
+              <div className="flex items-center justify-between gap-3 pt-4 mb-1">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-[#f15b5c]" />
+                  <label className="text-sm font-bold text-gray-700">
+                    Trọng số tính điểm xếp hạng
+                  </label>
+                </div>
+                <span
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-xs font-extrabold",
+                    weightValid ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
+                  )}
+                >
+                  Tổng {weightTotal}%
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">
+                Quyết định tỉ trọng 3 tiêu chí ở bảng Xếp hạng. Tổng phải bằng 100%.
+              </p>
+
+              <div className="space-y-3">
+                {WEIGHT_FIELDS.map(({ key, label, hint }) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-700">{label}</p>
+                      <p className="text-xs text-gray-400">{hint}</p>
+                    </div>
+                    <div className="relative shrink-0">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={configForm[key]}
+                        onChange={(e) =>
+                          setConfigForm((prev) => ({
+                            ...prev,
+                            [key]: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)),
+                          }))
+                        }
+                        className="w-24 h-11 rounded-xl border border-gray-200 pl-4 pr-7 text-sm font-bold text-right focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {configError && (
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-red-500">
+                <AlertCircle className="w-4 h-4" />
+                {configError}
+              </p>
+            )}
+
             <div className="pt-2 flex items-center gap-3">
               <button
                 onClick={handleSaveConfig}
-                disabled={configSaving}
+                disabled={configSaving || !weightValid}
                 className="px-5 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-60 transition-opacity hover:opacity-90"
                 style={{ backgroundColor: "#f15b5c" }}
               >
@@ -831,7 +932,7 @@ export function ExamAdminPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {attempts.map((a) => {
+                  {pageAttempts.map((a) => {
                     const scorePct = Math.round((a.score / a.total) * 100);
                     const date = new Date(a.createdAt);
                     return (
@@ -873,6 +974,32 @@ export function ExamAdminPage({
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {resultsTotalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+              <span className="text-xs font-semibold text-gray-400">
+                Trang {resultsPage + 1}/{resultsTotalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setResultsPage((p) => Math.max(0, p - 1))}
+                  disabled={resultsPage === 0}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Trang trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setResultsPage((p) => Math.min(resultsTotalPages - 1, p + 1))}
+                  disabled={resultsPage >= resultsTotalPages - 1}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Trang sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>

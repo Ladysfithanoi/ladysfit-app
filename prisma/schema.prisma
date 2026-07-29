@@ -585,6 +585,10 @@ model ExamConfig {
   examDate         String?
   examStartTime    String   @default("00:00")
   examEndTime      String   @default("23:59")
+  // Trọng số (%) 3 tiêu chí của bảng xếp hạng — tổng phải bằng 100
+  rankWeightExam      Int   @default(30)
+  rankWeightRevenue   Int   @default(40)
+  rankWeightTransform Int   @default(30)
   updatedAt        DateTime @updatedAt
 
   @@map("exam_config")

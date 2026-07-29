@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isValidExamDate, isValidExamTime, vnInstant } from "@/lib/exam-schedule";
+import { isValidWeights, WEIGHT_TOTAL } from "@/lib/ranking-config";
 
 async function getOrCreateConfig() {
   const existing = await prisma.examConfig.findFirst();
@@ -33,9 +34,29 @@ export async function PUT(req: NextRequest) {
     examDate,
     examStartTime,
     examEndTime,
+    rankWeightExam,
+    rankWeightRevenue,
+    rankWeightTransform,
   } = body;
 
   const config = await getOrCreateConfig();
+
+  // ── Trọng số xếp hạng ─────────────────────────────────────────────────────
+  const weights = {
+    exam: rankWeightExam ?? config.rankWeightExam,
+    revenue: rankWeightRevenue ?? config.rankWeightRevenue,
+    transform: rankWeightTransform ?? config.rankWeightTransform,
+  };
+  const weightsTouched =
+    rankWeightExam !== undefined ||
+    rankWeightRevenue !== undefined ||
+    rankWeightTransform !== undefined;
+  if (weightsTouched && !isValidWeights(weights)) {
+    return NextResponse.json(
+      { error: `Tổng 3 trọng số phải bằng ${WEIGHT_TOTAL}%` },
+      { status: 400 }
+    );
+  }
 
   // ── Lịch thi ──────────────────────────────────────────────────────────────
   const nextEnabled = scheduleEnabled ?? config.scheduleEnabled;
@@ -86,6 +107,9 @@ export async function PUT(req: NextRequest) {
       examDate: nextDate,
       examStartTime: nextStart,
       examEndTime: nextEnd,
+      rankWeightExam: weights.exam,
+      rankWeightRevenue: weights.revenue,
+      rankWeightTransform: weights.transform,
     },
   });
 

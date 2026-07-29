@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
+import { DEFAULT_RANK_WEIGHTS } from "@/lib/ranking-config";
 import { ExamAdminPage } from "@/components/dashboard/exam/exam-admin-page";
 
 export default async function ExamPage() {
@@ -28,6 +29,9 @@ export default async function ExamPage() {
     examDate: null as string | null,
     examStartTime: "00:00",
     examEndTime: "23:59",
+    rankWeightExam: DEFAULT_RANK_WEIGHTS.exam,
+    rankWeightRevenue: DEFAULT_RANK_WEIGHTS.revenue,
+    rankWeightTransform: DEFAULT_RANK_WEIGHTS.transform,
     updatedAt: new Date(),
   };
 
@@ -116,6 +120,9 @@ export default async function ExamPage() {
         examDate: config.examDate,
         examStartTime: config.examStartTime,
         examEndTime: config.examEndTime,
+        rankWeightExam: config.rankWeightExam,
+        rankWeightRevenue: config.rankWeightRevenue,
+        rankWeightTransform: config.rankWeightTransform,
       }}
       attempts={serializedAttempts}
       windowState={window.state}

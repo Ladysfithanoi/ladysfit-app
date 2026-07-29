@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { computeRanking } from "@/lib/ranking";
+import { computeRanking, getRankWeights } from "@/lib/ranking";
 import { RankingPage } from "@/components/dashboard/ranking/ranking-page";
 
 export default async function Page({
@@ -19,7 +19,8 @@ export default async function Page({
   const parsed = parseInt(searchParams.year ?? "", 10);
   const year = Number.isFinite(parsed) ? parsed : currentYear;
 
-  const rows = await computeRanking(year);
+  const weights = await getRankWeights();
+  const rows = await computeRanking(year, weights);
 
-  return <RankingPage rows={rows} year={year} myId={session.user.id} />;
+  return <RankingPage rows={rows} year={year} myId={session.user.id} weights={weights} />;
 }

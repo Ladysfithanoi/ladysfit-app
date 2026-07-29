@@ -14,7 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RANK_WEIGHTS, type RankRow } from "@/lib/ranking-config";
+import type { RankRow, RankWeights } from "@/lib/ranking-config";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
@@ -60,10 +60,12 @@ export function RankingPage({
   rows,
   year,
   myId,
+  weights,
 }: {
   rows: RankRow[];
   year: number;
   myId: string;
+  weights: RankWeights;
 }) {
   const router = useRouter();
   const top3 = rows.slice(0, 3);
@@ -111,15 +113,15 @@ export function RankingPage({
         <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Cách tính</span>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
           <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-          Điểm thi {Math.round(RANK_WEIGHTS.exam * 100)}%
+          Điểm thi {weights.exam}%
         </span>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-          Doanh số {Math.round(RANK_WEIGHTS.revenue * 100)}%
+          Doanh số {weights.revenue}%
         </span>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
           <Sparkles className="w-3.5 h-3.5 text-[#f15b5c]" />
-          Transform {Math.round(RANK_WEIGHTS.transform * 100)}%
+          Transform {weights.transform}%
         </span>
         <span className="text-xs text-gray-400 font-medium">
           · Doanh số và transform chấm theo tương quan với người cao nhất trong kỳ · Chưa thi tính 0đ
