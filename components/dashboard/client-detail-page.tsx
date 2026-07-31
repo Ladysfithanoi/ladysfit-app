@@ -415,9 +415,12 @@ export function ClientDetailPage({
   }
 
   const canEditSessions = userRole === "ADMIN" || userRole === "FM";
+  const isAdmin = userRole === "ADMIN";
 
   // Substitute modal state
   const [subOpen, setSubOpen] = useState(false);
+  // Cơ sở đang chọn để lọc nhân sự — chỉ Admin đổi được (phân khách sang cơ sở khác).
+  const [subBranchId, setSubBranchId] = useState(client.branch?.id ?? "");
   const [subSubstituteId, setSubSubstituteId] = useState("");
   const [subType, setSubType] = useState<"SHORT_TERM" | "LONG_TERM">("SHORT_TERM");
   const [subDays, setSubDays] = useState("7");
@@ -425,6 +428,7 @@ export function ClientDetailPage({
   const [subLoading, setSubLoading] = useState(false);
   const [subError, setSubError] = useState("");
   const [subSuccess, setSubSuccess] = useState(false);
+  const [subMovedBranch, setSubMovedBranch] = useState(false);
 
   async function handleSubstituteSubmit() {
     setSubError("");
@@ -444,10 +448,9 @@ export function ClientDetailPage({
           notes: subNotes || undefined,
         }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? "Có lỗi xảy ra");
-      }
+      const d = await res.json() as { error?: string; movedBranch?: boolean };
+      if (!res.ok) throw new Error(d.error ?? "Có lỗi xảy ra");
+      setSubMovedBranch(!!d.movedBranch);
       setSubSuccess(true);
       router.refresh();
     } catch (err) {
@@ -457,14 +460,21 @@ export function ClientDetailPage({
     }
   }
 
+  // Cơ sở dùng để lọc nhân sự: Admin chọn được cơ sở khác (phân khách sang cơ sở
+  // mới), các vai trò còn lại luôn bị khoá theo cơ sở của khách.
+  const subTargetBranchId = isAdmin ? subBranchId : client.branch?.id ?? "";
+  const subTargetBranchName =
+    branches.find((b) => b.id === subTargetBranchId)?.name ?? client.branch?.name ?? "";
+  const isCrossBranchTransfer = isAdmin && subTargetBranchId !== (client.branch?.id ?? "");
+
   // PTs available for substitute selection
   const substitutablePTs = staffList.filter((pt) => {
     // Exclude management-only roles that don't teach
     if (!pt.role || pt.role === "COO" || pt.role === "CEO_FITPARTNER") return false;
     // Exclude self
     if (pt.id === currentUserId) return false;
-    // Always restrict to client's branch — substitutes must be at the same branch
-    if (pt.branchId !== client.branch?.id) return false;
+    // Chỉ nhân sự thuộc cơ sở đang chọn
+    if (pt.branchId !== subTargetBranchId) return false;
     return true;
   });
 
@@ -1138,6 +1148,7 @@ export function ClientDetailPage({
             <Button
               onClick={() => {
                 setSubOpen(true);
+                setSubBranchId(client.branch?.id ?? "");
                 setSubSubstituteId("");
                 setSubType("SHORT_TERM");
                 setSubDays("7");
@@ -3139,7 +3150,11 @@ export function ClientDetailPage({
               <div className="space-y-4">
                 <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
                   <p className="text-sm font-bold text-green-700">✓ Đã gửi yêu cầu thành công</p>
-                  <p className="text-xs text-green-600 mt-1">PT hỗ trợ đã được thông báo</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    {subMovedBranch
+                      ? `Khách đã chuyển sang cơ sở ${subTargetBranchName} — PT mới đã được thông báo`
+                      : "PT hỗ trợ đã được thông báo"}
+                  </p>
                 </div>
                 <button
                   onClick={() => setSubOpen(false)}
@@ -3151,6 +3166,31 @@ export function ClientDetailPage({
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Step 0: Cơ sở — chỉ Admin được đổi để phân khách sang cơ sở khác */}
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-gray-700">Cơ sở *</label>
+                    <select
+                      value={subBranchId}
+                      onChange={(e) => {
+                        setSubBranchId(e.target.value);
+                        setSubSubstituteId("");
+                      }}
+                      className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                          {b.id === client.branch?.id ? " (cơ sở hiện tại)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-gray-400">
+                      Chọn cơ sở khác để phân khách sang cơ sở đó — chỉ Admin có quyền này.
+                    </p>
+                  </div>
+                )}
+
                 {/* Step 1: PT selection */}
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-gray-700">PT hỗ trợ *</label>
@@ -3167,9 +3207,24 @@ export function ClientDetailPage({
                     ))}
                   </select>
                   {substitutablePTs.length === 0 && (
-                    <p className="text-xs text-amber-500 font-semibold">Không có PT nào khả dụng trong cơ sở này</p>
+                    <p className="text-xs text-amber-500 font-semibold">
+                      Không có PT nào khả dụng trong cơ sở {subTargetBranchName || "này"}
+                    </p>
                   )}
                 </div>
+
+                {isCrossBranchTransfer && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-1">
+                    <p className="text-xs font-bold text-amber-700">
+                      🏢 Chuyển khách sang cơ sở {subTargetBranchName}
+                    </p>
+                    <p className="text-[11px] text-amber-600 leading-relaxed">
+                      Chọn <span className="font-bold">Chuyển giao dài hạn</span> để khách đổi hẳn sang
+                      cơ sở mới (khách sẽ thuộc quản lý của FM cơ sở đó). Hỗ trợ ngắn hạn chỉ là dạy hộ
+                      tạm — khách vẫn thuộc cơ sở {client.branch?.name ?? "hiện tại"}.
+                    </p>
+                  </div>
+                )}
 
                 {/* Step 2: Type */}
                 <div className="space-y-2">
@@ -3215,6 +3270,7 @@ export function ClientDetailPage({
                         <p className="text-sm font-semibold text-gray-800">Chuyển giao dài hạn</p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           Khách hàng sẽ chuyển về PT này vĩnh viễn
+                          {isCrossBranchTransfer && `, đồng thời chuyển sang cơ sở ${subTargetBranchName}`}
                         </p>
                       </div>
                     </label>

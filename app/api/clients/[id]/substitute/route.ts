@@ -57,13 +57,41 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const client = await prisma.client.findUnique({
     where: { id: params.id },
-    select: { id: true, fullName: true, assignedPTId: true },
+    select: { id: true, fullName: true, assignedPTId: true, branchId: true },
   });
   if (!client) return NextResponse.json({ error: "Không tìm thấy khách hàng" }, { status: 404 });
 
   if (substituteId === client.assignedPTId) {
     return NextResponse.json({ error: "PT đang phụ trách không thể tự nhờ chính mình" }, { status: 400 });
   }
+
+  const substitute = await prisma.user.findFirst({
+    where: { id: substituteId, deletedAt: null },
+    select: { id: true, name: true, email: true, branchId: true },
+  });
+  if (!substitute) {
+    return NextResponse.json({ error: "Không tìm thấy nhân sự được chọn" }, { status: 404 });
+  }
+
+  // Nhân sự nhận khách ở cơ sở khác → đây là việc phân khách sang cơ sở khác,
+  // chỉ Admin được làm. Chuyển giao DÀI HẠN thì khách đổi luôn cơ sở theo nhân
+  // sự mới; hỗ trợ ngắn hạn chỉ là dạy hộ tạm nên khách vẫn thuộc cơ sở cũ.
+  const crossBranch = substitute.branchId !== client.branchId;
+  if (crossBranch) {
+    if (role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Chỉ Admin mới được phân khách sang cơ sở khác." },
+        { status: 403 }
+      );
+    }
+    if (!substitute.branchId) {
+      return NextResponse.json(
+        { error: "Nhân sự được chọn chưa thuộc cơ sở nào." },
+        { status: 400 }
+      );
+    }
+  }
+  const movesBranch = crossBranch && type === "LONG_TERM" && !!substitute.branchId;
 
   // Cancel any existing active substitute requests for this client
   await prisma.substituteRequest.updateMany({
@@ -72,11 +100,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   });
 
   if (type === "LONG_TERM") {
-    // Transfer permanently — update assignedPTId
+    // Transfer permanently — update assignedPTId (kèm cơ sở nếu chuyển khác cơ sở)
     await prisma.$transaction([
       prisma.client.update({
         where: { id: params.id },
-        data: { assignedPTId: substituteId },
+        data: {
+          assignedPTId: substituteId,
+          ...(movesBranch ? { branchId: substitute.branchId as string } : {}),
+        },
       }),
       prisma.substituteRequest.create({
         data: {
@@ -110,14 +141,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   // Notify substitute PT — raw SQL to support the SUBSTITUTE_REQUEST enum value
   const typeLabel = type === "SHORT_TERM" ? `${durationDays} ngày` : "Dài hạn";
-  const notifMessage = `🔄 Bạn được nhờ dạy hộ KH ${client.fullName} — ${typeLabel}`;
+  const notifMessage = movesBranch
+    ? `🔄 KH ${client.fullName} được chuyển sang cơ sở của bạn — bạn phụ trách từ nay`
+    : `🔄 Bạn được nhờ dạy hộ KH ${client.fullName} — ${typeLabel}`;
   const now = new Date();
   await prisma.$executeRaw`
     INSERT INTO checklist_notifications (id, "userId", type, message, "isRead", date, "relatedId", "createdAt")
     VALUES (gen_random_uuid()::text, ${substituteId}, 'SUBSTITUTE_REQUEST'::"ChecklistNotifType", ${notifMessage}, false, ${now}, ${params.id}, ${now})
   `;
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, movedBranch: movesBranch });
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
