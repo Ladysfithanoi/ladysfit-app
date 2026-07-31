@@ -347,7 +347,9 @@ export function RankingPage({
               </div>
             ) : (
               <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                <table className="w-full">
+                {/* min-w-max: bảng giãn theo nội dung nên chữ không bị xuống dòng
+                    trên màn hẹp — thay vào đó cả bảng trượt ngang trong khung trên. */}
+                <table className="w-full min-w-max">
                   <thead>
                     <tr className="border-b border-gray-50 bg-gray-50/50">
                       {["Hạng", "Nhân sự", "Cấp độ", "Điểm thi", "Doanh số TB", "Transform", "Tổng điểm"].map(
@@ -374,12 +376,12 @@ export function RankingPage({
                           row.ptId === myId ? "bg-[#f15b5c]/5" : "hover:bg-gray-50/40"
                         )}
                       >
-                        <td className="px-5 py-3.5 text-center">
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
                           <span className="inline-flex w-8 h-8 rounded-full bg-gray-100 items-center justify-center text-sm font-extrabold text-gray-600">
                             {row.rank}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             <p className="text-sm font-semibold text-gray-800">{row.name}</p>
                             {row.ptId === myId && (
@@ -390,7 +392,7 @@ export function RankingPage({
                           </div>
                           <p className="text-xs text-gray-400">{row.branchName ?? row.email}</p>
                         </td>
-                        <td className="px-5 py-3.5 text-center">
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
                           <span
                             className="text-xs font-semibold px-2 py-1 rounded-full"
                             style={{
@@ -401,7 +403,7 @@ export function RankingPage({
                             {row.levelName ?? "—"}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-center">
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
                           <span
                             className={cn(
                               "text-sm font-bold",
@@ -414,13 +416,13 @@ export function RankingPage({
                             <p className="text-[10px] text-gray-400 font-semibold">Chưa thi</p>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800">
+                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800 whitespace-nowrap">
                           {fmtRevenue(row.avgMonthlyRevenue)}
                         </td>
-                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800">
+                        <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800 whitespace-nowrap">
                           {row.transformedCount}
                         </td>
-                        <td className="px-5 py-3.5 text-center">
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
                           <span className="text-sm font-extrabold text-[#f15b5c]">{row.points}</span>
                         </td>
                       </tr>
