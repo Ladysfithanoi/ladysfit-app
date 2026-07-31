@@ -134,6 +134,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
     }
   }
 
+  // Quyền bỏ qua rào số tuần của tiến trình giai đoạn (mở khóa sớm giai đoạn kế).
+  // Admin: mọi khách. FM: khách thuộc cơ sở mình quản lý — gồm khách của chính FM
+  // và khách của các PT dưới quyền. PT: không có quyền.
+  const canBypassPhase = isAdmin || (isFM && managedBranchIds.includes(client.branchId));
+
   const serialized = {
     id: client.id,
     clientCode: client.clientCode ?? null,
@@ -311,6 +316,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       userRole={session.user.role}
       currentUserId={session.user.id}
       isSubstitute={isSubstitute}
+      canBypassPhase={canBypassPhase}
       enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
       minSessionMinutes={sysConfig?.minSessionMinutes ?? 30}
     />

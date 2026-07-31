@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSlotsForSessionType } from "@/lib/workout-structure";
-import { phaseOrderOf } from "@/lib/phase-progression";
+import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
 
 const fullProgramInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -58,16 +58,35 @@ export async function PATCH(
     manualPhaseOverride?: boolean;
   };
 
-  // Chỉ Admin mới được chuyển khách VỀ giai đoạn trước đó. PT/FM chỉ được giữ
-  // nguyên hoặc tiến lên giai đoạn cao hơn.
-  if (body.phase !== undefined && session.user.role !== "ADMIN") {
-    const existing = await prisma.workoutProgram.findUnique({
-      where: { id: params.programId, clientId: params.id },
-      select: { phase: true },
-    });
-    const newOrder = phaseOrderOf(body.phase);
-    const curOrder = phaseOrderOf(existing?.phase ?? "");
-    if (existing && newOrder > 0 && curOrder > 0 && newOrder < curOrder) {
+  const existing = await prisma.workoutProgram.findUnique({
+    where: { id: params.programId, clientId: params.id },
+    select: { phase: true, phaseId: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Đổi giai đoạn thủ công = bỏ qua rào "đủ số tuần ở giai đoạn trước", nên chỉ
+  // FM (cơ sở mình quản lý) và Admin được phép. PT vẫn sửa được các thông tin
+  // khác của chương trình (số buổi/tuần, tuần hiện tại, loại hình tập, ghi chú).
+  const phaseChanged =
+    (body.phase !== undefined && body.phase !== existing.phase) ||
+    (body.phaseId !== undefined && (body.phaseId ?? null) !== existing.phaseId);
+
+  if (phaseChanged || body.manualPhaseOverride !== undefined) {
+    const allowed = await canBypassPhaseGate(session.user, params.id);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Chỉ Quản lý (FM) phụ trách cơ sở hoặc Admin mới được đổi giai đoạn của khách." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Chỉ Admin mới được chuyển khách VỀ giai đoạn trước đó. FM chỉ được giữ nguyên
+  // hoặc mở lên giai đoạn cao hơn.
+  if (phaseChanged && session.user.role !== "ADMIN") {
+    const newOrder = phaseOrderOf(body.phase ?? existing.phase);
+    const curOrder = phaseOrderOf(existing.phase);
+    if (newOrder > 0 && curOrder > 0 && newOrder < curOrder) {
       return NextResponse.json(
         { error: "Chỉ Admin mới được chuyển khách về giai đoạn trước đó." },
         { status: 403 }
@@ -86,7 +105,7 @@ export async function PATCH(
       ...(body.sessionsPerWeek !== undefined ? { sessionsPerWeek: body.sessionsPerWeek } : {}),
       ...(body.currentWeek !== undefined ? { currentWeek: body.currentWeek } : {}),
       ...(body.workoutType !== undefined ? { workoutType: body.workoutType } : {}),
-      // PT đổi giai đoạn thủ công → đánh dấu để engine tự động tôn trọng lựa chọn.
+      // FM/Admin đổi giai đoạn thủ công → đánh dấu để engine tôn trọng lựa chọn.
       ...(body.manualPhaseOverride !== undefined ? { manualPhaseOverride: body.manualPhaseOverride } : {}),
     },
   });

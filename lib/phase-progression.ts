@@ -19,12 +19,40 @@ import {
 //
 // Nội dung CT giai đoạn kế (nếu chưa tồn tại) được tự tạo từ template — GĐ2/GĐ3
 // dùng "loại tập" mặc định đầu tiên, bài tập để trống cho PT điền sau.
+//
+// FM/Admin có thể mở khoá SỚM một giai đoạn (bỏ qua rào số tuần) bằng cách bật
+// cờ manualPhaseOverride của CT đó — xem canBypassPhaseGate bên dưới.
 
 export const PHASE_MIN_COMPLETED_WEEKS = 8;
 export const MAX_PHASE_ORDER = 3;
 // Số buổi tập (buổi khác nhau, có Nhật ký COMPLETED) tối thiểu để một tuần được
 // tính là "đã hoàn thành". Không vượt quá số buổi/tuần thực tế của chương trình.
 export const MIN_WEEK_SESSIONS = 3;
+
+// ── Quyền bỏ qua (bypass) rào số tuần ────────────────────────────────────────
+//
+// Mặc định khách phải hoàn thành đủ số tuần của giai đoạn hiện tại mới mở được
+// giai đoạn kế. Quản lý được phép bỏ qua rào này khi thấy cần (khách tiến nhanh
+// hơn dự kiến, khách cũ đã tập ngoài đời…):
+//   • Admin  → mọi khách.
+//   • FM     → khách thuộc cơ sở mình quản lý, tức khách của chính FM lẫn khách
+//              của các PT dưới quyền.
+//   • PT     → không có quyền; tiến trình vẫn chạy tự động như cũ.
+// Không ai bấm gì thì logic tự động giữ nguyên — bypass hoàn toàn là tùy chọn.
+export async function canBypassPhaseGate(
+  user: { role?: string | null; managedBranchIds?: string[] | null },
+  clientId: string
+): Promise<boolean> {
+  if (user.role === "ADMIN") return true;
+  if (user.role !== "FM") return false;
+  const managed = user.managedBranchIds ?? [];
+  if (managed.length === 0) return false;
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { branchId: true },
+  });
+  return client != null && managed.includes(client.branchId);
+}
 
 /** Lấy thứ tự giai đoạn từ tên ("Giai đoạn 2: Skinny Fat" → 2). 0 nếu không khớp. */
 export function phaseOrderOf(phaseName: string | null | undefined): number {

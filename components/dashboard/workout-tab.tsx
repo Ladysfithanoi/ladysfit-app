@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2, Users } from "lucide-react";
+import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, LockKeyholeOpen, Pencil, Plus, Settings2, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -284,8 +284,10 @@ function ProgramView({
   onLogUpdated,
   onLogDeleted,
   onSessionDeleted,
+  onPhaseGateChanged,
   userRole,
   isSubstitute,
+  canBypassPhase = false,
   enableLevelSystem = true,
   minSessionMinutes = 30,
   inheritedByExercise = null,
@@ -299,8 +301,12 @@ function ProgramView({
   onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onSessionDeleted: (week: WorkoutWeek, sessionId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  /** Sau khi FM/Admin mở khóa sớm (hoặc hoàn tác) — trạng thái nhiều CT đổi cùng lúc. */
+  onPhaseGateChanged: (rows: { id: string; status: string; manualPhaseOverride: boolean }[]) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
+  canBypassPhase?: boolean;
   enableLevelSystem?: boolean;
   minSessionMinutes?: number;
   /** Thông số gần nhất theo TÊN BÀI TẬP kế thừa từ giai đoạn trước (chỉ xem). */
@@ -341,6 +347,10 @@ function ProgramView({
   const [deletingWeek, setDeletingWeek] = useState(false);
   const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  // Mở khóa sớm giai đoạn (bỏ qua rào số tuần) — chỉ FM/Admin thấy.
+  const [confirmPhaseGate, setConfirmPhaseGate] = useState<null | "unlock" | "relock">(null);
+  const [phaseGateSaving, setPhaseGateSaving] = useState(false);
+  const [phaseGateError, setPhaseGateError] = useState("");
   const [copyingTemplate, setCopyingTemplate] = useState(false);
   const [copyTemplateMsg, setCopyTemplateMsg] = useState("");
   const [showCopyClient, setShowCopyClient] = useState(false);
@@ -402,13 +412,18 @@ function ProgramView({
   // Mọi chương trình không phải ACTIVE đều chỉ-xem (đã qua hoặc bị khoá).
   const isReadOnly = program.status !== "ACTIVE";
 
-  // Chỉ Admin được đổi giai đoạn tự do (kể cả về giai đoạn trước). PT/FM chỉ thấy
+  // Chỉ Admin được đổi giai đoạn tự do (kể cả về giai đoạn trước). FM chỉ thấy
   // giai đoạn hiện tại trở lên — không chuyển khách về giai đoạn trước đó.
   const isAdmin = userRole === "ADMIN";
   const currentPhaseOrder = parsePhaseOrder(program.phase);
   const selectablePhases = isAdmin
     ? phases
     : phases.filter((p) => parsePhaseOrder(p.name) >= currentPhaseOrder);
+  // Đổi giai đoạn thủ công = bỏ qua rào số tuần → chỉ FM/Admin. PT chỉ sửa được
+  // nội dung giáo án và các thông tin khác của chương trình.
+  const canEditPhase = canBypassPhase;
+  // Giai đoạn đang chạy nhưng do quản lý mở sớm/đổi tay (không phải tự động).
+  const isManualPhase = !!program.manualPhaseOverride && currentPhaseOrder >= 2;
 
   // Đánh số buổi liên tục qua các tuần: buổi đầu của một tuần nối tiếp số buổi
   // cuối của tuần trước (Buổi 1, 2, 3 … thay vì Buổi A, B, C). Tính động theo vị
@@ -689,9 +704,10 @@ function ProgramView({
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       const updatedWeek: WorkoutWeek = await res.json();
 
-      // Nếu PT đổi giai đoạn trong giáo án → lưu giai đoạn vào CT + đánh dấu
-      // override để engine tự động tôn trọng (không tự kéo về).
-      const phaseChanged = editPhaseId !== (program.phaseId ?? "");
+      // Nếu FM/Admin đổi giai đoạn trong giáo án → lưu giai đoạn vào CT + đánh dấu
+      // override để engine tự động tôn trọng (không tự kéo về). PT không có ô đổi
+      // giai đoạn nên bỏ qua hẳn — tránh gửi nhầm khi CT cũ chưa gắn phaseId.
+      const phaseChanged = canEditPhase && editPhaseId !== (program.phaseId ?? "");
       if (phaseChanged && editSelectedPhase) {
         await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
           method: "PATCH",
@@ -785,6 +801,31 @@ function ProgramView({
     }
   }
 
+  // FM/Admin mở khóa sớm giai đoạn này (hoặc hoàn tác) — bỏ qua yêu cầu đủ số
+  // tuần ở giai đoạn trước. Thao tác đổi trạng thái nhiều CT nên báo lên cha.
+  async function handlePhaseGate(unlock: boolean) {
+    setPhaseGateSaving(true);
+    setPhaseGateError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/programs/${program.id}/phase-unlock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unlock }),
+      });
+      const data = await res.json() as {
+        error?: string;
+        programs?: { id: string; status: string; manualPhaseOverride: boolean }[];
+      };
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      setConfirmPhaseGate(null);
+      onPhaseGateChanged(data.programs ?? []);
+    } catch (err) {
+      setPhaseGateError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setPhaseGateSaving(false);
+    }
+  }
+
   function openProgModal() {
     setProgForm({
       phaseId: program.phaseId ?? "",
@@ -802,11 +843,13 @@ function ProgramView({
     setProgError("");
     try {
       const selectedPhase = phases.find((p) => p.id === progForm.phaseId);
-      // PT đổi giai đoạn thủ công → đánh dấu override để engine tôn trọng.
-      const phaseChanged = progForm.phaseId !== (program.phaseId ?? "");
+      // FM/Admin đổi giai đoạn thủ công → đánh dấu override để engine tôn trọng.
+      // PT không được đổi giai đoạn nên không gửi kèm 2 trường này.
+      const phaseChanged = canEditPhase && progForm.phaseId !== (program.phaseId ?? "");
       const body = {
-        phase: selectedPhase?.name ?? program.phase,
-        phaseId: progForm.phaseId || null,
+        ...(canEditPhase
+          ? { phase: selectedPhase?.name ?? program.phase, phaseId: progForm.phaseId || null }
+          : {}),
         sessionsPerWeek: progForm.sessionsPerWeek,
         currentWeek: progForm.currentWeek,
         workoutType: progForm.workoutType || null,
@@ -857,6 +900,14 @@ function ProgramView({
             {!isReadOnly && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Đang áp dụng</span>
             )}
+            {!isReadOnly && isManualPhase && (
+              <span
+                className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-200"
+                title="Giai đoạn này do quản lý mở sớm/chọn tay — hệ thống không tự kéo về giai đoạn trước."
+              >
+                ⚡ Mở sớm thủ công
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {program.packageEnrollment && (
@@ -894,10 +945,32 @@ function ProgramView({
 
       {/* Banner cho chương trình bị khóa */}
       {isLocked && (
-        <div className="px-5 pt-3">
+        <div className="px-5 pt-3 space-y-2">
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             🔒 Giai đoạn này sẽ tự mở khóa sau khi khách hoàn thành tối thiểu 8 tuần tập ở giai đoạn hiện tại.
+            {canBypassPhase && " Quản lý (FM) / Admin có thể mở sớm nếu thấy cần thiết."}
           </p>
+          {canBypassPhase && (
+            <button
+              onClick={() => { setPhaseGateError(""); setConfirmPhaseGate("unlock"); }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+            >
+              <LockKeyholeOpen className="w-3.5 h-3.5" />
+              Mở khóa sớm giai đoạn này
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Hoàn tác việc mở sớm — chỉ hiện với CT đang chạy do quản lý mở tay */}
+      {!isReadOnly && isManualPhase && canBypassPhase && (
+        <div className="px-5 pt-3">
+          <button
+            onClick={() => { setPhaseGateError(""); setConfirmPhaseGate("relock"); }}
+            className="text-xs font-semibold text-violet-700 underline underline-offset-2 hover:text-violet-900"
+          >
+            Hoàn tác mở sớm — trả về tiến trình tự động
+          </button>
         </div>
       )}
 
@@ -1076,16 +1149,18 @@ function ProgramView({
                 <div className="mb-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-[#f15b5c]">Đang chỉnh sửa Tuần {currentWeekData.weekNumber}</p>
-                    <button
-                      onClick={() => setShowPhaseChange((v) => !v)}
-                      className="text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors flex items-center gap-1"
-                    >
-                      Đổi giai đoạn / loại tập
-                      {showPhaseChange ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
+                    {canEditPhase && (
+                      <button
+                        onClick={() => setShowPhaseChange((v) => !v)}
+                        className="text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors flex items-center gap-1"
+                      >
+                        Đổi giai đoạn / loại tập
+                        {showPhaseChange ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    )}
                   </div>
 
-                  {showPhaseChange && (
+                  {canEditPhase && showPhaseChange && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
                       <p className="text-xs font-bold text-amber-700">
                         ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này. Đây là thao tác thủ công — hệ thống sẽ tôn trọng giai đoạn bạn chọn (không tự kéo về).
@@ -1468,21 +1543,34 @@ function ProgramView({
               {/* Phase (đổi thủ công — hệ thống sẽ tôn trọng lựa chọn này) */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
-                <select
-                  value={progForm.phaseId}
-                  onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
-                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                >
-                  <option value="">— Chọn giai đoạn —</option>
-                  {selectablePhases.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-gray-400">
-                  {isAdmin
-                    ? "Admin được đổi tự do mọi giai đoạn. Đổi thủ công sẽ ghi đè tiến trình tự động."
-                    : "Chỉ được giữ nguyên hoặc chuyển lên giai đoạn cao hơn — không thể chuyển khách về giai đoạn trước (chỉ Admin mới được)."}
-                </p>
+                {canEditPhase ? (
+                  <>
+                    <select
+                      value={progForm.phaseId}
+                      onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                      className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                    >
+                      <option value="">— Chọn giai đoạn —</option>
+                      {selectablePhases.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-gray-400">
+                      {isAdmin
+                        ? "Admin được đổi tự do mọi giai đoạn. Đổi thủ công sẽ ghi đè tiến trình tự động (không cần đủ 8 tuần)."
+                        : "Chỉ được giữ nguyên hoặc chuyển lên giai đoạn cao hơn — không thể chuyển khách về giai đoạn trước (chỉ Admin mới được). Đổi thủ công sẽ ghi đè tiến trình tự động (không cần đủ 8 tuần)."}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-full h-10 rounded-xl border border-gray-200 bg-gray-50 px-3 flex items-center text-sm text-gray-400">
+                      {program.phase}
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Giai đoạn do hệ thống tự quản lý theo số tuần khách đã tập. Cần chuyển sớm thì nhờ Quản lý (FM) hoặc Admin mở khóa.
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Sessions per week + Current week */}
@@ -1552,6 +1640,59 @@ function ProgramView({
               </button>
               <button
                 onClick={() => setEditProgOpen(false)}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm mở khóa sớm / hoàn tác giai đoạn (FM, Admin) ── */}
+      {confirmPhaseGate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <LockKeyholeOpen className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">
+                  {confirmPhaseGate === "unlock" ? `Mở khóa sớm ${program.phase}?` : "Hoàn tác mở sớm?"}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">Chỉ FM phụ trách cơ sở và Admin thực hiện được</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+              {confirmPhaseGate === "unlock" ? (
+                <>
+                  Khách sẽ chuyển sang <span className="font-bold">{program.phase}</span> ngay mà{" "}
+                  <span className="font-bold">không cần đủ 8 tuần</span> ở giai đoạn hiện tại. Giai đoạn
+                  đang tập sẽ được lưu trữ (vẫn xem lại được) và bạn có thể hoàn tác sau.
+                </>
+              ) : (
+                <>
+                  Hệ thống sẽ tính lại tiến trình theo số tuần khách đã tập thật. Nếu chưa đủ, khách quay
+                  về giai đoạn trước và <span className="font-bold">{program.phase}</span> bị khóa lại —
+                  nhật ký đã ghi vẫn được giữ nguyên.
+                </>
+              )}
+            </p>
+            {phaseGateError && <p className="text-xs text-red-500 font-medium">{phaseGateError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => handlePhaseGate(confirmPhaseGate === "unlock")}
+                disabled={phaseGateSaving}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {phaseGateSaving ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />Đang lưu...</>
+                ) : confirmPhaseGate === "unlock" ? "Mở khóa sớm" : "Hoàn tác"}
+              </button>
+              <button
+                onClick={() => { setConfirmPhaseGate(null); setPhaseGateError(""); }}
                 className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
               >
                 Hủy
@@ -1714,6 +1855,7 @@ export function WorkoutTab({
   onPackageUpdated,
   userRole,
   isSubstitute,
+  canBypassPhase = false,
   enableLevelSystem = true,
   minSessionMinutes = 30,
 }: {
@@ -1723,6 +1865,8 @@ export function WorkoutTab({
   onPackageUpdated?: (pkg: PackageUpdate) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
+  canBypassPhase?: boolean;
   enableLevelSystem?: boolean;
   minSessionMinutes?: number;
 }) {
@@ -1818,6 +1962,23 @@ export function WorkoutTab({
     router.refresh();
   }
 
+  // Mở khóa sớm / hoàn tác đổi trạng thái của NHIỀU chương trình cùng lúc (CT được
+  // mở thành ACTIVE, giai đoạn trước thành ARCHIVED…) nên áp lại cả danh sách.
+  const handlePhaseGateChanged = useCallback(
+    (rows: { id: string; status: string; manualPhaseOverride: boolean }[]) => {
+      setPrograms((prev) =>
+        prev.map((p) => {
+          const row = rows.find((r) => r.id === p.id);
+          return row
+            ? { ...p, status: row.status as WorkoutProgram["status"], manualPhaseOverride: row.manualPhaseOverride }
+            : p;
+        })
+      );
+      router.refresh();
+    },
+    [router]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1857,8 +2018,10 @@ export function WorkoutTab({
           onLogUpdated={handleLogUpdated}
           onLogDeleted={handleLogDeleted}
           onSessionDeleted={handleSessionDeleted}
+          onPhaseGateChanged={handlePhaseGateChanged}
           userRole={userRole}
           isSubstitute={isSubstitute}
+          canBypassPhase={canBypassPhase}
           enableLevelSystem={enableLevelSystem}
           minSessionMinutes={minSessionMinutes}
           inheritedByExercise={inheritedFor(p)}
@@ -1879,8 +2042,10 @@ export function WorkoutTab({
               onLogUpdated={handleLogUpdated}
               onLogDeleted={handleLogDeleted}
               onSessionDeleted={handleSessionDeleted}
+              onPhaseGateChanged={handlePhaseGateChanged}
               userRole={userRole}
               isSubstitute={isSubstitute}
+              canBypassPhase={canBypassPhase}
               enableLevelSystem={enableLevelSystem}
               minSessionMinutes={minSessionMinutes}
             />
@@ -1912,8 +2077,10 @@ export function WorkoutTab({
                   onLogUpdated={handleLogUpdated}
                   onLogDeleted={handleLogDeleted}
                   onSessionDeleted={handleSessionDeleted}
+                  onPhaseGateChanged={handlePhaseGateChanged}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
+                  canBypassPhase={canBypassPhase}
                   enableLevelSystem={enableLevelSystem}
                   minSessionMinutes={minSessionMinutes}
                 />
