@@ -157,12 +157,23 @@ export function PerformanceTab({ branchId, year }: Props) {
   const isElapsedMonth = (m: number) => m <= monthsElapsed; // m: 1-12
   // Trung bình doanh số/tháng = tổng doanh số các tháng đã kết thúc / số tháng đã kết thúc.
   const avgElapsed = (arr: number[]) => sum(arr.slice(0, avgDivisor)) / avgDivisor;
+  // TB doanh số/quý: tính TB doanh số các tháng trong từng quý (Q1 = TB tháng 1-2-3,
+  // Q2 = TB tháng 4-5-6, ...), rồi lấy trung bình của các quý đó.
+  // Chỉ tính trên các tháng đã kết thúc → quý chưa có tháng nào kết thúc thì bỏ qua.
+  const avgQuarterElapsed = (arr: number[]) => {
+    const quarterAvgs: number[] = [];
+    for (let q = 0; q < 4; q++) {
+      const months = arr.slice(q * 3, q * 3 + 3).filter((_, i) => q * 3 + i + 1 <= avgDivisor);
+      if (months.length > 0) quarterAvgs.push(sum(months) / months.length);
+    }
+    return quarterAvgs.length > 0 ? sum(quarterAvgs) / quarterAvgs.length : 0;
+  };
 
   // ── Tổng quan: tính trên cả năm cho mỗi nhân sự ──────────────────────────
   const overviewRows = personnel.map((p) => {
     const yearRevenue = sum(p.revenue);
     const avgMonth = avgElapsed(p.revenue);
-    const avgQuarter = avgMonth * 3; // 1 quý = 3 tháng
+    const avgQuarter = avgQuarterElapsed(p.revenue);
     // Khách hàng = số Client thực tế PT phụ trách (không cộng dồn lead won theo tháng).
     // Tỉ lệ transform = khách đã đạt transform / tổng khách của chính PT đó.
     const clientCount = p.clientCount;
@@ -269,7 +280,7 @@ export function PerformanceTab({ branchId, year }: Props) {
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Tổng quan hiệu suất — Năm {selYear}</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            TB doanh số tháng chỉ tính trên {avgDivisor} tháng đã kết thúc trong năm (bỏ tháng đang diễn ra) • hiệu suất = TB doanh số tháng / KPI theo cấp độ PT
+            TB doanh số tháng chỉ tính trên {avgDivisor} tháng đã kết thúc trong năm (bỏ tháng đang diễn ra) • TB DS/quý = trung bình DS của từng quý (Q1 = TB tháng 1-2-3, ...) rồi lấy TB các quý • hiệu suất = TB doanh số tháng / KPI theo cấp độ PT
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
