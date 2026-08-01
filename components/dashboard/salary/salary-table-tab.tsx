@@ -19,6 +19,7 @@ type SalaryRecord = {
   seniorityBonus: number;
   showsL1L2Loyal: number;
   showsL3L4L5: number;
+  showsResident: number;
   showPay: number;
   goalBonus: number;
   googleBonus: number;
@@ -40,12 +41,13 @@ type GenEntry = {
   userRole: "PT" | "FM" | "ADMIN";
   showsL1L2Loyal: number;
   showsL3L4L5: number;
+  showsResident: number;
   clientsAchievedGoal: number;
   googleReviews: number;
   renewContracts: number;
 };
 
-type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number }>;
+type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }>;
 
 type ImgModalState = {
   recordId: string;
@@ -67,6 +69,11 @@ type Props = {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function vnd(n: number) { return n.toLocaleString("vi-VN") + "đ"; }
+
+/** Tiền buổi dạy ước tính trong modal tạo bảng lương — khớp công thức phía server. */
+function showPayOf(e: { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }) {
+  return e.showsL1L2Loyal * 60_000 + e.showsL3L4L5 * 100_000 + e.showsResident * 35_000;
+}
 
 const STATUS_LABELS = { PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán" };
 const STATUS_COLORS = {
@@ -137,17 +144,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     const entries: GenEntry[] = [
       {
         userId: currentFMId, name: currentFMName, userRole: "FM",
-        showsL1L2Loyal: 0, showsL3L4L5: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
       },
       ...branchPTs.map(pt => ({
         userId: pt.id, name: pt.name ?? pt.email, userRole: "PT" as const,
-        showsL1L2Loyal: 0, showsL3L4L5: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
       })),
       ...branchAdmins.map(a => ({
         userId: a.id, name: a.name ?? a.email, userRole: "ADMIN" as const,
-        showsL1L2Loyal: 0, showsL3L4L5: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
       })),
     ];
@@ -168,6 +175,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           ...e,
           showsL1L2Loyal: data[e.userId]?.showsL1L2Loyal ?? 0,
           showsL3L4L5:    data[e.userId]?.showsL3L4L5    ?? 0,
+          showsResident:  data[e.userId]?.showsResident  ?? 0,
         })));
       }
     } finally {
@@ -190,6 +198,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 ...e,
                 showsL1L2Loyal: sessionCounts[userId]?.showsL1L2Loyal ?? 0,
                 showsL3L4L5:    sessionCounts[userId]?.showsL3L4L5    ?? 0,
+                showsResident:  sessionCounts[userId]?.showsResident  ?? 0,
               }
             : e
         ));
@@ -321,7 +330,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   function SessionCountCard({ entry }: { entry: GenEntry }) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-[10px] font-semibold text-blue-400 mb-1">L1/L2/Loyal</p>
             <p className="text-xl font-extrabold text-blue-700">
@@ -336,10 +345,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             </p>
             <p className="text-[10px] text-purple-400">buổi × 100,000đ</p>
           </div>
+          <div className="bg-teal-50 rounded-xl p-3 text-center">
+            <p className="text-[10px] font-semibold text-teal-400 mb-1">Cư dân</p>
+            <p className="text-xl font-extrabold text-teal-700">
+              {fetchingCounts ? "…" : entry.showsResident}
+            </p>
+            <p className="text-[10px] text-teal-400">buổi × 35,000đ</p>
+          </div>
           <div className="bg-green-50 rounded-xl p-3 text-center">
             <p className="text-[10px] font-semibold text-green-400 mb-1">Tiền buổi dạy</p>
             <p className="text-sm font-extrabold text-green-700">
-              {fetchingCounts ? "…" : vnd(entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000)}
+              {fetchingCounts ? "…" : vnd(showPayOf(entry))}
             </p>
             <p className="text-[10px] text-green-400">từ WorkoutLog</p>
           </div>
@@ -364,6 +380,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             {([
               { label: "Show L1/L2/Loyal", field: "showsL1L2Loyal" as const },
               { label: "Show L3/L4/L5",    field: "showsL3L4L5"   as const },
+              { label: "Show Cư dân",      field: "showsResident" as const },
             ] as const).map(({ label, field }) => (
               <div key={field} className="space-y-1">
                 <label className="text-xs font-semibold text-gray-500">{label}</label>
@@ -573,6 +590,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.commissionAmount)}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                             {r.showsL1L2Loyal}L1/L2 + {r.showsL3L4L5}L3+
+                            {r.showsResident > 0 && ` + ${r.showsResident} Cư dân`}
                           </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.showPay)}</td>
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>

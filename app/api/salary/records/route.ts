@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
+import {
+  SESSION_PAY_L1_L2_LOYAL,
+  SESSION_PAY_L3_L4_L5,
+  SESSION_PAY_RESIDENT,
+} from "@/lib/packages";
 
 // ── KOC commission helper ──────────────────────────────────────────────────
 
@@ -211,10 +216,18 @@ type GenEntry = {
   userRole:             "PT" | "FM" | "ADMIN";
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
+  showsResident:        number;
   clientsAchievedGoal:  number;
   googleReviews:        number;
   renewContracts:       number;
 };
+
+/** Tiền buổi dạy: 60k gói L1/L2/Loyalfit, 100k gói L3/L4/L5, 35k gói tài trợ Cư dân. */
+function calcShowPay(l1: number, l3: number, resident: number) {
+  return l1 * SESSION_PAY_L1_L2_LOYAL
+       + l3 * SESSION_PAY_L3_L4_L5
+       + resident * SESSION_PAY_RESIDENT;
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -262,7 +275,7 @@ export async function POST(req: Request) {
       const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay          = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
+      const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
 
@@ -271,7 +284,8 @@ export async function POST(req: Request) {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary: 0, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus: 0, fixedAllowances: 0,
-          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
+          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
+          showsResident: entry.showsResident, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
           bhxh: 0, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
@@ -290,10 +304,12 @@ export async function POST(req: Request) {
       const rate             = fmRate(totalBranchRevenue);
       const commissionAmount = totalBranchRevenue * rate;
 
-      const totalShows = Math.min(entry.showsL1L2Loyal + entry.showsL3L4L5, 60);
-      const l3Shows    = Math.min(entry.showsL3L4L5, totalShows);
-      const l1Shows    = Math.min(entry.showsL1L2Loyal, totalShows - l3Shows);
-      const showPay    = l1Shows * 60_000 + l3Shows * 100_000;
+      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất (100k → 60k → 35k)
+      const totalShows    = Math.min(entry.showsL1L2Loyal + entry.showsL3L4L5 + entry.showsResident, 60);
+      const l3Shows       = Math.min(entry.showsL3L4L5, totalShows);
+      const l1Shows       = Math.min(entry.showsL1L2Loyal, totalShows - l3Shows);
+      const residentShows = Math.min(entry.showsResident, totalShows - l3Shows - l1Shows);
+      const showPay       = calcShowPay(l1Shows, l3Shows, residentShows);
 
       const googleBonus = entry.googleReviews * 100_000;
       const renewBonus  = entry.renewContracts * 150_000;
@@ -305,7 +321,7 @@ export async function POST(req: Request) {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary, totalRevenue: totalBranchRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances,
-          showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showPay,
+          showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showsResident: residentShows, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
           renewBonus, renewContracts: entry.renewContracts,
@@ -322,7 +338,7 @@ export async function POST(req: Request) {
       const seniorityBonus   = Math.min(seniorityYears, 4) * 6_000_000;
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay          = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
+      const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
       const goalBonus        = entry.clientsAchievedGoal * 100_000;
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
       const totalSalary      = baseSalary + seniorityBonus + commissionAmount + showPay + goalBonus + kocCommission + kolCommission;
@@ -332,7 +348,8 @@ export async function POST(req: Request) {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances: 0,
-          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5, showPay,
+          showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
+          showsResident: entry.showsResident, showPay,
           goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
           bhxh: 4_960_000, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,

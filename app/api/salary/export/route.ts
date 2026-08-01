@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
+import { sessionPayRate } from "@/lib/packages";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -165,7 +166,7 @@ export async function POST(req: Request) {
           valuePerSession = 60_000;
           totalValue = sessionsThisMonth * 60_000;
         } else {
-          valuePerSession = ["L1", "L2", "Loyalfit"].includes(e.packageName) ? 60_000 : 100_000;
+          valuePerSession = sessionPayRate(e.packageName);
           totalValue = sessionsThisMonth * (valuePerSession as number);
         }
 

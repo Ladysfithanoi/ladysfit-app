@@ -21,7 +21,7 @@ import type { MealPlanRow } from "@/components/dashboard/nutrition-designer";
 import { StepsBarChart, MinutesBarChart, type ActivityChartPoint } from "@/components/dashboard/activity-log-charts";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { BodyMeasurementsSection } from "@/components/dashboard/body-measurements-section";
-import { PACKAGES } from "@/lib/packages";
+import { PACKAGES, RESIDENT_PACKAGE } from "@/lib/packages";
 import { cn } from "@/lib/utils";
 
 type Branch = { id: string; name: string };
@@ -191,6 +191,14 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** Gói khách không phải trả tiền: KOC, KOL và gói tài trợ Cư dân. */
+function isFreePackage(pkg: { contractType: string; packageName: string }) {
+  return pkg.contractType === "KOC"
+      || pkg.contractType === "KOL"
+      || pkg.packageName === "KOC"
+      || pkg.packageName === RESIDENT_PACKAGE;
+}
+
 function getAvailablePackages(
   intakeWeight: number,
   height: number,
@@ -207,7 +215,8 @@ function getAvailablePackages(
 
   let names: string[] = ["L3", "L4", "L5"];
   if (hasAny) names.push("Loyalfit");
-  names.push("KOC");
+  // Gói tài trợ luôn chọn được — điều kiện là "cư dân toà nhà", không xét cân nặng.
+  names.push(RESIDENT_PACKAGE, "KOC");
 
   let note: string;
   let noteOk = false;
@@ -1852,7 +1861,7 @@ export function ClientDetailPage({
                               )}
                             </div>
                             <p className="text-xs text-gray-400 mt-0.5">
-                              {(pkg.contractType === "KOC" || pkg.packageName === "KOC" || pkg.contractType === "KOL") ? "Miễn phí" : formatPrice(pkg.price)}
+                              {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}
                             </p>
                           </td>
                           <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
@@ -2550,7 +2559,7 @@ export function ClientDetailPage({
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {(pkg.contractType === "KOC" || pkg.packageName === "KOC" || pkg.contractType === "KOL") ? "Miễn phí" : formatPrice(pkg.price)}</p>
+                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
                     {canEditSessions ? (
@@ -2720,7 +2729,9 @@ export function ClientDetailPage({
                         <option key={p.name} value={p.name}>
                           {p.name === "KOC"
                             ? "KOC — Lộ trình tặng (60 buổi / 60 ngày)"
-                            : `${p.name} — ${p.stageLabel} (${p.sessions} buổi, ${formatPrice(p.discountedPrice ?? p.price)})`}
+                            : p.name === RESIDENT_PACKAGE
+                              ? `${RESIDENT_PACKAGE} — Gói tài trợ (21 buổi / 30 ngày · 35,000đ/buổi)`
+                              : `${p.name} — ${p.stageLabel} (${p.sessions} buổi, ${formatPrice(p.discountedPrice ?? p.price)})`}
                         </option>
                       ) : null;
                     })}
@@ -2731,11 +2742,28 @@ export function ClientDetailPage({
             })()}
 
             {/* Package info preview for NORMAL packages */}
-            {addPkgName && addPkgName !== "KOC" && addPkgName !== "KOL" && PACKAGES[addPkgName] && (
+            {addPkgName && addPkgName !== "KOC" && addPkgName !== "KOL" && addPkgName !== RESIDENT_PACKAGE && PACKAGES[addPkgName] && (
               <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-1">
                 <p><span className="font-bold">Số buổi:</span> {PACKAGES[addPkgName].sessions}</p>
                 <p><span className="font-bold">Thời hạn:</span> {PACKAGES[addPkgName].durationDays} ngày</p>
                 <p><span className="font-bold">Giá:</span> {formatPrice(PACKAGES[addPkgName].discountedPrice ?? PACKAGES[addPkgName].price)}</p>
+              </div>
+            )}
+
+            {/* Gói cư dân — tài trợ, cấu trúc như L1 */}
+            {addPkgName === RESIDENT_PACKAGE && (
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-teal-700">Gói cư dân</span>
+                  <span className="text-[10px] text-teal-500 bg-teal-100 px-2 py-0.5 rounded-full">Được tài trợ · 35,000đ/buổi</span>
+                </div>
+                <div className="text-xs text-teal-700 space-y-1">
+                  <p><span className="font-bold">Số buổi:</span> {PACKAGES[RESIDENT_PACKAGE].sessions} (như L1)</p>
+                  <p><span className="font-bold">Thời hạn:</span> {PACKAGES[RESIDENT_PACKAGE].durationDays} ngày</p>
+                  <p><span className="font-bold">Phí:</span> 0đ <span className="italic text-teal-500">(Được tài trợ)</span></p>
+                  <p><span className="font-bold">Tiền buổi dạy PT:</span> 35,000đ/buổi</p>
+                  <p className="italic text-teal-500">Không ghi nhận doanh số cho PT.</p>
+                </div>
               </div>
             )}
 

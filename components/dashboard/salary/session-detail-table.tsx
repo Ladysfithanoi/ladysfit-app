@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Camera, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RESIDENT_PACKAGE } from "@/lib/packages";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -427,7 +428,9 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       <td className={cn(TD, "font-semibold text-gray-800 whitespace-nowrap min-w-[180px]")}>{row.clientName}{row.isSubstitute && <SubstituteBadge />}</td>
       <td className={TD}>
         <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap",
-          ["L1","L2","Loyalfit"].includes(row.packageName) ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700")}>
+          row.packageName === RESIDENT_PACKAGE      ? "bg-teal-100 text-teal-700"
+          : ["L1","L2","Loyalfit"].includes(row.packageName) ? "bg-blue-100 text-blue-700"
+          :                                           "bg-purple-100 text-purple-700")}>
           {row.packageName}
         </span>
       </td>

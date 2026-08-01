@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { BarChart2, Users, Trophy, TrendingUp, Minus, X, Search, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sessionPayRate } from "@/lib/packages";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,6 @@ const MONTHS = [
   "Tháng 9","Tháng 10","Tháng 11","Tháng 12",
 ];
 const YEARS = [2024, 2025, 2026];
-const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
 
 function vnd(n: number) { return n.toLocaleString("vi-VN") + "đ"; }
 
@@ -95,10 +95,10 @@ function PTSessionDetailModal({
   }, [onClose]);
 
   const totalSessions = data?.clients.reduce((s, c) => s + c.sessions.length, 0) ?? 0;
-  const estimatedPay  = data?.clients.reduce((s, c) => {
-    const rate = L1_L2_LOYAL.has(c.packageName) ? 60_000 : 100_000;
-    return s + c.sessions.length * rate;
-  }, 0) ?? 0;
+  const estimatedPay  = data?.clients.reduce(
+    (s, c) => s + c.sessions.length * sessionPayRate(c.packageName),
+    0,
+  ) ?? 0;
 
   // Gom các buổi dạy theo từng NGÀY (tính client-side từ chính dữ liệu trên,
   // nên không đổi logic đếm buổi). Mỗi ngày biết PT đã dạy bao nhiêu khách.

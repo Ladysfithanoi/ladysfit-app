@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-function valuePerSession(packageName: string): number {
-  return ["L1", "L2", "Loyalfit"].includes(packageName) ? 60_000 : 100_000;
-}
+import { sessionPayRate } from "@/lib/packages";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -212,7 +209,7 @@ export async function GET(req: Request) {
         };
       }
 
-      const vpSession = valuePerSession(e.packageName);
+      const vpSession = sessionPayRate(e.packageName);
       return {
         ...base,
         valuePerSession: vpSession,

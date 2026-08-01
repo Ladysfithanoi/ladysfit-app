@@ -68,6 +68,7 @@ const PACKAGE_OPTIONS = [
   { value: "L4", label: "L4" },
   { value: "L5", label: "L5" },
   { value: "Loyalfit", label: "Loyalfit" },
+  { value: "Cư dân", label: "Cư dân" },
   { value: "NONE", label: "Chưa có lộ trình" },
 ];
 

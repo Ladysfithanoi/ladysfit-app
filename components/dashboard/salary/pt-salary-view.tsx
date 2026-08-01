@@ -12,6 +12,7 @@ type SalaryRecord = {
   seniorityBonus:       number;
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
+  showsResident:        number;
   showPay:              number;
   goalBonus:            number;
   clientsAchievedGoal:  number;
@@ -78,7 +79,9 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalShows = record ? record.showsL1L2Loyal + record.showsL3L4L5 : 0;
+  const totalShows = record
+    ? record.showsL1L2Loyal + record.showsL3L4L5 + (record.showsResident ?? 0)
+    : 0;
 
   return (
     <div className="space-y-5 max-w-2xl">

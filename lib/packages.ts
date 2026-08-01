@@ -82,6 +82,17 @@ export const PACKAGES: Record<string, PackageDef> = {
     conditions: "Chỉ dành cho khách hàng đã từng mua sản phẩm tại LDF.",
     canBuyMultiple: true,
   },
+  "Cư dân": {
+    name: "Cư dân",
+    stage: "1",
+    stageLabel: "Lộ trình tài trợ - Gói cư dân",
+    sessions: 21,
+    durationDays: 30,
+    price: 0,
+    commitment: "Cam kết giảm 2–5 kg",
+    conditions: "Gói tài trợ dành cho cư dân toà nhà. Cấu trúc như L1 (21 buổi / 30 ngày). PT nhận 35.000đ/buổi dạy, không ghi nhận doanh số. Chỉ mua 1 lần.",
+    canBuyMultiple: false,
+  },
   KOC: {
     name: "KOC",
     stage: "1",
@@ -94,6 +105,29 @@ export const PACKAGES: Record<string, PackageDef> = {
     canBuyMultiple: false,
   },
 };
+
+/** Gói tài trợ cho cư dân toà nhà — miễn phí, PT nhận 35k/buổi, không tính doanh số. */
+export const RESIDENT_PACKAGE = "Cư dân";
+
+/** Gói được tài trợ (khách không trả tiền) → không sinh doanh số cho PT. */
+export function isSponsoredPackage(packageName: string) {
+  return packageName === RESIDENT_PACKAGE || packageName === "KOC";
+}
+
+export const SESSION_PAY_RESIDENT = 35_000;
+export const SESSION_PAY_L1_L2_LOYAL = 60_000;
+export const SESSION_PAY_L3_L4_L5 = 100_000;
+
+/**
+ * Tiền công 1 buổi dạy trả cho PT, theo tên gói của khách được dạy.
+ * KOC/KOL không dùng hàm này — hai loại hợp đồng đó có cách tính hoa hồng riêng.
+ */
+export function sessionPayRate(packageName: string): number {
+  if (packageName === RESIDENT_PACKAGE) return SESSION_PAY_RESIDENT;
+  return ["L1", "L2", "Loyalfit"].includes(packageName)
+    ? SESSION_PAY_L1_L2_LOYAL
+    : SESSION_PAY_L3_L4_L5;
+}
 
 export function formatPrice(n: number) {
   const m = n / 1_000_000;

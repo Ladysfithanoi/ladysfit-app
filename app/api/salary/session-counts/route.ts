@@ -2,6 +2,7 @@ import { NextResponse }     from "next/server";
 import { getServerSession }  from "next-auth";
 import { authOptions }       from "@/lib/auth";
 import { prisma }            from "@/lib/prisma";
+import { RESIDENT_PACKAGE }  from "@/lib/packages";
 
 const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
 
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
   const gte = new Date(year, month - 1, 1);
   const lt  = new Date(year, month, 1);
 
-  const result: Record<string, { showsL1L2Loyal: number; showsL3L4L5: number }> = {};
+  const result: Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }> = {};
 
   await Promise.all(
     userIds.map(async userId => {
@@ -61,14 +62,16 @@ export async function GET(req: Request) {
 
       let showsL1L2Loyal = 0;
       let showsL3L4L5    = 0;
+      let showsResident  = 0;
 
       for (const row of rows) {
         if (row.contractType === "KOL") continue;
-        if (L1_L2_LOYAL.has(row.packageName)) showsL1L2Loyal++;
+        if (row.packageName === RESIDENT_PACKAGE) showsResident++;
+        else if (L1_L2_LOYAL.has(row.packageName)) showsL1L2Loyal++;
         else showsL3L4L5++;
       }
 
-      result[userId] = { showsL1L2Loyal, showsL3L4L5 };
+      result[userId] = { showsL1L2Loyal, showsL3L4L5, showsResident };
     })
   );
 

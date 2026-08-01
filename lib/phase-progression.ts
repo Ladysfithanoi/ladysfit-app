@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { RESIDENT_PACKAGE } from "@/lib/packages";
 import {
   WORKOUT_TYPE_OPTIONS,
   PHASE_DEFAULT_REPS,
@@ -148,8 +149,9 @@ async function runProgression(clientId: string): Promise<void> {
   const hasFinishedL2 = packages.some(
     (p) => p.packageName === "L2" && isPackageFinished(p)
   );
+  // Gói "Cư dân" có cấu trúc y hệt L1 nên tính như đã xong một gói L1.
   const hasFinishedL1 = packages.some(
-    (p) => p.packageName === "L1" && isPackageFinished(p)
+    (p) => (p.packageName === "L1" || p.packageName === RESIDENT_PACKAGE) && isPackageFinished(p)
   );
   const phase1RequiredWeeks = hasFinishedL2 ? 0 : hasFinishedL1 ? 4 : PHASE_MIN_COMPLETED_WEEKS;
   const requiredWeeksFor = (order: number) =>
