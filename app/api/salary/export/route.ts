@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBranchRevenue } from "@/lib/salary-revenue";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -292,16 +293,20 @@ export async function POST(req: Request) {
         cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       });
 
-      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, %HH=8, status=16)
-      [4,5,6,7,9,10,11,12,13,14,15].forEach(c => {
+      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, %HH=8, status=16).
+      // Cột Doanh số (7) KHÔNG cộng dồn: dòng FM là doanh số cả phòng, đã bao gồm doanh
+      // số của từng PT/Admin — cộng lại sẽ đếm trùng. Dòng tổng lấy doanh số phòng.
+      [4,5,6,9,10,11,12,13,14,15].forEach(c => {
         if (typeof rowData[c - 1] === "number") totals[c - 1] += rowData[c - 1] as number;
       });
     }
 
     // Total row
+    const branchRevenue = await getBranchRevenue(branchId, month, year);
     const totRowData = Array(S1_COLS).fill("") as (string | number)[];
     totRowData[1] = "TỔNG CỘNG";
-    [4,5,6,7,9,10,11,12,13,14,15].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
+    [4,5,6,9,10,11,12,13,14,15].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
+    totRowData[6] = branchRevenue;
 
     const totRow = ws1.addRow(totRowData);
     totRow.height = 22;
@@ -313,6 +318,16 @@ export async function POST(req: Request) {
       };
     });
     [4,5,6,7,9,10,11,12,13,14,15].forEach(c => { totRow.getCell(c).numFmt = VND_FMT; });
+
+    // Note: giải thích cột Doanh số ở dòng tổng
+    const noteRow = ws1.addRow([
+      "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
+      + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn.",
+      ...Array(S1_COLS - 1).fill(""),
+    ]);
+    ws1.mergeCells(noteRow.number, 1, noteRow.number, S1_COLS);
+    noteRow.height = 18;
+    ws1.getCell(noteRow.number, 1).font = { italic: true, size: 9, color: { argb: "FF888888" } };
 
     // Column widths
     [5,28,8,16,14,14,18,7,16,18,16,18,14,14,14,14].forEach((w, i) => {

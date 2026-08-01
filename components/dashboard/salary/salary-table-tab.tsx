@@ -288,6 +288,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const totalFund      = records.reduce((s, r) => s + r.totalSalary, 0);
   const totalPaid      = records.filter(r => r.status === "PAID").reduce((s, r) => s + r.totalSalary, 0);
   const totalRemaining = records.reduce((s, r) => s + r.remainingPayment, 0);
+  // Doanh số phòng nằm ở dòng FM (đã gồm doanh số của toàn bộ PT/Admin trong cơ sở) nên
+  // chỉ cộng các dòng FM — cộng cả bảng sẽ đếm trùng doanh số từng người.
+  const branchRevenue  = records.filter(r => r.user.role === "FM").reduce((s, r) => s + r.totalRevenue, 0);
 
   const numInput = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
@@ -427,8 +430,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
       {/* Summary cards */}
       {records.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[
+            { label: "Doanh số phòng", value: vnd(branchRevenue),   color: "text-blue-600" },
             { label: "Tổng quỹ lương", value: vnd(totalFund),      color: "text-[#f15b5c]" },
             { label: "Đã thanh toán",  value: vnd(totalPaid),       color: "text-green-600" },
             { label: "Còn phải trả",   value: vnd(totalRemaining),  color: "text-yellow-600" },

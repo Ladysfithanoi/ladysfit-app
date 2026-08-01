@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 
 // ── KOC commission helper ──────────────────────────────────────────────────
 
@@ -126,22 +127,15 @@ export async function GET(req: Request) {
   const uniqueBranchIds = Array.from(new Set(records.map(r => r.branchId)));
   const branchRevenueMap: Record<string, number> = {};
   await Promise.all(uniqueBranchIds.map(async (bid) => {
-    const agg = await prisma.salesLead.aggregate({
-      where: { branchId: bid, month, year, status: { in: ["PIF", "DE", "PB"] } },
-      _sum: { actualRevenue: true },
-    });
-    branchRevenueMap[bid] = Number(agg._sum.actualRevenue ?? 0) * 1_000_000;
+    branchRevenueMap[bid] = await getBranchRevenue(bid, month, year);
   }));
 
-  // Fresh individual revenue (VND) per user — used for PT/ADMIN commission
+  // Fresh individual revenue (VND) per user — used for PT/ADMIN commission.
+  // Khoá theo cả cơ sở: một người có thể có bảng lương ở nhiều cơ sở.
   const ptAdminRecords = records.filter(r => r.user.role !== "FM");
   const ptRevenueMap: Record<string, number> = {};
   await Promise.all(ptAdminRecords.map(async (r) => {
-    const agg = await prisma.salesLead.aggregate({
-      where: { assignedPTId: r.userId, month, year, status: { in: ["PIF", "DE", "PB"] } },
-      _sum: { actualRevenue: true },
-    });
-    ptRevenueMap[r.userId] = Number(agg._sum.actualRevenue ?? 0) * 1_000_000;
+    ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
   }));
 
   // Recalculate and patch each record where revenue-derived values changed
@@ -150,7 +144,7 @@ export async function GET(req: Request) {
 
     const totalRevenue = role === "FM"
       ? (branchRevenueMap[r.branchId] ?? 0)
-      : (ptRevenueMap[r.userId] ?? 0);
+      : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0);
 
     const rate           = role === "FM" ? fmRate(totalRevenue) : ptRate(totalRevenue);
     const commissionRate   = rate * 100;
@@ -239,17 +233,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Total branch revenue in VND (actualRevenue stored in triệu → × 1,000,000)
-  const branchAgg = await prisma.salesLead.aggregate({
-    where: {
-      branchId: body.branchId,
-      month:    body.month,
-      year:     body.year,
-      status:   { in: ["PIF", "DE", "PB"] },
-    },
-    _sum: { actualRevenue: true },
-  });
-  const totalBranchRevenue = Number(branchAgg._sum.actualRevenue ?? 0) * 1_000_000;
+  // Doanh số cả phòng (VND) — cùng định nghĩa với "Tổng doanh thu" bên Setup
+  const totalBranchRevenue = await getBranchRevenue(body.branchId, body.month, body.year);
 
   // Delete any existing records for this branch/month/year so regeneration
   // always produces fresh data instead of silently skipping.
@@ -274,15 +259,7 @@ export async function POST(req: Request) {
     });
 
     if (entry.userRole === "ADMIN") {
-      const adminAgg = await prisma.salesLead.aggregate({
-        where: {
-          assignedPTId: entry.userId,
-          month: body.month, year: body.year,
-          status: { in: ["PIF", "DE", "PB"] },
-        },
-        _sum: { actualRevenue: true },
-      });
-      const totalRevenue     = Number(adminAgg._sum.actualRevenue ?? 0) * 1_000_000;
+      const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = entry.showsL1L2Loyal * 60_000 + entry.showsL3L4L5 * 100_000;
@@ -338,15 +315,7 @@ export async function POST(req: Request) {
       });
     } else {
       // PT
-      const ptAgg = await prisma.salesLead.aggregate({
-        where: {
-          assignedPTId: entry.userId,
-          month: body.month, year: body.year,
-          status: { in: ["PIF", "DE", "PB"] },
-        },
-        _sum: { actualRevenue: true },
-      });
-      const totalRevenue   = Number(ptAgg._sum.actualRevenue ?? 0) * 1_000_000;
+      const totalRevenue   = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const baseSalary     = config?.baseSalary     ?? 5_310_000;
       const seniorityYears = config?.seniorityYears ?? 0;
 
