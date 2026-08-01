@@ -44,10 +44,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     contractCode: providedCode, contractType, startWeight, startWeightConfirmed,
   } = body;
 
-  // KOC and KOL packages have price = 0 which is falsy, so only require price for NORMAL
-  const isKOC = contractType === "KOC" || packageName === "KOC";
-  const isKOL = contractType === "KOL";
-  if (!packageName || !sessions || !durationDays || (!isKOC && !isKOL && !price)) {
+  // Không bắt buộc giá: gói tài trợ (KOC, KOL, Cư dân) có price = 0, và nói chung
+  // cứ đủ thông tin cấu trúc gói là thêm được.
+  if (!packageName || !sessions || !durationDays) {
     return NextResponse.json({ error: "Thiếu thông tin gói tập" }, { status: 400 });
   }
 
@@ -78,7 +77,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     RETURNING id
     `,
     params.id, contractCode, packageName, packageStage ?? "", sessions,
-    durationDays, price, resolvedContractType, notes || null
+    durationDays, price ?? 0, resolvedContractType, notes || null
   );
 
   const enrollmentId = pkgId[0].id;
