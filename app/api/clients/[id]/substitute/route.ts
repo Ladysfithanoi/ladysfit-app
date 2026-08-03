@@ -41,11 +41,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!canRequest) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
-  const { substituteId, type, durationDays, notes } = body as {
+  const { substituteId, type, durationDays, notes, targetBranchId } = body as {
     substituteId: string;
     type: "SHORT_TERM" | "LONG_TERM";
     durationDays?: number;
     notes?: string;
+    /** Cơ sở Admin chọn trên giao diện — dùng làm cơ sở đích khi chuyển khách. */
+    targetBranchId?: string;
   };
 
   if (!substituteId || !type) {
@@ -67,16 +69,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const substitute = await prisma.user.findFirst({
     where: { id: substituteId, deletedAt: null },
-    select: { id: true, name: true, email: true, branchId: true },
+    select: {
+      id: true, name: true, email: true, branchId: true,
+      // FM không có branchId — cơ sở của họ là các cơ sở được phân công quản lý.
+      managedBranches: { select: { branchId: true } },
+    },
   });
   if (!substitute) {
     return NextResponse.json({ error: "Không tìm thấy nhân sự được chọn" }, { status: 404 });
   }
 
+  const substituteBranchIds = [
+    ...(substitute.branchId ? [substitute.branchId] : []),
+    ...substitute.managedBranches.map((m) => m.branchId),
+  ];
+
   // Nhân sự nhận khách ở cơ sở khác → đây là việc phân khách sang cơ sở khác,
   // chỉ Admin được làm. Chuyển giao DÀI HẠN thì khách đổi luôn cơ sở theo nhân
   // sự mới; hỗ trợ ngắn hạn chỉ là dạy hộ tạm nên khách vẫn thuộc cơ sở cũ.
-  const crossBranch = substitute.branchId !== client.branchId;
+  const crossBranch = client.branchId
+    ? !substituteBranchIds.includes(client.branchId)
+    : substituteBranchIds.length > 0;
+  let destinationBranchId: string | null = null;
   if (crossBranch) {
     if (role !== "ADMIN") {
       return NextResponse.json(
@@ -84,14 +98,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         { status: 403 }
       );
     }
-    if (!substitute.branchId) {
+    // Cơ sở đích: ưu tiên cơ sở Admin chọn trên giao diện (FM có thể quản lý
+    // nhiều cơ sở), sau đó tới cơ sở làm việc của nhân sự.
+    destinationBranchId =
+      (targetBranchId && substituteBranchIds.includes(targetBranchId) ? targetBranchId : null) ??
+      substitute.branchId ??
+      (substituteBranchIds.length === 1 ? substituteBranchIds[0] : null);
+    if (!destinationBranchId) {
       return NextResponse.json(
         { error: "Nhân sự được chọn chưa thuộc cơ sở nào." },
         { status: 400 }
       );
     }
   }
-  const movesBranch = crossBranch && type === "LONG_TERM" && !!substitute.branchId;
+  const movesBranch = crossBranch && type === "LONG_TERM" && !!destinationBranchId;
 
   // Cancel any existing active substitute requests for this client
   await prisma.substituteRequest.updateMany({
@@ -106,7 +126,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         where: { id: params.id },
         data: {
           assignedPTId: substituteId,
-          ...(movesBranch ? { branchId: substitute.branchId as string } : {}),
+          ...(movesBranch ? { branchId: destinationBranchId as string } : {}),
         },
       }),
       prisma.substituteRequest.create({

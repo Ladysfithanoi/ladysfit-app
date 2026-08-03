@@ -25,7 +25,15 @@ import { PACKAGES, RESIDENT_PACKAGE } from "@/lib/packages";
 import { cn } from "@/lib/utils";
 
 type Branch = { id: string; name: string };
-type PT = { id: string; name: string | null; email: string; branchId?: string | null; role?: string };
+type PT = {
+  id: string;
+  name: string | null;
+  email: string;
+  branchId?: string | null;
+  role?: string;
+  // FM quản lý cơ sở qua bảng phân công (branchId của họ để trống)
+  managedBranches?: { branchId: string }[];
+};
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
 type ActivityLogItem = { id: string; date: string; steps: number | null; minutesActive: number | null; note: string | null };
 type PackageEnrollment = {
@@ -265,7 +273,6 @@ export function ClientDetailPage({
   mealPlans: initialMealPlans,
   activityLogs: initialActivityLogs = [],
   userRole,
-  currentUserId,
   isSubstitute,
   canBypassPhase = false,
   enableLevelSystem = true,
@@ -441,7 +448,7 @@ export function ClientDetailPage({
 
   async function handleSubstituteSubmit() {
     setSubError("");
-    if (!subSubstituteId) { setSubError("Vui lòng chọn PT hỗ trợ"); return; }
+    if (!subSubstituteId) { setSubError("Vui lòng chọn nhân sự hỗ trợ"); return; }
     if (subType === "SHORT_TERM" && (!subDays || parseInt(subDays) < 1)) {
       setSubError("Vui lòng nhập số ngày hỗ trợ"); return;
     }
@@ -455,6 +462,7 @@ export function ClientDetailPage({
           type: subType,
           durationDays: subType === "SHORT_TERM" ? parseInt(subDays) : undefined,
           notes: subNotes || undefined,
+          targetBranchId: subTargetBranchId || undefined,
         }),
       });
       const d = await res.json() as { error?: string; movedBranch?: boolean };
@@ -480,10 +488,14 @@ export function ClientDetailPage({
   const substitutablePTs = staffList.filter((pt) => {
     // Exclude management-only roles that don't teach
     if (!pt.role || pt.role === "COO" || pt.role === "CEO_FITPARTNER") return false;
-    // Exclude self
-    if (pt.id === currentUserId) return false;
-    // Chỉ nhân sự thuộc cơ sở đang chọn
-    if (pt.branchId !== subTargetBranchId) return false;
+    // PT đang phụ trách không thể nhận lại chính khách của mình
+    if (pt.id === client.assignedPT.id) return false;
+    // Nhân sự thuộc cơ sở đang chọn — FM tính theo cơ sở được phân công quản lý
+    // (branchId của FM để trống), PT/Admin tính theo cơ sở làm việc.
+    const inBranch =
+      pt.branchId === subTargetBranchId ||
+      (pt.role === "FM" && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId));
+    if (!inBranch) return false;
     return true;
   });
 
@@ -3221,22 +3233,23 @@ export function ClientDetailPage({
 
                 {/* Step 1: PT selection */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-700">PT hỗ trợ *</label>
+                  <label className="text-sm font-semibold text-gray-700">Nhân sự hỗ trợ *</label>
                   <select
                     value={subSubstituteId}
                     onChange={(e) => setSubSubstituteId(e.target.value)}
                     className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
                   >
-                    <option value="">— Chọn PT —</option>
+                    <option value="">— Chọn nhân sự —</option>
                     {substitutablePTs.map((pt) => (
                       <option key={pt.id} value={pt.id}>
                         {pt.name ?? pt.email}
+                        {pt.role === "FM" ? " (FM)" : pt.role === "ADMIN" ? " (Admin)" : ""}
                       </option>
                     ))}
                   </select>
                   {substitutablePTs.length === 0 && (
                     <p className="text-xs text-amber-500 font-semibold">
-                      Không có PT nào khả dụng trong cơ sở {subTargetBranchName || "này"}
+                      Không có nhân sự nào khả dụng trong cơ sở {subTargetBranchName || "này"}
                     </p>
                   )}
                 </div>

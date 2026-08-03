@@ -49,7 +49,12 @@ export default async function ClientPage({ params }: { params: { id: string } })
         // CEO_FITPARTNER/COO are top management, not gym staff — exclude them so
         // they never show up as a "Nhân sự phụ trách" (assigned/substitute PT).
         where: { deletedAt: null, role: { notIn: ["CEO_FITPARTNER", "COO"] as Role[] } },
-        select: { id: true, name: true, email: true, branchId: true, role: true },
+        // FM không có branchId — cơ sở của họ nằm ở managedBranches, cần lấy kèm
+        // để lọc được FM trực thuộc cơ sở khi nhờ dạy hộ.
+        select: {
+          id: true, name: true, email: true, branchId: true, role: true,
+          managedBranches: { select: { branchId: true } },
+        },
         orderBy: { name: "asc" },
       }).catch((e) => { console.error("staff query failed:", e); return []; }),
       prisma.$queryRawUnsafe<{
