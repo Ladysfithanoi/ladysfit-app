@@ -371,7 +371,11 @@ export function ConsultationListClient({
               </thead>
               <tbody>
                 {pageRows.map((c) => (
-                  <tr key={c.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle">
+                  <tr
+                    key={c.id}
+                    onClick={() => router.push(`/dashboard/consultation/${c.id}`)}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors align-middle cursor-pointer"
+                  >
                     <td className="px-5 py-3.5 min-w-[180px]">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
@@ -393,13 +397,14 @@ export function ConsultationListClient({
                       <div className="flex items-center gap-2">
                         <Link
                           href={`/dashboard/consultation/${c.id}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-[#f15b5c] hover:text-[#d94a4b] transition-colors"
                         >
                           {c.status === "DRAFT" ? "Tiếp tục" : "Xem"}
                           <ChevronRight className="w-3.5 h-3.5" />
                         </Link>
                         <button
-                          onClick={() => { setDeleteError(""); setDeletingRow(c); }}
+                          onClick={(e) => { e.stopPropagation(); setDeleteError(""); setDeletingRow(c); }}
                           className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                           title="Xóa hồ sơ"
                         >
