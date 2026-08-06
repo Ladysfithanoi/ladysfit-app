@@ -2,7 +2,7 @@ import { NextResponse }     from "next/server";
 import { getServerSession }  from "next-auth";
 import { authOptions }       from "@/lib/auth";
 import { RESIDENT_PACKAGE }  from "@/lib/packages";
-import { getTaughtSessions } from "@/lib/pt-session-count";
+import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 
 const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
 
@@ -41,6 +41,24 @@ export async function GET(req: Request) {
     if (row.packageName === RESIDENT_PACKAGE) bucket.showsResident++;
     else if (L1_L2_LOYAL.has(row.packageName)) bucket.showsL1L2Loyal++;
     else bucket.showsL3L4L5++;
+  }
+
+  // Phần Admin/FM chỉnh tay "Số buổi PT" ở hồ sơ khách, ghi nhận vào tháng này.
+  const adjustments = await getSessionAdjustments(userIds, month, year);
+  for (const adj of adjustments) {
+    const bucket = result[adj.ptId];
+    if (!bucket) continue;
+    if (adj.contractType === "KOL") continue;
+    if (adj.packageName === RESIDENT_PACKAGE) bucket.showsResident += adj.delta;
+    else if (L1_L2_LOYAL.has(adj.packageName)) bucket.showsL1L2Loyal += adj.delta;
+    else bucket.showsL3L4L5 += adj.delta;
+  }
+
+  // Trừ tay quá đà không được để số buổi âm.
+  for (const bucket of Object.values(result)) {
+    bucket.showsL1L2Loyal = Math.max(0, bucket.showsL1L2Loyal);
+    bucket.showsL3L4L5    = Math.max(0, bucket.showsL3L4L5);
+    bucket.showsResident  = Math.max(0, bucket.showsResident);
   }
 
   return NextResponse.json(result);

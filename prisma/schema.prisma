@@ -72,6 +72,7 @@ model User {
   weeklyMonthlyReports  WeeklyMonthlyReport[] @relation("UserWeeklyMonthlyReports")
   salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
   salaryRecords         SalaryRecord[]        @relation("UserSalaryRecords")
+  ptSessionAdjustments  PTSessionAdjustment[] @relation("PTSessionAdjustments")
   transactions          Transaction[]         @relation("TransactionCreator")
   checklistNotifications  ChecklistNotification[]
   measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
@@ -391,8 +392,39 @@ model PackageEnrollment {
   workoutPrograms WorkoutProgram[]
   sessionPhotos   SessionPhoto[]
   kocContract     KOCContract?
+  ptSessionAdjustments PTSessionAdjustment[]
 
   @@map("package_enrollments")
+}
+
+// Admin/FM chỉnh tay "Số buổi PT" của một lộ trình.
+//
+// "Số buổi PT" tự đếm từ workout_logs (buổi đã check-out có chữ ký kèm nhật ký
+// buổi tập). Khi con số tự đếm sai — buổi dạy thật nhưng ký hỏng, dữ liệu cũ —
+// Admin/FM sửa lại tổng số buổi của lộ trình ở hồ sơ khách; phần CHÊNH LỆCH được
+// ghi vào đây theo THÁNG SỬA và cộng vào lương tháng đó.
+//
+// Lưu theo (lộ trình · tháng) nên sửa nhiều lần qua nhiều tháng vẫn cộng dồn
+// đúng, và tiền chỉ rơi vào đúng tháng đã ghi nhận.
+model PTSessionAdjustment {
+  id           String   @id @default(cuid())
+  enrollmentId String
+  // PT được ghi công phần chênh lệch — PT phụ trách khách lúc sửa.
+  ptId         String
+  month        Int
+  year         Int
+  // Số buổi cộng thêm, có thể âm khi trừ bớt.
+  delta        Int
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  enrollment PackageEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  pt         User              @relation("PTSessionAdjustments", fields: [ptId], references: [id])
+
+  @@unique([enrollmentId, month, year])
+  @@index([ptId, month, year])
+  @@map("pt_session_adjustments")
 }
 
 enum PackageEnrollmentStatus {

@@ -100,3 +100,100 @@ export function countByEnrollment(rows: TaughtSessionRow[]): Map<string, number>
   }
   return counts;
 }
+
+/**
+ * Số buổi PT TỰ ĐẾM của từng lộ trình của một khách, tính cả đời gói (không
+ * giới hạn tháng, không giới hạn người dạy — buổi dạy hộ vẫn thuộc lộ trình
+ * này). Dùng cho thanh tiến độ ở hồ sơ khách và làm mốc tính phần chênh khi
+ * Admin/FM sửa tay, nên hai chỗ luôn khớp nhau.
+ */
+export async function getEnrollmentTaughtCounts(clientId: string): Promise<Record<string, number>> {
+  const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string | null; n: number }[]>(
+    `
+    SELECT COALESCE(pe_charged.id, pe_guess.id) AS "enrollmentId", COUNT(*)::int AS n
+    FROM workout_logs wl
+    LEFT JOIN package_enrollments pe_charged ON pe_charged.id = wl."packageEnrollmentId"
+    LEFT JOIN LATERAL (
+      SELECT p.id
+      FROM package_enrollments p
+      WHERE p."clientId" = wl."clientId"
+      ORDER BY
+        (p."startDate" IS NOT NULL
+         AND p."startDate" <= wl."sessionDate"
+         AND (p."endDate" IS NULL OR p."endDate" >= wl."sessionDate")) DESC,
+        p."createdAt" DESC
+      LIMIT 1
+    ) pe_guess ON wl."packageEnrollmentId" IS NULL
+    WHERE wl."clientId" = $1
+      AND wl.status = 'COMPLETED'
+      AND wl."signatureUrl" IS NOT NULL
+      AND wl."signatureUrl" <> ''
+      AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)
+    GROUP BY 1
+    `,
+    clientId,
+  );
+
+  const counts: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.enrollmentId) counts[r.enrollmentId] = Number(r.n);
+  }
+  return counts;
+}
+
+// ── Phần Admin/FM chỉnh tay ────────────────────────────────────────────────
+
+/**
+ * Số buổi Admin/FM cộng/trừ tay cho tháng này, kèm gói của lộ trình để tính
+ * đúng đơn giá. Xem model PTSessionAdjustment.
+ */
+export type AdjustmentRow = {
+  ptId:         string;
+  clientId:     string;
+  enrollmentId: string;
+  packageName:  string;
+  contractType: "NORMAL" | "KOC" | "KOL";
+  delta:        number;
+};
+
+export async function getSessionAdjustments(
+  ptIds: string[],
+  month: number,
+  year:  number,
+): Promise<AdjustmentRow[]> {
+  if (ptIds.length === 0) return [];
+
+  return prisma.$queryRawUnsafe<AdjustmentRow[]>(
+    `
+    SELECT a."ptId", a."enrollmentId", a.delta,
+           pe."clientId",
+           pe."packageName",
+           pe."contractType"::text AS "contractType"
+    FROM pt_session_adjustments a
+    JOIN package_enrollments pe ON pe.id = a."enrollmentId"
+    WHERE a."ptId" = ANY($1::text[]) AND a.month = $2 AND a.year = $3
+    `,
+    ptIds, month, year,
+  );
+}
+
+/** Tổng số buổi Admin/FM đã chỉnh tay cho một lộ trình, cộng qua mọi tháng. */
+export async function getAdjustmentTotals(
+  enrollmentIds: string[],
+): Promise<Record<string, number>> {
+  if (enrollmentIds.length === 0) return {};
+
+  const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string; total: number }[]>(
+    `
+    SELECT "enrollmentId", COALESCE(SUM(delta), 0)::int AS total
+    FROM pt_session_adjustments
+    WHERE "enrollmentId" = ANY($1::text[])
+    GROUP BY "enrollmentId"
+    `,
+    enrollmentIds,
+  );
+
+  const totals: Record<string, number> = {};
+  for (const r of rows) totals[r.enrollmentId] = Number(r.total);
+  return totals;
+}

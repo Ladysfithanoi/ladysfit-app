@@ -8,7 +8,7 @@ import {
   SESSION_PAY_L3_L4_L5,
   SESSION_PAY_RESIDENT,
 } from "@/lib/packages";
-import { getTaughtSessions } from "@/lib/pt-session-count";
+import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { standardWorkDays } from "@/lib/work-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
@@ -72,7 +72,10 @@ async function fetchKOCKOLCommission(
   // đúng buổi đã check-out có chữ ký trong tháng, cùng nguồn với tiền buổi dạy,
   // nên buổi KOL dạy hộ cũng ghi công đúng người dạy.
   const taught = await getTaughtSessions([ptId], new Date(year, month - 1, 1), new Date(year, month, 1));
-  const kolSessions   = taught.filter(r => r.contractType === "KOL").length;
+  const kolAdjust = (await getSessionAdjustments([ptId], month, year))
+    .filter(a => a.contractType === "KOL")
+    .reduce((sum, a) => sum + a.delta, 0);
+  const kolSessions   = Math.max(0, taught.filter(r => r.contractType === "KOL").length + kolAdjust);
   const kolCommission = kolSessions * 60_000;
 
   return { kocCommission, kolCommission, kocContracts, kolSessions };

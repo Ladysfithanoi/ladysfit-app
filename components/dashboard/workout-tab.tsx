@@ -101,8 +101,6 @@ export type WorkoutLogRow = {
   packageCounted?: boolean;
   /** Lộ trình mà buổi này đã trừ (ghi lúc check-in) — dùng để chia buổi theo gói. */
   packageEnrollmentId?: string | null;
-  /** Có nhật ký buổi tập hay không (setLogs có thể không được truyền xuống). */
-  hasSetLogs?: boolean;
   earlyEndApprovedAt?: string | null;
   confirmationMethod: WorkoutConfirmMethod | null;
   confirmedAt: string | null;

@@ -6,6 +6,7 @@ import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 import { ensureClientPhaseProgression } from "@/lib/phase-progression";
 import { closeFinishedPackages } from "@/lib/package-status";
 import { refreshClientChurnStatus } from "@/lib/client-status";
+import { getEnrollmentTaughtCounts, getAdjustmentTotals } from "@/lib/pt-session-count";
 import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -217,6 +218,19 @@ export default async function ClientPage({ params }: { params: { id: string } })
     };
   });
 
+  // "Số buổi PT" của từng lộ trình = buổi đã check-out có chữ ký kèm nhật ký
+  // buổi tập, cộng phần Admin/FM chỉnh tay. Tính ở server để khớp đúng con số
+  // mà API sửa số buổi PT dùng làm mốc tính chênh.
+  const enrollmentIds = serializedPackages.map((p) => p.id);
+  const [autoPTCounts, adjustmentTotals] = await Promise.all([
+    getEnrollmentTaughtCounts(params.id).catch(() => ({} as Record<string, number>)),
+    getAdjustmentTotals(enrollmentIds).catch(() => ({} as Record<string, number>)),
+  ]);
+  const ptSessionsByPackage: Record<string, number> = {};
+  for (const id of enrollmentIds) {
+    ptSessionsByPackage[id] = Math.max(0, (autoPTCounts[id] ?? 0) + (adjustmentTotals[id] ?? 0));
+  }
+
   const serializedPrograms = programs.map((p) => ({
     id: p.id,
     phase: p.phase,
@@ -281,10 +295,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
     checkOutAt: l.checkOutAt?.toISOString() ?? null,
     firstInteractionAt: l.firstInteractionAt?.toISOString() ?? null,
     signatureUrl: l.signatureUrl,
-    // Cần cho 2 thanh tiến độ "KH đi tập" / "Số buổi PT" ở Lộ trình đăng ký.
     checkInSignatureUrl: l.checkInSignatureUrl,
     packageEnrollmentId: l.packageEnrollmentId,
-    hasSetLogs: l.setLogs.length > 0,
     earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
     confirmationMethod: l.confirmationMethod,
     confirmedAt: l.confirmedAt?.toISOString() ?? null,
@@ -296,6 +308,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       branches={branches}
       staffList={staff}
       packages={serializedPackages}
+      ptSessionsByPackage={ptSessionsByPackage}
       workoutPrograms={serializedPrograms}
       workoutLogs={serializedLogs}
       mealPlans={mealPlans.map((p) => ({

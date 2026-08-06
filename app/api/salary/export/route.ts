@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
-import { countByEnrollment, getTaughtSessions } from "@/lib/pt-session-count";
+import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -129,6 +129,10 @@ export async function POST(req: Request) {
       // kèm nhật ký buổi tập, ghi công cho người thực sự dạy. Gộp theo lộ trình
       // để khách có nhiều gói không bị cộng trùng giá trị.
       const logCount = countByEnrollment(await getTaughtSessions([r.userId], startDate, endDate));
+      // Cộng phần Admin/FM chỉnh tay "Số buổi PT" đã ghi nhận vào tháng này.
+      for (const adj of await getSessionAdjustments([r.userId], month, year)) {
+        logCount.set(adj.enrollmentId, Math.max(0, (logCount.get(adj.enrollmentId) ?? 0) + adj.delta));
+      }
 
       // Lộ trình đã có buổi dạy tháng này vẫn hiện kể cả khi gói vừa đóng giữa
       // tháng (hết buổi / hết hạn), để file Excel khớp với tiền buổi dạy thực trả.

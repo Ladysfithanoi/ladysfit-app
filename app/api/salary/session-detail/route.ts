@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
-import { getTaughtSessions, countByClient, countByEnrollment } from "@/lib/pt-session-count";
+import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -68,6 +68,11 @@ export async function GET(req: Request) {
     // Gộp theo lộ trình: một khách có thể có gói cũ vừa hết + gói mới, gộp theo
     // khách sẽ gán cùng số buổi cho cả hai dòng và cộng trùng "Tổng giá trị".
     const logCountByEnrollment = countByEnrollment(taughtRows);
+    // Cộng phần Admin/FM chỉnh tay "Số buổi PT" đã ghi nhận vào tháng này.
+    for (const adj of await getSessionAdjustments([ptId], month, year)) {
+      const next = (logCountByEnrollment.get(adj.enrollmentId) ?? 0) + adj.delta;
+      logCountByEnrollment.set(adj.enrollmentId, Math.max(0, next));
+    }
     // Lộ trình đã có buổi dạy tháng này phải hiện ra kể cả khi gói vừa đóng
     // (hết buổi / hết hạn) giữa tháng — nếu không, bảng chi tiết sẽ lệch với
     // tiền buổi dạy thực trả.

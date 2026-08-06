@@ -264,48 +264,6 @@ function Field({ label, children, half }: { label: string; children: React.React
 }
 
 /**
- * "Số buổi PT" của từng lộ trình — buổi PT đã CHECK-OUT có chữ ký của khách kèm
- * nhật ký buổi tập. Đây chính là số buổi dùng để tính lương cho PT (cùng định
- * nghĩa với lib/pt-session-count.ts), nên nó có thể thấp hơn "KH đi tập": khách
- * ký check-in là gói bị trừ buổi, nhưng nếu buổi không được ký check-out (bỏ dở,
- * quá 2 tiếng tự huỷ) thì PT không được tính công buổi đó.
- *
- * Buổi được gắn với lộ trình mà nó đã trừ (packageEnrollmentId, ghi lúc
- * check-in). Log cũ chưa có trường này thì gán cho lộ trình đang chạy tại ngày
- * tập đó.
- */
-function countPTSessionsByPackage(
-  logs: WorkoutLogRow[],
-  packages: PackageEnrollment[],
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const p of packages) counts[p.id] = 0;
-
-  for (const log of logs) {
-    const signed = log.status === "COMPLETED" && (log.signatureUrl ?? "").trim() !== "";
-    if (!signed || log.hasSetLogs === false) continue;
-
-    let pkgId = log.packageEnrollmentId && counts[log.packageEnrollmentId] !== undefined
-      ? log.packageEnrollmentId
-      : null;
-
-    if (!pkgId) {
-      const at = new Date(log.sessionDate).getTime();
-      const ongoing = packages.find((p) =>
-        p.startDate != null &&
-        new Date(p.startDate).getTime() <= at &&
-        (p.endDate == null || new Date(p.endDate).getTime() >= at)
-      );
-      pkgId = ongoing?.id ?? null;
-    }
-
-    if (pkgId) counts[pkgId] += 1;
-  }
-
-  return counts;
-}
-
-/**
  * Hai thanh tiến độ của một lộ trình:
  *   • KH đi tập  — số buổi khách đã check-in (= số buổi đã trừ vào lộ trình).
  *   • Số buổi PT — số buổi PT đã check-out có chữ ký kèm nhật ký buổi tập.
@@ -357,6 +315,7 @@ export function ClientDetailPage({
   branches,
   staffList,
   packages: initialPackages,
+  ptSessionsByPackage: initialPTSessions = {},
   workoutPrograms: initialWorkoutPrograms,
   workoutLogs: initialWorkoutLogs,
   mealPlans: initialMealPlans,
@@ -371,6 +330,8 @@ export function ClientDetailPage({
   branches: Branch[];
   staffList: PT[];
   packages: PackageEnrollment[];
+  /** Số buổi PT của từng lộ trình (đếm tự động + phần Admin/FM chỉnh tay). */
+  ptSessionsByPackage?: Record<string, number>;
   workoutPrograms: WorkoutProgram[];
   workoutLogs?: WorkoutLogRow[];
   mealPlans?: MealPlanRow[];
@@ -416,12 +377,14 @@ export function ClientDetailPage({
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState(false);
   const [packages, setPackages] = useState<PackageEnrollment[]>(initialPackages);
-  // Số buổi PT (check-out có chữ ký + nhật ký) của từng lộ trình — thanh tiến độ
-  // thứ hai ở "Lộ trình đăng ký", cũng là số buổi dùng để tính lương cho PT.
-  const ptSessionsByPackage = useMemo(
-    () => countPTSessionsByPackage(initialWorkoutLogs ?? [], packages),
-    [initialWorkoutLogs, packages],
-  );
+  // Số buổi PT (check-out có chữ ký + nhật ký, cộng phần Admin/FM chỉnh tay) của
+  // từng lộ trình — thanh tiến độ thứ hai ở "Lộ trình đăng ký", cũng là số buổi
+  // dùng để tính lương cho PT.
+  const [ptSessionsByPackage, setPtSessionsByPackage] =
+    useState<Record<string, number>>(initialPTSessions);
+  const [pkgPTInputs, setPkgPTInputs] = useState<Partial<Record<string, string>>>({});
+  const [savingPTId, setSavingPTId] = useState<string | null>(null);
+  const [ptSessionError, setPtSessionError] = useState("");
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [pkgStartDate, setPkgStartDate] = useState("");
   const [pkgUpdateLoading, setPkgUpdateLoading] = useState(false);
@@ -899,6 +862,38 @@ export function ClientDetailPage({
       // silent
     } finally {
       setSavingSessionsId(null);
+    }
+  }
+
+  // Admin/FM sửa "Số buổi PT" của một lộ trình. Số nhập là tổng của cả lộ trình;
+  // server ghi phần chênh vào tháng hiện tại và cộng vào lương tháng đó.
+  async function handleSavePTSessions(pkgId: string) {
+    const val = pkgPTInputs[pkgId];
+    if (val === undefined) return;
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 0) return;
+    setSavingPTId(pkgId);
+    setPtSessionError("");
+    try {
+      const res = await fetch(`/api/clients/${client.id}/packages/${pkgId}/pt-sessions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ptSessions: num }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setPtSessionError(err.error ?? "Không lưu được số buổi PT");
+        return;
+      }
+      const saved = await res.json() as { ptSessions: number; appliedMonth: number; appliedYear: number };
+      setPtSessionsByPackage((prev) => ({ ...prev, [pkgId]: saved.ptSessions }));
+      setPkgPTInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
+      setToastMsg(`Đã lưu số buổi PT — tính vào lương tháng ${saved.appliedMonth}/${saved.appliedYear} ✓`);
+      setTimeout(() => setToastMsg(null), 4000);
+    } catch {
+      setPtSessionError("Không lưu được số buổi PT");
+    } finally {
+      setSavingPTId(null);
     }
   }
 
@@ -2668,7 +2663,7 @@ export function ClientDetailPage({
                     {" / "}{pkg.sessions} buổi · {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}
                   </p>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
+                    <span className="text-xs text-blue-400 w-16 flex-shrink-0">KH đi tập:</span>
                     {canEditSessions ? (
                       <div className="flex items-center gap-1 flex-1">
                         <input
@@ -2696,10 +2691,48 @@ export function ClientDetailPage({
                       </span>
                     )}
                   </div>
-                  {!canEditSessions && (
+                  {/* Số buổi PT — dùng để tính lương. Phần chênh so với số đếm
+                      tự động được ghi vào lương THÁNG HIỆN TẠI. */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-green-600 w-16 flex-shrink-0">Số buổi PT:</span>
+                    {canEditSessions ? (
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={pkg.sessions}
+                          value={pkgPTInputs[pkg.id] ?? (ptSessionsByPackage[pkg.id] ?? 0)}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => setPkgPTInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                          className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                        />
+                        <button
+                          onClick={() => handleSavePTSessions(pkg.id)}
+                          disabled={savingPTId === pkg.id}
+                          className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50 whitespace-nowrap"
+                          style={{ backgroundColor: "#f15b5c" }}
+                        >
+                          {savingPTId === pkg.id ? "..." : "Lưu"}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-700">
+                        {ptSessionsByPackage[pkg.id] ?? 0}/{pkg.sessions} buổi
+                      </span>
+                    )}
+                  </div>
+                  {canEditSessions ? (
                     <p className="text-[10px] text-gray-400 italic">
-                      * Chỉ Admin và FM có thể chỉnh sửa số buổi đã tập
+                      * Sửa &ldquo;Số buổi PT&rdquo; sẽ cộng phần chênh vào tiền buổi dạy của
+                      tháng {new Date().getMonth() + 1}/{new Date().getFullYear()}
                     </p>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 italic">
+                      * Chỉ Admin và FM có thể chỉnh sửa số buổi
+                    </p>
+                  )}
+                  {ptSessionError && (
+                    <p className="text-[10px] text-red-500 font-semibold">{ptSessionError}</p>
                   )}
 
                   {/* Số ngày bảo lưu / gia hạn */}
