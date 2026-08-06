@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
+import { getTaughtSessions, countByClient } from "@/lib/pt-session-count";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -135,13 +136,9 @@ export async function POST(req: Request) {
         r.userId
       );
 
-      const logs = await prisma.workoutLog.findMany({
-        where: { clientId: { in: enrollments.map(e => e.clientId) }, sessionDate: { gte: startDate, lt: endDate } },
-        select: { clientId: true },
-      });
-
-      const logCount = new Map<string, number>();
-      for (const l of logs) logCount.set(l.clientId, (logCount.get(l.clientId) ?? 0) + 1);
+      // Cùng định nghĩa "Số buổi PT" với bảng lương: buổi đã check-out có chữ ký
+      // kèm nhật ký buổi tập, ghi công cho người thực sự dạy.
+      const logCount = countByClient(await getTaughtSessions([r.userId], startDate, endDate));
 
       const ptName = r.user.name ?? r.user.email;
 
@@ -209,7 +206,7 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════════════════════
 
     const ws1 = wb.addWorksheet("Tổng hợp lương");
-    const S1_COLS = 16;
+    const S1_COLS = 17;
 
     // Title row
     const titleRow = ws1.addRow([`BẢNG LƯƠNG THÁNG ${monthStr}/${year}`, ...Array(S1_COLS - 1).fill("")]);
@@ -238,7 +235,7 @@ export async function POST(req: Request) {
 
     // Header row
     const S1_HEADERS = [
-      "STT","Họ tên","Vị trí","Lương CB","Phụ cấp","Thâm niên",
+      "STT","Họ tên","Vị trí","Lương CB","Phụ cấp","Ngày công","Thâm niên",
       "Doanh số","% HH","Tiền HH","Tiền buổi dạy","Thưởng",
       "Tổng lương","Tạm ứng","Còn lại","BHXH","Trạng thái",
     ];
@@ -251,7 +248,11 @@ export async function POST(req: Request) {
 
     for (const r of records) {
       stt++;
-      const rec = r as typeof r & { kocCommission?: number; kolCommission?: number; bhxh?: number; showPay?: number; goalBonus?: number; googleBonus?: number; renewBonus?: number };
+      const rec = r as typeof r & {
+        kocCommission?: number; kolCommission?: number; bhxh?: number; showPay?: number;
+        goalBonus?: number; googleBonus?: number; renewBonus?: number;
+        standardWorkDays?: number; actualWorkDays?: number;
+      };
       const role = r.user.role;
       const kocC = Number(rec.kocCommission ?? 0);
       const kolC = Number(rec.kolCommission ?? 0);
@@ -260,12 +261,19 @@ export async function POST(req: Request) {
         : role === "ADMIN" ? (kocC + kolC)
         :                    (Number(rec.goalBonus ?? 0) + kocC + kolC);
 
+      // Admin dạy thêm không có lương cứng nên không áp ngày công.
+      const stdDays = Number(rec.standardWorkDays ?? 0);
+      const workDaysText = role === "ADMIN" || stdDays <= 0
+        ? "—"
+        : `${Number(rec.actualWorkDays ?? 0)}/${stdDays}`;
+
       const rowData = [
         stt,
         r.user.name ?? r.user.email,
         ROLE_VN[role] ?? role,
         r.baseSalary,
         r.fixedAllowances,
+        workDaysText,
         r.seniorityBonus,
         r.totalRevenue,
         r.commissionRate,
@@ -285,19 +293,20 @@ export async function POST(req: Request) {
       if (role === "FM") dr.fill = solidFill(BLUE_BG.argb);
 
       // Number formats
-      [4,5,6,7,9,10,11,12,13,14,15].forEach((col: number) => {
+      [4,5,7,8,10,11,12,13,14,15,16].forEach((col: number) => {
         const cell = dr.getCell(col);
         cell.numFmt = VND_FMT;
       });
+      dr.getCell(6).alignment = { horizontal: "center" };
 
       dr.eachCell(cell => {
         cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       });
 
-      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, %HH=8, status=16).
-      // Cột Doanh số (7) KHÔNG cộng dồn: dòng FM là doanh số cả phòng, đã bao gồm doanh
+      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, ngày công=6, %HH=9, status=17).
+      // Cột Doanh số (8) KHÔNG cộng dồn: dòng FM là doanh số cả phòng, đã bao gồm doanh
       // số của từng PT/Admin — cộng lại sẽ đếm trùng. Dòng tổng lấy doanh số phòng.
-      [4,5,6,9,10,11,12,13,14,15].forEach(c => {
+      [4,5,7,10,11,12,13,14,15,16].forEach(c => {
         if (typeof rowData[c - 1] === "number") totals[c - 1] += rowData[c - 1] as number;
       });
     }
@@ -306,8 +315,8 @@ export async function POST(req: Request) {
     const branchRevenue = await getBranchRevenue(branchId, month, year);
     const totRowData = Array(S1_COLS).fill("") as (string | number)[];
     totRowData[1] = "TỔNG CỘNG";
-    [4,5,6,9,10,11,12,13,14,15].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
-    totRowData[6] = branchRevenue;
+    [4,5,7,10,11,12,13,14,15,16].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
+    totRowData[7] = branchRevenue;
 
     const totRow = ws1.addRow(totRowData);
     totRow.height = 22;
@@ -318,12 +327,13 @@ export async function POST(req: Request) {
         left: { style: "thin" }, right: { style: "thin" },
       };
     });
-    [4,5,6,7,9,10,11,12,13,14,15].forEach(c => { totRow.getCell(c).numFmt = VND_FMT; });
+    [4,5,7,8,10,11,12,13,14,15,16].forEach(c => { totRow.getCell(c).numFmt = VND_FMT; });
 
     // Note: giải thích cột Doanh số ở dòng tổng
     const noteRow = ws1.addRow([
       "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
-      + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn.",
+      + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn. "
+      + "Ngày công = thực tế/chuẩn (số ngày trong tháng − số Chủ nhật); lương cứng (lương CB + phụ cấp) chia theo tỉ lệ này.",
       ...Array(S1_COLS - 1).fill(""),
     ]);
     ws1.mergeCells(noteRow.number, 1, noteRow.number, S1_COLS);
@@ -331,7 +341,7 @@ export async function POST(req: Request) {
     ws1.getCell(noteRow.number, 1).font = { italic: true, size: 9, color: { argb: "FF888888" } };
 
     // Column widths
-    [5,28,8,16,14,14,18,7,16,18,16,18,14,14,14,14].forEach((w, i) => {
+    [5,28,8,16,14,11,14,18,7,16,18,16,18,14,14,14,14].forEach((w, i) => {
       ws1.getColumn(i + 1).width = w;
     });
 

@@ -1133,6 +1133,11 @@ model SalaryRecord {
   renewBonus          Float        @default(0)
   renewContracts      Int          @default(0)
   fixedAllowances     Float        @default(0)
+  // Ngày công. Chuẩn = số ngày của tháng − số Chủ nhật (26–27 ngày). Thực tế do
+  // FM nhập. Lương cứng (lương CB + phụ cấp) được chia theo thực tế / chuẩn;
+  // hoa hồng, tiền buổi dạy và thưởng không bị chia. Xem lib/work-days.ts.
+  standardWorkDays    Int          @default(0)
+  actualWorkDays      Int          @default(0)
   bhxh                Float        @default(0)
   totalSalary         Float        @default(0)
   kocCommission       Float        @default(0)

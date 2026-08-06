@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { SalaryStatus } from "@prisma/client";
+import { standardWorkDays } from "@/lib/work-days";
+import { computeTotalSalary } from "@/lib/salary-total";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -11,7 +13,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const record = await prisma.salaryRecord.findUnique({
     where:   { id: params.id },
-    include: { user: { select: { id: true, name: true } } },
+    include: { user: { select: { id: true, name: true, role: true } } },
   });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -20,22 +22,52 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json() as { status?: SalaryStatus; advancePaid?: number; notes?: string };
+  const body = await req.json() as {
+    status?: SalaryStatus; advancePaid?: number; notes?: string; actualWorkDays?: number;
+  };
 
   const oldStatus    = record.status;
   const newStatus    = body.status ?? oldStatus;
   const advancePaid  = body.advancePaid !== undefined ? body.advancePaid : record.advancePaid;
-  const remainingPayment = record.totalSalary - advancePaid;
+
+  // ── Ngày công thực tế → tính lại lương cứng theo tỉ lệ ─────────────────────
+  const rec = record as typeof record & { standardWorkDays?: number; actualWorkDays?: number };
+  const standardDays = (rec.standardWorkDays ?? 0) > 0
+    ? rec.standardWorkDays!
+    : standardWorkDays(record.month, record.year);
+  const actualDays = body.actualWorkDays !== undefined
+    ? Math.max(0, Math.min(body.actualWorkDays, standardDays))
+    : ((rec.standardWorkDays ?? 0) > 0 ? (rec.actualWorkDays ?? 0) : standardDays);
+
+  const totalSalary = computeTotalSalary({
+    role:             record.user.role,
+    baseSalary:       record.baseSalary,
+    fixedAllowances:  record.fixedAllowances,
+    seniorityBonus:   record.seniorityBonus,
+    commissionAmount: record.commissionAmount,
+    showPay:          record.showPay,
+    goalBonus:        record.goalBonus,
+    googleBonus:      record.googleBonus,
+    renewBonus:       record.renewBonus,
+    kocCommission:    record.kocCommission,
+    kolCommission:    record.kolCommission,
+    standardWorkDays: standardDays,
+    actualWorkDays:   actualDays,
+  });
+  const remainingPayment = totalSalary - advancePaid;
 
   const updated = await prisma.salaryRecord.update({
     where: { id: params.id },
     data: {
       ...(body.status && { status: body.status }),
       advancePaid,
+      standardWorkDays: standardDays as unknown as never,
+      actualWorkDays:   actualDays   as unknown as never,
+      totalSalary,
       remainingPayment,
       ...(body.notes !== undefined && { notes: body.notes }),
     },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true, email: true, role: true } } },
   });
 
   // ── Auto-create expense transaction when marking PAID ────────────────────
@@ -50,7 +82,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           branchId:        record.branchId,
           type:            "EXPENSE",
           category:        "Quỹ lương",
-          amount:          record.totalSalary,
+          amount:          totalSalary,
           description:     `Lương tháng ${record.month}/${record.year} - ${record.user.name ?? ""}`,
           transactionDate: paymentDate,
           referenceId:     record.id,

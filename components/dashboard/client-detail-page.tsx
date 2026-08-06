@@ -263,6 +263,95 @@ function Field({ label, children, half }: { label: string; children: React.React
   );
 }
 
+/**
+ * "Số buổi PT" của từng lộ trình — buổi PT đã CHECK-OUT có chữ ký của khách kèm
+ * nhật ký buổi tập. Đây chính là số buổi dùng để tính lương cho PT (cùng định
+ * nghĩa với lib/pt-session-count.ts), nên nó có thể thấp hơn "KH đi tập": khách
+ * ký check-in là gói bị trừ buổi, nhưng nếu buổi không được ký check-out (bỏ dở,
+ * quá 2 tiếng tự huỷ) thì PT không được tính công buổi đó.
+ *
+ * Buổi được gắn với lộ trình mà nó đã trừ (packageEnrollmentId, ghi lúc
+ * check-in). Log cũ chưa có trường này thì gán cho lộ trình đang chạy tại ngày
+ * tập đó.
+ */
+function countPTSessionsByPackage(
+  logs: WorkoutLogRow[],
+  packages: PackageEnrollment[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const p of packages) counts[p.id] = 0;
+
+  for (const log of logs) {
+    const signed = log.status === "COMPLETED" && (log.signatureUrl ?? "").trim() !== "";
+    if (!signed || log.hasSetLogs === false) continue;
+
+    let pkgId = log.packageEnrollmentId && counts[log.packageEnrollmentId] !== undefined
+      ? log.packageEnrollmentId
+      : null;
+
+    if (!pkgId) {
+      const at = new Date(log.sessionDate).getTime();
+      const ongoing = packages.find((p) =>
+        p.startDate != null &&
+        new Date(p.startDate).getTime() <= at &&
+        (p.endDate == null || new Date(p.endDate).getTime() >= at)
+      );
+      pkgId = ongoing?.id ?? null;
+    }
+
+    if (pkgId) counts[pkgId] += 1;
+  }
+
+  return counts;
+}
+
+/**
+ * Hai thanh tiến độ của một lộ trình:
+ *   • KH đi tập  — số buổi khách đã check-in (= số buổi đã trừ vào lộ trình).
+ *   • Số buổi PT — số buổi PT đã check-out có chữ ký kèm nhật ký buổi tập.
+ */
+function PackageProgressBars({ sessionsUsed, ptSessions, total, amber }: {
+  sessionsUsed: number; ptSessions: number; total: number; amber?: boolean;
+}) {
+  const bars = [
+    {
+      label: "KH đi tập",
+      hint:  "Số buổi khách hàng đã ký check-in",
+      value: sessionsUsed,
+      fill:  amber ? "bg-amber-400" : "bg-blue-500",
+      text:  amber ? "text-amber-700" : "text-blue-600",
+    },
+    {
+      label: "Số buổi PT",
+      hint:  "Số buổi đã ký check-out kèm nhật ký buổi tập — dùng để tính lương PT",
+      value: ptSessions,
+      fill:  amber ? "bg-amber-600" : "bg-green-500",
+      text:  amber ? "text-amber-800" : "text-green-600",
+    },
+  ];
+
+  return (
+    <div className="space-y-2 mb-2">
+      {bars.map((b) => (
+        <div key={b.label} title={b.hint}>
+          <div className="flex items-center justify-between mb-1">
+            <span className={cn("text-[11px] font-bold", b.text)}>{b.label}</span>
+            <span className={cn("text-[11px] font-semibold whitespace-nowrap", b.text)}>
+              {b.value}/{total} buổi
+            </span>
+          </div>
+          <div className={cn("h-1.5 rounded-full overflow-hidden", amber ? "bg-amber-200" : "bg-gray-200")}>
+            <div
+              className={cn("h-full rounded-full transition-all", b.fill)}
+              style={{ width: `${total > 0 ? Math.min(100, (b.value / total) * 100) : 0}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ClientDetailPage({
   client,
   branches,
@@ -327,6 +416,12 @@ export function ClientDetailPage({
   const [accountError, setAccountError] = useState("");
   const [accountSuccess, setAccountSuccess] = useState(false);
   const [packages, setPackages] = useState<PackageEnrollment[]>(initialPackages);
+  // Số buổi PT (check-out có chữ ký + nhật ký) của từng lộ trình — thanh tiến độ
+  // thứ hai ở "Lộ trình đăng ký", cũng là số buổi dùng để tính lương cho PT.
+  const ptSessionsByPackage = useMemo(
+    () => countPTSessionsByPackage(initialWorkoutLogs ?? [], packages),
+    [initialWorkoutLogs, packages],
+  );
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [pkgStartDate, setPkgStartDate] = useState("");
   const [pkgUpdateLoading, setPkgUpdateLoading] = useState(false);
@@ -1419,7 +1514,6 @@ export function ClientDetailPage({
               </div>
               <div className="flex flex-wrap gap-3">
                 {packages.map((pkg) => {
-                  const pct = Math.round((pkg.sessionsUsed / pkg.sessions) * 100);
                   const isKOC = pkg.contractType === "KOC" || pkg.packageName === "KOC";
                   const isKOL = pkg.contractType === "KOL";
 
@@ -1441,14 +1535,12 @@ export function ClientDetailPage({
                           </span>
                         </div>
                         <p className="text-[11px] text-amber-600 mb-2">60 buổi / 60 ngày · Miễn phí</p>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="flex-1 h-1.5 bg-amber-200 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">
-                            {pkg.sessionsUsed}/{pkg.sessions} buổi
-                          </span>
-                        </div>
+                        <PackageProgressBars
+                          sessionsUsed={pkg.sessionsUsed}
+                          ptSessions={ptSessionsByPackage[pkg.id] ?? 0}
+                          total={pkg.sessions}
+                          amber
+                        />
                         <div className="text-[11px] text-amber-700 space-y-0.5 mt-1">
                           {pkg.startDate ? (
                             <>
@@ -1477,16 +1569,6 @@ export function ClientDetailPage({
                     );
                   }
 
-                  const barColor =
-                    pct >= 100 ? "bg-green-500" :
-                    pct > 80   ? "bg-orange-400" :
-                    pct >= 50  ? "bg-blue-400" :
-                                 "bg-gray-400";
-                  const countColor =
-                    pct >= 100 ? "text-green-600" :
-                    pct > 80   ? "text-orange-500" :
-                    pct >= 50  ? "text-blue-600" :
-                                 "text-gray-600";
                   return (
                     <div key={pkg.id} className={cn(
                       "flex-1 min-w-[220px] border rounded-xl p-4 bg-gray-50/50",
@@ -1507,15 +1589,11 @@ export function ClientDetailPage({
                         ? <p className="text-[11px] text-blue-600 mb-2">Được tài trợ · 60,000đ/buổi</p>
                         : <p className="text-xs text-gray-400 mb-2">{pkg.packageStage}</p>
                       }
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${pct}%` }} />
-                        </div>
-                        {pct >= 100
-                          ? <span className={cn("text-xs font-bold whitespace-nowrap", countColor)}>Hoàn thành ✓</span>
-                          : <span className={cn("text-xs font-semibold whitespace-nowrap", countColor)}>{pkg.sessionsUsed}/{pkg.sessions} buổi</span>
-                        }
-                      </div>
+                      <PackageProgressBars
+                        sessionsUsed={pkg.sessionsUsed}
+                        ptSessions={ptSessionsByPackage[pkg.id] ?? 0}
+                        total={pkg.sessions}
+                      />
                       <div className="text-xs text-gray-400 space-y-0.5 mt-1">
                         {pkg.startDate ? (
                           <>
@@ -1850,7 +1928,7 @@ export function ClientDetailPage({
                 <table className="w-full text-sm min-w-[600px]">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/50">
-                      {["Tên gói", "Mã HĐ", "Giai đoạn", "Số buổi", "Ngày bắt đầu", "Ngày kết thúc", "Trạng thái"].map((h) => (
+                      {["Tên gói", "Mã HĐ", "Giai đoạn", "KH đi tập", "Số buổi PT", "Ngày bắt đầu", "Ngày kết thúc", "Trạng thái"].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left text-xs font-bold text-gray-400 whitespace-nowrap">
                           {h}
                         </th>
@@ -1859,7 +1937,11 @@ export function ClientDetailPage({
                   </thead>
                   <tbody>
                     {packages.map((pkg) => {
-                      const pct = Math.round((pkg.sessionsUsed / pkg.sessions) * 100);
+                      // KH đi tập = buổi khách đã check-in (đã trừ vào lộ trình).
+                      // Số buổi PT = buổi đã check-out có chữ ký kèm nhật ký buổi tập.
+                      const ptSessions = ptSessionsByPackage[pkg.id] ?? 0;
+                      const pct   = pkg.sessions > 0 ? Math.min(100, (pkg.sessionsUsed / pkg.sessions) * 100) : 0;
+                      const ptPct = pkg.sessions > 0 ? Math.min(100, (ptSessions / pkg.sessions) * 100) : 0;
                       return (
                         <tr key={pkg.id} className="border-b border-gray-50 last:border-0">
                           <td className="px-4 py-3">
@@ -1880,15 +1962,20 @@ export function ClientDetailPage({
                             {pkg.contractCode ?? "—"}
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{pkg.packageStage}</td>
-                          <td className="px-4 py-3">
-                            <p className="text-xs font-bold text-gray-800 mb-1">
+                          <td className="px-4 py-3" title="Số buổi khách hàng đã ký check-in">
+                            <p className="text-xs font-bold text-blue-600 mb-1">
                               {pkg.sessionsUsed}/{pkg.sessions} buổi
                             </p>
                             <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-[#f15b5c]"
-                                style={{ width: `${pct}%` }}
-                              />
+                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3" title="Số buổi đã ký check-out kèm nhật ký buổi tập — dùng để tính lương PT">
+                            <p className="text-xs font-bold text-green-600 mb-1">
+                              {ptSessions}/{pkg.sessions} buổi
+                            </p>
+                            <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-green-500" style={{ width: `${ptPct}%` }} />
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -2571,7 +2658,12 @@ export function ClientDetailPage({
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400">{pkg.sessionsUsed}/{pkg.sessions} buổi · {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}</p>
+                  <p className="text-xs text-gray-400">
+                    <span className="text-blue-500 font-semibold">KH đi tập {pkg.sessionsUsed}</span>
+                    {" · "}
+                    <span className="text-green-600 font-semibold">Số buổi PT {ptSessionsByPackage[pkg.id] ?? 0}</span>
+                    {" / "}{pkg.sessions} buổi · {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}
+                  </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Số buổi đã tập:</span>
                     {canEditSessions ? (

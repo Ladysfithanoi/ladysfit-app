@@ -272,6 +272,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
     checkOutAt: l.checkOutAt?.toISOString() ?? null,
     firstInteractionAt: l.firstInteractionAt?.toISOString() ?? null,
     signatureUrl: l.signatureUrl,
+    // Cần cho 2 thanh tiến độ "KH đi tập" / "Số buổi PT" ở Lộ trình đăng ký.
+    checkInSignatureUrl: l.checkInSignatureUrl,
+    packageEnrollmentId: l.packageEnrollmentId,
+    hasSetLogs: l.setLogs.length > 0,
     earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
     confirmationMethod: l.confirmationMethod,
     confirmedAt: l.confirmedAt?.toISOString() ?? null,

@@ -10,6 +10,8 @@ type SalaryRecord = {
   commissionRate:       number;
   commissionAmount:     number;
   seniorityBonus:       number;
+  standardWorkDays:     number;
+  actualWorkDays:       number;
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
   showsResident:        number;
@@ -134,6 +136,16 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
 
             <div className="space-y-0">
               <Row label="Lương cơ bản"    value={vnd(record.baseSalary)} />
+
+              {/* Ngày công: lương cơ bản được chia theo thực tế / chuẩn */}
+              {record.standardWorkDays > 0 && (
+                <Row
+                  label="Ngày công"
+                  value={record.actualWorkDays >= record.standardWorkDays
+                    ? `${record.actualWorkDays}/${record.standardWorkDays} ngày (đủ công)`
+                    : `${record.actualWorkDays}/${record.standardWorkDays} ngày`}
+                />
+              )}
 
               {record.seniorityBonus > 0 && (
                 <Row label="Lương thâm niên" value={vnd(record.seniorityBonus)} />

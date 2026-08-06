@@ -25,6 +25,8 @@ type SalaryRecord = {
   googleBonus: number;
   renewBonus: number;
   fixedAllowances: number;
+  standardWorkDays: number;
+  actualWorkDays: number;
   kocCommission: number;
   kolCommission: number;
   totalSalary: number;
@@ -45,6 +47,7 @@ type GenEntry = {
   clientsAchievedGoal: number;
   googleReviews: number;
   renewContracts: number;
+  actualWorkDays: number;
 };
 
 type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }>;
@@ -69,6 +72,16 @@ type Props = {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function vnd(n: number) { return n.toLocaleString("vi-VN") + "đ"; }
+
+/** Ngày công chuẩn = số ngày trong tháng − số Chủ nhật (khớp lib/work-days.ts). */
+function standardWorkDays(month: number, year: number) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let sundays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (new Date(year, month - 1, d).getDay() === 0) sundays++;
+  }
+  return daysInMonth - sundays;
+}
 
 /** Tiền buổi dạy ước tính trong modal tạo bảng lương — khớp công thức phía server. */
 function showPayOf(e: { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }) {
@@ -100,7 +113,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [editAdvance, setEditAdvance] = useState("");
   const [editNotes, setEditNotes]     = useState("");
+  const [editWorkDays, setEditWorkDays] = useState("");
   const [saving, setSaving]           = useState(false);
+
+  /** Mở/đóng dòng sửa của một bản ghi. */
+  function toggleEdit(r: SalaryRecord) {
+    if (editingId === r.id) { setEditingId(null); return; }
+    setEditingId(r.id);
+    setEditAdvance(String(r.advancePaid));
+    setEditNotes(r.notes ?? "");
+    setEditWorkDays(String(r.actualWorkDays ?? standardWorkDays(month, year)));
+  }
 
   // Generate modal state
   const [showGenModal, setShowGenModal]       = useState(false);
@@ -141,21 +164,26 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   async function openGenModal() {
     const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && s.role === "PT");
     const branchAdmins = staffList.filter(s => s.branchId === selectedBranchId && s.role === "ADMIN");
+    // Mặc định đi làm đủ ngày công chuẩn; FM sửa lại cho từng người nếu nghỉ.
+    const stdDays = standardWorkDays(month, year);
     const entries: GenEntry[] = [
       {
         userId: currentFMId, name: currentFMName, userRole: "FM",
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
+        actualWorkDays: stdDays,
       },
       ...branchPTs.map(pt => ({
         userId: pt.id, name: pt.name ?? pt.email, userRole: "PT" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
+        actualWorkDays: stdDays,
       })),
       ...branchAdmins.map(a => ({
         userId: a.id, name: a.name ?? a.email, userRole: "ADMIN" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
+        actualWorkDays: stdDays,
       })),
     ];
     setGenEntries(entries);
@@ -248,7 +276,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
       const res = await fetch(`/api/salary/records/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ advancePaid: parseFloat(editAdvance) || 0, notes: editNotes }),
+        body: JSON.stringify({
+          advancePaid:    parseFloat(editAdvance) || 0,
+          notes:          editNotes,
+          actualWorkDays: parseInt(editWorkDays, 10) || 0,
+        }),
       });
       if (res.ok) {
         const updated = await res.json() as SalaryRecord;
@@ -302,6 +334,22 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const branchRevenue  = records.filter(r => r.user.role === "FM").reduce((s, r) => s + r.totalRevenue, 0);
 
   const numInput = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+
+  /** Ngày công thực tế / chuẩn — lương cứng được chia theo tỉ lệ này. */
+  function workDaysCell(r: SalaryRecord) {
+    const std = r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year);
+    const act = r.standardWorkDays > 0 ? r.actualWorkDays : std;
+    const full = act >= std;
+    return (
+      <td className="px-3 py-2.5 whitespace-nowrap">
+        <span className={cn("font-bold", full ? "text-gray-700" : "text-orange-500")}>{act}</span>
+        <span className="text-gray-400">/{std} ngày</span>
+        {!full && (
+          <span className="block text-[10px] text-orange-400">nghỉ {std - act} ngày</span>
+        )}
+      </td>
+    );
+  }
 
   function sessionImgCell(r: SalaryRecord) {
     const imgs = r.sessionImages ? (JSON.parse(r.sessionImages) as string[]) : [];
@@ -482,7 +530,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Thâm niên","Doanh số","% HH","Tiền HH","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương CB","Ngày công","Thâm niên","Doanh số","% HH","Tiền HH","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -493,6 +541,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
                           <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary)}</td>
+                          {workDaysCell(r)}
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             {r.seniorityBonus > 0 ? (
                               <span className="inline-flex flex-col gap-0.5">
@@ -515,7 +564,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                           {sessionImgCell(r)}
                           <ActionCell r={r} editingId={editingId}
-                            onEdit={() => editingId === r.id ? setEditingId(null) : (setEditingId(r.id), setEditAdvance(String(r.advancePaid)), setEditNotes(r.notes ?? ""))}
+                            onEdit={() => toggleEdit(r)}
                             onStatus={handleStatusChange} />
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <button
@@ -533,12 +582,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                         </tr>
                         {editingId === r.id && (
-                          <EditRow colSpan={14} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
-                            onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
+                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
+                            editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                            saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
+                            onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                         )}
                         {expandedIds.has(r.id) && (
                           <tr>
-                            <td colSpan={14} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
+                            <td colSpan={15} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
                               <SessionDetailTable
                                 ptId={r.user.id}
                                 ptName={r.user.name ?? r.user.email}
@@ -603,7 +654,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                           {sessionImgCell(r)}
                           <ActionCell r={r} editingId={editingId}
-                            onEdit={() => editingId === r.id ? setEditingId(null) : (setEditingId(r.id), setEditAdvance(String(r.advancePaid)), setEditNotes(r.notes ?? ""))}
+                            onEdit={() => toggleEdit(r)}
                             onStatus={handleStatusChange} />
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <button
@@ -621,8 +672,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                         </tr>
                         {editingId === r.id && (
-                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
-                            onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
+                          /* Admin dạy thêm không có lương cứng → không nhập ngày công (standardDays = 0). */
+                          <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
+                            editWorkDays={editWorkDays} standardDays={0} saving={saving}
+                            onAdvance={setEditAdvance} onNotes={setEditNotes}
+                            onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                         )}
                         {expandedIds.has(r.id) && (
                           <tr>
@@ -658,7 +712,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương cố định","Thâm niên","DS phòng","% HH","Tiền HH","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động"].map(h => (
+                      {["Nhân viên","Lương cố định","Ngày công","Thâm niên","DS phòng","% HH","Tiền HH","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -668,6 +722,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
                         <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{fmRecord.user.name ?? fmRecord.user.email}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.baseSalary + fmRecord.fixedAllowances)}</td>
+                        {workDaysCell(fmRecord)}
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {fmRecord.seniorityBonus > 0 ? (
                             <span className="inline-flex flex-col gap-0.5">
@@ -691,12 +746,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         </td>
                         {sessionImgCell(fmRecord)}
                         <ActionCell r={fmRecord} editingId={editingId}
-                          onEdit={() => editingId === fmRecord.id ? setEditingId(null) : (setEditingId(fmRecord.id), setEditAdvance(String(fmRecord.advancePaid)), setEditNotes(fmRecord.notes ?? ""))}
+                          onEdit={() => toggleEdit(fmRecord)}
                           onStatus={handleStatusChange} />
                       </tr>
                       {editingId === fmRecord.id && (
-                        <EditRow colSpan={14} editAdvance={editAdvance} editNotes={editNotes} saving={saving}
-                          onAdvance={setEditAdvance} onNotes={setEditNotes} onSave={handleSaveEdit} />
+                        <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
+                          editWorkDays={editWorkDays} standardDays={fmRecord.standardWorkDays > 0 ? fmRecord.standardWorkDays : standardWorkDays(month, year)}
+                          saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
+                          onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                       )}
                     </React.Fragment>
                   </tbody>
@@ -737,6 +794,30 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   </div>
 
                   <SessionCountCard entry={entry} />
+
+                  {/* Ngày công — lương cứng chia theo thực tế / chuẩn.
+                      Admin dạy thêm không có lương cứng nên không hỏi. */}
+                  {entry.userRole !== "ADMIN" && (
+                    <div className="pt-1 border-t border-gray-100">
+                      <div className="space-y-1 max-w-[260px]">
+                        <label className="text-xs font-semibold text-gray-500">
+                          Ngày công thực tế
+                          <span className="text-gray-400 font-normal"> / {standardWorkDays(month, year)} ngày chuẩn</span>
+                        </label>
+                        <input
+                          type="number" min={0} max={standardWorkDays(month, year)}
+                          value={entry.actualWorkDays}
+                          onFocus={(e) => e.target.select()}
+                          onChange={e => updateEntry(entry.userId, "actualWorkDays", parseInt(e.target.value) || 0)}
+                          className={numInput + " w-full text-left"}
+                        />
+                        <p className="text-[10px] text-gray-400">
+                          Ngày công chuẩn = số ngày tháng {month} − số Chủ nhật. Lương cứng
+                          (lương CB + phụ cấp) chia theo tỉ lệ này; hoa hồng và tiền buổi dạy giữ nguyên.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* FM-specific extra inputs */}
                   {entry.userRole === "FM" && (
@@ -859,14 +940,27 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
   );
 }
 
-function EditRow({ colSpan, editAdvance, editNotes, saving, onAdvance, onNotes, onSave }: {
-  colSpan: number; editAdvance: string; editNotes: string; saving: boolean;
-  onAdvance: (v: string) => void; onNotes: (v: string) => void; onSave: () => void;
+function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, saving, onAdvance, onNotes, onWorkDays, onSave }: {
+  colSpan: number; editAdvance: string; editNotes: string; editWorkDays: string;
+  /** Ngày công chuẩn của tháng; 0 = vai trò không có lương cứng → ẩn ô ngày công. */
+  standardDays: number; saving: boolean;
+  onAdvance: (v: string) => void; onNotes: (v: string) => void;
+  onWorkDays: (v: string) => void; onSave: () => void;
 }) {
   return (
     <tr className="bg-amber-50/50 border-b border-gray-100">
       <td colSpan={colSpan} className="px-5 py-4">
         <div className="flex flex-wrap items-end gap-4">
+          {standardDays > 0 && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500">
+                Ngày công thực tế <span className="text-gray-400 font-normal">/ {standardDays} ngày chuẩn</span>
+              </label>
+              <input type="number" min={0} max={standardDays} value={editWorkDays}
+                onFocus={(e) => e.target.select()} onChange={e => onWorkDays(e.target.value)}
+                className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+            </div>
+          )}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Tạm ứng (đ)</label>
             <input type="number" step="100000" value={editAdvance} onFocus={(e) => e.target.select()} onChange={e => onAdvance(e.target.value)}

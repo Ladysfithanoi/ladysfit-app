@@ -8,6 +8,8 @@ import {
   SESSION_PAY_L3_L4_L5,
   SESSION_PAY_RESIDENT,
 } from "@/lib/packages";
+import { standardWorkDays } from "@/lib/work-days";
+import { computeTotalSalary } from "@/lib/salary-total";
 
 // ── KOC commission helper ──────────────────────────────────────────────────
 
@@ -160,20 +162,34 @@ export async function GET(req: Request) {
       ? await fetchKOCKOLCommission(r.userId)
       : { kocCommission: 0, kolCommission: 0 };
 
-    let totalSalary: number;
-    if (role === "FM") {
-      totalSalary = r.baseSalary + r.fixedAllowances + r.seniorityBonus +
-                    commissionAmount + r.showPay + r.googleBonus + r.renewBonus;
-    } else if (role === "ADMIN") {
-      totalSalary = commissionAmount + r.showPay + kocCommission + kolCommission;
-    } else {
-      totalSalary = r.baseSalary + r.seniorityBonus + commissionAmount + r.showPay + r.goalBonus + kocCommission + kolCommission;
-    }
+    // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
+    // như đi làm đủ, để FM sửa được ngay mà tổng lương không đổi.
+    const rWithDays = r as typeof r & { standardWorkDays?: number; actualWorkDays?: number };
+    const hasWorkDays      = (rWithDays.standardWorkDays ?? 0) > 0;
+    const standardDays     = hasWorkDays ? rWithDays.standardWorkDays! : standardWorkDays(month, year);
+    const actualDays       = hasWorkDays ? (rWithDays.actualWorkDays ?? 0) : standardDays;
+
+    const totalSalary = computeTotalSalary({
+      role,
+      baseSalary:       r.baseSalary,
+      fixedAllowances:  r.fixedAllowances,
+      seniorityBonus:   r.seniorityBonus,
+      commissionAmount,
+      showPay:          r.showPay,
+      goalBonus:        r.goalBonus,
+      googleBonus:      r.googleBonus,
+      renewBonus:       r.renewBonus,
+      kocCommission,
+      kolCommission,
+      standardWorkDays: standardDays,
+      actualWorkDays:   actualDays,
+    });
 
     const remainingPayment = totalSalary - r.advancePaid;
 
     const rWithKOC = r as typeof r & { kocCommission?: number; kolCommission?: number };
     const changed =
+      !hasWorkDays ||
       Math.abs(r.totalRevenue    - totalRevenue)     > 0.01 ||
       Math.abs(r.commissionRate  - commissionRate)   > 0.001 ||
       Math.abs(r.commissionAmount - commissionAmount) > 0.01 ||
@@ -191,6 +207,8 @@ export async function GET(req: Request) {
         commissionAmount,
         kocCommission: kocCommission as unknown as never,
         kolCommission: kolCommission as unknown as never,
+        standardWorkDays: standardDays as unknown as never,
+        actualWorkDays:   actualDays   as unknown as never,
         totalSalary,
         remainingPayment,
       },
@@ -220,6 +238,8 @@ type GenEntry = {
   clientsAchievedGoal:  number;
   googleReviews:        number;
   renewContracts:       number;
+  /** Ngày công thực tế FM nhập; bỏ trống = đi làm đủ ngày công chuẩn. */
+  actualWorkDays?:      number;
 };
 
 /** Tiền buổi dạy: 60k gói L1/L2/Loyalfit, 100k gói L3/L4/L5, 35k gói tài trợ Cư dân. */
@@ -264,6 +284,9 @@ export async function POST(req: Request) {
   let created = 0;
   const skipped = 0;
 
+  // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
+  const stdDays = standardWorkDays(body.month, body.year);
+
   for (const entry of body.entries) {
 
     const config = await prisma.salaryConfig.findFirst({
@@ -271,12 +294,16 @@ export async function POST(req: Request) {
       orderBy: { effectiveFrom: "desc" },
     });
 
+    // Không nhập → mặc định đi làm đủ; nhập vượt ngày công chuẩn → chốt ở mức chuẩn.
+    const actDays = Math.max(0, Math.min(entry.actualWorkDays ?? stdDays, stdDays));
+
     if (entry.userRole === "ADMIN") {
       const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
+      // Admin dạy thêm không có lương cứng nên ngày công không ảnh hưởng lương.
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
 
       await prisma.salaryRecord.create({
@@ -284,6 +311,7 @@ export async function POST(req: Request) {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary: 0, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus: 0, fixedAllowances: 0,
+          standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
           showsResident: entry.showsResident, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
@@ -313,14 +341,18 @@ export async function POST(req: Request) {
 
       const googleBonus = entry.googleReviews * 100_000;
       const renewBonus  = entry.renewContracts * 150_000;
-      const totalSalary = baseSalary + fixedAllowances + seniorityBonus +
-                          commissionAmount + showPay + googleBonus + renewBonus;
+      const totalSalary = computeTotalSalary({
+        role: "FM", baseSalary, fixedAllowances, seniorityBonus, commissionAmount,
+        showPay, goalBonus: 0, googleBonus, renewBonus, kocCommission: 0, kolCommission: 0,
+        standardWorkDays: stdDays, actualWorkDays: actDays,
+      });
 
       await prisma.salaryRecord.create({
         data: {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary, totalRevenue: totalBranchRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances,
+          standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showsResident: residentShows, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
@@ -341,13 +373,18 @@ export async function POST(req: Request) {
       const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
       const goalBonus        = entry.clientsAchievedGoal * 100_000;
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
-      const totalSalary      = baseSalary + seniorityBonus + commissionAmount + showPay + goalBonus + kocCommission + kolCommission;
+      const totalSalary      = computeTotalSalary({
+        role: "PT", baseSalary, fixedAllowances: 0, seniorityBonus, commissionAmount,
+        showPay, goalBonus, googleBonus: 0, renewBonus: 0, kocCommission, kolCommission,
+        standardWorkDays: stdDays, actualWorkDays: actDays,
+      });
 
       await prisma.salaryRecord.create({
         data: {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
           baseSalary, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances: 0,
+          standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
           showsResident: entry.showsResident, showPay,
           goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,

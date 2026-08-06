@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
+import { getTaughtSessions, countByClient } from "@/lib/pt-session-count";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -60,20 +61,9 @@ export async function GET(req: Request) {
 
     // Đếm buổi theo NGƯỜI THỰC SỰ DẠY (wl."createdById"), không theo assignedPTId.
     // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi
-    // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ.
-    const taughtLogs = await prisma.workoutLog.findMany({
-      where: {
-        createdById: ptId,
-        status:      "COMPLETED",
-        sessionDate: { gte: startDate, lt: endDate },
-      },
-      select: { clientId: true },
-    });
-
-    const logCountByClient = new Map<string, number>();
-    for (const log of taughtLogs) {
-      logCountByClient.set(log.clientId, (logCountByClient.get(log.clientId) ?? 0) + 1);
-    }
+    // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ. Chỉ buổi đã
+    // check-out có chữ ký kèm nhật ký buổi tập mới được tính (xem pt-session-count).
+    const logCountByClient = countByClient(await getTaughtSessions([ptId], startDate, endDate));
 
     // Hợp đồng ACTIVE của khách được GÁN cho PT này (hiện luôn cả khi tháng này
     // chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).

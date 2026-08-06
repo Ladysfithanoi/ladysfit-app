@@ -1,8 +1,8 @@
 import { NextResponse }     from "next/server";
 import { getServerSession }  from "next-auth";
 import { authOptions }       from "@/lib/auth";
-import { prisma }            from "@/lib/prisma";
 import { RESIDENT_PACKAGE }  from "@/lib/packages";
+import { getTaughtSessions } from "@/lib/pt-session-count";
 
 const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
 
@@ -25,55 +25,23 @@ export async function GET(req: Request) {
   const gte = new Date(year, month - 1, 1);
   const lt  = new Date(year, month, 1);
 
+  // "Số buổi PT" — chỉ buổi đã check-out có chữ ký kèm nhật ký buổi tập.
+  const rows = await getTaughtSessions(userIds, gte, lt);
+
   const result: Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }> = {};
+  for (const userId of userIds) {
+    result[userId] = { showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0 };
+  }
 
-  await Promise.all(
-    userIds.map(async userId => {
-      // Show được tính cho NGƯỜI THỰC SỰ DẠY buổi (wl."createdById" — người ký
-      // check-in/check-out buổi đó), KHÔNG theo client."assignedPTId". Nhờ vậy khi
-      // một PT dạy hộ (substitute) khách của PT khác, buổi ký check-out xong sẽ ghi
-      // công cho đúng người dạy hộ. Phân loại gói (L1/L2/Loyal vs còn lại) và loại
-      // trừ KOL vẫn dựa trên gói ACTIVE của KHÁCH được dạy.
-      // Raw SQL để đọc contractType (có thể chưa có trong Prisma client cũ).
-      const rows = await prisma.$queryRawUnsafe<{
-        contractType: string;
-        packageName:  string;
-      }[]>(
-        `
-        SELECT
-          COALESCE(pe."contractType"::text, 'NORMAL') AS "contractType",
-          COALESCE(pe."packageName", '')               AS "packageName"
-        FROM workout_logs wl
-        JOIN clients c ON c.id = wl."clientId"
-        LEFT JOIN LATERAL (
-          SELECT pe."contractType"::text AS "contractType", pe."packageName"
-          FROM package_enrollments pe
-          WHERE pe."clientId" = c.id AND pe.status = 'ACTIVE'
-          ORDER BY pe."createdAt" DESC
-          LIMIT 1
-        ) pe ON true
-        WHERE wl."createdById" = $1
-          AND wl."status" = 'COMPLETED'
-          AND wl."sessionDate" >= $2
-          AND wl."sessionDate" <  $3
-        `,
-        userId, gte, lt
-      );
-
-      let showsL1L2Loyal = 0;
-      let showsL3L4L5    = 0;
-      let showsResident  = 0;
-
-      for (const row of rows) {
-        if (row.contractType === "KOL") continue;
-        if (row.packageName === RESIDENT_PACKAGE) showsResident++;
-        else if (L1_L2_LOYAL.has(row.packageName)) showsL1L2Loyal++;
-        else showsL3L4L5++;
-      }
-
-      result[userId] = { showsL1L2Loyal, showsL3L4L5, showsResident };
-    })
-  );
+  for (const row of rows) {
+    const bucket = result[row.ptId];
+    if (!bucket) continue;
+    // KOL có cách tính hoa hồng riêng (60k/buổi), không nằm trong tiền buổi dạy.
+    if (row.contractType === "KOL") continue;
+    if (row.packageName === RESIDENT_PACKAGE) bucket.showsResident++;
+    else if (L1_L2_LOYAL.has(row.packageName)) bucket.showsL1L2Loyal++;
+    else bucket.showsL3L4L5++;
+  }
 
   return NextResponse.json(result);
 }
