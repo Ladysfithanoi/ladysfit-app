@@ -879,15 +879,18 @@ export function ClientDetailPage({
     if (isNaN(num) || num < 0) return;
     setSavingSessionsId(pkgId);
     try {
-      const newStatus = num >= pkg.sessions ? "COMPLETED" : pkg.status === "COMPLETED" ? "ACTIVE" : pkg.status;
+      // Mở lại gói khi hạ số buổi xuống dưới mức đầy; server sẽ tự đóng lại nếu
+      // gói đã hết buổi hoặc hết hạn, nên lấy trạng thái trả về làm chuẩn.
+      const reopen = num < pkg.sessions && pkg.status === "COMPLETED";
       const res = await fetch(`/api/clients/${client.id}/packages/${pkgId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionsUsed: num, status: newStatus }),
+        body: JSON.stringify({ sessionsUsed: num, ...(reopen ? { status: "ACTIVE" } : {}) }),
       });
       if (!res.ok) throw new Error();
+      const updated = await res.json();
       setPackages((prev) =>
-        prev.map((p) => p.id === pkgId ? { ...p, sessionsUsed: num, status: newStatus as PackageEnrollment["status"] } : p)
+        prev.map((p) => p.id === pkgId ? { ...p, sessionsUsed: num, status: updated.status } : p)
       );
       setPkgSessionsInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
       setToastMsg("Đã lưu số buổi tập ✓");
@@ -917,7 +920,7 @@ export function ClientDetailPage({
       setPackages((prev) =>
         prev.map((p) =>
           p.id === pkgId
-            ? { ...p, reservedDays: updated.reservedDays, extensionDays: updated.extensionDays, endDate: updated.endDate }
+            ? { ...p, reservedDays: updated.reservedDays, extensionDays: updated.extensionDays, endDate: updated.endDate, status: updated.status }
             : p
         )
       );

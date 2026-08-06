@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
-import { getTaughtSessions, countByClient } from "@/lib/pt-session-count";
+import { getTaughtSessions, countByClient, countByEnrollment } from "@/lib/pt-session-count";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -63,7 +63,15 @@ export async function GET(req: Request) {
     // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi
     // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ. Chỉ buổi đã
     // check-out có chữ ký kèm nhật ký buổi tập mới được tính (xem pt-session-count).
-    const logCountByClient = countByClient(await getTaughtSessions([ptId], startDate, endDate));
+    const taughtRows       = await getTaughtSessions([ptId], startDate, endDate);
+    const logCountByClient = countByClient(taughtRows);
+    // Gộp theo lộ trình: một khách có thể có gói cũ vừa hết + gói mới, gộp theo
+    // khách sẽ gán cùng số buổi cho cả hai dòng và cộng trùng "Tổng giá trị".
+    const logCountByEnrollment = countByEnrollment(taughtRows);
+    // Lộ trình đã có buổi dạy tháng này phải hiện ra kể cả khi gói vừa đóng
+    // (hết buổi / hết hạn) giữa tháng — nếu không, bảng chi tiết sẽ lệch với
+    // tiền buổi dạy thực trả.
+    const taughtEnrollmentIds = Array.from(logCountByEnrollment.keys());
 
     // Hợp đồng ACTIVE của khách được GÁN cho PT này (hiện luôn cả khi tháng này
     // chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
@@ -74,10 +82,10 @@ export async function GET(req: Request) {
              c."fullName"
       FROM package_enrollments pe
       JOIN clients c ON c.id = pe."clientId"
-      WHERE pe.status = 'ACTIVE' AND c."assignedPTId" = $1
+      WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
       ORDER BY c."fullName" ASC, pe."createdAt" ASC
       `,
-      ptId
+      ptId, taughtEnrollmentIds
     );
 
     // Thêm khách mà PT này DẠY HỘ tháng này (có buổi dạy nhưng không phải khách
@@ -94,10 +102,10 @@ export async function GET(req: Request) {
                  c."fullName"
           FROM package_enrollments pe
           JOIN clients c ON c.id = pe."clientId"
-          WHERE pe.status = 'ACTIVE' AND c.id = ANY($1::text[])
+          WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
           ORDER BY c."fullName" ASC, pe."createdAt" ASC
           `,
-          substituteClientIds
+          substituteClientIds, taughtEnrollmentIds
         )
       : [];
 
@@ -142,7 +150,7 @@ export async function GET(req: Request) {
 
     const rows = allEnrollments.map((e, idx) => {
       const photo = photoByEnrollment.get(e.id);
-      const sessionsThisMonth = logCountByClient.get(e.clientId) ?? 0;
+      const sessionsThisMonth = logCountByEnrollment.get(e.id) ?? 0;
       const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
 
       const base = {

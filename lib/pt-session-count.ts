@@ -28,6 +28,8 @@ import { prisma } from "@/lib/prisma";
 export type TaughtSessionRow = {
   ptId:         string;
   clientId:     string;
+  /** Lộ trình buổi này thuộc về; null nếu khách chưa từng có lộ trình nào. */
+  enrollmentId: string | null;
   packageName:  string;
   contractType: "NORMAL" | "KOC" | "KOL";
 };
@@ -44,6 +46,7 @@ export async function getTaughtSessions(
     SELECT
       wl."createdById" AS "ptId",
       wl."clientId"    AS "clientId",
+      COALESCE(pe_charged.id, pe_guess.id)                                           AS "enrollmentId",
       COALESCE(pe_charged."packageName", pe_guess."packageName", '')                 AS "packageName",
       COALESCE(pe_charged."contractType"::text, pe_guess."contractType", 'NORMAL')   AS "contractType"
     FROM workout_logs wl
@@ -53,7 +56,7 @@ export async function getTaughtSessions(
     -- Log cũ chưa ghi packageEnrollmentId: lấy gói đang chạy tại ngày tập,
     -- không có thì lấy gói gần nhất của khách.
     LEFT JOIN LATERAL (
-      SELECT p."packageName", p."contractType"::text AS "contractType"
+      SELECT p.id, p."packageName", p."contractType"::text AS "contractType"
       FROM package_enrollments p
       WHERE p."clientId" = wl."clientId"
       ORDER BY
@@ -80,6 +83,20 @@ export function countByClient(rows: TaughtSessionRow[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const row of rows) {
     counts.set(row.clientId, (counts.get(row.clientId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Gộp theo LỘ TRÌNH thay vì theo khách — cần cho bảng chi tiết buổi dạy: một
+ * khách có thể có nhiều lộ trình (gói cũ vừa hết + gói mới), gộp theo khách sẽ
+ * gán cùng một số buổi cho mọi dòng và cộng trùng "Tổng giá trị".
+ */
+export function countByEnrollment(rows: TaughtSessionRow[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.enrollmentId) continue;
+    counts.set(row.enrollmentId, (counts.get(row.enrollmentId) ?? 0) + 1);
   }
   return counts;
 }

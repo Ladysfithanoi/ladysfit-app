@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { refreshClientChurnStatus } from "@/lib/client-status";
+import { closeFinishedPackages } from "@/lib/package-status";
 
 export async function PUT(
   req: Request,
@@ -53,16 +54,20 @@ export async function PUT(
     }
   }
 
-  const updated = await prisma.packageEnrollment.update({
+  await prisma.packageEnrollment.update({
     where: { id: params.packageId },
     data,
   });
 
-  // Sửa gói thủ công (đánh dấu hết hạn/hoàn thành, đổi ngày...) cũng có thể khiến
-  // khách hết lộ trình → tự chuyển sang "Nghỉ tập" nếu không còn lộ trình nào chạy.
+  // Sửa số buổi đã tập / ngày bắt đầu / bảo lưu — gia hạn có thể làm gói vừa hết
+  // buổi hoặc vừa hết hạn ngay lúc lưu → đóng gói luôn cho khớp.
+  await closeFinishedPackages(params.id);
+
+  // Gói đóng lại cũng có thể khiến khách hết lộ trình → tự chuyển "Nghỉ tập".
   await refreshClientChurnStatus(params.id);
 
-  return NextResponse.json(updated);
+  const fresh = await prisma.packageEnrollment.findUnique({ where: { id: params.packageId } });
+  return NextResponse.json(fresh);
 }
 
 export async function DELETE(

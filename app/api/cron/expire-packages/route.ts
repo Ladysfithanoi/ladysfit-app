@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isPackageOngoing } from "@/lib/client-status";
+import { closeFinishedPackages } from "@/lib/package-status";
 
-// Daily sweep: any client who is currently "Đang tập" but whose lộ trình have all
-// finished (hết buổi / hết hạn) and who hasn't bought a new one is moved to "Nghỉ tập".
-// This catches the time-based "hết hạn" case that no live request would otherwise hit.
+// Daily sweep, hai bước:
+//  1. Đóng mọi lộ trình đã hết buổi (hết số buổi khách check-in) hoặc hết hạn —
+//     ACTIVE → COMPLETED / EXPIRED.
+//  2. Khách đang "Đang tập" mà không còn lộ trình nào chạy và chưa mua gói mới
+//     thì chuyển sang "Nghỉ tập".
+// Đây là nơi bắt trường hợp "hết hạn" theo thời gian mà không request nào chạm tới.
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const closed = await closeFinishedPackages();
 
   const now = new Date();
   const activeClients = await prisma.client.findMany({
@@ -35,5 +41,9 @@ export async function GET(req: Request) {
     });
   }
 
-  return NextResponse.json({ paused: toPause.length });
+  return NextResponse.json({
+    packagesCompleted: closed.completed,
+    packagesExpired:   closed.expired,
+    paused:            toPause.length,
+  });
 }

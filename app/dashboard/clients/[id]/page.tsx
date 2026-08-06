@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 import { ensureClientPhaseProgression } from "@/lib/phase-progression";
+import { closeFinishedPackages } from "@/lib/package-status";
+import { refreshClientChurnStatus } from "@/lib/client-status";
 import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
       },
     },
   };
+
+  // Đóng lộ trình đã hết buổi (hết số buổi khách check-in) hoặc hết hạn trước khi
+  // đọc dữ liệu, để hồ sơ luôn hiện đúng trạng thái mà không phải chờ cron hằng ngày.
+  const closedPackages = await closeFinishedPackages(params.id);
+  if (closedPackages.completed + closedPackages.expired > 0) {
+    await refreshClientChurnStatus(params.id);
+  }
 
   // Tự động cập nhật tiến trình giai đoạn (mở khoá/lưu trữ/tạo CT giai đoạn kế)
   // trước khi đọc danh sách chương trình, để dữ liệu hiển thị luôn đúng.

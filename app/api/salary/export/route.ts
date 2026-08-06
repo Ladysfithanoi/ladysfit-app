@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
-import { getTaughtSessions, countByClient } from "@/lib/pt-session-count";
+import { countByEnrollment, getTaughtSessions } from "@/lib/pt-session-count";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -125,26 +125,29 @@ export async function POST(req: Request) {
     const sessionDetailsByUser = new Map<string, SessionRow[]>();
 
     await Promise.all(ptAdminRecords.map(async r => {
+      // Cùng định nghĩa "Số buổi PT" với bảng lương: buổi đã check-out có chữ ký
+      // kèm nhật ký buổi tập, ghi công cho người thực sự dạy. Gộp theo lộ trình
+      // để khách có nhiều gói không bị cộng trùng giá trị.
+      const logCount = countByEnrollment(await getTaughtSessions([r.userId], startDate, endDate));
+
+      // Lộ trình đã có buổi dạy tháng này vẫn hiện kể cả khi gói vừa đóng giữa
+      // tháng (hết buổi / hết hạn), để file Excel khớp với tiền buổi dạy thực trả.
       const enrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
         `SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName",
                 pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
                 c."fullName"
          FROM package_enrollments pe
          JOIN clients c ON c.id = pe."clientId"
-         WHERE pe.status = 'ACTIVE' AND c."assignedPTId" = $1
+         WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
          ORDER BY c."fullName" ASC, pe."createdAt" ASC`,
-        r.userId
+        r.userId, Array.from(logCount.keys())
       );
-
-      // Cùng định nghĩa "Số buổi PT" với bảng lương: buổi đã check-out có chữ ký
-      // kèm nhật ký buổi tập, ghi công cho người thực sự dạy.
-      const logCount = countByClient(await getTaughtSessions([r.userId], startDate, endDate));
 
       const ptName = r.user.name ?? r.user.email;
 
       const rows: SessionRow[] = enrollments.map((e, idx) => {
         const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
-        const sessionsThisMonth = logCount.get(e.clientId) ?? 0;
+        const sessionsThisMonth = logCount.get(e.id) ?? 0;
 
         let valuePerSession: number | string;
         let totalValue: number;

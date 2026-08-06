@@ -8,6 +8,7 @@ import {
   SESSION_PAY_L3_L4_L5,
   SESSION_PAY_RESIDENT,
 } from "@/lib/packages";
+import { getTaughtSessions } from "@/lib/pt-session-count";
 import { standardWorkDays } from "@/lib/work-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
@@ -24,7 +25,18 @@ function calculateKOCCommission(startWeight: number, endWeight: number | null, s
   return 0;
 }
 
-async function fetchKOCKOLCommission(ptId: string): Promise<{ kocCommission: number; kolCommission: number; kocContracts: number; kolSessions: number }> {
+async function fetchKOCKOLCommission(
+  ptId:  string,
+  month: number,
+  year:  number,
+): Promise<{ kocCommission: number; kolCommission: number; kocContracts: number; kolSessions: number }> {
+  // KOC: thưởng một lần cho hợp đồng KẾT THÚC TRONG THÁNG NÀY.
+  //
+  // Cách cũ lọc theo pe.status = 'ACTIVE' và không giới hạn tháng nên trả lặp
+  // lại mỗi tháng chừng nào gói còn ACTIVE. Gói KOC là 60 buổi/60 ngày nên khi
+  // lộ trình tự đóng (hết buổi/hết hạn) điều kiện đó vĩnh viễn không khớp và
+  // thưởng KOC sẽ không bao giờ được trả. Nay bám theo ngày kết thúc hợp đồng —
+  // độc lập với trạng thái gói, và chỉ vào lương đúng một tháng.
   const kocRows = await prisma.$queryRawUnsafe<{
     startWeight: number;
     endWeight: number | null;
@@ -37,9 +49,10 @@ async function fetchKOCKOLCommission(ptId: string): Promise<{ kocCommission: num
            pe."contractType"
     FROM koc_contracts k
     JOIN package_enrollments pe ON pe.id = k."enrollmentId"
-    WHERE k."ptId" = $1 AND k.status = 'COMPLETED' AND pe.status = 'ACTIVE'
+    WHERE k."ptId" = $1 AND k.status = 'COMPLETED'
+      AND k."endDate" >= $2 AND k."endDate" < $3
     `,
-    ptId
+    ptId, new Date(year, month - 1, 1), new Date(year, month, 1)
   );
 
   let kocCommission = 0;
@@ -51,18 +64,15 @@ async function fetchKOCKOLCommission(ptId: string): Promise<{ kocCommission: num
     }
   }
 
-  // KOL: sum sessions_used for active KOL packages assigned to this PT
-  const kolRows = await prisma.$queryRawUnsafe<{ total_sessions: number }[]>(
-    `
-    SELECT COALESCE(SUM(pe."sessionsUsed"), 0)::int AS total_sessions
-    FROM package_enrollments pe
-    JOIN clients c ON c.id = pe."clientId"
-    WHERE c."assignedPTId" = $1 AND pe."contractType" = 'KOL' AND pe.status = 'ACTIVE'
-    `,
-    ptId
-  );
-
-  const kolSessions = kolRows[0] ? Number(kolRows[0].total_sessions) : 0;
+  // KOL: 60.000đ cho mỗi buổi KOL DẠY TRONG THÁNG NÀY.
+  //
+  // Cách cũ cộng dồn pe."sessionsUsed" của mọi gói KOL ACTIVE (tổng số buổi từ
+  // đầu hợp đồng) và trả lặp lại nguyên số đó mỗi tháng — một khách KOL 60 buổi
+  // trả 3,6tr/tháng vô thời hạn, kể cả tháng PT không dạy buổi KOL nào. Nay đếm
+  // đúng buổi đã check-out có chữ ký trong tháng, cùng nguồn với tiền buổi dạy,
+  // nên buổi KOL dạy hộ cũng ghi công đúng người dạy.
+  const taught = await getTaughtSessions([ptId], new Date(year, month - 1, 1), new Date(year, month, 1));
+  const kolSessions   = taught.filter(r => r.contractType === "KOL").length;
   const kolCommission = kolSessions * 60_000;
 
   return { kocCommission, kolCommission, kocContracts, kolSessions };
@@ -159,7 +169,7 @@ export async function GET(req: Request) {
 
     // Fetch KOC/KOL commission for PT/ADMIN roles
     const { kocCommission, kolCommission } = (role !== "FM")
-      ? await fetchKOCKOLCommission(r.userId)
+      ? await fetchKOCKOLCommission(r.userId, month, year)
       : { kocCommission: 0, kolCommission: 0 };
 
     // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
@@ -302,7 +312,7 @@ export async function POST(req: Request) {
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
-      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
+      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       // Admin dạy thêm không có lương cứng nên ngày công không ảnh hưởng lương.
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
 
@@ -372,7 +382,7 @@ export async function POST(req: Request) {
       const commissionAmount = totalRevenue * rate;
       const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident);
       const goalBonus        = entry.clientsAchievedGoal * 100_000;
-      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId);
+      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       const totalSalary      = computeTotalSalary({
         role: "PT", baseSalary, fixedAllowances: 0, seniorityBonus, commissionAmount,
         showPay, goalBonus, googleBonus: 0, renewBonus: 0, kocCommission, kolCommission,
