@@ -12,12 +12,23 @@ import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight, Check, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Staff = { id: string; name: string | null; email: string; role: string };
+type Staff = {
+  id:    string;
+  name:  string | null;
+  email: string;
+  role:  string;
+  /** Cơ sở của nhân sự — FM thuộc tất cả cơ sở mình quản lý. */
+  branchIds: string[];
+};
+
+type Branch = { id: string; name: string };
 
 type Props = {
   currentUserId:   string;
   currentUserRole: string;
   staffList:       Staff[];
+  /** Cơ sở người đang đăng nhập được xem; từ 2 cơ sở trở lên mới hiện bộ lọc. */
+  branches:        Branch[];
 };
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -42,13 +53,15 @@ function isSunday(day: number, month: number, year: number) {
   return new Date(year, month - 1, day).getDay() === 0;
 }
 
-export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }: Props) {
+export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, branches }: Props) {
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear]   = useState(today.getFullYear());
   const [userId, setUserId] = useState(
     staffList.some(s => s.id === currentUserId) ? currentUserId : (staffList[0]?.id ?? currentUserId),
   );
+  // "" = tất cả cơ sở. Chỉ Admin và FM quản lý nhiều cơ sở mới thấy bộ lọc này.
+  const [branchId, setBranchId] = useState("");
 
   const [leaveDays, setLeaveDays] = useState<Set<number>>(new Set());
   const [standard, setStandard]   = useState(0);
@@ -59,6 +72,11 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }:
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
+  }
+
+  /** Nhân sự của một cơ sở; "" = tất cả cơ sở người đang đăng nhập được xem. */
+  function staffOfBranch(bid: string) {
+    return bid ? staffList.filter(s => s.branchIds.includes(bid)) : staffList;
   }
 
   const fetchLeave = useCallback(async () => {
@@ -117,6 +135,13 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }:
     setYear(now.getFullYear());
   }
 
+  /** Đổi cơ sở → nếu người đang xem không thuộc cơ sở đó thì nhảy sang người đầu tiên. */
+  function changeBranch(nextBranchId: string) {
+    setBranchId(nextBranchId);
+    const list = staffOfBranch(nextBranchId);
+    if (list.length > 0 && !list.some(s => s.id === userId)) setUserId(list[0].id);
+  }
+
   const total   = daysInMonth(month, year);
   const blanks  = leadingBlanks(month, year);
   // Chủ nhật đã nằm ngoài ngày công chuẩn nên không tính vào số ngày nghỉ.
@@ -126,6 +151,12 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }:
   const selectedStaff = staffList.find(s => s.id === userId);
   const isSelf        = userId === currentUserId;
   const canPickStaff  = staffList.length > 1;
+  // Từ 2 cơ sở trở lên (Admin, FM quản lý nhiều cơ sở) mới cần lọc theo cơ sở.
+  const canPickBranch  = branches.length > 1;
+  const visibleStaff   = canPickBranch ? staffOfBranch(branchId) : staffList;
+  const selectedBranchNames = (selectedStaff?.branchIds ?? [])
+    .map(id => branches.find(b => b.id === id)?.name)
+    .filter(Boolean) as string[];
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -146,17 +177,34 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }:
       {/* Thanh chọn nhân sự + tháng */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="flex flex-wrap items-center gap-4">
+          {canPickBranch && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Cơ sở:</label>
+              <select value={branchId} onChange={e => changeBranch(e.target.value)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30">
+                <option value="">Tất cả cơ sở</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+
           {canPickStaff && (
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Nhân sự:</label>
-              <select value={userId} onChange={e => setUserId(e.target.value)}
-                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30">
-                {staffList.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {(s.name ?? s.email) + (s.id === currentUserId ? " (bạn)" : "")}
-                  </option>
-                ))}
-              </select>
+              {visibleStaff.length === 0 ? (
+                <span className="h-9 flex items-center px-3 text-sm text-gray-400 italic">
+                  Cơ sở này chưa có nhân sự
+                </span>
+              ) : (
+                <select value={userId} onChange={e => setUserId(e.target.value)}
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30">
+                  {visibleStaff.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {(s.name ?? s.email) + (s.id === currentUserId ? " (bạn)" : "")}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -185,6 +233,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList }:
               {selectedStaff.role === "ADMIN" ? "Admin" : selectedStaff.role}
             </span>
             <p className="text-sm font-semibold text-gray-700">{selectedStaff.name ?? selectedStaff.email}</p>
+            {selectedBranchNames.length > 0 && (
+              <span className="text-[11px] text-gray-400 font-medium">· {selectedBranchNames.join(", ")}</span>
+            )}
             {!isSelf && <span className="text-[10px] text-gray-400">— bạn đang sửa lịch hộ</span>}
           </div>
         )}
