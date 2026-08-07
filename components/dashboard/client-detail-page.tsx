@@ -2328,6 +2328,7 @@ export function ClientDetailPage({
           clientId={client.id}
           initialPrograms={workoutProgs}
           isSubstitute={isSubstitute}
+          assignedPTId={client.assignedPT?.id ?? null}
           initialLogs={initialWorkoutLogs}
           onPackageUpdated={(pkg) =>
             setPackages((prev) =>

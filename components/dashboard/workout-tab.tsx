@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Copy, Dumbbell, Loader2, LockKeyholeOpen, Pencil, Plus, Settings2, Trash2, Users } from "lucide-react";
+import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, LockKeyholeOpen, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -114,6 +114,62 @@ export type WorkoutLogRow = {
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+/** Buổi này do người KHÁC dạy chứ không phải PT đang phụ trách khách → buổi dạy hộ.
+ *  Nhật ký + chữ ký của buổi dạy hộ vẫn nằm đúng chỗ trong chương trình, nhưng
+ *  trước đây không có dấu hiệu nào trên màn hình nên PT phụ trách tưởng là mất. */
+function isCoveredLog(log: WorkoutLogRow, assignedPTId?: string | null): boolean {
+  return !!assignedPTId && !!log.createdBy.id && log.createdBy.id !== assignedPTId;
+}
+
+/** Tóm tắt buổi đã tập gần nhất, hiện ngay dưới giáo án: ngày, thời lượng, AI dạy
+ *  (đánh dấu rõ nếu là buổi dạy hộ) và chữ ký khách đã ký. Trước đây phải mở modal
+ *  "Xem lịch sử" mới thấy được, nên buổi dạy hộ nhìn như chưa từng được lưu. */
+function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boolean }) {
+  const minutes =
+    log.checkInAt && log.checkOutAt
+      ? Math.round((new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000)
+      : null;
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-xl border px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2",
+        covered ? "border-purple-200 bg-purple-50/60" : "border-gray-100 bg-gray-50/60"
+      )}
+    >
+      <span className="text-xs font-bold text-gray-700">{fmtDate(log.sessionDate)}</span>
+      {minutes != null && (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+          <Clock className="w-3 h-3" />
+          {minutes} phút
+        </span>
+      )}
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full",
+          covered ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"
+        )}
+      >
+        <UserCheck className="w-3 h-3" />
+        {covered ? "Dạy hộ: " : "PT: "}
+        {log.createdBy.name ?? "—"}
+      </span>
+      {log.signatureUrl ? (
+        <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
+          Khách đã ký
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={log.signatureUrl}
+            alt="Chữ ký khách"
+            className="h-9 rounded-md border border-gray-200 bg-white"
+          />
+        </span>
+      ) : log.confirmationMethod === "CLIENT_APP" ? (
+        <span className="text-[11px] font-bold text-emerald-600">Khách xác nhận qua app</span>
+      ) : null}
+    </div>
+  );
 }
 
 /** Thứ tự giai đoạn từ tên ("Giai đoạn 2: ..." → 2). 0 nếu không nhận diện được. */
@@ -289,6 +345,7 @@ function ProgramView({
   onPhaseGateChanged,
   userRole,
   isSubstitute,
+  assignedPTId = null,
   canBypassPhase = false,
   enableLevelSystem = true,
   minSessionMinutes = 30,
@@ -307,6 +364,8 @@ function ProgramView({
   onPhaseGateChanged: (rows: { id: string; status: string; manualPhaseOverride: boolean }[]) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  /** PT đang phụ trách khách — dùng để nhận ra buổi nào là buổi người khác dạy hộ. */
+  assignedPTId?: string | null;
   /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
   canBypassPhase?: boolean;
   enableLevelSystem?: boolean;
@@ -500,11 +559,22 @@ function ProgramView({
       .map((l) => l.sessionId)
   );
   // Buổi đã tập xong trong tuần đang xem + chỉ số "buổi hôm nay" (buổi kế tiếp).
-  const currentWeekCompletedIds = new Set(
-    currentWeekData
-      ? workoutLogs.filter((l) => l.weekId === currentWeekData.id && l.status === "COMPLETED").map((l) => l.sessionId)
-      : []
-  );
+  // Giữ luôn nhật ký MỚI NHẤT của từng buổi (không chỉ tập id) để nhận ra ngay
+  // buổi nào do người khác dạy hộ — trước đây phải mở modal lịch sử mới biết.
+  const completedLogBySession = new Map<string, WorkoutLogRow>();
+  if (currentWeekData) {
+    const done = workoutLogs
+      .filter((l) => l.weekId === currentWeekData.id && l.status === "COMPLETED")
+      .sort((a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime());
+    for (const l of done) completedLogBySession.set(l.sessionId, l); // tăng dần → cuối cùng là mới nhất
+  }
+  const currentWeekCompletedIds = new Set(completedLogBySession.keys());
+  // Các buổi trong tuần đang xem do người khác dạy hộ — nêu thẳng ở dòng tổng quan.
+  const coveredThisWeek = currentWeekData
+    ? currentWeekData.sessions
+        .map((s, i) => ({ i, log: completedLogBySession.get(s.id) }))
+        .filter((x): x is { i: number; log: WorkoutLogRow } => !!x.log && isCoveredLog(x.log, assignedPTId))
+    : [];
   const todaySessionIdx = nextSessionIndex(currentWeekData, workoutLogs);
   const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
   const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
@@ -1213,6 +1283,17 @@ function ProgramView({
                   ) : (
                     <span className="font-semibold text-emerald-600">· Đã hoàn thành tuần này 🎉</span>
                   )}
+                  {coveredThisWeek.map(({ i, log }) => (
+                    <button
+                      key={log.id}
+                      onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
+                      title="Bấm để xem nhật ký & chữ ký của buổi dạy hộ này"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold hover:bg-purple-200 transition-colors"
+                    >
+                      <UserCheck className="w-3 h-3" />
+                      {sessionLabel(i)} — dạy hộ: {log.createdBy.name ?? "—"}
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -1223,21 +1304,26 @@ function ProgramView({
                   const sid = (s as WorkoutSession).id;
                   const sessionActive = !editMode && activeSessionIds.has(sid);
                   const isDone = !editMode && currentWeekCompletedIds.has(sid);
+                  const doneLog = isDone ? completedLogBySession.get(sid) ?? null : null;
+                  const isCovered = !!doneLog && isCoveredLog(doneLog, assignedPTId);
                   const isToday = !editMode && !sessionActive && i === todaySessionIdx;
                   const isSelected = i === activeSessionIdx;
                   return (
                     <button
                       key={i}
                       onClick={() => { setActiveSessionIdx(i); setCheckInError(""); }}
+                      title={isCovered ? `Buổi này do ${doneLog?.createdBy.name ?? "người khác"} dạy hộ` : undefined}
                       className={cn(
                         "flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
                         isSelected
                           ? "border-[#f15b5c] text-[#f15b5c] bg-white"
                           : isToday
                             ? "border-transparent text-amber-600 bg-amber-50 hover:text-amber-700"
-                            : isDone
-                              ? "border-transparent text-emerald-600 bg-emerald-50/60 hover:text-emerald-700"
-                              : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
+                            : isCovered
+                              ? "border-transparent text-purple-600 bg-purple-50/70 hover:text-purple-700"
+                              : isDone
+                                ? "border-transparent text-emerald-600 bg-emerald-50/60 hover:text-emerald-700"
+                                : "border-transparent text-gray-500 bg-gray-50 hover:text-gray-700"
                       )}
                     >
                       {sessionActive ? (
@@ -1245,6 +1331,8 @@ function ProgramView({
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f15b5c] opacity-75" />
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#f15b5c]" />
                         </span>
+                      ) : isCovered ? (
+                        <UserCheck className="w-3.5 h-3.5 text-purple-500" />
                       ) : isDone ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                       ) : null}
@@ -1436,6 +1524,7 @@ function ProgramView({
                             onDeleted={(logId) => onLogDeleted(logId)}
                           />
                         ) : (
+                          <>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-col gap-1">
                               <button
@@ -1474,6 +1563,12 @@ function ProgramView({
                               <span className="text-xs text-gray-300 italic">Chưa có buổi nào được ghi lại</span>
                             )}
                           </div>
+                          {/* Buổi đã tập gần nhất: ai dạy + chữ ký khách, thấy ngay không
+                              phải mở modal — buổi dạy hộ mới không bị nhìn như chưa lưu. */}
+                          {lastLog && (
+                            <LastSessionSummary log={lastLog} covered={isCoveredLog(lastLog, assignedPTId)} />
+                          )}
+                          </>
                         )}
                       </div>
 
@@ -1484,6 +1579,7 @@ function ProgramView({
                           logs={completedLogs}
                           phase={program.phase}
                           clientId={clientId}
+                          assignedPTId={assignedPTId}
                           onLogUpdated={onLogUpdated}
                           onLogDeleted={onLogDeleted}
                           onClose={() => setHistorySessionId(null)}
@@ -1749,6 +1845,7 @@ function ProgramView({
         <WeekLogOverview
           weeks={allWeekLogs}
           initialWeekId={currentWeekData.id}
+          assignedPTId={assignedPTId}
           onClose={() => setShowWeekLog(false)}
         />
       )}
@@ -1857,6 +1954,7 @@ export function WorkoutTab({
   onPackageUpdated,
   userRole,
   isSubstitute,
+  assignedPTId = null,
   canBypassPhase = false,
   enableLevelSystem = true,
   minSessionMinutes = 30,
@@ -1867,6 +1965,8 @@ export function WorkoutTab({
   onPackageUpdated?: (pkg: PackageUpdate) => void;
   userRole?: string;
   isSubstitute?: boolean;
+  /** PT đang phụ trách khách — dùng để nhận ra buổi nào do người khác dạy hộ. */
+  assignedPTId?: string | null;
   /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
   canBypassPhase?: boolean;
   enableLevelSystem?: boolean;
@@ -2023,6 +2123,7 @@ export function WorkoutTab({
           onPhaseGateChanged={handlePhaseGateChanged}
           userRole={userRole}
           isSubstitute={isSubstitute}
+          assignedPTId={assignedPTId}
           canBypassPhase={canBypassPhase}
           enableLevelSystem={enableLevelSystem}
           minSessionMinutes={minSessionMinutes}
@@ -2047,6 +2148,7 @@ export function WorkoutTab({
               onPhaseGateChanged={handlePhaseGateChanged}
               userRole={userRole}
               isSubstitute={isSubstitute}
+              assignedPTId={assignedPTId}
               canBypassPhase={canBypassPhase}
               enableLevelSystem={enableLevelSystem}
               minSessionMinutes={minSessionMinutes}
@@ -2082,6 +2184,7 @@ export function WorkoutTab({
                   onPhaseGateChanged={handlePhaseGateChanged}
                   userRole={userRole}
                   isSubstitute={isSubstitute}
+                  assignedPTId={assignedPTId}
                   canBypassPhase={canBypassPhase}
                   enableLevelSystem={enableLevelSystem}
                   minSessionMinutes={minSessionMinutes}
