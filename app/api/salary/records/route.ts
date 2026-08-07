@@ -10,6 +10,7 @@ import {
 } from "@/lib/packages";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { standardWorkDays } from "@/lib/work-days";
+import { countLeaveDaysByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
 // ── KOC commission helper ──────────────────────────────────────────────────
@@ -158,6 +159,11 @@ export async function GET(req: Request) {
     ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
   }));
 
+  // Ngày nghỉ tích trên lịch nghỉ của tháng — trừ vào ngày công thực tế.
+  const leaveMap = await countLeaveDaysByUser(
+    Array.from(new Set(records.map(r => r.userId))), month, year,
+  );
+
   // Recalculate and patch each record where revenue-derived values changed
   const updated = await Promise.all(records.map(async (r) => {
     const role = r.user.role;
@@ -177,10 +183,18 @@ export async function GET(req: Request) {
 
     // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
     // như đi làm đủ, để FM sửa được ngay mà tổng lương không đổi.
-    const rWithDays = r as typeof r & { standardWorkDays?: number; actualWorkDays?: number };
+    const rWithDays = r as typeof r & { standardWorkDays?: number; actualWorkDays?: number; leaveDays?: number };
     const hasWorkDays      = (rWithDays.standardWorkDays ?? 0) > 0;
     const standardDays     = hasWorkDays ? rWithDays.standardWorkDays! : standardWorkDays(month, year);
-    const actualDays       = hasWorkDays ? (rWithDays.actualWorkDays ?? 0) : standardDays;
+
+    // Lịch nghỉ đổi bao nhiêu ngày thì trừ (hoặc trả lại) đúng bấy nhiêu ngày công,
+    // nên phần FM sửa tay trước đó vẫn được giữ nguyên.
+    const leaveCount  = leaveMap[r.userId] ?? 0;
+    const storedLeave = rWithDays.leaveDays ?? 0;
+    const baseDays    = hasWorkDays ? (rWithDays.actualWorkDays ?? 0) : standardDays;
+    const actualDays  = leaveCount === storedLeave
+      ? baseDays
+      : Math.max(0, Math.min(baseDays - (leaveCount - storedLeave), standardDays));
 
     const totalSalary = computeTotalSalary({
       role,
@@ -203,6 +217,7 @@ export async function GET(req: Request) {
     const rWithKOC = r as typeof r & { kocCommission?: number; kolCommission?: number };
     const changed =
       !hasWorkDays ||
+      leaveCount !== storedLeave ||
       Math.abs(r.totalRevenue    - totalRevenue)     > 0.01 ||
       Math.abs(r.commissionRate  - commissionRate)   > 0.001 ||
       Math.abs(r.commissionAmount - commissionAmount) > 0.01 ||
@@ -222,6 +237,7 @@ export async function GET(req: Request) {
         kolCommission: kolCommission as unknown as never,
         standardWorkDays: standardDays as unknown as never,
         actualWorkDays:   actualDays   as unknown as never,
+        leaveDays:        leaveCount   as unknown as never,
         totalSalary,
         remainingPayment,
       },
@@ -299,6 +315,8 @@ export async function POST(req: Request) {
 
   // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
   const stdDays = standardWorkDays(body.month, body.year);
+  // Ngày nghỉ đã tích trên lịch nghỉ — mặc định trừ luôn vào ngày công thực tế.
+  const leaveMap = await countLeaveDaysByUser(targetUserIds, body.month, body.year);
 
   for (const entry of body.entries) {
 
@@ -307,8 +325,10 @@ export async function POST(req: Request) {
       orderBy: { effectiveFrom: "desc" },
     });
 
-    // Không nhập → mặc định đi làm đủ; nhập vượt ngày công chuẩn → chốt ở mức chuẩn.
-    const actDays = Math.max(0, Math.min(entry.actualWorkDays ?? stdDays, stdDays));
+    // Không nhập → lấy ngày công chuẩn trừ ngày nghỉ trên lịch; nhập vượt ngày
+    // công chuẩn → chốt ở mức chuẩn.
+    const leaveCount = leaveMap[entry.userId] ?? 0;
+    const actDays = Math.max(0, Math.min(entry.actualWorkDays ?? (stdDays - leaveCount), stdDays));
 
     if (entry.userRole === "ADMIN") {
       const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
@@ -325,6 +345,7 @@ export async function POST(req: Request) {
           baseSalary: 0, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus: 0, fixedAllowances: 0,
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
+          leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
           showsResident: entry.showsResident, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
@@ -366,6 +387,7 @@ export async function POST(req: Request) {
           baseSalary, totalRevenue: totalBranchRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances,
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
+          leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showsResident: residentShows, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
@@ -398,6 +420,7 @@ export async function POST(req: Request) {
           baseSalary, totalRevenue, commissionRate: rate * 100, commissionAmount,
           seniorityBonus, fixedAllowances: 0,
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
+          leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
           showsResident: entry.showsResident, showPay,
           goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,

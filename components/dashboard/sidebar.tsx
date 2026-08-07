@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
-  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award, Trophy,
+  Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award, Trophy, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -25,6 +25,8 @@ const forAdminFM    = (r: Role) => isAdmin(r) || isFM(r);
 const forAdminOnly  = (r: Role) => isAdmin(r);
 const forNotCEO     = (r: Role) => !isCEO(r) && !isCOO(r);
 const forFMandPT    = (r: Role) => isFM(r) || r === "PT";
+/** Nhân sự vận hành phòng tập — những vai trò có chấm ngày công. */
+const forStaff      = (r: Role) => isAdmin(r) || isFM(r) || r === "PT";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 
@@ -54,6 +56,12 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
       { href: "/dashboard/practical", icon: Award,       label: "Thăng hạng", show: forAdminFM },
+    ],
+  },
+  {
+    header: "LỊCH",
+    items: [
+      { href: "/dashboard/leave", icon: CalendarDays, label: "Lịch nghỉ", show: forStaff },
     ],
   },
   {

@@ -83,6 +83,8 @@ model User {
   substituteRequestsReceived SubstituteRequest[]          @relation("SubstituteSub")
   practicalAssessments       PracticalAssessment[]        @relation("PTPracticalAssessments")
   assessedPracticals         PracticalAssessment[]        @relation("AssessorPracticals")
+  leaveDays                  LeaveDay[]                   @relation("UserLeaveDays")
+  createdLeaveDays           LeaveDay[]                   @relation("LeaveDayCreator")
 
   @@map("users")
 }
@@ -1170,6 +1172,10 @@ model SalaryRecord {
   // hoa hồng, tiền buổi dạy và thưởng không bị chia. Xem lib/work-days.ts.
   standardWorkDays    Int          @default(0)
   actualWorkDays      Int          @default(0)
+  // Số ngày nghỉ lấy từ lịch nghỉ (leave_days) tại lần tính gần nhất. Khi lịch
+  // nghỉ đổi, ngày công thực tế được trừ đúng phần chênh lệch nên số FM sửa tay
+  // vẫn giữ. Xem lib/leave-days.ts.
+  leaveDays           Int          @default(0)
   bhxh                Float        @default(0)
   totalSalary         Float        @default(0)
   kocCommission       Float        @default(0)
@@ -1187,6 +1193,29 @@ model SalaryRecord {
 
   @@unique([userId, month, year])
   @@map("salary_records")
+}
+
+// ── Lịch nghỉ ─────────────────────────────────────────────────────────────
+
+/// Một ngày nghỉ của nhân sự, tích trực tiếp trên lịch. Số ngày nghỉ trong
+/// tháng (bỏ Chủ nhật vì Chủ nhật vốn không tính công) được trừ vào ngày công
+/// thực tế của bảng lương tháng đó.
+model LeaveDay {
+  id          String   @id @default(cuid())
+  userId      String
+  /// Ngày nghỉ, chỉ phần ngày — luôn dựng bằng UTC để khớp cột DATE của Postgres.
+  date        DateTime @db.Date
+  note        String?
+  /// Người tích lịch: chính nhân sự đó, FM của cơ sở hoặc Admin.
+  createdById String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserLeaveDays", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("LeaveDayCreator", fields: [createdById], references: [id])
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("leave_days")
 }
 
 // ── Transform Gallery ────────────────────────────────────────────────────

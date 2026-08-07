@@ -258,7 +258,7 @@ export async function POST(req: Request) {
       const rec = r as typeof r & {
         kocCommission?: number; kolCommission?: number; bhxh?: number; showPay?: number;
         goalBonus?: number; googleBonus?: number; renewBonus?: number;
-        standardWorkDays?: number; actualWorkDays?: number;
+        standardWorkDays?: number; actualWorkDays?: number; leaveDays?: number;
       };
       const role = r.user.role;
       const kocC = Number(rec.kocCommission ?? 0);
@@ -269,10 +269,11 @@ export async function POST(req: Request) {
         :                    (Number(rec.goalBonus ?? 0) + kocC + kolC);
 
       // Admin dạy thêm không có lương cứng nên không áp ngày công.
-      const stdDays = Number(rec.standardWorkDays ?? 0);
+      const stdDays   = Number(rec.standardWorkDays ?? 0);
+      const leaveDays = Number(rec.leaveDays ?? 0);
       const workDaysText = role === "ADMIN" || stdDays <= 0
         ? "—"
-        : `${Number(rec.actualWorkDays ?? 0)}/${stdDays}`;
+        : `${Number(rec.actualWorkDays ?? 0)}/${stdDays}${leaveDays > 0 ? ` (nghỉ ${leaveDays})` : ""}`;
 
       const rowData = [
         stt,
@@ -340,7 +341,8 @@ export async function POST(req: Request) {
     const noteRow = ws1.addRow([
       "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
       + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn. "
-      + "Ngày công = thực tế/chuẩn (số ngày trong tháng − số Chủ nhật); lương cứng (lương CB + phụ cấp) chia theo tỉ lệ này.",
+      + "Ngày công = thực tế/chuẩn (số ngày trong tháng − số Chủ nhật); lương cứng (lương CB + phụ cấp) chia theo tỉ lệ này. "
+      + "Số trong ngoặc là ngày nghỉ tích trên lịch nghỉ.",
       ...Array(S1_COLS - 1).fill(""),
     ]);
     ws1.mergeCells(noteRow.number, 1, noteRow.number, S1_COLS);

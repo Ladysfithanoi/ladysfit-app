@@ -27,6 +27,8 @@ type SalaryRecord = {
   fixedAllowances: number;
   standardWorkDays: number;
   actualWorkDays: number;
+  /** Số ngày nghỉ lấy từ lịch nghỉ, đã trừ vào ngày công thực tế. */
+  leaveDays: number;
   kocCommission: number;
   kolCommission: number;
   totalSalary: number;
@@ -48,6 +50,8 @@ type GenEntry = {
   googleReviews: number;
   renewContracts: number;
   actualWorkDays: number;
+  /** Ngày nghỉ đọc từ lịch nghỉ — đã trừ sẵn vào actualWorkDays. */
+  leaveDays: number;
 };
 
 type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }>;
@@ -164,26 +168,27 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   async function openGenModal() {
     const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && s.role === "PT");
     const branchAdmins = staffList.filter(s => s.branchId === selectedBranchId && s.role === "ADMIN");
-    // Mặc định đi làm đủ ngày công chuẩn; FM sửa lại cho từng người nếu nghỉ.
+    // Mặc định đi làm đủ ngày công chuẩn; số ngày nghỉ trên lịch được trừ ngay
+    // sau khi tải xong, FM vẫn sửa lại được cho từng người.
     const stdDays = standardWorkDays(month, year);
     const entries: GenEntry[] = [
       {
         userId: currentFMId, name: currentFMName, userRole: "FM",
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
-        actualWorkDays: stdDays,
+        actualWorkDays: stdDays, leaveDays: 0,
       },
       ...branchPTs.map(pt => ({
         userId: pt.id, name: pt.name ?? pt.email, userRole: "PT" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
-        actualWorkDays: stdDays,
+        actualWorkDays: stdDays, leaveDays: 0,
       })),
       ...branchAdmins.map(a => ({
         userId: a.id, name: a.name ?? a.email, userRole: "ADMIN" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
-        actualWorkDays: stdDays,
+        actualWorkDays: stdDays, leaveDays: 0,
       })),
     ];
     setGenEntries(entries);
@@ -193,19 +198,26 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
     try {
       const userIds = entries.map(e => e.userId).join(",");
-      const res = await fetch(
-        `/api/salary/session-counts?branchId=${selectedBranchId}&month=${month}&year=${year}&userIds=${userIds}`,
-      );
-      if (res.ok) {
-        const data = await res.json() as SessionCounts;
-        setSessionCounts(data);
-        setGenEntries(entries.map(e => ({
+      const [countsRes, leaveRes] = await Promise.all([
+        fetch(`/api/salary/session-counts?branchId=${selectedBranchId}&month=${month}&year=${year}&userIds=${userIds}`),
+        fetch(`/api/leave/summary?month=${month}&year=${year}&userIds=${userIds}`),
+      ]);
+
+      const counts = countsRes.ok ? await countsRes.json() as SessionCounts : {};
+      const leave  = leaveRes.ok  ? await leaveRes.json()  as Record<string, number> : {};
+
+      setSessionCounts(counts);
+      setGenEntries(entries.map(e => {
+        const leaveDays = leave[e.userId] ?? 0;
+        return {
           ...e,
-          showsL1L2Loyal: data[e.userId]?.showsL1L2Loyal ?? 0,
-          showsL3L4L5:    data[e.userId]?.showsL3L4L5    ?? 0,
-          showsResident:  data[e.userId]?.showsResident  ?? 0,
-        })));
-      }
+          showsL1L2Loyal: counts[e.userId]?.showsL1L2Loyal ?? 0,
+          showsL3L4L5:    counts[e.userId]?.showsL3L4L5    ?? 0,
+          showsResident:  counts[e.userId]?.showsResident  ?? 0,
+          leaveDays,
+          actualWorkDays: Math.max(0, stdDays - leaveDays),
+        };
+      }));
     } finally {
       setFetchingCounts(false);
     }
@@ -340,12 +352,16 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     const std = r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year);
     const act = r.standardWorkDays > 0 ? r.actualWorkDays : std;
     const full = act >= std;
+    const fromCalendar = r.leaveDays ?? 0;
     return (
       <td className="px-3 py-2.5 whitespace-nowrap">
         <span className={cn("font-bold", full ? "text-gray-700" : "text-orange-500")}>{act}</span>
         <span className="text-gray-400">/{std} ngày</span>
         {!full && (
           <span className="block text-[10px] text-orange-400">nghỉ {std - act} ngày</span>
+        )}
+        {fromCalendar > 0 && (
+          <span className="block text-[10px] text-gray-400">{fromCalendar} ngày từ lịch nghỉ</span>
         )}
       </td>
     );
@@ -584,6 +600,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         {editingId === r.id && (
                           <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
                             editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                            leaveDays={r.leaveDays ?? 0}
                             saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                             onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                         )}
@@ -674,7 +691,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         {editingId === r.id && (
                           /* Admin dạy thêm không có lương cứng → không nhập ngày công (standardDays = 0). */
                           <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
-                            editWorkDays={editWorkDays} standardDays={0} saving={saving}
+                            editWorkDays={editWorkDays} standardDays={0} leaveDays={0} saving={saving}
                             onAdvance={setEditAdvance} onNotes={setEditNotes}
                             onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                         )}
@@ -752,6 +769,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       {editingId === fmRecord.id && (
                         <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
                           editWorkDays={editWorkDays} standardDays={fmRecord.standardWorkDays > 0 ? fmRecord.standardWorkDays : standardWorkDays(month, year)}
+                          leaveDays={fmRecord.leaveDays ?? 0}
                           saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                           onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                       )}
@@ -811,6 +829,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           onChange={e => updateEntry(entry.userId, "actualWorkDays", parseInt(e.target.value) || 0)}
                           className={numInput + " w-full text-left"}
                         />
+                        {entry.leaveDays > 0 && (
+                          <p className="text-[10px] font-semibold text-orange-500">
+                            Đã trừ {entry.leaveDays} ngày nghỉ tích trên lịch nghỉ
+                          </p>
+                        )}
                         <p className="text-[10px] text-gray-400">
                           Ngày công chuẩn = số ngày tháng {month} − số Chủ nhật. Lương cứng
                           (lương CB + phụ cấp) chia theo tỉ lệ này; hoa hồng và tiền buổi dạy giữ nguyên.
@@ -940,10 +963,12 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
   );
 }
 
-function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, saving, onAdvance, onNotes, onWorkDays, onSave }: {
+function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onSave }: {
   colSpan: number; editAdvance: string; editNotes: string; editWorkDays: string;
   /** Ngày công chuẩn của tháng; 0 = vai trò không có lương cứng → ẩn ô ngày công. */
-  standardDays: number; saving: boolean;
+  standardDays: number;
+  /** Ngày nghỉ đã trừ tự động từ lịch nghỉ — FM sửa đè được số bên dưới. */
+  leaveDays: number; saving: boolean;
   onAdvance: (v: string) => void; onNotes: (v: string) => void;
   onWorkDays: (v: string) => void; onSave: () => void;
 }) {
@@ -959,6 +984,11 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, 
               <input type="number" min={0} max={standardDays} value={editWorkDays}
                 onFocus={(e) => e.target.select()} onChange={e => onWorkDays(e.target.value)}
                 className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+              {leaveDays > 0 && (
+                <p className="text-[10px] text-orange-500 font-semibold">
+                  Đã trừ {leaveDays} ngày nghỉ từ lịch nghỉ
+                </p>
+              )}
             </div>
           )}
           <div className="space-y-1">

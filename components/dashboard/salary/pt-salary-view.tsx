@@ -12,6 +12,8 @@ type SalaryRecord = {
   seniorityBonus:       number;
   standardWorkDays:     number;
   actualWorkDays:       number;
+  /** Ngày nghỉ lấy từ lịch nghỉ, đã trừ vào ngày công thực tế. */
+  leaveDays:            number;
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
   showsResident:        number;
@@ -140,7 +142,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
               {/* Ngày công: lương cơ bản được chia theo thực tế / chuẩn */}
               {record.standardWorkDays > 0 && (
                 <Row
-                  label="Ngày công"
+                  label={(record.leaveDays ?? 0) > 0 ? `Ngày công (nghỉ ${record.leaveDays} ngày)` : "Ngày công"}
                   value={record.actualWorkDays >= record.standardWorkDays
                     ? `${record.actualWorkDays}/${record.standardWorkDays} ngày (đủ công)`
                     : `${record.actualWorkDays}/${record.standardWorkDays} ngày`}
