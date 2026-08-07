@@ -49,6 +49,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/dashboard/consultation", icon: ClipboardList, label: "Tư vấn",     show: forNotCEO },
       { href: "/dashboard/clients",      icon: Users,         label: "Khách hàng", show: forNotCEO },
       { href: "/dashboard/staff",        icon: UserCircle,    label: "Nhân sự",    show: forNotCEO },
+      { href: "/dashboard/leave",        icon: CalendarDays,  label: "Lịch nghỉ",  show: forStaff  },
     ],
   },
   {
@@ -56,12 +57,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/checklist", icon: CheckSquare, label: "Check-list Nhân sự", show: forFMandPT },
       { href: "/dashboard/practical", icon: Award,       label: "Thăng hạng", show: forAdminFM },
-    ],
-  },
-  {
-    header: "LỊCH",
-    items: [
-      { href: "/dashboard/leave", icon: CalendarDays, label: "Lịch nghỉ", show: forStaff },
     ],
   },
   {
