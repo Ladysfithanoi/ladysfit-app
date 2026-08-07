@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { SalaryStatus } from "@prisma/client";
 import { standardWorkDays } from "@/lib/work-days";
-import { countLeaveDaysByUser } from "@/lib/leave-days";
+import { countUnpaidLeaveByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   // Ngày nghỉ trên lịch nghỉ tại thời điểm sửa. FM nhập tay thì lấy đúng số FM
   // nhập; ghi lại số ngày nghỉ đã áp để lần tính sau chỉ trừ phần chênh lệch.
-  const leaveCount = (await countLeaveDaysByUser([record.userId], record.month, record.year))[record.userId] ?? 0;
+  const leaveCount = (await countUnpaidLeaveByUser([record.userId], record.month, record.year))[record.userId] ?? 0;
   const actualDays = body.actualWorkDays !== undefined
     ? Math.max(0, Math.min(body.actualWorkDays, standardDays))
     : ((rec.standardWorkDays ?? 0) > 0

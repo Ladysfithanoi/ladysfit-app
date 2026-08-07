@@ -10,7 +10,7 @@ import {
 } from "@/lib/packages";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { standardWorkDays } from "@/lib/work-days";
-import { countLeaveDaysByUser } from "@/lib/leave-days";
+import { countUnpaidLeaveByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
 // ── KOC commission helper ──────────────────────────────────────────────────
@@ -159,8 +159,9 @@ export async function GET(req: Request) {
     ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
   }));
 
-  // Ngày nghỉ tích trên lịch nghỉ của tháng — trừ vào ngày công thực tế.
-  const leaveMap = await countLeaveDaysByUser(
+  // Ngày nghỉ thường tích trên lịch nghỉ của tháng — trừ vào ngày công thực tế.
+  // Nghỉ phép năm không nằm ở đây vì vẫn hưởng đủ lương.
+  const leaveMap = await countUnpaidLeaveByUser(
     Array.from(new Set(records.map(r => r.userId))), month, year,
   );
 
@@ -315,8 +316,9 @@ export async function POST(req: Request) {
 
   // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
   const stdDays = standardWorkDays(body.month, body.year);
-  // Ngày nghỉ đã tích trên lịch nghỉ — mặc định trừ luôn vào ngày công thực tế.
-  const leaveMap = await countLeaveDaysByUser(targetUserIds, body.month, body.year);
+  // Ngày nghỉ thường đã tích trên lịch nghỉ — mặc định trừ luôn vào ngày công
+  // thực tế; nghỉ phép năm không trừ.
+  const leaveMap = await countUnpaidLeaveByUser(targetUserIds, body.month, body.year);
 
   for (const entry of body.entries) {
 

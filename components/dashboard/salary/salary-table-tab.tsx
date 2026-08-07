@@ -361,7 +361,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           <span className="block text-[10px] text-orange-400">nghỉ {std - act} ngày</span>
         )}
         {fromCalendar > 0 && (
-          <span className="block text-[10px] text-gray-400">{fromCalendar} ngày từ lịch nghỉ</span>
+          <span className="block text-[10px] text-gray-400">{fromCalendar} ngày nghỉ thường từ lịch</span>
         )}
       </td>
     );
@@ -831,7 +831,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         />
                         {entry.leaveDays > 0 && (
                           <p className="text-[10px] font-semibold text-orange-500">
-                            Đã trừ {entry.leaveDays} ngày nghỉ tích trên lịch nghỉ
+                            Đã trừ {entry.leaveDays} ngày nghỉ thường theo lịch nghỉ (phép năm không trừ)
                           </p>
                         )}
                         <p className="text-[10px] text-gray-400">
@@ -986,7 +986,7 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, 
                 className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
               {leaveDays > 0 && (
                 <p className="text-[10px] text-orange-500 font-semibold">
-                  Đã trừ {leaveDays} ngày nghỉ từ lịch nghỉ
+                  Đã trừ {leaveDays} ngày nghỉ thường từ lịch nghỉ
                 </p>
               )}
             </div>

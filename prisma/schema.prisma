@@ -1172,9 +1172,10 @@ model SalaryRecord {
   // hoa hồng, tiền buổi dạy và thưởng không bị chia. Xem lib/work-days.ts.
   standardWorkDays    Int          @default(0)
   actualWorkDays      Int          @default(0)
-  // Số ngày nghỉ lấy từ lịch nghỉ (leave_days) tại lần tính gần nhất. Khi lịch
-  // nghỉ đổi, ngày công thực tế được trừ đúng phần chênh lệch nên số FM sửa tay
-  // vẫn giữ. Xem lib/leave-days.ts.
+  // Số ngày nghỉ KHÔNG LƯƠNG lấy từ lịch nghỉ (leave_days) tại lần tính gần nhất;
+  // nghỉ phép năm không tính vào đây vì vẫn hưởng đủ lương. Khi lịch nghỉ đổi,
+  // ngày công thực tế được trừ đúng phần chênh lệch nên số FM sửa tay vẫn giữ.
+  // Xem lib/leave-days.ts.
   leaveDays           Int          @default(0)
   bhxh                Float        @default(0)
   totalSalary         Float        @default(0)
@@ -1197,14 +1198,22 @@ model SalaryRecord {
 
 // ── Lịch nghỉ ─────────────────────────────────────────────────────────────
 
-/// Một ngày nghỉ của nhân sự, tích trực tiếp trên lịch. Số ngày nghỉ trong
-/// tháng (bỏ Chủ nhật vì Chủ nhật vốn không tính công) được trừ vào ngày công
-/// thực tế của bảng lương tháng đó.
+/// Nghỉ phép năm vẫn hưởng đủ lương; nghỉ thường thì trừ ngày công.
+enum LeaveType {
+  ANNUAL
+  UNPAID
+}
+
+/// Một ngày nghỉ của nhân sự, tích trực tiếp trên lịch. Chỉ ngày NGHỈ THƯỜNG
+/// (UNPAID, đã bỏ Chủ nhật vì Chủ nhật vốn không tính công) mới bị trừ vào ngày
+/// công thực tế của bảng lương tháng đó.
 model LeaveDay {
   id          String   @id @default(cuid())
   userId      String
   /// Ngày nghỉ, chỉ phần ngày — luôn dựng bằng UTC để khớp cột DATE của Postgres.
   date        DateTime @db.Date
+  /// Phép năm (đủ lương) hay nghỉ thường (trừ ngày công). Xem lib/leave-days.ts.
+  type        LeaveType @default(UNPAID)
   note        String?
   /// Người tích lịch: chính nhân sự đó, FM của cơ sở hoặc Admin.
   createdById String

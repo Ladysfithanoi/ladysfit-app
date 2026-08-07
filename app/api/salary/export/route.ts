@@ -342,7 +342,7 @@ export async function POST(req: Request) {
       "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
       + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn. "
       + "Ngày công = thực tế/chuẩn (số ngày trong tháng − số Chủ nhật); lương cứng (lương CB + phụ cấp) chia theo tỉ lệ này. "
-      + "Số trong ngoặc là ngày nghỉ tích trên lịch nghỉ.",
+      + "Số trong ngoặc là ngày nghỉ thường theo lịch nghỉ; nghỉ phép năm vẫn hưởng đủ lương nên không trừ.",
       ...Array(S1_COLS - 1).fill(""),
     ]);
     ws1.mergeCells(noteRow.number, 1, noteRow.number, S1_COLS);

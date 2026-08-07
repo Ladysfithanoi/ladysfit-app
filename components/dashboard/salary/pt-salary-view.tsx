@@ -142,7 +142,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
               {/* Ngày công: lương cơ bản được chia theo thực tế / chuẩn */}
               {record.standardWorkDays > 0 && (
                 <Row
-                  label={(record.leaveDays ?? 0) > 0 ? `Ngày công (nghỉ ${record.leaveDays} ngày)` : "Ngày công"}
+                  label={(record.leaveDays ?? 0) > 0 ? `Ngày công (nghỉ thường ${record.leaveDays} ngày)` : "Ngày công"}
                   value={record.actualWorkDays >= record.standardWorkDays
                     ? `${record.actualWorkDays}/${record.standardWorkDays} ngày (đủ công)`
                     : `${record.actualWorkDays}/${record.standardWorkDays} ngày`}
