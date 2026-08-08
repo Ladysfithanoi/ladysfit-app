@@ -60,6 +60,8 @@ const TABS = [
   { key: "RESERVED", label: "Bảo lưu" },
 ] as const;
 
+type TabKey = (typeof TABS)[number]["key"];
+
 const PACKAGE_OPTIONS = [
   { value: "", label: "Tất cả lộ trình" },
   { value: "L1", label: "L1" },
@@ -91,8 +93,31 @@ function dmyToDate(dmy: string): Date | null {
 const inputCls =
   "h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
-// Ghi nhớ lựa chọn cơ sở + nhân sự phụ trách qua các lần tải lại trang.
-const FILTER_STORAGE_KEY = "clients-filter-staff-v1";
+// Ghi nhớ toàn bộ bộ lọc + tab + trang đang xem, để khi xem chi tiết một khách
+// hàng rồi quay lại danh sách thì mọi lựa chọn trước đó vẫn còn nguyên.
+const FILTER_STORAGE_KEY = "clients-filter-v2";
+
+type FilterState = {
+  search: string;
+  activeTab: TabKey;
+  ptFilter: string;
+  branchFilter: string;
+  pkgFilter: string;
+  dateFrom: string;
+  dateTo: string;
+  page: number;
+};
+
+const DEFAULT_FILTERS: FilterState = {
+  search: "",
+  activeTab: "ALL",
+  ptFilter: "",
+  branchFilter: "",
+  pkgFilter: "",
+  dateFrom: "",
+  dateTo: "",
+  page: 1,
+};
 
 export function ClientsPageClient({
   initialClients,
@@ -113,13 +138,14 @@ export function ClientsPageClient({
 }) {
   const router = useRouter();
   const [clients, setClients] = useState<ClientRow[]>(initialClients);
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"ALL" | "ACTIVE" | "PAUSED" | "RESERVED">("ALL");
-  const [ptFilter, setPtFilter] = useState("");
-  const [branchFilter, setBranchFilter] = useState("");
-  const [pkgFilter, setPkgFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const { search, activeTab, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo, page } = filters;
+
+  // Mọi thay đổi bộ lọc đều đưa về trang 1, trừ khi chính `page` được đổi.
+  function patchFilters(patch: Partial<FilterState>) {
+    setFilters((prev) => ({ ...prev, page: 1, ...patch }));
+  }
+
   const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState("");
@@ -165,12 +191,7 @@ export function ClientsPageClient({
   );
 
   function clearFilters() {
-    setSearch("");
-    setPtFilter("");
-    setBranchFilter("");
-    setPkgFilter("");
-    setDateFrom("");
-    setDateTo("");
+    patchFilters({ search: "", ptFilter: "", branchFilter: "", pkgFilter: "", dateFrom: "", dateTo: "" });
   }
 
   // Staff visible in PT dropdown (base scope)
@@ -193,36 +214,51 @@ export function ClientsPageClient({
   // Auto-reset PT filter when branch changes and selected PT is no longer in scope
   useEffect(() => {
     if (ptFilter && !branchFilteredStaff.some((s) => s.id === ptFilter)) {
-      setPtFilter("");
+      patchFilters({ ptFilter: "" });
     }
   }, [branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Khôi phục lựa chọn cơ sở + nhân sự đã lưu (chỉ chạy 1 lần khi mở trang).
-  // Chỉ khôi phục giá trị còn hợp lệ để tránh lọc theo PT/cơ sở đã bị xoá.
-  const restoredFilters = useRef(false);
+  // Chỉ nhận lại những giá trị còn hợp lệ, tránh lọc theo PT/cơ sở đã bị xoá
+  // hoặc nằm ngoài quyền xem hiện tại.
+  function sanitizeSaved(raw: unknown): Partial<FilterState> {
+    if (!raw || typeof raw !== "object") return {};
+    const s = raw as Record<string, unknown>;
+    const out: Partial<FilterState> = {};
+    if (typeof s.search === "string") out.search = s.search;
+    if (TABS.some((t) => t.key === s.activeTab)) out.activeTab = s.activeTab as TabKey;
+    if (s.branchFilter === "" || visibleBranches.some((b) => b.id === s.branchFilter)) {
+      out.branchFilter = s.branchFilter as string;
+    }
+    if (s.ptFilter === "" || (staffList ?? []).some((p) => p.id === s.ptFilter)) {
+      out.ptFilter = s.ptFilter as string;
+    }
+    if (PACKAGE_OPTIONS.some((o) => o.value === s.pkgFilter)) out.pkgFilter = s.pkgFilter as string;
+    if (typeof s.dateFrom === "string") out.dateFrom = s.dateFrom;
+    if (typeof s.dateTo === "string") out.dateTo = s.dateTo;
+    if (typeof s.page === "number" && Number.isInteger(s.page) && s.page >= 1) out.page = s.page;
+    return out;
+  }
+
+  // Khôi phục bộ lọc đã lưu (chỉ chạy 1 lần khi mở trang).
   useEffect(() => {
     try {
       const raw = localStorage.getItem(FILTER_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as { branchFilter?: string; ptFilter?: string };
-        if (saved.branchFilter && visibleBranches.some((b) => b.id === saved.branchFilter)) {
-          setBranchFilter(saved.branchFilter);
-        }
-        if (saved.ptFilter && (staffList ?? []).some((s) => s.id === saved.ptFilter)) {
-          setPtFilter(saved.ptFilter);
-        }
-      }
+      if (raw) setFilters((prev) => ({ ...prev, ...sanitizeSaved(JSON.parse(raw)) }));
     } catch { /* ignore parse/storage errors */ }
-    restoredFilters.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lưu lại mỗi khi đổi cơ sở/nhân sự (bỏ qua lần đầu trước khi khôi phục xong).
+  // Lưu lại mỗi khi bộ lọc đổi. Bỏ qua lần chạy lúc mount để giá trị mặc định
+  // không ghi đè lên dữ liệu đã lưu trước khi khôi phục kịp chạy.
+  const skipFirstSave = useRef(true);
   useEffect(() => {
-    if (!restoredFilters.current) return;
+    if (skipFirstSave.current) {
+      skipFirstSave.current = false;
+      return;
+    }
     try {
-      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({ branchFilter, ptFilter }));
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
     } catch { /* ignore storage errors */ }
-  }, [branchFilter, ptFilter]);
+  }, [filters]);
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -272,16 +308,11 @@ export function ClientsPageClient({
     });
   }, [clients, activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
 
-  // Pagination — max PAGE_SIZE rows per page
-  const [page, setPage] = useState(1);
+  // Pagination — max PAGE_SIZE rows per page. Trang được reset về 1 ngay trong
+  // patchFilters mỗi khi bộ lọc đổi, nên không cần effect riêng.
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
   const safePage = Math.min(page, pageCount || 1);
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  // Reset to first page whenever the result set changes (tab switch / filtering)
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, search, ptFilter, branchFilter, pkgFilter, dateFrom, dateTo]);
 
   return (
     <>
@@ -303,7 +334,7 @@ export function ClientsPageClient({
               type="text"
               placeholder="Tìm tên hoặc số điện thoại..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => patchFilters({ search: e.target.value })}
               className={cn(inputCls, "pl-9 w-full")}
             />
           </div>
@@ -312,7 +343,7 @@ export function ClientsPageClient({
           {isPrivileged && visibleBranches.length > 0 && (
             <select
               value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
+              onChange={(e) => patchFilters({ branchFilter: e.target.value })}
               className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
             >
               <option value="">Tất cả cơ sở</option>
@@ -326,7 +357,7 @@ export function ClientsPageClient({
           {isPrivileged && visibleStaff.length > 0 && (
             <select
               value={ptFilter}
-              onChange={(e) => setPtFilter(e.target.value)}
+              onChange={(e) => patchFilters({ ptFilter: e.target.value })}
               className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
             >
               <option value="">Tất cả PT</option>
@@ -357,7 +388,7 @@ export function ClientsPageClient({
           {/* Package / lộ trình filter */}
           <select
             value={pkgFilter}
-            onChange={(e) => setPkgFilter(e.target.value)}
+            onChange={(e) => patchFilters({ pkgFilter: e.target.value })}
             className={cn(inputCls, "w-full md:w-auto md:min-w-[160px]")}
           >
             {PACKAGE_OPTIONS.map((o) => (
@@ -372,7 +403,7 @@ export function ClientsPageClient({
               type="text"
               placeholder="dd/mm/yyyy"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => patchFilters({ dateFrom: e.target.value })}
               className={cn(inputCls, "w-full md:w-[140px]")}
             />
             <span className="text-xs text-gray-400 font-semibold">→</span>
@@ -381,7 +412,7 @@ export function ClientsPageClient({
               type="text"
               placeholder="dd/mm/yyyy"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => patchFilters({ dateTo: e.target.value })}
               className={cn(inputCls, "w-full md:w-[140px]")}
             />
           </div>
@@ -412,7 +443,7 @@ export function ClientsPageClient({
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => patchFilters({ activeTab: tab.key })}
             className={cn(
               "flex-shrink-0 whitespace-nowrap text-sm font-medium px-4 py-2.5 rounded-xl transition-colors",
               activeTab === tab.key
@@ -565,7 +596,7 @@ export function ClientsPageClient({
             pageCount={pageCount}
             total={filtered.length}
             pageSize={PAGE_SIZE}
-            onPageChange={setPage}
+            onPageChange={(p) => patchFilters({ page: p })}
             itemLabel="khách hàng"
           />
         )}
