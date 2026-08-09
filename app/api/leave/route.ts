@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { standardWorkDays } from "@/lib/work-days";
 import {
+  LEAVE_DEDUCTION,
   MAX_CONSECUTIVE_ANNUAL,
   annualRunLengthWith,
   canManageLeaveOf,
@@ -14,9 +15,9 @@ import {
   type LeaveDayEntry,
 } from "@/lib/leave-days";
 
-/** Số ngày nghỉ thường trong tháng — chỉ loại này mới bị trừ ngày công. */
-function countUnpaid(days: LeaveDayEntry[], month: number, year: number): number {
-  return days.filter(d => d.type === "UNPAID" && !isSunday(utcDay(year, month, d.day))).length;
+/** Các ngày thực sự tính (Chủ nhật vốn không tính công nên bỏ ra ngoài). */
+function countedDays(days: LeaveDayEntry[], month: number, year: number): LeaveDayEntry[] {
+  return days.filter(d => !isSunday(utcDay(year, month, d.day)));
 }
 
 /** Trạng thái lịch nghỉ của một nhân sự trong tháng, dùng chung cho GET và POST. */
@@ -26,16 +27,20 @@ async function monthState(userId: string, month: number, year: number) {
     getAnnualLeaveBalance(userId, year),
   ]);
   const standard = standardWorkDays(month, year);
-  const unpaid   = countUnpaid(days, month, year);
+  const counted  = countedDays(days, month, year);
+  // Số ngày công bị trừ — nghỉ thường 1, nghỉ nửa ngày 0,5, phép năm 0.
+  const deducted = counted.reduce((sum, d) => sum + LEAVE_DEDUCTION[d.type], 0);
 
   return {
     userId, month, year, days,
-    unpaidCount:      unpaid,
+    unpaidCount:      counted.filter(d => d.type === "UNPAID").length,
+    halfDayCount:     counted.filter(d => d.type === "HALF_DAY").length,
+    deductedDays:     deducted,
     annualQuota:      balance.quota,
     annualUsed:       balance.used,
     annualRemaining:  balance.remaining,
     standardWorkDays: standard,
-    actualWorkDays:   Math.max(0, standard - unpaid),
+    actualWorkDays:   Math.max(0, standard - deducted),
   };
 }
 
@@ -72,8 +77,11 @@ export async function POST(req: Request) {
 
   const body = await req.json() as {
     userId?: string; day: number; month: number; year: number;
-    /** "ANNUAL" = phép năm, "UNPAID" = nghỉ thường, "NONE" = bỏ nghỉ ngày đó. */
-    type: "ANNUAL" | "UNPAID" | "NONE";
+    /**
+     * "ANNUAL" = phép năm, "UNPAID" = nghỉ thường, "HALF_DAY" = nghỉ nửa ngày,
+     * "NONE" = bỏ nghỉ ngày đó.
+     */
+    type: "ANNUAL" | "UNPAID" | "HALF_DAY" | "NONE";
     note?: string;
   };
   const userId = body.userId ?? session.user.id;
@@ -82,7 +90,7 @@ export async function POST(req: Request) {
   if (!validPeriod(month, year)) {
     return NextResponse.json({ error: "Tháng/năm không hợp lệ" }, { status: 400 });
   }
-  if (type !== "ANNUAL" && type !== "UNPAID" && type !== "NONE") {
+  if (type !== "ANNUAL" && type !== "UNPAID" && type !== "HALF_DAY" && type !== "NONE") {
     return NextResponse.json({ error: "Loại nghỉ không hợp lệ" }, { status: 400 });
   }
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -128,10 +136,11 @@ export async function POST(req: Request) {
       create: { userId, date, type: "ANNUAL", note: body.note ?? null, createdById: session.user.id },
     });
   } else {
+    // Nghỉ thường (trừ 1 công) và nghỉ nửa ngày (trừ 0,5 công) — không có hạn mức.
     await prisma.leaveDay.upsert({
       where:  { userId_date: { userId, date } },
-      update: { type: "UNPAID", ...(body.note !== undefined && { note: body.note }) },
-      create: { userId, date, type: "UNPAID", note: body.note ?? null, createdById: session.user.id },
+      update: { type, ...(body.note !== undefined && { note: body.note }) },
+      create: { userId, date, type, note: body.note ?? null, createdById: session.user.id },
     });
   }
 

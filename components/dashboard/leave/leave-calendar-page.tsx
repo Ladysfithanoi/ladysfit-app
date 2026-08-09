@@ -5,17 +5,19 @@
  * ngày đó và chọn loại nghỉ:
  *   • Nghỉ phép năm — vẫn hưởng đủ lương, tối đa 12 ngày/năm (mỗi tháng làm việc
  *     1 ngày), một đợt liên tiếp tối đa 5 ngày, không dùng hết thì mất khi hết năm.
- *   • Nghỉ thường — bị trừ vào ngày công thực tế của bảng lương tháng đó.
+ *   • Nghỉ thường — bị trừ 1 ngày công thực tế của bảng lương tháng đó.
+ *   • Nghỉ nửa ngày — chỉ bị trừ 0,5 ngày công thực tế.
  *
  * Chủ nhật không tích được vì ngày công chuẩn đã trừ sẵn Chủ nhật.
  * Xem lib/leave-days.ts cho toàn bộ quy tắc phía server.
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Check, CalendarDays, X, Umbrella, Ban } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, CalendarDays, X, Umbrella, Ban, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDays } from "@/lib/work-days";
 
-type LeaveType = "ANNUAL" | "UNPAID";
+type LeaveType = "ANNUAL" | "UNPAID" | "HALF_DAY";
 
 type Staff = {
   id:    string;
@@ -40,6 +42,9 @@ type Props = {
 type MonthState = {
   days:             { day: number; type: LeaveType }[];
   unpaidCount:      number;
+  halfDayCount:     number;
+  /** Tổng ngày công bị trừ: nghỉ thường 1, nghỉ nửa ngày 0,5 — có thể lẻ .5. */
+  deductedDays:     number;
   annualQuota:      number;
   annualUsed:       number;
   annualRemaining:  number;
@@ -56,7 +61,7 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 const EMPTY: MonthState = {
-  days: [], unpaidCount: 0,
+  days: [], unpaidCount: 0, halfDayCount: 0, deductedDays: 0,
   annualQuota: 0, annualUsed: 0, annualRemaining: 0,
   standardWorkDays: 0, actualWorkDays: 0,
 };
@@ -190,7 +195,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
         <div>
           <h1 className="text-xl font-extrabold text-gray-800">Lịch nghỉ</h1>
           <p className="text-xs text-gray-400 font-medium">
-            Bấm vào ngày để chọn nghỉ phép (đủ lương) hoặc nghỉ thường (trừ ngày công).
+            Bấm vào ngày để chọn nghỉ phép (đủ lương), nghỉ thường (trừ 1 công) hoặc nghỉ nửa ngày (trừ 0,5 công).
           </p>
         </div>
       </div>
@@ -272,10 +277,15 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
             color: state.annualRemaining > 0 ? "text-emerald-600" : "text-gray-400",
           },
           {
-            label: "Nghỉ thường tháng này",
-            value: `${state.unpaidCount} ngày`,
-            hint:  state.unpaidCount > 0 ? "bị trừ ngày công" : "không bị trừ gì",
-            color: state.unpaidCount > 0 ? "text-[#f15b5c]" : "text-gray-700",
+            label: "Nghỉ trừ công tháng này",
+            value: `${formatDays(state.deductedDays)} ngày`,
+            hint:  state.deductedDays > 0
+              ? [
+                  state.unpaidCount  > 0 ? `${state.unpaidCount} ngày thường` : "",
+                  state.halfDayCount > 0 ? `${state.halfDayCount} buổi nửa ngày` : "",
+                ].filter(Boolean).join(" · ")
+              : "không bị trừ gì",
+            color: state.deductedDays > 0 ? "text-[#f15b5c]" : "text-gray-700",
           },
           {
             label: "Ngày công chuẩn",
@@ -285,7 +295,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
           },
           {
             label: "Ngày công thực tế",
-            value: `${state.actualWorkDays} ngày`,
+            value: `${formatDays(state.actualWorkDays)} ngày`,
             hint:  "phép năm vẫn tính đủ công",
             color: "text-gray-800",
           },
@@ -337,7 +347,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                       ? "bg-emerald-50 hover:bg-emerald-100/70"
                       : type === "UNPAID"
                         ? "bg-[#f15b5c]/10 hover:bg-[#f15b5c]/15"
-                        : "bg-white hover:bg-gray-50",
+                        : type === "HALF_DAY"
+                          ? "bg-amber-50 hover:bg-amber-100/70"
+                          : "bg-white hover:bg-gray-50",
                   savingDay === day && "opacity-60",
                 )}
               >
@@ -351,7 +363,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                         ? "text-emerald-600"
                         : type === "UNPAID"
                           ? "text-[#f15b5c]"
-                          : "text-gray-600",
+                          : type === "HALF_DAY"
+                            ? "text-amber-600"
+                            : "text-gray-600",
                 )}>
                   {day}
                 </span>
@@ -366,6 +380,10 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#f15b5c] text-white text-[10px] font-bold">
                     <Check className="w-3 h-3" /> Nghỉ
                   </span>
+                ) : type === "HALF_DAY" ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-bold">
+                    <Clock className="w-3 h-3" /> Nửa ngày
+                  </span>
                 ) : null}
               </button>
             );
@@ -377,7 +395,10 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
             <span className="w-3 h-3 rounded bg-emerald-500" /> Nghỉ phép — đủ lương
           </span>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
-            <span className="w-3 h-3 rounded bg-[#f15b5c]" /> Nghỉ thường — trừ ngày công
+            <span className="w-3 h-3 rounded bg-[#f15b5c]" /> Nghỉ thường — trừ 1 ngày công
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+            <span className="w-3 h-3 rounded bg-amber-500" /> Nghỉ nửa ngày — trừ 0,5 ngày công
           </span>
           <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
             <span className="w-3 h-3 rounded bg-gray-200" /> Chủ nhật — không tính ngày công
@@ -388,7 +409,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
           tối đa 5 ngày, không dùng hết thì mất khi hết năm (không cộng dồn).
           {currentUserRole === "PT"
             ? " FM vẫn có thể chỉnh lại ngày công khi chốt lương."
-            : " Bảng lương chỉ trừ ngày nghỉ thường."}
+            : " Bảng lương chỉ trừ nghỉ thường (1 công) và nghỉ nửa ngày (0,5 công)."}
         </p>
       </div>
 
@@ -455,6 +476,23 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                         <span className="block text-[11px] text-gray-400">Trừ 1 ngày công của tháng</span>
                       </span>
                       {current === "UNPAID" && <Check className="w-4 h-4 text-[#f15b5c]" />}
+                    </button>
+
+                    <button
+                      onClick={() => setDayType(pickerDay, "HALF_DAY")}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors",
+                        current === "HALF_DAY"
+                          ? "border-amber-500 bg-amber-50"
+                          : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                      <span className="flex-1">
+                        <span className="block text-sm font-bold text-gray-800">Nghỉ nửa ngày</span>
+                        <span className="block text-[11px] text-gray-400">Chỉ trừ 0,5 ngày công của tháng</span>
+                      </span>
+                      {current === "HALF_DAY" && <Check className="w-4 h-4 text-amber-500" />}
                     </button>
 
                     {current && (

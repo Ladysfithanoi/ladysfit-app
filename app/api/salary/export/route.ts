@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
 import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
+import { formatDays } from "@/lib/work-days";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -273,7 +274,7 @@ export async function POST(req: Request) {
       const leaveDays = Number(rec.leaveDays ?? 0);
       const workDaysText = role === "ADMIN" || stdDays <= 0
         ? "—"
-        : `${Number(rec.actualWorkDays ?? 0)}/${stdDays}${leaveDays > 0 ? ` (nghỉ ${leaveDays})` : ""}`;
+        : `${formatDays(Number(rec.actualWorkDays ?? 0))}/${stdDays}${leaveDays > 0 ? ` (nghỉ ${formatDays(leaveDays)})` : ""}`;
 
       const rowData = [
         stt,

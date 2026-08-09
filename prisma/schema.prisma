@@ -1171,12 +1171,13 @@ model SalaryRecord {
   // FM nhập. Lương cứng (lương CB + phụ cấp) được chia theo thực tế / chuẩn;
   // hoa hồng, tiền buổi dạy và thưởng không bị chia. Xem lib/work-days.ts.
   standardWorkDays    Int          @default(0)
-  actualWorkDays      Int          @default(0)
-  // Số ngày nghỉ KHÔNG LƯƠNG lấy từ lịch nghỉ (leave_days) tại lần tính gần nhất;
-  // nghỉ phép năm không tính vào đây vì vẫn hưởng đủ lương. Khi lịch nghỉ đổi,
-  // ngày công thực tế được trừ đúng phần chênh lệch nên số FM sửa tay vẫn giữ.
-  // Xem lib/leave-days.ts.
-  leaveDays           Int          @default(0)
+  // Float vì nghỉ nửa ngày chỉ trừ 0,5 ngày công.
+  actualWorkDays      Float        @default(0)
+  // Số ngày công bị trừ theo lịch nghỉ (leave_days) tại lần tính gần nhất: nghỉ
+  // thường 1 ngày, nghỉ nửa ngày 0,5 ngày; nghỉ phép năm không tính vào đây vì
+  // vẫn hưởng đủ lương. Khi lịch nghỉ đổi, ngày công thực tế được trừ đúng phần
+  // chênh lệch nên số FM sửa tay vẫn giữ. Xem lib/leave-days.ts.
+  leaveDays           Float        @default(0)
   bhxh                Float        @default(0)
   totalSalary         Float        @default(0)
   kocCommission       Float        @default(0)
@@ -1202,17 +1203,19 @@ model SalaryRecord {
 enum LeaveType {
   ANNUAL
   UNPAID
+  HALF_DAY
 }
 
-/// Một ngày nghỉ của nhân sự, tích trực tiếp trên lịch. Chỉ ngày NGHỈ THƯỜNG
-/// (UNPAID, đã bỏ Chủ nhật vì Chủ nhật vốn không tính công) mới bị trừ vào ngày
-/// công thực tế của bảng lương tháng đó.
+/// Một ngày nghỉ của nhân sự, tích trực tiếp trên lịch. Nghỉ thường (UNPAID)
+/// trừ 1 ngày công, nghỉ nửa ngày (HALF_DAY) trừ 0,5 ngày công, phép năm
+/// (ANNUAL) không trừ gì. Chủ nhật không tích được vì vốn không tính công.
 model LeaveDay {
   id          String   @id @default(cuid())
   userId      String
   /// Ngày nghỉ, chỉ phần ngày — luôn dựng bằng UTC để khớp cột DATE của Postgres.
   date        DateTime @db.Date
-  /// Phép năm (đủ lương) hay nghỉ thường (trừ ngày công). Xem lib/leave-days.ts.
+  /// Phép năm (đủ lương), nghỉ thường (trừ 1 công) hay nghỉ nửa ngày (trừ 0,5
+  /// công). Xem lib/leave-days.ts.
   type        LeaveType @default(UNPAID)
   note        String?
   /// Người tích lịch: chính nhân sự đó, FM của cơ sở hoặc Admin.

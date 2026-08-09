@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { countUnpaidLeaveByUser } from "@/lib/leave-days";
+import { sumLeaveDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 
 export async function GET(req: Request) {
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   // nghỉ xong sẽ không thấy gì đổi. Đồng bộ luôn phần ngày nghỉ ở đây: trừ đúng
   // phần lịch nghỉ chênh so với lần tính trước, giữ nguyên số FM sửa tay.
   if (record && record.standardWorkDays > 0) {
-    const leaveCount = (await countUnpaidLeaveByUser([session.user.id], month, year))[session.user.id] ?? 0;
+    const leaveCount = (await sumLeaveDeductionByUser([session.user.id], month, year))[session.user.id] ?? 0;
     if (leaveCount !== record.leaveDays) {
       const actualWorkDays = Math.max(0, Math.min(
         record.actualWorkDays - (leaveCount - record.leaveDays),

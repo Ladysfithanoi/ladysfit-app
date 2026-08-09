@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { canManageLeaveOf, countUnpaidLeaveByUser } from "@/lib/leave-days";
+import { canManageLeaveOf, sumLeaveDeductionByUser } from "@/lib/leave-days";
 
 /**
- * Số ngày nghỉ THƯỜNG trong tháng của nhiều nhân sự cùng lúc — modal tạo bảng
- * lương dùng để điền sẵn ngày công thực tế (chuẩn − nghỉ). Nghỉ phép năm không
- * tính vào đây vì vẫn hưởng đủ lương.
+ * Số NGÀY CÔNG bị trừ trong tháng của nhiều nhân sự cùng lúc (nghỉ thường 1,
+ * nghỉ nửa ngày 0,5) — modal tạo bảng lương dùng để điền sẵn ngày công thực tế
+ * (chuẩn − nghỉ). Nghỉ phép năm không tính vào đây vì vẫn hưởng đủ lương.
  */
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,5 +26,5 @@ export async function GET(req: Request) {
   const allowedFlags = await Promise.all(ids.map(id => canManageLeaveOf(session.user, id)));
   const allowedIds   = ids.filter((_, i) => allowedFlags[i]);
 
-  return NextResponse.json(await countUnpaidLeaveByUser(allowedIds, month, year));
+  return NextResponse.json(await sumLeaveDeductionByUser(allowedIds, month, year));
 }

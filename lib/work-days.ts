@@ -28,3 +28,11 @@ export function workDayRatio(actualWorkDays: number, standard: number): number {
   if (actualWorkDays <= 0) return 0;
   return Math.min(actualWorkDays, standard) / standard;
 }
+
+/**
+ * Ngày công để hiển thị: nghỉ nửa ngày làm số ngày lẻ .5 nên viết kiểu Việt Nam
+ * ("25,5"), số nguyên thì không kèm phần thập phân ("25").
+ */
+export function formatDays(days: number): string {
+  return Number.isInteger(days) ? String(days) : days.toFixed(1).replace(".", ",");
+}

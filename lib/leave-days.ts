@@ -3,9 +3,10 @@
  *
  * Mỗi ngày nhân sự (hoặc FM/Admin) tích trên lịch là một dòng trong `leave_days`,
  * kèm loại nghỉ:
- *   • ANNUAL — nghỉ phép năm, VẪN HƯỞNG ĐỦ LƯƠNG nên không đụng tới ngày công.
- *   • UNPAID — nghỉ thường, bị trừ thẳng vào NGÀY CÔNG THỰC TẾ của bảng lương
- *     tháng đó (xem lib/work-days.ts cho cách ngày công chia lương cứng).
+ *   • ANNUAL   — nghỉ phép năm, VẪN HƯỞNG ĐỦ LƯƠNG nên không đụng tới ngày công.
+ *   • UNPAID   — nghỉ thường, bị trừ thẳng 1 NGÀY CÔNG THỰC TẾ của bảng lương
+ *                tháng đó (xem lib/work-days.ts cho cách ngày công chia lương cứng).
+ *   • HALF_DAY — nghỉ nửa ngày, chỉ bị trừ 0,5 ngày công thực tế.
  *
  * Quy định phép năm: mỗi tháng làm việc được 1 ngày phép, tối đa 12 ngày/năm,
  * không dùng hết thì mất khi hết năm (không cộng dồn sang năm sau), và một đợt
@@ -24,6 +25,16 @@ import type { LeaveType } from "@prisma/client";
 
 /** Số ngày phép tối đa của một năm làm việc đủ 12 tháng. */
 export const ANNUAL_LEAVE_PER_YEAR = 12;
+
+/**
+ * Số ngày công bị trừ cho mỗi loại nghỉ — nguồn duy nhất của quy tắc này, mọi
+ * nơi tính ngày công đều đi qua đây.
+ */
+export const LEAVE_DEDUCTION: Record<LeaveType, number> = {
+  ANNUAL:   0,
+  UNPAID:   1,
+  HALF_DAY: 0.5,
+};
 
 /** Số ngày phép tối đa của một đợt nghỉ liên tiếp. */
 export const MAX_CONSECUTIVE_ANNUAL = 5;
@@ -71,28 +82,33 @@ export async function getLeaveDaysOfMonth(
 }
 
 /**
- * Số ngày nghỉ KHÔNG LƯƠNG của từng nhân sự trong tháng (đã bỏ Chủ nhật) — đây
- * là số bị trừ vào ngày công. Nghỉ phép năm không tính vào đây.
+ * Số NGÀY CÔNG bị trừ của từng nhân sự trong tháng (đã bỏ Chủ nhật): nghỉ
+ * thường 1, nghỉ nửa ngày 0,5 — nên kết quả có thể là số lẻ .5. Nghỉ phép năm
+ * không tính vào đây vì vẫn hưởng đủ lương.
  * Nhân sự không có ngày nghỉ nào vẫn có khoá trong kết quả với giá trị 0.
  */
-export async function countUnpaidLeaveByUser(
+export async function sumLeaveDeductionByUser(
   userIds: string[],
   month:   number,
   year:    number,
 ): Promise<Record<string, number>> {
-  const counts: Record<string, number> = {};
-  for (const id of userIds) counts[id] = 0;
-  if (userIds.length === 0) return counts;
+  const deducted: Record<string, number> = {};
+  for (const id of userIds) deducted[id] = 0;
+  if (userIds.length === 0) return deducted;
 
   const rows = await prisma.leaveDay.findMany({
-    where:  { userId: { in: userIds }, date: monthDateRange(month, year), type: "UNPAID" },
-    select: { userId: true, date: true },
+    where:  {
+      userId: { in: userIds },
+      date:   monthDateRange(month, year),
+      type:   { in: ["UNPAID", "HALF_DAY"] },
+    },
+    select: { userId: true, date: true, type: true },
   });
   for (const row of rows) {
     if (isSunday(row.date)) continue;
-    counts[row.userId] = (counts[row.userId] ?? 0) + 1;
+    deducted[row.userId] = (deducted[row.userId] ?? 0) + LEAVE_DEDUCTION[row.type];
   }
-  return counts;
+  return deducted;
 }
 
 // ── Phép năm ───────────────────────────────────────────────────────────────

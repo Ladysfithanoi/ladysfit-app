@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { formatDays } from "@/lib/work-days";
 import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
@@ -12,7 +13,7 @@ type SalaryRecord = {
   seniorityBonus:       number;
   standardWorkDays:     number;
   actualWorkDays:       number;
-  /** Ngày nghỉ lấy từ lịch nghỉ, đã trừ vào ngày công thực tế. */
+  /** Ngày công bị trừ theo lịch nghỉ (nghỉ thường 1, nửa ngày 0,5). */
   leaveDays:            number;
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
@@ -142,10 +143,12 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
               {/* Ngày công: lương cơ bản được chia theo thực tế / chuẩn */}
               {record.standardWorkDays > 0 && (
                 <Row
-                  label={(record.leaveDays ?? 0) > 0 ? `Ngày công (nghỉ thường ${record.leaveDays} ngày)` : "Ngày công"}
+                  label={(record.leaveDays ?? 0) > 0
+                    ? `Ngày công (nghỉ ${formatDays(record.leaveDays)} ngày)`
+                    : "Ngày công"}
                   value={record.actualWorkDays >= record.standardWorkDays
-                    ? `${record.actualWorkDays}/${record.standardWorkDays} ngày (đủ công)`
-                    : `${record.actualWorkDays}/${record.standardWorkDays} ngày`}
+                    ? `${formatDays(record.actualWorkDays)}/${record.standardWorkDays} ngày (đủ công)`
+                    : `${formatDays(record.actualWorkDays)}/${record.standardWorkDays} ngày`}
                 />
               )}
 

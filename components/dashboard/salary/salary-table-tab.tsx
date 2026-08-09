@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, X, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDays } from "@/lib/work-days";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
 import { SessionDetailTable } from "./session-detail-table";
@@ -26,8 +27,9 @@ type SalaryRecord = {
   renewBonus: number;
   fixedAllowances: number;
   standardWorkDays: number;
+  /** Có thể lẻ .5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */
   actualWorkDays: number;
-  /** Số ngày nghỉ lấy từ lịch nghỉ, đã trừ vào ngày công thực tế. */
+  /** Ngày công bị trừ theo lịch nghỉ (nghỉ thường 1, nửa ngày 0,5). */
   leaveDays: number;
   kocCommission: number;
   kolCommission: number;
@@ -50,7 +52,7 @@ type GenEntry = {
   googleReviews: number;
   renewContracts: number;
   actualWorkDays: number;
-  /** Ngày nghỉ đọc từ lịch nghỉ — đã trừ sẵn vào actualWorkDays. */
+  /** Ngày công bị trừ theo lịch nghỉ (nửa ngày = 0,5) — đã trừ sẵn vào actualWorkDays. */
   leaveDays: number;
 };
 
@@ -291,7 +293,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         body: JSON.stringify({
           advancePaid:    parseFloat(editAdvance) || 0,
           notes:          editNotes,
-          actualWorkDays: parseInt(editWorkDays, 10) || 0,
+          actualWorkDays: parseFloat(editWorkDays) || 0,
         }),
       });
       if (res.ok) {
@@ -355,13 +357,13 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     const fromCalendar = r.leaveDays ?? 0;
     return (
       <td className="px-3 py-2.5 whitespace-nowrap">
-        <span className={cn("font-bold", full ? "text-gray-700" : "text-orange-500")}>{act}</span>
+        <span className={cn("font-bold", full ? "text-gray-700" : "text-orange-500")}>{formatDays(act)}</span>
         <span className="text-gray-400">/{std} ngày</span>
         {!full && (
-          <span className="block text-[10px] text-orange-400">nghỉ {std - act} ngày</span>
+          <span className="block text-[10px] text-orange-400">nghỉ {formatDays(std - act)} ngày</span>
         )}
         {fromCalendar > 0 && (
-          <span className="block text-[10px] text-gray-400">{fromCalendar} ngày nghỉ thường từ lịch</span>
+          <span className="block text-[10px] text-gray-400">{formatDays(fromCalendar)} ngày công nghỉ từ lịch</span>
         )}
       </td>
     );
@@ -822,16 +824,18 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           Ngày công thực tế
                           <span className="text-gray-400 font-normal"> / {standardWorkDays(month, year)} ngày chuẩn</span>
                         </label>
+                        {/* step 0,5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */}
                         <input
-                          type="number" min={0} max={standardWorkDays(month, year)}
+                          type="number" min={0} max={standardWorkDays(month, year)} step={0.5}
                           value={entry.actualWorkDays}
                           onFocus={(e) => e.target.select()}
-                          onChange={e => updateEntry(entry.userId, "actualWorkDays", parseInt(e.target.value) || 0)}
+                          onChange={e => updateEntry(entry.userId, "actualWorkDays", parseFloat(e.target.value) || 0)}
                           className={numInput + " w-full text-left"}
                         />
                         {entry.leaveDays > 0 && (
                           <p className="text-[10px] font-semibold text-orange-500">
-                            Đã trừ {entry.leaveDays} ngày nghỉ thường theo lịch nghỉ (phép năm không trừ)
+                            Đã trừ {formatDays(entry.leaveDays)} ngày công nghỉ theo lịch nghỉ
+                            (nghỉ nửa ngày 0,5 công; phép năm không trừ)
                           </p>
                         )}
                         <p className="text-[10px] text-gray-400">
@@ -981,12 +985,13 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, 
               <label className="text-xs font-semibold text-gray-500">
                 Ngày công thực tế <span className="text-gray-400 font-normal">/ {standardDays} ngày chuẩn</span>
               </label>
-              <input type="number" min={0} max={standardDays} value={editWorkDays}
+              {/* step 0,5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */}
+              <input type="number" min={0} max={standardDays} step={0.5} value={editWorkDays}
                 onFocus={(e) => e.target.select()} onChange={e => onWorkDays(e.target.value)}
                 className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
               {leaveDays > 0 && (
                 <p className="text-[10px] text-orange-500 font-semibold">
-                  Đã trừ {leaveDays} ngày nghỉ thường từ lịch nghỉ
+                  Đã trừ {formatDays(leaveDays)} ngày công nghỉ từ lịch nghỉ
                 </p>
               )}
             </div>
