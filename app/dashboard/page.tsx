@@ -88,6 +88,7 @@ export default async function DashboardPage() {
           initialWeight: true,
           currentWeight: true,
           height: true,
+          createdAt: true,
           updatedAt: true,
           branchId: true,
           assignedPTId: true,
@@ -171,6 +172,42 @@ export default async function DashboardPage() {
     const isTransformed = (c: { initialWeight: number; currentWeight: number }) =>
       c.initialWeight - c.currentWeight >= 7;
 
+    // Transform-quality counters grouped by (branch, year, month of createdAt). The client
+    // component sums the buckets it needs for the selected branch + period.
+    const buildTransformQuality = () => {
+      const buckets = new Map<string, AdminStats["transformQuality"][number]>();
+      for (const c of allClients) {
+        if (!isClassifiable(c)) continue;
+        const year = c.createdAt.getFullYear();
+        const month = c.createdAt.getMonth();
+        const key = `${c.branchId}|${year}|${month}`;
+        let b = buckets.get(key);
+        if (!b) {
+          b = {
+            branchId: c.branchId,
+            year,
+            month,
+            eligible: 0,
+            eligibleTransformed: 0,
+            notEligible: 0,
+            notEligibleTransformed: 0,
+            eligibleNotTransformedOngoing: 0,
+          };
+          buckets.set(key, b);
+        }
+        const t = isTransformed(c);
+        if (isEligible(c)) {
+          b.eligible += 1;
+          if (t) b.eligibleTransformed += 1;
+          else if (ongoingProgramClientIds.has(c.id)) b.eligibleNotTransformedOngoing += 1;
+        } else {
+          b.notEligible += 1;
+          if (t) b.notEligibleTransformed += 1;
+        }
+      }
+      return Array.from(buckets.values());
+    };
+
     const stats: AdminStats = {
       totalClients: allClients.length,
       activeClients: allClients.filter((c) => c.status === "ACTIVE").length,
@@ -202,32 +239,9 @@ export default async function DashboardPage() {
         branchName: c.branch.name,
         date: (firstTransformDate.get(c.id) ?? c.updatedAt).toISOString(),
       })),
-      transformQuality: branches.map((b) => {
-        const bc = allClients.filter((c) => c.branchId === b.id);
-        let eligible = 0, eligibleTransformed = 0, notEligible = 0, notEligibleTransformed = 0;
-        let eligibleNotTransformedOngoing = 0;
-        for (const c of bc) {
-          const t = isTransformed(c);
-          if (isClassifiable(c)) {
-            if (isEligible(c)) {
-              eligible += 1;
-              if (t) eligibleTransformed += 1;
-              else if (ongoingProgramClientIds.has(c.id)) eligibleNotTransformedOngoing += 1;
-            } else {
-              notEligible += 1;
-              if (t) notEligibleTransformed += 1;
-            }
-          }
-        }
-        return {
-          branchId: b.id,
-          eligible,
-          eligibleTransformed,
-          notEligible,
-          notEligibleTransformed,
-          eligibleNotTransformedOngoing,
-        };
-      }),
+      // Bucketed per branch + per month of the client's start date (createdAt) so the UI
+      // can aggregate the ratios by month / quarter / year (or all time).
+      transformQuality: buildTransformQuality(),
       notTransformedClients: allClients
         .filter((c) => !isTransformed(c))
         .map((c) => ({

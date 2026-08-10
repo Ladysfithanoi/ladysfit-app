@@ -39,6 +39,8 @@ export type AdminStats = {
   }[];
   transformQuality: {
     branchId: string;
+    year: number;
+    month: number; // 0-11, from the client's start date (createdAt)
     eligible: number;
     eligibleTransformed: number;
     notEligible: number;
