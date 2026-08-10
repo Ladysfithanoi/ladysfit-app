@@ -23,7 +23,7 @@ export default async function ConsultationPage() {
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
         branch: { select: { id: true, name: true } },
-        info: { select: { fullName: true, phone: true } },
+        info: { select: { fullName: true, phone: true, email: true } },
       },
       orderBy: { updatedAt: "desc" },
     }),

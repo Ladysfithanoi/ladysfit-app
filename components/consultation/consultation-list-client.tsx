@@ -21,7 +21,7 @@ type ConsultationRow = {
   convertedClientId: string | null;
   createdBy: { id: string; name: string | null; email: string };
   branch: { id: string; name: string };
-  info: { fullName: string; phone: string } | null;
+  info: { fullName: string; phone: string; email: string | null } | null;
 };
 
 const STEP_LABELS = ["CIF", "Thẩm định", "Chương trình", "Chế độ ăn", "Lộ trình"];
@@ -85,7 +85,7 @@ export function ConsultationListClient({
   const [creating, setCreating] = useState(false);
 
   // Filters
-  const [phoneSearch, setPhoneSearch] = useState("");
+  const [search, setSearch] = useState("");
   const [ptFilter, setPtFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -98,7 +98,7 @@ export function ConsultationListClient({
 
   const showPtFilter = isAdmin || isFM;
   const showBranchFilter = isAdmin || isFM;
-  const hasFilters = !!(phoneSearch || ptFilter || branchFilter || dateFrom || dateTo);
+  const hasFilters = !!(search || ptFilter || branchFilter || dateFrom || dateTo);
 
   // Branches visible in the dropdown: all for ADMIN, managed-only for FM
   const visibleBranches = isAdmin
@@ -120,7 +120,7 @@ export function ConsultationListClient({
   }
 
   function clearFilters() {
-    setPhoneSearch("");
+    setSearch("");
     setPtFilter("");
     setBranchFilter("");
     setDateFrom("");
@@ -128,8 +128,15 @@ export function ConsultationListClient({
   }
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return consultations.filter((c) => {
-      if (phoneSearch && !(c.info?.phone ?? "").includes(phoneSearch)) return false;
+      if (q) {
+        const matchSearch =
+          (c.info?.phone ?? "").includes(q) ||
+          (c.info?.fullName ?? "").toLowerCase().includes(q) ||
+          (c.info?.email ?? "").toLowerCase().includes(q);
+        if (!matchSearch) return false;
+      }
       if (ptFilter && c.createdBy.id !== ptFilter) return false;
       if (branchFilter && c.branch.id !== branchFilter) return false;
       if (dateFrom) {
@@ -148,7 +155,7 @@ export function ConsultationListClient({
       }
       return true;
     });
-  }, [consultations, phoneSearch, ptFilter, branchFilter, dateFrom, dateTo]);
+  }, [consultations, search, ptFilter, branchFilter, dateFrom, dateTo]);
 
   const displayed = filtered.filter((c) => c.status === tab);
   const draftCount = filtered.filter((c) => c.status === "DRAFT").length;
@@ -163,7 +170,7 @@ export function ConsultationListClient({
   // Reset to first page whenever the result set changes (tab switch / filtering)
   useEffect(() => {
     setPage(1);
-  }, [tab, phoneSearch, ptFilter, branchFilter, dateFrom, dateTo]);
+  }, [tab, search, ptFilter, branchFilter, dateFrom, dateTo]);
 
   async function handleCreate() {
     setCreating(true);
@@ -229,14 +236,14 @@ export function ConsultationListClient({
       {/* Filter bar */}
       <div className="mb-4 space-y-2">
         <div className="flex flex-col gap-2 w-full md:flex-row md:items-center md:flex-wrap">
-          {/* Phone search */}
-          <div className="relative w-full md:w-auto md:min-w-[160px]">
+          {/* Search — phone / name / email */}
+          <div className="relative w-full md:w-auto md:min-w-[240px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
             <input
               type="text"
-              placeholder="Tìm theo số điện thoại..."
-              value={phoneSearch}
-              onChange={(e) => setPhoneSearch(e.target.value)}
+              placeholder="Tìm theo SĐT, họ tên hoặc email..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className={cn(inputCls, "pl-9 w-full")}
             />
           </div>
