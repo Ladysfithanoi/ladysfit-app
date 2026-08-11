@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/prisma";
+import { countTransformsByPt } from "@/lib/transform-credit";
 
 // ── Bộ máy xét thăng hạng PT ─────────────────────────────────────────────────
 // Một PT ở cấp hiện tại được thăng lên cấp kế tiếp khi đủ CẢ 4 điều kiện:
 //   1. Đậu bài kiểm tra lý thuyết (lần thi gần nhất passed)
 //   2. Đạt bài kiểm tra thực hành (lần chấm gần nhất passed, còn hạn theo retestIntervalDays)
 //   3. TB doanh số/tháng ≥ promoteMinAvgRevenue của cấp hiện tại
-//   4. Số khách transform ≥ promoteMinTransform của cấp hiện tại
+//   4. Số khách transform ≥ promoteMinTransform của cấp hiện tại — chỉ đếm
+//      transform được ghi công cho chính họ (kèm khách đủ 6 tuần trước mốc),
+//      nhận khách có sẵn transform của người khác thì không tính (transform-credit)
 // Cấp cao nhất (không còn cấp trên) thì giữ nguyên.
 
 export type PromotionCondition = {
@@ -46,26 +49,18 @@ export async function computePtStats(
 
   const months = avgMonthsForYear(year);
 
-  const [leads, clients] = await Promise.all([
+  const [leads, transformByPt] = await Promise.all([
     prisma.salesLead.findMany({
       where: { assignedPTId: { in: ptIds }, year, month: { lte: months } },
       select: { assignedPTId: true, actualRevenue: true },
     }),
-    prisma.client.findMany({
-      where: { assignedPTId: { in: ptIds }, hasTransformed: true },
-      select: { assignedPTId: true },
-    }),
+    countTransformsByPt(),
   ]);
 
   const revenueByPt = new Map<string, number>();
   for (const l of leads) {
     if (!l.assignedPTId) continue;
     revenueByPt.set(l.assignedPTId, (revenueByPt.get(l.assignedPTId) ?? 0) + (l.actualRevenue ?? 0));
-  }
-  const transformByPt = new Map<string, number>();
-  for (const c of clients) {
-    if (!c.assignedPTId) continue;
-    transformByPt.set(c.assignedPTId, (transformByPt.get(c.assignedPTId) ?? 0) + 1);
   }
 
   for (const id of ptIds) {

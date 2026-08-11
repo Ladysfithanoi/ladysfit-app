@@ -38,7 +38,13 @@ const DAY_MS = 86_400_000;
 
 export type TransformCredit = {
   clientId: string;
-  /** Người được ghi công; null = không ai (đổi tay quá sát mốc hoặc không rõ). */
+  /** Cơ sở của khách — để gom transform về đúng cơ sở khi thống kê. */
+  branchId: string;
+  /**
+   * Người được ghi công; null = không ai. Transform không có chủ VẪN là
+   * transform của Ladysfit: mọi con số TỔNG (hệ thống, cơ sở, đội) phải đếm cả
+   * những dòng này, chỉ phần chia theo đầu người mới bỏ qua chúng.
+   */
   ptId: string | null;
   /** Ngày đạt mốc — quyết định transform rơi vào kỳ nào của bảng xếp hạng. */
   date: Date;
@@ -103,7 +109,14 @@ function creditedPt(client: ClientRow, history: Segment[], date: Date): string |
 export async function computeTransformCredits(): Promise<TransformCredit[]> {
   const clients = await prisma.client.findMany({
     where: { hasTransformed: true },
-    select: { id: true, assignedPTId: true, initialWeight: true, createdAt: true, updatedAt: true },
+    select: {
+      id: true,
+      branchId: true,
+      assignedPTId: true,
+      initialWeight: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
   if (clients.length === 0) return [];
 
@@ -141,20 +154,23 @@ export async function computeTransformCredits(): Promise<TransformCredit[]> {
   return clients.map((c) => {
     const date = milestoneByClient.get(c.id) ?? c.updatedAt;
     const history = buildHistory(c, segmentsByClient.get(c.id) ?? []);
-    return { clientId: c.id, date, ptId: creditedPt(c, history, date) };
+    return { clientId: c.id, branchId: c.branchId, date, ptId: creditedPt(c, history, date) };
   });
 }
 
-/** Số khách transform được ghi công cho từng người trong khoảng [start, end). */
+/**
+ * Số khách transform được ghi công cho từng người. Không truyền khoảng thời
+ * gian thì đếm cả đời (dùng cho điều kiện thăng cấp, tab hiệu suất); truyền thì
+ * chỉ đếm transform đạt mốc trong [start, end) (dùng cho bảng xếp hạng theo kỳ).
+ */
 export async function countTransformsByPt(
-  start: Date,
-  end: Date
+  range?: { start: Date; end: Date }
 ): Promise<Map<string, number>> {
   const credits = await computeTransformCredits();
   const counts = new Map<string, number>();
   for (const credit of credits) {
     if (!credit.ptId) continue;
-    if (credit.date < start || credit.date >= end) continue;
+    if (range && (credit.date < range.start || credit.date >= range.end)) continue;
     counts.set(credit.ptId, (counts.get(credit.ptId) ?? 0) + 1);
   }
   return counts;

@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SALES_TARGET, salesTargetFor } from "@/lib/roles";
+import { computeTransformCredits } from "@/lib/transform-credit";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -66,22 +67,40 @@ export async function GET(req: Request) {
 
   // Số khách hàng thực tế PT phụ trách (đếm Client, không cộng dồn lead won theo tháng
   // — 1 khách gia hạn nhiều lần chỉ tính 1) + số khách đã gán mác đạt transform.
-  const clientRows = await prisma.client.findMany({
-    where: {
-      branchId,
-      ...(isPT ? { assignedPTId: session.user.id } : {}),
-    },
-    select: {
-      assignedPTId: true,
-      hasTransformed: true,
-      assignedPT: {
-        select: {
-          name: true, email: true, role: true,
-          ptLevel: { select: { name: true, monthlyTarget: true } },
+  const [clientRows, allCredits] = await Promise.all([
+    prisma.client.findMany({
+      where: {
+        branchId,
+        ...(isPT ? { assignedPTId: session.user.id } : {}),
+      },
+      select: {
+        id: true,
+        assignedPTId: true,
+        hasTransformed: true,
+        assignedPT: {
+          select: {
+            name: true, email: true, role: true,
+            ptLevel: { select: { name: true, monthlyTarget: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    computeTransformCredits(),
+  ]);
+
+  // Transform của cơ sở, ghi công theo luật 6 tuần (lib/transform-credit): mỗi
+  // transform chỉ về tay một người, người nhận khách có sẵn transform không
+  // được tính. Phần không thuộc về ai — người làm ra đã nghỉ, khách đổi tay quá
+  // sát mốc — dồn vào "phòng tập" để TỔNG của cơ sở không hụt đi.
+  // PT chỉ xem được số của chính mình nên không thấy phần của cả cơ sở.
+  const visibleCredits = allCredits.filter(
+    (c) => c.branchId === branchId && (!isPT || c.ptId === session.user.id)
+  );
+  const creditedTransforms = new Map<string, number>();
+  for (const credit of visibleCredits) {
+    if (!credit.ptId) continue;
+    creditedTransforms.set(credit.ptId, (creditedTransforms.get(credit.ptId) ?? 0) + 1);
+  }
 
   const clientStat = new Map<string, {
     name: string;
@@ -89,7 +108,6 @@ export async function GET(req: Request) {
     levelName: string | null;
     salesTarget: number;
     clientCount: number;
-    transformedCount: number;
   }>();
   for (const c of clientRows) {
     const s = clientStat.get(c.assignedPTId) ?? {
@@ -98,10 +116,8 @@ export async function GET(req: Request) {
       levelName: c.assignedPT.ptLevel?.name ?? null,
       salesTarget: salesTargetFor(c.assignedPT.ptLevel?.monthlyTarget),
       clientCount: 0,
-      transformedCount: 0,
     };
     s.clientCount += 1;
-    if (c.hasTransformed) s.transformedCount += 1;
     clientStat.set(c.assignedPTId, s);
   }
 
@@ -164,7 +180,7 @@ export async function GET(req: Request) {
         customers: stat?.customers ?? Array(12).fill(0),
         leads: stat?.leads ?? Array(12).fill(0),
         clientCount: cStat?.clientCount ?? 0,
-        transformedCount: cStat?.transformedCount ?? 0,
+        transformedCount: creditedTransforms.get(ptId) ?? 0,
       };
     })
     // Drop personnel with no activity at all in the year and no clients.
@@ -177,10 +193,17 @@ export async function GET(req: Request) {
       return br - ar;
     });
 
+  // Transform của cơ sở không thuộc về nhân sự nào trong danh sách — người làm
+  // ra đã nghỉ, hoặc khách đổi tay quá sát mốc. Vẫn là transform của Ladysfit
+  // nên trả riêng để giao diện cộng vào tổng đội.
+  const listedTransforms = personnel.reduce((s, p) => s + p.transformedCount, 0);
+  const houseTransformedCount = visibleCredits.length - listedTransforms;
+
   return NextResponse.json({
     year,
     target: DEFAULT_SALES_TARGET, // KPI mặc định (triệu/tháng) khi PT chưa gán cấp độ
     personnel,                    // mỗi nhân sự mang salesTarget theo cấp độ riêng
     house: houseHasData ? house : null,
+    houseTransformedCount,
   });
 }

@@ -13,7 +13,7 @@ type Personnel = {
   customers: number[];
   leads: number[];
   clientCount: number;        // số khách hàng thực tế PT phụ trách (đếm Client)
-  transformedCount: number;   // số khách đã gán mác đạt transform
+  transformedCount: number;   // số khách transform được ghi công (kèm đủ 6 tuần trước mốc)
 };
 
 function nameWithRole(name: string, role?: string, levelName?: string | null) {
@@ -34,6 +34,9 @@ type PerfData = {
   target: number; // KPI doanh số mặc định / tháng (triệu) khi PT chưa gán cấp độ
   personnel: Personnel[];
   house: House | null; // doanh số lead của nhân sự đã nghỉ → tính vào phòng tập
+  // Transform của cơ sở không ghi công cho ai (người làm ra đã nghỉ, khách đổi
+  // tay quá sát mốc) — vẫn là transform của Ladysfit nên phải cộng vào tổng đội.
+  houseTransformedCount?: number;
 };
 
 type Props = {
@@ -192,7 +195,10 @@ export function PerformanceTab({ branchId, year }: Props) {
   const staffYearRevenue = sum(overviewRows.map((r) => r.yearRevenue));
   // Tổng khách hàng đội = tổng khách thực tế các PT phụ trách (không đếm lead won).
   const teamClientCount = sum(overviewRows.map((r) => r.clientCount));
-  const teamTransformedCount = sum(overviewRows.map((r) => r.transformedCount));
+  // Tổng transform của đội đếm đủ mọi khách đạt mốc của cơ sở, gồm cả phần
+  // không ghi công cho ai — transform của nhân sự đã nghỉ vẫn là của Ladysfit.
+  const houseTransformedCount = data?.houseTransformedCount ?? 0;
+  const teamTransformedCount = sum(overviewRows.map((r) => r.transformedCount)) + houseTransformedCount;
   const teamTransformPct = teamClientCount > 0 ? (teamTransformedCount / teamClientCount) * 100 : 0;
 
   // Tổng doanh số đội = nhân sự hiện tại + phòng tập (nhân sự đã nghỉ).
@@ -292,14 +298,17 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center font-semibold text-gray-800")}>{fmtRevenue(row.yearRevenue)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-800")}>{row.clientCount}</td>
                   <td className={cn(td, "text-center")}>
-                    <span className="font-semibold text-blue-600" title={`${row.transformedCount}/${row.clientCount} khách đạt transform`}>
+                    <span
+                      className="font-semibold text-blue-600"
+                      title={`${row.transformedCount}/${row.clientCount} khách transform được ghi công (kèm khách đủ 6 tuần trước ngày đạt mốc)`}
+                    >
                       {fmtPct(row.transformPct)}
                     </span>
                   </td>
                   <td className={cn(td, "text-center")}><PerfPct pct={row.perfPct} /></td>
                 </tr>
               ))}
-              {house && (houseYearRevenue > 0 || houseYearCustomers > 0) && (
+              {(houseYearRevenue > 0 || houseYearCustomers > 0 || houseTransformedCount > 0) && (
                 <tr className="even:bg-[#fafafa] bg-gray-50/40">
                   <td className={cn(td, "font-semibold text-gray-500")}>
                     🏠 Nhân sự đã nghỉ / Phòng tập
@@ -308,7 +317,12 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center text-gray-500")}>{fmtRevenue(house ? avgElapsed(house.revenue) : 0)}</td>
                   <td className={cn(td, "text-center font-semibold text-gray-700")}>{fmtRevenue(houseYearRevenue)}</td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
-                  <td className={cn(td, "text-center text-gray-300")}>—</td>
+                  <td
+                    className={cn(td, "text-center text-gray-500")}
+                    title="Transform không ghi công cho ai: người làm ra đã nghỉ, hoặc khách đổi tay quá sát ngày đạt mốc. Vẫn tính vào tổng của đội."
+                  >
+                    {houseTransformedCount > 0 ? `${houseTransformedCount} transform` : "—"}
+                  </td>
                   <td className={cn(td, "text-center text-gray-300")}>—</td>
                 </tr>
               )}

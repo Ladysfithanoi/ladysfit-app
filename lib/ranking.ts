@@ -70,7 +70,7 @@ export async function computePtPeriodStats(
           select: { assignedPTId: true, actualRevenue: true },
         })
       : Promise.resolve([]),
-    countTransformsByPt(start, end),
+    countTransformsByPt({ start, end }),
   ]);
 
   const revenueByPt = new Map<string, number>();
