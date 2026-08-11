@@ -513,13 +513,27 @@ export function RankingPage({
 }
 
 /**
- * Bảng phòng tập chỉ vinh danh top 3 nên không có bảng phụ và không phân trang
- * như bảng nhân sự — phòng ngoài top 3 không hiển thị.
+ * Bảng phòng tập: top 3 lên bục vinh danh, từ hạng 4 trở đi vào bảng bên dưới
+ * có phân trang — giống bảng nhân sự. Phòng chưa có doanh số lẫn transform
+ * trong kỳ (0 điểm) không lên bục nhưng vẫn nằm trong bảng.
  */
 function BranchBoard({ rows, period }: { rows: BranchRankRow[]; period: RankPeriod }) {
-  const top3 = rows.filter((r) => r.points > 0).slice(0, 3);
+  // rows đã sắp theo điểm giảm dần nên các phòng có điểm luôn nằm trước
+  const podiumCount = Math.min(rows.filter((r) => r.points > 0).length, 3);
+  const top3 = rows.slice(0, podiumCount);
+  const rest = rows.slice(podiumCount);
 
-  if (top3.length === 0) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(rest.length / PAGE_SIZE));
+  const pageItems = rest.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  // Đổi kỳ thì danh sách đổi theo, đưa về trang đầu
+  useEffect(() => {
+    setPage(0);
+  }, [period.type, period.year, period.month, period.quarter]);
+  useEffect(() => { if (page > totalPages - 1) setPage(0); }, [page, totalPages]);
+
+  if (podiumCount === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-2">
         <Trophy className="w-8 h-8 text-gray-200" />
@@ -532,7 +546,7 @@ function BranchBoard({ rows, period }: { rows: BranchRankRow[]; period: RankPeri
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:items-end">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 md:items-end">
         {top3.map((row, i) => {
           const deco = PODIUM[i];
           const Icon = deco.icon;
@@ -597,10 +611,99 @@ function BranchBoard({ rows, period }: { rows: BranchRankRow[]; period: RankPeri
         })}
       </div>
 
-      <p className="mt-4 text-xs text-gray-400 font-medium text-center">
-        Chỉ vinh danh 3 phòng dẫn đầu {periodLabel(period).toLowerCase()} trên tổng {rows.length}{" "}
-        phòng tập
-      </p>
+      {/* ─── Bảng xếp hạng còn lại ─── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <p className="text-base font-extrabold text-gray-900">
+            Bảng xếp hạng phòng tập — {periodLabel(period)}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {rows.length} phòng tập
+            {rest.length > 0 && ` · hạng ${top3.length + 1}–${rows.length}`}
+          </p>
+        </div>
+
+        {rest.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm text-gray-300 font-semibold">Không còn phòng tập nào khác</p>
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <table className="w-full min-w-max">
+              <thead>
+                <tr className="border-b border-gray-50 bg-gray-50/50">
+                  {["Hạng", "Phòng tập", "Doanh số TB", "Transform", "Tổng điểm"].map((h, i) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
+                        i === 1 ? "text-left" : "text-center"
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((row) => (
+                  <tr
+                    key={row.branchId}
+                    className="border-b border-gray-50 last:border-0 transition-colors hover:bg-gray-50/40"
+                  >
+                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                      <span className="inline-flex w-8 h-8 rounded-full bg-gray-100 items-center justify-center text-sm font-extrabold text-gray-600">
+                        {row.rank}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Dumbbell className="w-4 h-4 text-gray-300 shrink-0" />
+                        <p className="text-sm font-semibold text-gray-800">{row.name}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800 whitespace-nowrap">
+                      {fmtRevenue(row.avgMonthlyRevenue)}
+                    </td>
+                    <td className="px-5 py-3.5 text-center text-sm font-bold text-gray-800 whitespace-nowrap">
+                      {row.transformedCount}
+                    </td>
+                    <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                      <span className="text-sm font-extrabold text-[#f15b5c]">{row.points}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+            <span className="text-xs font-semibold text-gray-400">
+              Trang {page + 1}/{totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Trang trước"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="Trang sau"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
