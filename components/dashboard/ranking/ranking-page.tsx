@@ -85,27 +85,63 @@ const BOARDS: { key: Board; label: string }[] = [
   { key: "branch", label: "Phòng tập" },
 ];
 
+/** Bảng đã xem lần trước, để lần sau vào thẳng từ menu là mở đúng bảng đó. */
+const BOARD_STORAGE_KEY = "ladysfit.ranking.board";
+
+function readSavedBoard(): Board | null {
+  try {
+    const saved = localStorage.getItem(BOARD_STORAGE_KEY);
+    return saved === "staff" || saved === "branch" ? saved : null;
+  } catch {
+    return null; // trình duyệt chặn localStorage thì thôi, không phải lỗi
+  }
+}
+
 export function RankingPage({
   rows,
   branchRows,
   period,
   myId,
   weights,
+  initialBoard,
 }: {
   rows: RankRow[];
   branchRows: BranchRankRow[];
   period: RankPeriod;
   myId: string;
   weights: RankWeights;
+  /** Bảng ghi trong URL; null khi vào trang không kèm tham số board. */
+  initialBoard: Board | null;
 }) {
   const router = useRouter();
-  const [board, setBoard] = useState<Board>("staff");
+  const [board, setBoard] = useState<Board>(initialBoard ?? "staff");
   const bWeights = branchWeights(weights);
+
+  // URL đã chỉ định bảng thì theo URL; không thì mở lại bảng đã xem lần trước.
+  useEffect(() => {
+    if (initialBoard) return;
+    const saved = readSavedBoard();
+    if (saved) setBoard(saved);
+  }, [initialBoard]);
+
+  function selectBoard(next: Board) {
+    setBoard(next);
+    try {
+      localStorage.setItem(BOARD_STORAGE_KEY, next);
+    } catch {
+      // không lưu được thì vẫn còn tham số trên URL lo phần refresh
+    }
+    // Dữ liệu cả hai bảng đã có sẵn nên đổi tab không cần tải lại trang — chỉ
+    // ghi vào URL bằng history API để refresh mở đúng bảng đang xem.
+    const url = new URL(window.location.href);
+    url.searchParams.set("board", next);
+    window.history.replaceState(null, "", url.toString());
+  }
 
   function goTo(next: Partial<RankPeriod>) {
     const p = { ...period, ...next };
     router.push(
-      `/dashboard/ranking?period=${p.type}&year=${p.year}&month=${p.month}&quarter=${p.quarter}`
+      `/dashboard/ranking?period=${p.type}&year=${p.year}&month=${p.month}&quarter=${p.quarter}&board=${board}`
     );
   }
   const top3 = rows.slice(0, 3);
@@ -208,7 +244,7 @@ export function RankingPage({
         {BOARDS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setBoard(key)}
+            onClick={() => selectBoard(key)}
             className={cn(
               "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
               board === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"

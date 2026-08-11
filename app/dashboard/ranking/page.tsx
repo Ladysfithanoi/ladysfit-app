@@ -13,7 +13,13 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
 export default async function Page({
   searchParams,
 }: {
-  searchParams: { period?: string; year?: string; month?: string; quarter?: string };
+  searchParams: {
+    period?: string;
+    year?: string;
+    month?: string;
+    quarter?: string;
+    board?: string;
+  };
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
@@ -34,6 +40,11 @@ export default async function Page({
     quarter: clamp(parseInt(searchParams.quarter ?? "", 10), 1, 4, now.quarter),
   };
 
+  // Bảng đang xem nằm trong URL nên refresh vẫn mở đúng tab. Không có tham số
+  // (vào thẳng từ menu) thì để client mở lại bảng đã xem lần trước.
+  const initialBoard =
+    searchParams.board === "branch" || searchParams.board === "staff" ? searchParams.board : null;
+
   const weights = await getRankWeights();
   const [rows, branchRows] = await Promise.all([
     computeRanking(period, weights),
@@ -47,6 +58,7 @@ export default async function Page({
       period={period}
       myId={session.user.id}
       weights={weights}
+      initialBoard={initialBoard}
     />
   );
 }
