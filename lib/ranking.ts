@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import {
+  branchWeights,
   DEFAULT_RANK_WEIGHTS,
   isValidWeights,
   periodMonths,
+  type BranchRankRow,
   type RankPeriod,
   type RankRow,
   type RankWeights,
 } from "@/lib/ranking-config";
-import { countTransformsByPt } from "@/lib/transform-credit";
+import { computeTransformCredits, countTransformsByPt } from "@/lib/transform-credit";
 
 // ── Xếp hạng nhân sự ─────────────────────────────────────────────────────────
 // Điểm xếp hạng gộp 3 tiêu chí, mỗi tiêu chí quy về thang 100 rồi nhân trọng số:
@@ -18,7 +20,7 @@ import { countTransformsByPt } from "@/lib/transform-credit";
 // đúng mặt bằng của kỳ đang xét. Trọng số do admin chỉnh ở Đề thi > Cấu hình.
 // Kỳ có thể là tháng, quý hoặc năm — chỉ dữ liệu phát sinh trong kỳ được tính.
 
-export type { RankRow, RankWeights } from "@/lib/ranking-config";
+export type { BranchRankRow, RankRow, RankWeights } from "@/lib/ranking-config";
 
 /** Khoảng thời gian [start, end) của kỳ. */
 function periodRange(period: RankPeriod): { start: Date; end: Date } {
@@ -190,6 +192,93 @@ export async function computeRanking(
 
   // Bằng điểm thì đồng hạng, hạng kế tiếp nhảy qua số suất đã dùng
   const rows: RankRow[] = [];
+  scored.forEach((row, i) => {
+    const prev = rows[i - 1];
+    rows.push({ ...row, rank: prev && prev.points === row.points ? prev.rank : i + 1 });
+  });
+
+  return rows;
+}
+
+// ── Xếp hạng phòng tập ───────────────────────────────────────────────────────
+// Chấm y hệt bảng nhân sự — quy về thang 100 theo tương quan với phòng cao nhất
+// rồi nhân trọng số — nhưng bỏ tiêu chí điểm thi vì phòng tập không đi thi:
+//   1. Doanh số   — TB doanh số/tháng của cả phòng trong kỳ (gồm cả lead không
+//                   gắn nhân sự nào, tức doanh số của người đã nghỉ)
+//   2. Transform  — số khách của phòng đạt mốc trong kỳ, ĐẾM CẢ những transform
+//                   không ghi công cho ai: vẫn là transform của Ladysfit
+
+/** Bảng xếp hạng phòng tập trong 1 kỳ, sắp theo điểm giảm dần. */
+export async function computeBranchRanking(
+  period: RankPeriod,
+  weights?: RankWeights
+): Promise<BranchRankRow[]> {
+  const w = branchWeights(weights ?? (await getRankWeights()));
+  const months = countedMonths(period);
+  const { start, end } = periodRange(period);
+
+  const [branches, leads, credits] = await Promise.all([
+    // Fitpartner là nhánh hợp tác, không phải phòng tập — loại như mọi trang khác
+    prisma.branch.findMany({
+      where: { name: { not: { contains: "Fitpartner" } } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    months.length > 0
+      ? prisma.salesLead.findMany({
+          where: { year: period.year, month: { in: months } },
+          select: { branchId: true, actualRevenue: true },
+        })
+      : Promise.resolve([]),
+    computeTransformCredits(),
+  ]);
+
+  if (branches.length === 0) return [];
+
+  const revenueByBranch = new Map<string, number>();
+  for (const l of leads) {
+    revenueByBranch.set(l.branchId, (revenueByBranch.get(l.branchId) ?? 0) + (l.actualRevenue ?? 0));
+  }
+
+  const transformByBranch = new Map<string, number>();
+  for (const c of credits) {
+    if (c.date < start || c.date >= end) continue;
+    transformByBranch.set(c.branchId, (transformByBranch.get(c.branchId) ?? 0) + 1);
+  }
+
+  const divisor = Math.max(months.length, 1);
+  const base = branches.map((b) => ({
+    branchId: b.id,
+    name: b.name,
+    avgMonthlyRevenue: (revenueByBranch.get(b.id) ?? 0) / divisor,
+    transformedCount: transformByBranch.get(b.id) ?? 0,
+  }));
+
+  const maxRevenue = Math.max(...base.map((b) => b.avgMonthlyRevenue), 0);
+  const maxTransform = Math.max(...base.map((b) => b.transformedCount), 0);
+
+  const scored = base.map((b) => {
+    const revenuePoints = maxRevenue > 0 ? (b.avgMonthlyRevenue / maxRevenue) * 100 : 0;
+    const transformPoints = maxTransform > 0 ? (b.transformedCount / maxTransform) * 100 : 0;
+    const points = (revenuePoints * w.revenue + transformPoints * w.transform) / 100;
+    return {
+      ...b,
+      revenuePoints: Math.round(revenuePoints * 10) / 10,
+      transformPoints: Math.round(transformPoints * 10) / 10,
+      points: Math.round(points * 10) / 10,
+    };
+  });
+
+  scored.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.avgMonthlyRevenue - a.avgMonthlyRevenue ||
+      b.transformedCount - a.transformedCount ||
+      a.name.localeCompare(b.name, "vi")
+  );
+
+  // Bằng điểm thì đồng hạng, giống bảng nhân sự
+  const rows: BranchRankRow[] = [];
   scored.forEach((row, i) => {
     const prev = rows[i - 1];
     rows.push({ ...row, rank: prev && prev.points === row.points ? prev.rank : i + 1 });

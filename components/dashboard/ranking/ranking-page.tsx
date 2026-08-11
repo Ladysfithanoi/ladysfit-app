@@ -12,10 +12,13 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Dumbbell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  branchWeights,
   periodLabel,
+  type BranchRankRow,
   type RankPeriod,
   type RankPeriodType,
   type RankRow,
@@ -74,18 +77,30 @@ function initials(name: string) {
   return last.charAt(0).toUpperCase() || "?";
 }
 
+/** Hai bảng xếp hạng dùng chung bộ chọn kỳ, đổi qua lại bằng tab. */
+type Board = "staff" | "branch";
+
+const BOARDS: { key: Board; label: string }[] = [
+  { key: "staff", label: "Nhân sự" },
+  { key: "branch", label: "Phòng tập" },
+];
+
 export function RankingPage({
   rows,
+  branchRows,
   period,
   myId,
   weights,
 }: {
   rows: RankRow[];
+  branchRows: BranchRankRow[];
   period: RankPeriod;
   myId: string;
   weights: RankWeights;
 }) {
   const router = useRouter();
+  const [board, setBoard] = useState<Board>("staff");
+  const bWeights = branchWeights(weights);
 
   function goTo(next: Partial<RankPeriod>) {
     const p = { ...period, ...next };
@@ -116,10 +131,13 @@ export function RankingPage({
             <Trophy className="w-5 h-5 text-[#f15b5c]" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900">Xếp hạng nhân sự</h1>
+            <h1 className="text-2xl font-extrabold text-gray-900">
+              {board === "staff" ? "Xếp hạng nhân sự" : "Xếp hạng phòng tập"}
+            </h1>
             <p className="text-sm text-gray-400 font-medium mt-0.5">
-              {periodLabel(period)} — tính theo điểm thi, doanh số trung bình và số khách
-              transform
+              {board === "staff"
+                ? `${periodLabel(period)} — tính theo điểm thi, doanh số trung bình và số khách transform`
+                : `${periodLabel(period)} — tính theo doanh số trung bình và số khách transform của cả phòng`}
             </p>
           </div>
         </div>
@@ -185,29 +203,58 @@ export function RankingPage({
         </div>
       </div>
 
+      {/* Chuyển bảng: nhân sự / phòng tập */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5 w-fit">
+        {BOARDS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setBoard(key)}
+            className={cn(
+              "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+              board === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Cách tính điểm */}
       <div className="flex items-center gap-2 flex-wrap px-4 py-3 mb-5 rounded-2xl bg-gray-50 border border-gray-100">
         <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Cách tính</span>
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
-          <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-          Điểm thi {weights.exam}%
-        </span>
+        {board === "staff" && (
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
+            <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+            Điểm thi {weights.exam}%
+          </span>
+        )}
         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-          Doanh số {weights.revenue}%
+          Doanh số {board === "staff" ? weights.revenue : bWeights.revenue}%
         </span>
         <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white px-2.5 py-1 rounded-full border border-gray-100">
           <Sparkles className="w-3.5 h-3.5 text-[#f15b5c]" />
-          Transform {weights.transform}%
+          Transform {board === "staff" ? weights.transform : bWeights.transform}%
         </span>
-        <span className="text-xs text-gray-400 font-medium">
-          · Chỉ tính doanh số và transform phát sinh trong {periodLabel(period).toLowerCase()},
-          chấm theo tương quan với người cao nhất · Chưa thi tính 0đ · Transform chỉ tính cho
-          người đã kèm khách ít nhất 6 tuần trước ngày khách đạt mốc
-        </span>
+        {board === "staff" ? (
+          <span className="text-xs text-gray-400 font-medium">
+            · Chỉ tính doanh số và transform phát sinh trong {periodLabel(period).toLowerCase()},
+            chấm theo tương quan với người cao nhất · Chưa thi tính 0đ · Transform chỉ tính cho
+            người đã kèm khách ít nhất 6 tuần trước ngày khách đạt mốc
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400 font-medium">
+            · Chỉ tính doanh số và transform phát sinh trong {periodLabel(period).toLowerCase()},
+            chấm theo tương quan với phòng cao nhất · Phòng tập không đi thi nên trọng số điểm
+            thi chia lại cho hai tiêu chí còn lại · Doanh số và transform tính cho cả phòng, gồm
+            cả phần của nhân sự đã nghỉ
+          </span>
+        )}
       </div>
 
-      {rows.length === 0 ? (
+      {board === "branch" ? (
+        <BranchBoard rows={branchRows} period={period} />
+      ) : rows.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-2">
           <Trophy className="w-8 h-8 text-gray-200" />
           <p className="text-sm text-gray-300 font-semibold">Chưa có dữ liệu xếp hạng</p>
@@ -462,5 +509,98 @@ export function RankingPage({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Bảng phòng tập chỉ vinh danh top 3 nên không có bảng phụ và không phân trang
+ * như bảng nhân sự — phòng ngoài top 3 không hiển thị.
+ */
+function BranchBoard({ rows, period }: { rows: BranchRankRow[]; period: RankPeriod }) {
+  const top3 = rows.filter((r) => r.points > 0).slice(0, 3);
+
+  if (top3.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-2">
+        <Trophy className="w-8 h-8 text-gray-200" />
+        <p className="text-sm text-gray-300 font-semibold">
+          Chưa có doanh số hoặc transform nào trong {periodLabel(period).toLowerCase()}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:items-end">
+        {top3.map((row, i) => {
+          const deco = PODIUM[i];
+          const Icon = deco.icon;
+          return (
+            <div
+              key={row.branchId}
+              className={cn(
+                "relative rounded-2xl border p-5 transition-transform hover:-translate-y-0.5",
+                deco.card,
+                // Quán quân nổi hơn: cao hơn và nằm giữa bục
+                i === 0 ? "md:order-2 md:pb-7" : i === 1 ? "md:order-1" : "md:order-3"
+              )}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center text-base font-extrabold",
+                    deco.badge
+                  )}
+                >
+                  {row.rank}
+                </span>
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide",
+                    deco.label
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  {deco.title}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-white/80 border border-white flex items-center justify-center shrink-0">
+                  <Dumbbell className="w-5 h-5 text-gray-600" />
+                </div>
+                <p className="text-base font-extrabold text-gray-900 min-w-0 truncate">{row.name}</p>
+              </div>
+
+              <div className="mt-4 flex items-end gap-1.5">
+                <p className="text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+                  {row.points}
+                </p>
+                <p className="text-xs font-bold text-gray-400 mb-0.5">điểm</p>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                <div className="rounded-xl bg-white/70 py-2">
+                  <p className="text-sm font-extrabold text-gray-800">
+                    {fmtRevenue(row.avgMonthlyRevenue)}
+                  </p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">DS/tháng</p>
+                </div>
+                <div className="rounded-xl bg-white/70 py-2">
+                  <p className="text-sm font-extrabold text-gray-800">{row.transformedCount}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Transform</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-xs text-gray-400 font-medium text-center">
+        Chỉ vinh danh 3 phòng dẫn đầu {periodLabel(period).toLowerCase()} trên tổng {rows.length}{" "}
+        phòng tập
+      </p>
+    </>
   );
 }

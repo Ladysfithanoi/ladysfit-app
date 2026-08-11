@@ -53,6 +53,30 @@ export function currentPeriod(now: Date = new Date()): RankPeriod {
   };
 }
 
+/**
+ * Trọng số dùng cho xếp hạng phòng tập: bỏ điểm thi (phòng tập không đi thi),
+ * chia lại phần của doanh số và transform cho tổng vẫn bằng 100 — admin chỉnh
+ * trọng số ở Đề thi > Cấu hình thì bảng phòng tập đổi theo cùng tỉ lệ.
+ */
+export function branchWeights(w: RankWeights): { revenue: number; transform: number } {
+  const total = w.revenue + w.transform;
+  if (total <= 0) return { revenue: 50, transform: 50 };
+  const revenue = Math.round((w.revenue / total) * WEIGHT_TOTAL);
+  return { revenue, transform: WEIGHT_TOTAL - revenue };
+}
+
+export type BranchRankRow = {
+  branchId: string;
+  name: string;
+  avgMonthlyRevenue: number; // triệu/tháng
+  /** Số khách transform của phòng trong kỳ — đếm cả khách của nhân sự đã nghỉ. */
+  transformedCount: number;
+  revenuePoints: number;
+  transformPoints: number;
+  points: number; // điểm tổng, thang 100
+  rank: number;
+};
+
 export type RankRow = {
   ptId: string;
   name: string;

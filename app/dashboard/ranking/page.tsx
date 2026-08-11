@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { computeRanking, getRankWeights } from "@/lib/ranking";
+import { computeBranchRanking, computeRanking, getRankWeights } from "@/lib/ranking";
 import { currentPeriod, type RankPeriod, type RankPeriodType } from "@/lib/ranking-config";
 import { RankingPage } from "@/components/dashboard/ranking/ranking-page";
 
@@ -35,9 +35,18 @@ export default async function Page({
   };
 
   const weights = await getRankWeights();
-  const rows = await computeRanking(period, weights);
+  const [rows, branchRows] = await Promise.all([
+    computeRanking(period, weights),
+    computeBranchRanking(period, weights),
+  ]);
 
   return (
-    <RankingPage rows={rows} period={period} myId={session.user.id} weights={weights} />
+    <RankingPage
+      rows={rows}
+      branchRows={branchRows}
+      period={period}
+      myId={session.user.id}
+      weights={weights}
+    />
   );
 }
