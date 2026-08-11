@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { fmtDate } from "@/lib/format-date";
 import { recountClientContracts } from "@/lib/recount-contracts";
+import { logPTAssignment } from "@/lib/transform-credit";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -101,6 +102,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   }
 
   if (!client) throw new Error("Không thể tạo mã khách hàng sau nhiều lần thử");
+
+  // Mở chặng phụ trách đầu tiên của khách (lib/transform-credit).
+  await logPTAssignment(client.id, c.createdById, "CREATED");
 
   await prisma.consultation.update({
     where: { id: params.id },

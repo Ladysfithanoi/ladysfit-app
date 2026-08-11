@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { logPTAssignment } from "@/lib/transform-credit";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -106,6 +107,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       avatarUrl: "avatarUrl" in body ? (body.avatarUrl ?? null) : undefined,
     },
   });
+
+  // Đổi người phụ trách ở form sửa hồ sơ cũng phải vào nhật ký, nếu không
+  // transform của khách sẽ được quy nhầm cho người mới nhận (lib/transform-credit).
+  if (body.assignedPTId) {
+    await logPTAssignment(params.id, body.assignedPTId, "EDITED");
+  }
 
   return NextResponse.json(client);
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logPTAssignment } from "@/lib/transform-credit";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -140,6 +141,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         },
       }),
     ]);
+    // Mở chặng phụ trách mới: transform khách đạt được TRƯỚC hôm nay vẫn thuộc
+    // về người cũ, người nhận phải kèm đủ 6 tuần mới được ghi công
+    // (lib/transform-credit).
+    await logPTAssignment(params.id, substituteId, "TRANSFERRED");
   } else {
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + (durationDays ?? 1));

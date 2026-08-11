@@ -85,6 +85,7 @@ model User {
   assessedPracticals         PracticalAssessment[]        @relation("AssessorPracticals")
   leaveDays                  LeaveDay[]                   @relation("UserLeaveDays")
   createdLeaveDays           LeaveDay[]                   @relation("LeaveDayCreator")
+  clientAssignments          ClientPTAssignment[]         @relation("PTClientAssignments")
 
   @@map("users")
 }
@@ -180,8 +181,34 @@ model Client {
   sessionPhotos                SessionPhoto[]              @relation("ClientSessionPhotos")
   kocContracts                 KOCContract[]
   substituteRequests           SubstituteRequest[]
+  ptAssignments                ClientPTAssignment[]
 
   @@map("clients")
+}
+
+// Nhật ký "khách thuộc về ai, từ lúc nào" — mỗi dòng mở một CHẶNG phụ trách,
+// chặng kết thúc khi có dòng kế tiếp. Ghi ở cả 3 lối đổi người: tạo khách,
+// sửa hồ sơ (đổi nhân sự phụ trách) và chuyển giao dài hạn.
+//
+// Có bảng này thì transform mới quy được về đúng người: khách chuyển từ PT cũ
+// sang PT mới, mốc transform rơi vào chặng nào thì người của chặng đó được ghi
+// công — người nhận không "thừa hưởng" kết quả có sẵn của khách. Xem
+// lib/transform-credit.ts.
+model ClientPTAssignment {
+  id        String   @id @default(cuid())
+  clientId  String
+  ptId      String
+  startedAt DateTime @default(now())
+  // Vì sao đổi: CREATED (tạo khách) · EDITED (sửa hồ sơ) · TRANSFERRED (chuyển
+  // giao dài hạn) · BACKFILL (dựng lại từ dữ liệu cũ khi thêm bảng này)
+  reason    String   @default("CREATED")
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pt     User   @relation("PTClientAssignments", fields: [ptId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, startedAt])
+  @@map("client_pt_assignments")
 }
 
 model Consultation {

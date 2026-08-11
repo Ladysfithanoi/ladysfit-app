@@ -7,12 +7,13 @@ import {
   type RankRow,
   type RankWeights,
 } from "@/lib/ranking-config";
+import { countTransformsByPt } from "@/lib/transform-credit";
 
 // ── Xếp hạng nhân sự ─────────────────────────────────────────────────────────
 // Điểm xếp hạng gộp 3 tiêu chí, mỗi tiêu chí quy về thang 100 rồi nhân trọng số:
 //   1. Điểm thi   — % bài thi gần nhất trong kỳ (chưa thi = 0đ)
 //   2. Doanh số   — TB doanh số/tháng trong kỳ, so với người cao nhất
-//   3. Transform  — số khách transform trong kỳ, so với người cao nhất
+//   3. Transform  — số khách transform được ghi công trong kỳ, so với người cao nhất
 // Doanh số và transform chấm theo tương quan nội bộ nên hạng luôn phản ánh
 // đúng mặt bằng của kỳ đang xét. Trọng số do admin chỉnh ở Đề thi > Cấu hình.
 // Kỳ có thể là tháng, quý hoặc năm — chỉ dữ liệu phát sinh trong kỳ được tính.
@@ -49,8 +50,8 @@ type PtPeriodStat = { avgMonthlyRevenue: number; transformedCount: number };
 
 /**
  * TB doanh số/tháng (triệu) + số khách transform của từng PT trong kỳ.
- * Transform lấy mốc là lần cân đầu tiên giảm đủ 7 kg; khách chưa có log cân
- * nào đạt mốc thì dùng thời điểm cập nhật gần nhất (giống trang Tổng quan).
+ * Transform lấy mốc là lần cân đầu tiên giảm đủ 7 kg và chỉ ghi công cho người
+ * đã kèm khách ≥ 6 tuần tính đến mốc đó — xem lib/transform-credit.ts.
  */
 export async function computePtPeriodStats(
   ptIds: string[],
@@ -62,50 +63,20 @@ export async function computePtPeriodStats(
   const months = countedMonths(period);
   const { start, end } = periodRange(period);
 
-  const [leads, clients] = await Promise.all([
+  const [leads, transformByPt] = await Promise.all([
     months.length > 0
       ? prisma.salesLead.findMany({
           where: { assignedPTId: { in: ptIds }, year: period.year, month: { in: months } },
           select: { assignedPTId: true, actualRevenue: true },
         })
       : Promise.resolve([]),
-    prisma.client.findMany({
-      where: { assignedPTId: { in: ptIds }, hasTransformed: true },
-      select: { id: true, assignedPTId: true, initialWeight: true, updatedAt: true },
-    }),
+    countTransformsByPt(start, end),
   ]);
 
   const revenueByPt = new Map<string, number>();
   for (const l of leads) {
     if (!l.assignedPTId) continue;
     revenueByPt.set(l.assignedPTId, (revenueByPt.get(l.assignedPTId) ?? 0) + (l.actualRevenue ?? 0));
-  }
-
-  // Mốc transform của từng khách = lần cân đầu tiên giảm ≥ 7 kg
-  const clientIds = clients.map((c) => c.id);
-  const logs =
-    clientIds.length > 0
-      ? await prisma.weightLog.findMany({
-          where: { clientId: { in: clientIds } },
-          select: { clientId: true, date: true, weight: true },
-          orderBy: { date: "asc" },
-        })
-      : [];
-
-  const initialWeightById = new Map(clients.map((c) => [c.id, c.initialWeight]));
-  const transformDate = new Map<string, Date>();
-  for (const log of logs) {
-    if (transformDate.has(log.clientId)) continue;
-    const initial = initialWeightById.get(log.clientId);
-    if (initial != null && initial - log.weight >= 7) transformDate.set(log.clientId, log.date);
-  }
-
-  const transformByPt = new Map<string, number>();
-  for (const c of clients) {
-    if (!c.assignedPTId) continue;
-    const when = transformDate.get(c.id) ?? c.updatedAt;
-    if (when < start || when >= end) continue;
-    transformByPt.set(c.assignedPTId, (transformByPt.get(c.assignedPTId) ?? 0) + 1);
   }
 
   const divisor = Math.max(months.length, 1);

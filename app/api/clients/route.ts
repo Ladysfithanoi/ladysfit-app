@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientStatus, PackageEnrollmentStatus } from "@prisma/client";
+import { logPTAssignment } from "@/lib/transform-credit";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -155,6 +156,9 @@ export async function POST(req: Request) {
       status: status ?? ClientStatus.ACTIVE,
     },
   });
+
+  // Mở chặng phụ trách đầu tiên của khách (lib/transform-credit).
+  await logPTAssignment(client.id, assignedPTId, "CREATED");
 
   return NextResponse.json(client, { status: 201 });
 }
