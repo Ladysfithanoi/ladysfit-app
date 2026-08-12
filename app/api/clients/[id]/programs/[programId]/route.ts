@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSlotsForSessionType } from "@/lib/workout-structure";
 import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
+import { sessionIdsWithLogs } from "@/lib/workout-session";
 
 const fullProgramInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -136,6 +137,10 @@ export async function PATCH(
         const currentCount = week.sessions.length;
 
         if (newCount > currentCount) {
+          // Đánh số tiếp từ order lớn nhất đang có, KHÔNG lấy theo số lượng buổi:
+          // `order` có thể bị hổng (đã xoá 1 buổi) nên dùng số lượng sẽ tạo ra buổi
+          // trùng order, khiến lần lưu giáo án sau ghép nhầm buổi.
+          let nextOrder = week.sessions.reduce((max, s) => Math.max(max, s.order), -1) + 1;
           for (let i = currentCount; i < newCount; i++) {
             const sessionType =
               sessionTypes.length > 0 ? sessionTypes[i % sessionTypes.length] : "Tạ 1";
@@ -145,7 +150,7 @@ export async function PATCH(
                 programId: params.programId,
                 weekId: week.id,
                 sessionName: `Buổi ${wi * newCount + i + 1} — ${sessionType}`,
-                order: i,
+                order: nextOrder++,
                 movements: {
                   create: slots.map((slot, mi) => ({
                     movementCode: slot.code,
@@ -160,7 +165,12 @@ export async function PATCH(
             });
           }
         } else if (newCount < currentCount) {
-          const toDelete = week.sessions.slice(newCount).map((s) => s.id);
+          // Bớt số buổi/tuần chỉ được xoá các buổi CHƯA có nhật ký. Buổi đã tập giữ
+          // nguyên — xoá sẽ cascade mất nhật ký, chữ ký check-in/check-out của khách
+          // (và không hoàn buổi lại cho lộ trình). Muốn bỏ hẳn thì xoá từng buổi.
+          const extra = week.sessions.slice(newCount);
+          const withLogs = await sessionIdsWithLogs(extra.map((s) => s.id));
+          const toDelete = extra.filter((s) => !withLogs.has(s.id)).map((s) => s.id);
           if (toDelete.length > 0) {
             await prisma.workoutSession.deleteMany({ where: { id: { in: toDelete } } });
           }

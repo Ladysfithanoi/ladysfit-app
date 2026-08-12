@@ -591,7 +591,15 @@ function ProgramView({
   function enterEditMode() {
     if (!currentWeekData) return;
     const draft = loadDraft<WorkoutDraft>(draftKey);
-    if (draft && draft.programId === program.id && draft.weekId === currentWeekData.id) {
+    // Bản nháp chỉ dùng lại khi còn khớp với tuần hiện tại. Nếu số buổi đã đổi
+    // (thêm/xóa buổi, đổi số buổi/tuần từ lúc lưu nháp) thì bỏ nháp và dựng lại từ
+    // dữ liệu thật — nháp cũ sẽ ghi đè cấu trúc tuần bằng cấu trúc đã lỗi thời.
+    if (
+      draft &&
+      draft.programId === program.id &&
+      draft.weekId === currentWeekData.id &&
+      draft.draftSessions?.length === currentWeekData.sessions.length
+    ) {
       setDraftSessions(draft.draftSessions);
       setEditPhaseId(draft.editPhaseId);
     } else {

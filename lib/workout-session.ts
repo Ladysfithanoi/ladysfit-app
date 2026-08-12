@@ -35,6 +35,24 @@ export async function voidOverCapSessions(): Promise<number> {
   return count;
 }
 
+// Những buổi (WorkoutSession) đã có ít nhất một nhật ký tập.
+//
+// WorkoutLog.session là onDelete: Cascade, nên xoá một buổi sẽ xoá luôn nhật ký,
+// chữ ký check-in / check-out và toàn bộ số liệu set của khách — không thể khôi
+// phục. Mọi thao tác ĐỒNG BỘ CẤU TRÚC giáo án (lưu giáo án tuần, đổi số buổi/tuần)
+// phải gọi hàm này trước và tuyệt đối không xoá các buổi nằm trong tập trả về.
+// Chỉ những thao tác XOÁ CÓ CHỦ ĐÍCH (xoá hẳn 1 buổi) mới được đụng tới chúng, và
+// phải hoàn buổi cho lộ trình của khách.
+export async function sessionIdsWithLogs(sessionIds: string[]): Promise<Set<string>> {
+  if (sessionIds.length === 0) return new Set();
+  const rows = await prisma.workoutLog.findMany({
+    where: { sessionId: { in: sessionIds } },
+    select: { sessionId: true },
+    distinct: ["sessionId"],
+  });
+  return new Set(rows.map((r) => r.sessionId));
+}
+
 // Deduct one session from the client's active package (buổi tập của khách).
 // Called at CHECK-IN — the client's check-in signature is the proof they showed
 // up, so the package advances even if the PT never completes the check-out.
