@@ -65,9 +65,12 @@ export async function PATCH(
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Đổi giai đoạn thủ công = bỏ qua rào "đủ số tuần ở giai đoạn trước", nên chỉ
-  // FM (cơ sở mình quản lý) và Admin được phép. PT vẫn sửa được các thông tin
-  // khác của chương trình (số buổi/tuần, tuần hiện tại, loại hình tập, ghi chú).
+  // Đổi NHÃN giai đoạn của một chương trình (sửa CT bị gắn nhầm giai đoạn) chỉ
+  // dành cho FM (cơ sở mình quản lý) và Admin. PT vẫn sửa được các thông tin khác
+  // (số buổi/tuần, tuần hiện tại, loại hình tập, ghi chú).
+  //
+  // Chuyển KHÁCH sang giai đoạn khác là việc của POST /api/clients/[id]/phase-switch
+  // — ở đó mới có đủ luật tuần tự / số tuần / quyền theo cấp độ PT.
   const phaseChanged =
     (body.phase !== undefined && body.phase !== existing.phase) ||
     (body.phaseId !== undefined && (body.phaseId ?? null) !== existing.phaseId);
@@ -106,7 +109,6 @@ export async function PATCH(
       ...(body.sessionsPerWeek !== undefined ? { sessionsPerWeek: body.sessionsPerWeek } : {}),
       ...(body.currentWeek !== undefined ? { currentWeek: body.currentWeek } : {}),
       ...(body.workoutType !== undefined ? { workoutType: body.workoutType } : {}),
-      // FM/Admin đổi giai đoạn thủ công → đánh dấu để engine tôn trọng lựa chọn.
       ...(body.manualPhaseOverride !== undefined ? { manualPhaseOverride: body.manualPhaseOverride } : {}),
     },
   });

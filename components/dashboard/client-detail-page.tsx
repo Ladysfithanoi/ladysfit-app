@@ -485,7 +485,11 @@ export function ClientDetailPage({
       });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? "Có lỗi xảy ra");
       const created = await res.json() as WorkoutProgram;
-      setWorkoutProgs((prev) => [created, ...prev]);
+      // Server đã lưu trữ CT đang chạy để chỉ còn MỘT chương trình đang áp dụng.
+      setWorkoutProgs((prev) => [
+        created,
+        ...prev.map((p) => (p.status === "ACTIVE" ? { ...p, status: "ARCHIVED" as const } : p)),
+      ]);
       setCreateProgOpen(false);
     } catch (err) {
       setCreateProgError(err instanceof Error ? err.message : "Có lỗi xảy ra");

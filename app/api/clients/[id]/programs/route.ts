@@ -68,6 +68,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const startWeek = body.currentWeek ?? 1;
 
+  // Mỗi khách chỉ có MỘT chương trình đang áp dụng — cổng khách hàng đọc theo
+  // trạng thái này. CT đang chạy được chuyển sang lưu trữ (vẫn xem lại được).
+  await prisma.workoutProgram.updateMany({
+    where: { clientId: params.id, status: { not: "ARCHIVED" } },
+    data: { status: "ARCHIVED" },
+  });
+
   const program = await prisma.workoutProgram.create({
     data: {
       clientId: params.id,

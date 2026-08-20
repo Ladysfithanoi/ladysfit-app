@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
-import { ensureClientPhaseProgression } from "@/lib/phase-progression";
 import { closeFinishedPackages } from "@/lib/package-status";
 import { refreshClientChurnStatus } from "@/lib/client-status";
 import { getEnrollmentTaughtCounts, getAdjustmentTotals } from "@/lib/pt-session-count";
@@ -37,10 +36,6 @@ export default async function ClientPage({ params }: { params: { id: string } })
   if (closedPackages.completed + closedPackages.expired > 0) {
     await refreshClientChurnStatus(params.id);
   }
-
-  // Tự động cập nhật tiến trình giai đoạn (mở khoá/lưu trữ/tạo CT giai đoạn kế)
-  // trước khi đọc danh sách chương trình, để dữ liệu hiển thị luôn đúng.
-  await ensureClientPhaseProgression(params.id);
 
   let client, branches, staff, enrollments, programs, workoutLogs, mealPlans, activityLogs, sysConfig;
   try {
@@ -239,7 +234,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     sessionsPerWeek: p.sessionsPerWeek,
     currentWeek: p.currentWeek,
     notes: p.notes,
-    status: p.status as "ACTIVE" | "ARCHIVED" | "LOCKED",
+    status: (p.status === "ACTIVE" ? "ACTIVE" : "ARCHIVED") as "ACTIVE" | "ARCHIVED",
     manualPhaseOverride: p.manualPhaseOverride,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
