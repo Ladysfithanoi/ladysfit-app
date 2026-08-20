@@ -323,7 +323,6 @@ export function ClientDetailPage({
   userRole,
   isSubstitute,
   canBypassPhase = false,
-  enableLevelSystem = true,
   minSessionMinutes = 30,
 }: {
   client: ClientDetail;
@@ -341,7 +340,6 @@ export function ClientDetailPage({
   isSubstitute?: boolean;
   /** FM/Admin được mở khóa sớm giai đoạn kế (bỏ qua rào số tuần). PT thì không. */
   canBypassPhase?: boolean;
-  enableLevelSystem?: boolean;
   minSessionMinutes?: number;
 }) {
   const router = useRouter();
@@ -2350,7 +2348,6 @@ export function ClientDetailPage({
           }
           userRole={userRole}
           canBypassPhase={canBypassPhase}
-          enableLevelSystem={enableLevelSystem}
           minSessionMinutes={minSessionMinutes}
         />
       )}

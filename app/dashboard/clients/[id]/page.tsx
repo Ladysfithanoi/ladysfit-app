@@ -348,7 +348,6 @@ export default async function ClientPage({ params }: { params: { id: string } })
       currentUserId={session.user.id}
       isSubstitute={isSubstitute}
       canBypassPhase={canBypassPhase}
-      enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
       minSessionMinutes={sysConfig?.minSessionMinutes ?? 30}
     />
   );

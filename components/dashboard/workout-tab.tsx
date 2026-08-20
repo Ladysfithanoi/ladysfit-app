@@ -337,17 +337,14 @@ function ProgramView({
   clientId,
   workoutLogs,
   onUpdate,
-  onArchive,
   onLogAdded,
   onLogUpdated,
   onLogDeleted,
   onSessionDeleted,
   onPhaseGateChanged,
   userRole,
-  isSubstitute,
   assignedPTId = null,
   canBypassPhase = false,
-  enableLevelSystem = true,
   minSessionMinutes = 30,
   inheritedByExercise = null,
 }: {
@@ -355,7 +352,6 @@ function ProgramView({
   clientId: string;
   workoutLogs: WorkoutLogRow[];
   onUpdate: (updated: Partial<WorkoutProgram> & { id: string }) => void;
-  onArchive: (id: string, status: "ACTIVE" | "ARCHIVED") => void;
   onLogAdded: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogUpdated: (updated: WorkoutLogRow, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
@@ -363,12 +359,10 @@ function ProgramView({
   /** Sau khi FM/Admin mở khóa sớm (hoặc hoàn tác) — trạng thái nhiều CT đổi cùng lúc. */
   onPhaseGateChanged: (rows: { id: string; status: string; manualPhaseOverride: boolean }[]) => void;
   userRole?: string;
-  isSubstitute?: boolean;
   /** PT đang phụ trách khách — dùng để nhận ra buổi nào là buổi người khác dạy hộ. */
   assignedPTId?: string | null;
   /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
   canBypassPhase?: boolean;
-  enableLevelSystem?: boolean;
   minSessionMinutes?: number;
   /** Thông số gần nhất theo TÊN BÀI TẬP kế thừa từ giai đoạn trước (chỉ xem). */
   inheritedByExercise?: Map<string, SetLogRow> | null;
@@ -407,7 +401,6 @@ function ProgramView({
   const [addingWeek, setAddingWeek] = useState(false);
   const [deletingWeek, setDeletingWeek] = useState(false);
   const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
-  const [archiving, setArchiving] = useState(false);
   // Mở khóa sớm giai đoạn (bỏ qua rào số tuần) — chỉ FM/Admin thấy.
   const [confirmPhaseGate, setConfirmPhaseGate] = useState<null | "unlock" | "relock">(null);
   const [phaseGateSaving, setPhaseGateSaving] = useState(false);
@@ -863,21 +856,6 @@ function ProgramView({
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setDeletingWeek(false);
-    }
-  }
-
-  async function handleArchive() {
-    setArchiving(true);
-    try {
-      const newStatus = isArchived ? "ACTIVE" : "ARCHIVED";
-      const res = await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) onArchive(program.id, newStatus);
-    } finally {
-      setArchiving(false);
     }
   }
 
@@ -1965,7 +1943,6 @@ export function WorkoutTab({
   isSubstitute,
   assignedPTId = null,
   canBypassPhase = false,
-  enableLevelSystem = true,
   minSessionMinutes = 30,
 }: {
   clientId: string;
@@ -1982,7 +1959,6 @@ export function WorkoutTab({
   assignedPTId?: string | null;
   /** FM/Admin được mở khóa sớm giai đoạn kế & đổi giai đoạn thủ công. PT thì không. */
   canBypassPhase?: boolean;
-  enableLevelSystem?: boolean;
   minSessionMinutes?: number;
 }) {
   const router = useRouter();
@@ -2071,11 +2047,6 @@ export function WorkoutTab({
     router.refresh();
   }, [onProgramsChange, onPackageUpdated, router]);
 
-  function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
-    onProgramsChange((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
-    router.refresh();
-  }
-
   // Mở khóa sớm / hoàn tác đổi trạng thái của NHIỀU chương trình cùng lúc (CT được
   // mở thành ACTIVE, giai đoạn trước thành ARCHIVED…) nên áp lại cả danh sách.
   const handlePhaseGateChanged = useCallback(
@@ -2127,17 +2098,14 @@ export function WorkoutTab({
           clientId={clientId}
           workoutLogs={workoutLogs.filter((l) => l.programId === p.id)}
           onUpdate={handleUpdate}
-          onArchive={handleArchive}
           onLogAdded={handleLogAdded}
           onLogUpdated={handleLogUpdated}
           onLogDeleted={handleLogDeleted}
           onSessionDeleted={handleSessionDeleted}
           onPhaseGateChanged={handlePhaseGateChanged}
           userRole={userRole}
-          isSubstitute={isSubstitute}
           assignedPTId={assignedPTId}
           canBypassPhase={canBypassPhase}
-          enableLevelSystem={enableLevelSystem}
           minSessionMinutes={minSessionMinutes}
           inheritedByExercise={inheritedFor(p)}
         />
@@ -2152,17 +2120,14 @@ export function WorkoutTab({
               clientId={clientId}
               workoutLogs={workoutLogs.filter((l) => l.programId === p.id)}
               onUpdate={handleUpdate}
-              onArchive={handleArchive}
               onLogAdded={handleLogAdded}
               onLogUpdated={handleLogUpdated}
               onLogDeleted={handleLogDeleted}
               onSessionDeleted={handleSessionDeleted}
               onPhaseGateChanged={handlePhaseGateChanged}
               userRole={userRole}
-              isSubstitute={isSubstitute}
               assignedPTId={assignedPTId}
               canBypassPhase={canBypassPhase}
-              enableLevelSystem={enableLevelSystem}
               minSessionMinutes={minSessionMinutes}
             />
           ))}
@@ -2188,17 +2153,14 @@ export function WorkoutTab({
                   clientId={clientId}
                   workoutLogs={workoutLogs.filter((l) => l.programId === p.id)}
                   onUpdate={handleUpdate}
-                  onArchive={handleArchive}
                   onLogAdded={handleLogAdded}
                   onLogUpdated={handleLogUpdated}
                   onLogDeleted={handleLogDeleted}
                   onSessionDeleted={handleSessionDeleted}
                   onPhaseGateChanged={handlePhaseGateChanged}
                   userRole={userRole}
-                  isSubstitute={isSubstitute}
                   assignedPTId={assignedPTId}
                   canBypassPhase={canBypassPhase}
-                  enableLevelSystem={enableLevelSystem}
                   minSessionMinutes={minSessionMinutes}
                 />
               ))}
