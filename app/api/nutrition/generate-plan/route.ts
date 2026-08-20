@@ -38,6 +38,83 @@ async function callGeminiWithKeyRotation(
   throw new Error("All API keys exhausted");
 }
 
+type Keyword = { text: string; accented: boolean };
+
+// Chữ cái Latin có dấu: Latin-1 Supplement, Latin Extended-A/B và
+// Latin Extended Additional (chứa toàn bộ nguyên âm tiếng Việt).
+// Dùng dải mã thay cho \p{L} vì \p{L} cần cờ /u (target ES5 không hỗ trợ).
+const LATIN_LETTERS = "a-z0-9\\u00c0-\\u024f\\u1e00-\\u1eff";
+
+// Thường hoá + bỏ ký tự đặc biệt nhưng GIỮ dấu tiếng Việt
+function normalizeKeepAccent(text: string): string {
+  return text
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(new RegExp(`[^${LATIN_LETTERS}\\s]`, "g"), " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Như trên nhưng BỎ dấu — dùng khi khách gõ không dấu
+function normalizeVi(text: string): string {
+  return normalizeKeepAccent(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Tách chuỗi khách nhập ("thịt bò, cá hồi và trứng gà") thành các từ khoá riêng.
+// Không dùng \b vì ranh giới từ của JS không nhận nguyên âm tiếng Việt có dấu.
+function splitKeywords(raw: string): Keyword[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: Keyword[] = [];
+  for (const part of raw.split(/[,;\/\n]|\s+(?:và|hoặc|với|cùng)\s+/gi)) {
+    const strict = normalizeKeepAccent(part);
+    const loose = normalizeVi(part);
+    if (loose.length < 2 || seen.has(loose)) continue;
+    seen.add(loose);
+    // Khách gõ có dấu → so khớp có dấu, để "bò" không dính nhầm "bơ"
+    const accented = strict !== loose;
+    out.push({ text: accented ? strict : loose, accented });
+  }
+  return out;
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let k = arr.length - 1; k > 0; k--) {
+    const r = Math.floor(Math.random() * (k + 1));
+    [arr[k], arr[r]] = [arr[r], arr[k]];
+  }
+  return arr;
+}
+
+// Khớp cụm từ theo ranh giới tiếng, không khớp giữa chừng một tiếng
+// ("cá" không được khớp "cà ri", nhưng "thịt bò xào" vẫn khớp "Thịt bò nạc")
+function matchPhrase(name: string, term: string): boolean {
+  const nameTokens = name.split(" ").filter(Boolean);
+  const termTokens = term.split(" ").filter(Boolean);
+  if (termTokens.length === 0 || nameTokens.length === 0) return false;
+  if (termTokens.length === 1) return nameTokens.includes(termTokens[0]);
+  if (name.includes(term)) return true;
+  if (` ${term} `.includes(` ${name} `)) return true;
+  for (let k = 0; k + 1 < termTokens.length; k++) {
+    if (name.includes(`${termTokens[k]} ${termTokens[k + 1]}`)) return true;
+  }
+  return false;
+}
+
+function matchesAny(foodName: string, keywords: Keyword[]): boolean {
+  const strictName = normalizeKeepAccent(foodName);
+  const looseName = normalizeVi(foodName);
+  if (!looseName) return false;
+  return keywords.some((kw) => matchPhrase(kw.accented ? strictName : looseName, kw.text));
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,32 +158,81 @@ export async function POST(req: Request) {
   // Lấy toàn bộ database thực phẩm từ Supabase
   const dbFoods = await prisma.food.findMany({ orderBy: { name: "asc" } });
 
-  // Nén dữ liệu dạng bảng nhỏ gọn để đưa vào prompt
-  const foodTable = dbFoods
+  const likesStr    = typeof likes    === "string" ? likes.trim()    : "";
+  const dislikesStr = typeof dislikes === "string" ? dislikes.trim() : "";
+
+  const likeKeywords    = splitKeywords(likesStr);
+  const dislikeKeywords = splitKeywords(dislikesStr);
+
+  // Loại thẳng thực phẩm bị kiêng ra khỏi bảng gửi cho AI — AI không thấy thì không chọn được
+  const allowedFoods = dislikeKeywords.length
+    ? dbFoods.filter((f) => !matchesAny(f.name, dislikeKeywords))
+    : dbFoods;
+
+  // Nếu lọc quá tay (còn quá ít món) thì giữ nguyên bảng gốc, chỉ dựa vào prompt để né
+  const usableFoods =
+    allowedFoods.length >= 15 && allowedFoods.length >= dbFoods.length * 0.2
+      ? allowedFoods
+      : dbFoods;
+
+  const likedMatches = likeKeywords.length
+    ? usableFoods.filter((f) => matchesAny(f.name, likeKeywords))
+    : [];
+
+  // Một từ khoá rộng (vd "cá") có thể khớp hàng chục món — bốc ngẫu nhiên tối đa
+  // MAX_FAVORITES để prompt không quá dài và mỗi lần tạo lại ra tổ hợp mới
+  const MAX_FAVORITES = 12;
+  const likedFoods = shuffle(likedMatches).slice(0, MAX_FAVORITES);
+  const likedNames = new Set(likedFoods.map((f) => f.name));
+
+  // Từ khoá khách thích nhưng database chưa có món nào khớp
+  const unmatchedLikes = likeKeywords.filter(
+    (kw) => !usableFoods.some((f) => matchesAny(f.name, [kw]))
+  );
+
+  // Nén dữ liệu dạng bảng nhỏ gọn để đưa vào prompt (⭐ = món khách thích)
+  const foodTable = usableFoods
     .map((f) => {
       const parts = [f.name, f.calories, f.protein, f.carbs, f.fat, f.weight_g];
       if (f.meal_type) parts.push(`[${f.meal_type}]`);
       if (f.category) parts.push(`(${f.category})`);
-      return parts.join("|");
+      const row = parts.join("|");
+      return likedNames.has(f.name) ? `⭐ ${row}` : row;
     })
     .join("\n");
 
-  const likesStr    = typeof likes    === "string" ? likes.trim()    : "";
-  const dislikesStr = typeof dislikes === "string" ? dislikes.trim() : "";
+  const favoriteTable = likedFoods
+    .map((f) => `${f.name}|${f.calories}|${f.protein}|${f.carbs}|${f.fat}|${f.weight_g}`)
+    .join("\n");
 
-  const likesContext = likesStr
-    ? `Ưu tiên sử dụng các thực phẩm sau (không bắt buộc 100%): ${likesStr}`
-    : "Không có yêu cầu đặc biệt — tự động chọn ngẫu nhiên từ database";
+  const favoriteBlock = likedFoods.length
+    ? `
+
+⭐ DANH SÁCH MÓN KHÁCH YÊU THÍCH (Tên|Cal|P|C|F|g_định_lượng) — BẮT BUỘC PHẢI XUẤT HIỆN TRONG THỰC ĐƠN:
+${favoriteTable}`
+    : "";
+
+  const likesContext = !likesStr
+    ? "Không có yêu cầu đặc biệt — tự động chọn ngẫu nhiên từ database"
+    : likedFoods.length > 0
+      ? `BẮT BUỘC dùng các món khách thích (đã đánh dấu ⭐ trong database): ${likedFoods
+          .map((f) => f.name)
+          .join(", ")}${
+          unmatchedLikes.length
+            ? `. Khách còn ghi thêm "${unmatchedLikes.map((k) => k.text).join(", ")}" — hãy chọn món GẦN GIỐNG NHẤT trong database.`
+            : ""
+        }`
+      : `Khách thích: ${likesStr}. Database chưa có món trùng tên — hãy chọn những món GẦN GIỐNG NHẤT (cùng nguyên liệu hoặc cùng cách chế biến) trong database.`;
 
   const dislikesContext = dislikesStr
-    ? `Tuyệt đối KHÔNG sử dụng các thực phẩm sau: ${dislikesStr}`
+    ? `Tuyệt đối KHÔNG dùng các thực phẩm sau và mọi món có chứa chúng: ${dislikesStr}`
     : "Không có dị ứng — được sử dụng linh hoạt mọi thực phẩm trong database";
 
   const systemInstruction = `Cậu là thuật toán xếp hình thực đơn siêu tốc của hệ thống Ladysfit.
 Hãy nhận mục tiêu Calo và tỷ lệ P-C-F từ user, sau đó LỰA CHỌN và KẾT HỢP các thực phẩm phù hợp TỪ MẢNG DỮ LIỆU THỰC PHẨM SUPABASE DƯỚI ĐÂY.
 
 FORMAT DATABASE (Tên|Cal|P|C|F|g_định_lượng|[Loại bữa]|(Mục đích)):
-${foodTable}
+${foodTable}${favoriteBlock}
 
 QUY TẮC BẮT BUỘC:
 1. Tuyệt đối không tự chế món mới nằm ngoài database trên. Chỉ dùng đúng các tên thực phẩm có trong bảng.
@@ -117,11 +243,16 @@ QUY TẮC BẮT BUỘC:
 
 ⛔ QUY TẮC ĐA DẠNG BỮA ĂN — VI PHẠM = KẾT QUẢ SAI:
 6. NGHIÊM CẤM TUYỆT ĐỐI: Các bữa trong cùng một ngày KHÔNG được trùng lặp trên 70% danh sách thực phẩm. Copy-paste thực đơn giữa các bữa là lỗi nghiêm trọng.
-7. MỖI BỮA PHẢI DÙNG NGUỒN ĐẠM CHÍNH KHÁC NHAU:
+7. MỖI BỮA PHẢI DÙNG NGUỒN ĐẠM CHÍNH KHÁC NHAU (trừ khi đó là món khách yêu thích ⭐ — sở thích khách hàng luôn thắng quy tắc đa dạng):
    - Nếu Bữa 1 đã dùng thịt bò → Bữa 2, 3 PHẢI chọn: cá, ức gà, thịt heo nạc, hải sản, tôm, trứng (nếu chưa dùng), đậu hũ...
    - Không lặp lại cùng một loại đạm chủ lực quá 1 lần trong toàn bộ ngày.
 8. NGUỒN TINH BỘT và CHẤT BÉO cũng phải đa dạng: không dùng cùng một loại tinh bột (vd: cơm trắng) cho tất cả các bữa — hãy xen kẽ khoai lang, bún, bánh mì, cháo yến mạch...
-9. KỶ LUẬT TOÁN HỌC KHÔNG ĐỔI: Dù đổi món đa dạng, tổng (Protein × 4 + Carbs × 4 + Fat × 9) của tất cả bữa cộng lại vẫn phải sai số ≤5% so với mục tiêu Calo. Tính lại gram từng thực phẩm để đảm bảo con số khớp.`;
+9. ƯU TIÊN SỞ THÍCH KHÁCH HÀNG — CAO HƠN MỌI QUY TẮC ĐA DẠNG:
+   - MỖI BỮA PHẢI có ít nhất 1 món lấy từ danh sách ⭐ (nếu danh sách ⭐ không rỗng). Đây là yêu cầu bắt buộc, không phải gợi ý.
+   - Nếu danh sách ⭐ có ít món hơn số bữa, được phép lặp lại món ⭐ ở nhiều bữa dù vi phạm quy tắc 7-8.
+   - Nếu danh sách ⭐ nhiều món, hãy trải đều chúng ra các bữa thay vì dồn hết vào một bữa.
+   - Thực phẩm khách kiêng/dị ứng đã bị loại khỏi database phía trên. Tuyệt đối không tự thêm lại chúng, kể cả dưới tên gọi khác hay làm nguyên liệu phụ.
+10. KỶ LUẬT TOÁN HỌC KHÔNG ĐỔI: Dù đổi món đa dạng, tổng (Protein × 4 + Carbs × 4 + Fat × 9) của tất cả bữa cộng lại vẫn phải sai số ≤5% so với mục tiêu Calo. Tính lại gram từng thực phẩm để đảm bảo con số khớp.`;
 
   const prompt = `Tạo thực đơn ${mealsNum} bữa cho 1 ngày:
 - Calories mục tiêu: ${Math.round(derNum)} kcal
@@ -133,7 +264,21 @@ BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần t
 Không được gộp bữa, không được bỏ sót bữa cuối. Ưu tiên hoàn thành đủ ${mealsNum} bữa hơn là chi tiết quá kỹ từng bữa.
 Chia đúng ${mealsNum} bữa, tổng macro sai số ≤5%.
 
-⛔ NHẮC LẠI ANTI-DUPLICATE: Mỗi bữa PHẢI dùng nguồn đạm khác nhau (không lặp thịt bò/gà/cá/heo liên tiếp). Kiểm tra lại trước khi trả về — nếu 2 bữa có >70% thực phẩm giống nhau, hãy thay thế ngay.
+⛔ NHẮC LẠI ANTI-DUPLICATE: Mỗi bữa PHẢI dùng nguồn đạm khác nhau (không lặp thịt bò/gà/cá/heo liên tiếp). Kiểm tra lại trước khi trả về — nếu 2 bữa có >70% thực phẩm giống nhau, hãy thay thế ngay.${
+    likedFoods.length
+      ? `
+
+⭐ NHẮC LẠI SỞ THÍCH (ưu tiên số 1, cao hơn anti-duplicate): MỖI BỮA phải có ít nhất 1 món lấy từ danh sách khách thích: ${likedFoods
+          .map((f) => f.name)
+          .join(", ")}. Trước khi trả về, tự kiểm tra lại từng bữa — bữa nào chưa có món nào trong danh sách này thì sửa ngay.`
+      : ""
+  }${
+    dislikesStr
+      ? `
+
+🚫 NHẮC LẠI KIÊNG KỊ: tuyệt đối không có ${dislikesStr} (và món chứa chúng) trong bất kỳ bữa nào.`
+      : ""
+  }
 
 QUY TẮC TRẢ VỀ JSON BẮT BUỘC:
 Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗi phần tử có 6 trường:
@@ -211,7 +356,10 @@ Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗ
   if (!meals || meals.length < mealsNum || finishReason === "MAX_TOKENS") {
     const rescuePrompt = `Tạo thực đơn ${mealsNum} bữa dựa trên món ăn Việt Nam phổ thông.
 Mục tiêu: ${Math.round(derNum)} kcal | P:${Math.round(proteinNum)}g F:${Math.round(fatNum)}g C:${Math.round(carbsNum)}g
-Kiêng/dị ứng: ${dislikesStr || "không có"}
+Món yêu thích BẮT BUỘC có mặt: ${
+      likedFoods.length ? likedFoods.map((f) => f.name).join(", ") : likesStr || "không có"
+    }
+Kiêng/dị ứng TUYỆT ĐỐI KHÔNG dùng: ${dislikesStr || "không có"}
 BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum} objects). Không thiếu bữa. Chỉ trả về JSON thuần.`;
     const rescuePayload = {
       contents: [{ role: "user", parts: [{ text: rescuePrompt }] }],
