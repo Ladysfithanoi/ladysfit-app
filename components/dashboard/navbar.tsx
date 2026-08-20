@@ -146,7 +146,6 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const checklistBellRef                              = useRef<HTMLDivElement>(null);
   const [checklistNotifs, setChecklistNotifs]         = useState<ChecklistNotif[]>([]);
   const [checklistUnread, setChecklistUnread]         = useState(0);
-  const [checklistLoaded, setChecklistLoaded]         = useState(false);
   const [reportModalDate, setReportModalDate]         = useState<string | null>(null);
 
   // Measurement notification bell (PT only)
@@ -338,7 +337,6 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         const data = await res.json();
         setChecklistNotifs(data.notifications ?? []);
         setChecklistUnread(data.unreadCount ?? 0);
-        setChecklistLoaded(true);
       }
     } catch { /* ignore */ }
   }

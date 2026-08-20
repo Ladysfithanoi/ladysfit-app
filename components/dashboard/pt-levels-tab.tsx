@@ -647,6 +647,7 @@ export function PTLevelsTab() {
         }
         confirmLabel={levelToDelete?._count.users ? "Đóng" : "Xóa"}
         cancelLabel={levelToDelete?._count.users ? undefined : "Hủy"}
+        loading={deleting}
         onConfirm={() => {
           if (levelToDelete?._count.users) {
             setDeleteOpen(false);

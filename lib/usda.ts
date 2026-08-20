@@ -15,12 +15,13 @@ export async function getFoodDetail(fdcId: number): Promise<any> {
   return res.json();
 }
 
+type UsdaNutrient = { nutrientName?: string; value?: number };
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractNutrients(food: any) {
-  const nutrients = food.foodNutrients || [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nutrients: UsdaNutrient[] = food.foodNutrients || [];
   const get = (name: string) =>
-    nutrients.find((n: any) => n.nutrientName?.includes(name))?.value || 0;
+    nutrients.find((n) => n.nutrientName?.includes(name))?.value || 0;
 
   return {
     calories: get("Energy"),

@@ -13,7 +13,7 @@ function round1(n: number): number {
 // Tên sheet Excel: tối đa 31 ký tự, không chứa : \ / ? * [ ]. Khử trùng để 2 cơ
 // sở trùng tên (sau khi cắt) không ghi đè nhau.
 function sanitizeSheetName(name: string, used: Set<string>): string {
-  let base = (name || "Cơ sở").replace(/[:\\/?*[\]]/g, " ").trim().slice(0, 31) || "Cơ sở";
+  const base = (name || "Cơ sở").replace(/[:\\/?*[\]]/g, " ").trim().slice(0, 31) || "Cơ sở";
   let candidate = base;
   let i = 2;
   while (used.has(candidate.toLowerCase())) {

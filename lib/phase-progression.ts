@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { RESIDENT_PACKAGE } from "@/lib/packages";
 import {
   WORKOUT_TYPE_OPTIONS,
-  PHASE_DEFAULT_REPS,
   getSessionTypeOptions,
   getSlotsForSessionType,
 } from "@/lib/workout-structure";
@@ -264,7 +263,6 @@ async function createPhaseProgram(
     (o) => o.value
   );
   const fallbackTypes = sessionTypes.length > 0 ? sessionTypes : ["Tạ 1"];
-  const defaultReps = PHASE_DEFAULT_REPS[baseName] ?? "15-20";
   const spw = sessionsPerWeek > 0 ? sessionsPerWeek : 3;
 
   // Tìm phaseId tương ứng trong DB (nếu có) để giữ liên kết WorkoutPhase.

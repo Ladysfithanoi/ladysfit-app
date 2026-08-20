@@ -168,7 +168,7 @@ export function UserGuidesTab() {
       ) : guides.length === 0 ? (
         <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-2xl">
           <p className="text-sm font-semibold text-gray-300">Chưa có bài hướng dẫn nào</p>
-          <p className="text-xs text-gray-300 mt-1">Nhấn "Thêm bài hướng dẫn" để bắt đầu</p>
+          <p className="text-xs text-gray-300 mt-1">Nhấn &quot;Thêm bài hướng dẫn&quot; để bắt đầu</p>
         </div>
       ) : (
         <div className="space-y-5">

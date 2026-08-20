@@ -20,11 +20,6 @@ function calcKOCRate(startW: number, endW: number | null): number {
   return 0;
 }
 
-function calcKOCTotal(startW: number, endW: number | null, sessions: number): number {
-  if (endW == null) return 0;
-  return Math.min(sessions, 60) * calcKOCRate(startW, endW);
-}
-
 // ── Style helpers ─────────────────────────────────────────────────────────
 
 const RED   = { argb: "FFF15B5C" };
