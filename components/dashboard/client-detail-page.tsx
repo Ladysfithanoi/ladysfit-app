@@ -432,8 +432,16 @@ export function ClientDetailPage({
   const [deletingWeightLogId, setDeletingWeightLogId] = useState<string | null>(null);
   const [deleteWeightLoading, setDeleteWeightLoading] = useState(false);
 
-  // Local workout programs state so new programs appear without page reload
+  // Local workout programs state so new programs appear without page reload.
+  // Đây là NGUỒN DUY NHẤT cho cả thẻ Tổng quan lẫn tab CT Tập — tab CT Tập bị gỡ
+  // khỏi cây mỗi lần đổi mục nên không được giữ bản sao riêng.
   const [workoutProgs, setWorkoutProgs] = useState<WorkoutProgram[]>(initialWorkoutPrograms);
+  // Sau mỗi router.refresh() (lưu giáo án, đổi thông tin CT, chốt buổi tập…) server
+  // trả về danh sách chương trình mới → phải áp lại, nếu không bản sao cục bộ đứng
+  // yên từ lần mount đầu và giao diện hiện dữ liệu cũ cho tới khi tải lại trang.
+  useEffect(() => {
+    setWorkoutProgs(initialWorkoutPrograms);
+  }, [initialWorkoutPrograms]);
 
   // Create workout program modal
   const [createProgOpen, setCreateProgOpen] = useState(false);
@@ -2326,7 +2334,8 @@ export function ClientDetailPage({
       {view === "workout" && (
         <WorkoutTab
           clientId={client.id}
-          initialPrograms={workoutProgs}
+          programs={workoutProgs}
+          onProgramsChange={setWorkoutProgs}
           isSubstitute={isSubstitute}
           assignedPTId={client.assignedPT?.id ?? null}
           initialLogs={initialWorkoutLogs}

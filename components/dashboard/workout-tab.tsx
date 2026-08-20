@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, LockKeyholeOpen, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1957,7 +1957,8 @@ type PackageUpdate = {
 
 export function WorkoutTab({
   clientId,
-  initialPrograms,
+  programs,
+  onProgramsChange,
   initialLogs,
   onPackageUpdated,
   userRole,
@@ -1968,7 +1969,11 @@ export function WorkoutTab({
   minSessionMinutes = 30,
 }: {
   clientId: string;
-  initialPrograms: WorkoutProgram[];
+  /** Danh sách chương trình do trang hồ sơ khách nắm giữ. KHÔNG sao chép vào state
+   *  riêng ở đây: tab này bị gỡ khỏi cây mỗi lần đổi mục (Tổng quan/Chi tiết/Chế độ
+   *  ăn), bản sao sẽ mất và thay đổi vừa lưu bị "quay về" giá trị cũ. */
+  programs: WorkoutProgram[];
+  onProgramsChange: Dispatch<SetStateAction<WorkoutProgram[]>>;
   initialLogs?: WorkoutLogRow[];
   onPackageUpdated?: (pkg: PackageUpdate) => void;
   userRole?: string;
@@ -1981,7 +1986,6 @@ export function WorkoutTab({
   minSessionMinutes?: number;
 }) {
   const router = useRouter();
-  const [programs, setPrograms] = useState(initialPrograms);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -2026,12 +2030,12 @@ export function WorkoutTab({
   // cache hết hạn. KHÔNG gọi khi đang autosave buổi dở (tránh refresh liên tục).
   const handleUpdate = useCallback(
     (patch: Partial<WorkoutProgram> & { id: string }) => {
-      setPrograms((prev) =>
+      onProgramsChange((prev) =>
         prev.map((p) => (p.id === patch.id ? { ...p, ...patch } : p))
       );
       router.refresh();
     },
-    [router]
+    [onProgramsChange, router]
   );
 
   const handleLogAdded = useCallback((log: WorkoutLogRow, pkg: PackageUpdate | null) => {
@@ -2056,7 +2060,7 @@ export function WorkoutTab({
 
   const handleSessionDeleted = useCallback((week: WorkoutWeek, sessionId: string, pkg?: PackageUpdate | null) => {
     // Replace the week that owns this session and drop the deleted session's logs.
-    setPrograms((prev) =>
+    onProgramsChange((prev) =>
       prev.map((p) => ({
         ...p,
         weeks: p.weeks.map((w) => (w.id === week.id ? week : w)),
@@ -2065,10 +2069,10 @@ export function WorkoutTab({
     setWorkoutLogs((prev) => prev.filter((l) => l.sessionId !== sessionId));
     if (pkg) onPackageUpdated?.(pkg);
     router.refresh();
-  }, [onPackageUpdated, router]);
+  }, [onProgramsChange, onPackageUpdated, router]);
 
   function handleArchive(id: string, status: "ACTIVE" | "ARCHIVED") {
-    setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+    onProgramsChange((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
     router.refresh();
   }
 
@@ -2076,7 +2080,7 @@ export function WorkoutTab({
   // mở thành ACTIVE, giai đoạn trước thành ARCHIVED…) nên áp lại cả danh sách.
   const handlePhaseGateChanged = useCallback(
     (rows: { id: string; status: string; manualPhaseOverride: boolean }[]) => {
-      setPrograms((prev) =>
+      onProgramsChange((prev) =>
         prev.map((p) => {
           const row = rows.find((r) => r.id === p.id);
           return row
@@ -2086,7 +2090,7 @@ export function WorkoutTab({
       );
       router.refresh();
     },
-    [router]
+    [onProgramsChange, router]
   );
 
   return (
