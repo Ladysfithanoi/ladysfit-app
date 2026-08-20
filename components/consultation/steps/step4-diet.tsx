@@ -9,13 +9,13 @@ export function Step4Diet({
   onNext,
   onPrev,
   isReadOnly,
-  canSaveAndContinue = true,
+  userRole,
 }: {
   consultation: ConsultationData;
   onNext: (p: Record<string, unknown>) => Promise<void>;
   onPrev: () => void;
   isReadOnly: boolean;
-  canSaveAndContinue?: boolean;
+  userRole?: string;
 }) {
   const [existingPlan, setExistingPlan] = useState<MealPlanRow | null | undefined>(undefined);
   const [savedPlan, setSavedPlan] = useState<MealPlanRow | null>(null);
@@ -83,6 +83,7 @@ export function Step4Diet({
             onSaved={handleSaved}
             onSkip={handleSkip}
             isReadOnly={isReadOnly}
+            canEditCalories={["ADMIN", "FM"].includes(userRole ?? "")}
             saveLabel={advancing ? "Đang lưu..." : "Lưu & Tiếp tục →"}
           />
         )}

@@ -14,15 +14,10 @@ export function phaseToStage(phase: string): number {
   return 1;
 }
 
-export function calculateNutrition(weight: number, height: number, hasDieted: boolean, stage: number) {
-  const pal = stage === 1 ? 1.2 : stage === 2 ? 1.4 : 1.6;
-  let tdee = weight * 22 * pal;
-  if (hasDieted) tdee *= 0.9;
-
-  const weightLossPercent = stage === 1 ? 0.01 : stage === 2 ? 0.005 : 0;
-  const dailyDeficit = (weight * weightLossPercent * 7700) / 7;
-  const der = tdee - dailyDeficit;
-
+// Macro mục tiêu suy ra từ mốc calo/ngày (DER). Đạm bám theo cân nặng lý tưởng nên
+// không đổi theo DER; phần calo còn lại chia cho béo & tinh bột. Tách riêng để khi
+// Admin/FM sửa tay mốc calo thì macro được tính lại đúng cùng một công thức.
+export function macrosForDer(der: number, height: number) {
   const idealWeight = (height - 100) * 0.9;
   const protein = idealWeight * 2;
 
@@ -51,7 +46,19 @@ export function calculateNutrition(weight: number, height: number, hasDieted: bo
     }
   }
 
-  return { tdee, der, protein, fat, carbs };
+  return { protein, fat, carbs };
+}
+
+export function calculateNutrition(weight: number, height: number, hasDieted: boolean, stage: number) {
+  const pal = stage === 1 ? 1.2 : stage === 2 ? 1.4 : 1.6;
+  let tdee = weight * 22 * pal;
+  if (hasDieted) tdee *= 0.9;
+
+  const weightLossPercent = stage === 1 ? 0.01 : stage === 2 ? 0.005 : 0;
+  const dailyDeficit = (weight * weightLossPercent * 7700) / 7;
+  const der = tdee - dailyDeficit;
+
+  return { tdee, der, ...macrosForDer(der, height) };
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -146,6 +153,7 @@ export function NutritionDesigner({
   onSaved,
   onSkip,
   isReadOnly = false,
+  canEditCalories = false,
   saveLabel = "Lưu chế độ ăn",
 }: {
   consultationId?: string;
@@ -159,6 +167,8 @@ export function NutritionDesigner({
   onSaved: (plan: MealPlanRow) => void;
   onSkip?: () => void;
   isReadOnly?: boolean;
+  /** Admin/FM được sửa tay mốc calo mục tiêu (DER) thay vì dùng số tự tính. PT thì không. */
+  canEditCalories?: boolean;
   saveLabel?: string;
 }) {
   // Section 1: Metrics
@@ -167,7 +177,23 @@ export function NutritionDesigner({
   const weight = initialWeight ?? 60;
   const height = initialHeight ?? 160;
   const stage = phaseToStage(phase);
-  const metrics = calculateNutrition(weight, height, hasDieted, stage);
+  const autoMetrics = calculateNutrition(weight, height, hasDieted, stage);
+
+  // Mốc calo sửa tay (Admin/FM). null = dùng đúng số hệ thống tự tính. Giữ dạng
+  // chuỗi để gõ dở ("1", "18"…) không bị nhảy về số tự tính giữa chừng. Mở lại một
+  // chế độ ăn đã lưu lệch số tự tính thì lấy lại chính mốc đã lưu — chỉ làm vậy cho
+  // người có quyền sửa, để luồng của PT giữ nguyên như cũ.
+  const [derOverride, setDerOverride] = useState<string | null>(() => {
+    if (!existingPlan || !canEditCalories) return null;
+    const auto = calculateNutrition(weight, height, false, stage);
+    return Math.round(existingPlan.der) === Math.round(auto.der)
+      ? null
+      : String(Math.round(existingPlan.der));
+  });
+  const derValue = derOverride !== null && Number(derOverride) > 0 ? Number(derOverride) : null;
+  const metrics = derValue === null
+    ? autoMetrics
+    : { tdee: autoMetrics.tdee, der: derValue, ...macrosForDer(derValue, height) };
 
   // Section 2: Meal design
   const [mealsPerDay, setMealsPerDay] = useState(existingPlan?.mealsPerDay ?? 3);
@@ -284,7 +310,7 @@ export function NutritionDesigner({
         {!isReadOnly && (
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setHasDieted((v) => !v)}
+              onClick={() => { setHasDieted((v) => !v); setDerOverride(null); }}
               className={cn(
                 "relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0",
                 hasDieted ? "bg-[#f15b5c]" : "bg-gray-200"
@@ -305,13 +331,46 @@ export function NutritionDesigner({
               <span className="text-xs text-gray-400 font-semibold">TDEE (duy trì)</span>
               <span className="text-sm font-extrabold text-gray-800">{Math.round(metrics.tdee)} kcal</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-gray-400 font-semibold">DER (mục tiêu)</span>
-              <span className="text-sm font-extrabold text-[#f15b5c]">{Math.round(metrics.der)} kcal</span>
+              {canEditCalories && !isReadOnly ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    value={derOverride ?? String(Math.round(autoMetrics.der))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDerOverride(e.target.value)}
+                    className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-right text-sm font-extrabold text-[#f15b5c] focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  />
+                  <span className="text-xs text-gray-400 font-semibold">kcal</span>
+                </div>
+              ) : (
+                <span className="text-sm font-extrabold text-[#f15b5c]">{Math.round(metrics.der)} kcal</span>
+              )}
             </div>
+            {canEditCalories && !isReadOnly && derOverride !== null && (
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <span className="text-[10px] text-gray-400">
+                  Hệ thống tự tính: {Math.round(autoMetrics.der)} kcal
+                </span>
+                <button
+                  onClick={() => setDerOverride(null)}
+                  className="text-[10px] font-bold text-gray-500 hover:text-[#f15b5c] underline"
+                >
+                  Dùng lại số tự tính
+                </button>
+              </div>
+            )}
           </div>
           <div className="bg-white rounded-xl px-4 py-3 border border-gray-100 space-y-1.5">
-            <p className="text-xs text-gray-400 font-semibold mb-1">Macro mục tiêu</p>
+            <p className="text-xs text-gray-400 font-semibold mb-1">
+              Macro mục tiêu
+              {derValue !== null && (
+                <span className="font-normal text-gray-300"> · tính theo mốc calo đã sửa</span>
+              )}
+            </p>
             <div className="grid grid-cols-3 gap-1.5">
               <MacroBadge label="P" value={metrics.protein} color="bg-blue-50 text-blue-700" />
               <MacroBadge label="F" value={metrics.fat} color="bg-yellow-50 text-yellow-700" />

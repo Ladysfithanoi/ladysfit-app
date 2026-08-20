@@ -244,7 +244,7 @@ export function ConsultationWizard({
             onNext={handleNext}
             onPrev={handlePrev}
             isReadOnly={isReadOnly}
-            canSaveAndContinue={canSaveAndContinue}
+            userRole={userRole}
           />
         )}
         {step === 5 && (

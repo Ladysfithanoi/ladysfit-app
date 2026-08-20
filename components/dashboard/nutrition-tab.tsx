@@ -243,6 +243,8 @@ export function NutritionTab({
 
   const activePlan = plans.find((p) => p.status === "ACTIVE") ?? null;
   const canEdit = ["ADMIN", "FM", "PT"].includes(userRole ?? "");
+  // Chỉ Admin/FM được sửa tay mốc calo mục tiêu; PT dùng đúng số hệ thống tính.
+  const canEditCalories = ["ADMIN", "FM"].includes(userRole ?? "");
 
   function handleSaved(plan: MealPlanRow) {
     setPlans((prev) => [plan, ...prev.map((p) => ({ ...p, status: "ARCHIVED" as const }))]);
@@ -320,6 +322,7 @@ export function NutritionTab({
           initialPhase={phase}
           existingPlan={null}
           onSaved={handleSaved}
+          canEditCalories={canEditCalories}
           saveLabel="Lưu chế độ ăn"
         />
       </div>
