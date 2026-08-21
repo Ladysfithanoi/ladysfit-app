@@ -459,9 +459,10 @@ function ProgramView({
   // Chương trình đã lưu trữ (giai đoạn đã qua) chỉ để xem lại.
   const isReadOnly = program.status !== "ACTIVE";
 
-  // Sửa NHÃN giai đoạn của chương trình này (dùng khi CT bị gắn nhầm giai đoạn)
-  // — chỉ FM/Admin. Chuyển khách sang giai đoạn khác là nút "Chuyển giai đoạn".
-  // Admin sửa được về mọi giai đoạn; FM chỉ từ giai đoạn hiện tại trở lên.
+  // Đổi giai đoạn tập hiện tại ngay trên chương trình này — chỉ FM/Admin. Đây là
+  // thao tác TẠI CHỖ: không CT nào bị lưu trữ, không CT nào được tạo mới. Việc
+  // khép giai đoạn (lưu trữ CT + mở CT giai đoạn kế) là nút "Chuyển giai đoạn".
+  // Admin đổi được về mọi giai đoạn; FM chỉ từ giai đoạn hiện tại trở lên.
   const isAdmin = userRole === "ADMIN";
   const currentPhaseOrder = parsePhaseOrder(program.phase);
   const selectablePhases = isAdmin
@@ -769,9 +770,9 @@ function ProgramView({
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       const updatedWeek: WorkoutWeek = await res.json();
 
-      // FM/Admin đổi nhãn giai đoạn ngay trong giáo án → lưu lại vào CT. Đây chỉ
-      // là ĐỔI TÊN/mẫu của chính CT này, không phải chuyển khách sang giai đoạn
-      // khác (việc đó dùng nút "Chuyển giai đoạn"). PT không có ô này.
+      // FM/Admin đổi giai đoạn ngay trong giáo án → lưu lại vào CT. Đổi tại chỗ:
+      // không lưu trữ CT nào (khép giai đoạn là nút "Chuyển giai đoạn"). PT không
+      // có ô này.
       const phaseChanged = canEditPhase && editPhaseId !== (program.phaseId ?? "");
       if (phaseChanged && editSelectedPhase) {
         await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
@@ -866,9 +867,9 @@ function ProgramView({
     setProgError("");
     try {
       const selectedPhase = phases.find((p) => p.id === progForm.phaseId);
-      // Ô giai đoạn ở đây chỉ ĐỔI NHÃN của chính CT này (sửa CT bị gắn nhầm giai
-      // đoạn) — chuyển khách sang giai đoạn khác là việc của nút "Chuyển giai
-      // đoạn". PT không có ô này nên không gửi kèm 2 trường phase.
+      // Ô giai đoạn ở đây đổi giai đoạn hiện tại NGAY TRÊN CT này, không lưu trữ
+      // CT nào — khép giai đoạn là việc của nút "Chuyển giai đoạn". PT không có
+      // ô này nên không gửi kèm 2 trường phase.
       const body = {
         ...(canEditPhase
           ? { phase: selectedPhase?.name ?? program.phase, phaseId: progForm.phaseId || null }
@@ -1151,7 +1152,7 @@ function ProgramView({
                   {canEditPhase && showPhaseChange && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
                       <p className="text-xs font-bold text-amber-700">
-                        ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này. Đây là thao tác thủ công — hệ thống sẽ tôn trọng giai đoạn bạn chọn (không tự kéo về).
+                        ⚠️ Đổi giai đoạn sẽ reset các bài tập đã chọn trong tuần này. Chương trình được đổi sang giai đoạn bạn chọn ngay tại chỗ — không có CT nào bị đưa vào kho lưu trữ.
                       </p>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1 col-span-2">
@@ -1554,7 +1555,9 @@ function ProgramView({
             </div>
 
             <div className="px-5 py-4 space-y-4">
-              {/* Giai đoạn: chỉ đổi NHÃN của CT này, không phải chuyển giai đoạn */}
+              {/* Giai đoạn: đổi giai đoạn tập hiện tại NGAY TRÊN CT này — không
+                  lưu trữ CT nào. Muốn CT hiện tại vào kho lưu trữ và mở CT mới
+                  cho giai đoạn kế thì dùng nút "Chuyển giai đoạn" ở đầu tab. */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-600">Giai đoạn</label>
                 {canEditPhase ? (
@@ -1570,9 +1573,11 @@ function ProgramView({
                       ))}
                     </select>
                     <p className="text-[11px] text-gray-400">
-                      Chỉ đổi nhãn giai đoạn của <span className="font-semibold">chính chương trình này</span> —
-                      dùng khi CT bị gắn nhầm giai đoạn. Muốn chuyển khách sang giai đoạn khác thì
-                      dùng nút <span className="font-semibold">Chuyển giai đoạn</span> ở đầu tab.
+                      Đổi giai đoạn tập hiện tại ngay trên chương trình này —{" "}
+                      <span className="font-semibold">không có chương trình nào bị lưu trữ</span>, giáo án và
+                      nhật ký giữ nguyên. Muốn khép lại giai đoạn hiện tại (đưa CT vào kho lưu trữ) và mở
+                      CT mới cho giai đoạn kế thì dùng nút{" "}
+                      <span className="font-semibold">Chuyển giai đoạn</span> ở đầu tab.
                       {!isAdmin && " Không thể đổi về giai đoạn thấp hơn giai đoạn hiện tại (chỉ Admin mới được)."}
                     </p>
                   </>
@@ -1582,8 +1587,9 @@ function ProgramView({
                       {program.phase}
                     </div>
                     <p className="text-[11px] text-gray-400">
-                      Chỉ Quản lý (FM) / Admin sửa được nhãn giai đoạn của chương trình. Chuyển khách
-                      sang giai đoạn khác thì dùng nút <span className="font-semibold">Chuyển giai đoạn</span> ở đầu tab.
+                      Chỉ Quản lý (FM) / Admin đổi được giai đoạn của chương trình. Muốn khép lại giai đoạn
+                      hiện tại và mở CT mới cho giai đoạn kế thì dùng nút{" "}
+                      <span className="font-semibold">Chuyển giai đoạn</span> ở đầu tab.
                     </p>
                   </>
                 )}

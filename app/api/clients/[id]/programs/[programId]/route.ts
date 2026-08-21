@@ -65,12 +65,13 @@ export async function PATCH(
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Đổi NHÃN giai đoạn của một chương trình (sửa CT bị gắn nhầm giai đoạn) chỉ
-  // dành cho FM (cơ sở mình quản lý) và Admin. PT vẫn sửa được các thông tin khác
-  // (số buổi/tuần, tuần hiện tại, loại hình tập, ghi chú).
+  // Đổi giai đoạn tập hiện tại NGAY TRÊN chương trình này (không lưu trữ CT nào,
+  // không tạo CT mới) chỉ dành cho FM (cơ sở mình quản lý) và Admin. PT vẫn sửa
+  // được các thông tin khác (số buổi/tuần, tuần hiện tại, loại hình tập, ghi chú).
   //
-  // Chuyển KHÁCH sang giai đoạn khác là việc của POST /api/clients/[id]/phase-switch
-  // — ở đó mới có đủ luật tuần tự / số tuần / quyền theo cấp độ PT.
+  // Khép giai đoạn — đưa CT đang chạy vào kho lưu trữ và mở CT cho giai đoạn kế —
+  // là việc của POST /api/clients/[id]/phase-switch, ở đó mới có đủ luật tuần tự /
+  // số tuần / quyền theo cấp độ PT.
   const phaseChanged =
     (body.phase !== undefined && body.phase !== existing.phase) ||
     (body.phaseId !== undefined && (body.phaseId ?? null) !== existing.phaseId);

@@ -68,12 +68,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const startWeek = body.currentWeek ?? 1;
 
-  // Mỗi khách chỉ có MỘT chương trình đang áp dụng — cổng khách hàng đọc theo
-  // trạng thái này. CT đang chạy được chuyển sang lưu trữ (vẫn xem lại được).
-  await prisma.workoutProgram.updateMany({
-    where: { clientId: params.id, status: { not: "ARCHIVED" } },
-    data: { status: "ARCHIVED" },
-  });
+  // KHÔNG tự lưu trữ chương trình đang chạy ở đây: đưa CT vào kho lưu trữ chỉ
+  // xảy ra khi người dùng bấm "Chuyển giai đoạn" (POST .../phase-switch), hoặc
+  // khi họ tự đổi trạng thái CT. Tạo thêm một CT không phải là chuyển giai đoạn.
 
   const program = await prisma.workoutProgram.create({
     data: {

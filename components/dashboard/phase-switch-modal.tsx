@@ -132,6 +132,13 @@ export function PhaseSwitchModal({
                 </p>
               )}
 
+              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2 leading-relaxed">
+                Chuyển giai đoạn sẽ đưa chương trình đang áp dụng vào{" "}
+                <span className="font-bold text-gray-700">kho lưu trữ</span> và mở chương trình của giai
+                đoạn mới. Nếu chỉ muốn đổi giai đoạn của chương trình đang chạy mà giữ nguyên giáo án, hãy
+                dùng ô <span className="font-bold text-gray-700">Giai đoạn</span> trong Thông tin CT.
+              </p>
+
               {info.options.map((o) => (
                 <div
                   key={o.order}
