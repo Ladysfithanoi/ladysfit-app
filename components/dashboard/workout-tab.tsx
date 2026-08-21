@@ -11,6 +11,7 @@ import {
 } from "@/lib/workout-structure";
 import { LiveSessionPanel, SessionLogHistory, SignaturePad, WeekLogOverview } from "./session-log-panel";
 import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-modal";
+import { CheckOutPhotoThumb } from "./checkout-photo";
 import { PhaseSwitchModal } from "./phase-switch-modal";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
@@ -101,6 +102,8 @@ export type WorkoutLogRow = {
   firstInteractionAt: string | null;
   signatureUrl: string | null;
   checkInSignatureUrl?: string | null;
+  /** Ảnh PT chụp cùng khách lúc check-out — bằng chứng buổi tập có thật. */
+  checkOutPhotoUrl?: string | null;
   packageCounted?: boolean;
   /** Lộ trình mà buổi này đã trừ (ghi lúc check-in) — dùng để chia buổi theo gói. */
   packageEnrollmentId?: string | null;
@@ -117,6 +120,12 @@ export type WorkoutLogRow = {
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+/** Giờ trong ngày từ ISO → "14:05". */
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 /** Buổi này do người KHÁC dạy chứ không phải PT đang phụ trách khách → buổi dạy hộ.
@@ -142,10 +151,12 @@ function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boo
       )}
     >
       <span className="text-xs font-bold text-gray-700">{fmtDate(log.sessionDate)}</span>
-      {minutes != null && (
+      {log.checkInAt && (
         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
           <Clock className="w-3 h-3" />
-          {minutes} phút
+          {fmtTime(log.checkInAt)}
+          {log.checkOutAt && ` → ${fmtTime(log.checkOutAt)}`}
+          {minutes != null && <span className="text-gray-400">({minutes} phút)</span>}
         </span>
       )}
       <span
@@ -171,6 +182,10 @@ function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boo
       ) : log.confirmationMethod === "CLIENT_APP" ? (
         <span className="text-[11px] font-bold text-emerald-600">Khách xác nhận qua app</span>
       ) : null}
+      <CheckOutPhotoThumb
+        src={log.checkOutPhotoUrl}
+        label={`Ảnh check-out · ${fmtDate(log.sessionDate)} · PT ${log.createdBy.name ?? "—"}`}
+      />
     </div>
   );
 }

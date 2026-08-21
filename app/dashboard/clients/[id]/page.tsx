@@ -291,6 +291,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     firstInteractionAt: l.firstInteractionAt?.toISOString() ?? null,
     signatureUrl: l.signatureUrl,
     checkInSignatureUrl: l.checkInSignatureUrl,
+    checkOutPhotoUrl: l.checkOutPhotoUrl,
     packageEnrollmentId: l.packageEnrollmentId,
     earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
     confirmationMethod: l.confirmationMethod,

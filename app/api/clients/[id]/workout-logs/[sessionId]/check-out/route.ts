@@ -66,6 +66,7 @@ export async function POST(
 
     const body = (await req.json()) as {
       signatureUrl?: string | null;
+      checkOutPhotoUrl?: string | null;
       notes?: string | null;
       setLogs?: SetLogInput[];
       survey?: unknown;
@@ -181,6 +182,21 @@ export async function POST(
       return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
     }
 
+    // ── Ảnh PT chụp cùng khách lúc check-out ──
+    // Chữ ký tay ký hộ được, ảnh chụp tại chỗ thì không — đây là rào chống ký
+    // khống. Bỏ qua cho log AWAITING tồn dư (buổi đã xong từ trước, giờ chỉ đối
+    // soát lại — không thể quay ngược thời gian mà chụp).
+    const photo = (body.checkOutPhotoUrl ?? "").trim();
+    if (!isAwaiting && !photo) {
+      if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
+        await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
+      }
+      return NextResponse.json(
+        { error: "Cần ảnh PT chụp cùng khách tại buổi tập để hoàn thành check-out." },
+        { status: 400 }
+      );
+    }
+
     // ── Bắt buộc đánh giá buổi tập trước khi ký check-out ──
     // PT phải hoàn thành bảng đánh giá 3 trục (hiệu suất / RIR / hồi phục). Từ đó
     // sinh gợi ý điều chỉnh tải cho buổi sau. Bỏ qua cho log AWAITING tồn dư (luồng
@@ -220,6 +236,7 @@ export async function POST(
         confirmationMethod: "SIGNATURE",
         firstInteractionAt,
         signatureUrl: sig,
+        ...(photo ? { checkOutPhotoUrl: photo } : {}),
         packageCounted: true,
         // If we just counted a legacy uncounted log, remember which lộ trình it
         // charged so a later delete/void refunds the exact same package.

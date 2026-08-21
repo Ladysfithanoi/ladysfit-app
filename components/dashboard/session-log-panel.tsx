@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
+import { CheckOutPhotoCapture, CheckOutPhotoThumb } from "./checkout-photo";
 import {
   buildNextSessionSuggestion,
   type SessionSurvey,
@@ -34,6 +35,20 @@ const RECOVERY_OPTIONS: { value: SurveyRecovery; label: string; icon: string }[]
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+/** Giờ trong ngày từ ISO → "14:05". */
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Số phút giữa check-in và check-out; null khi buổi chưa đủ hai mốc. */
+function sessionMinutes(log: { checkInAt: string | null; checkOutAt: string | null }): number | null {
+  if (!log.checkInAt || !log.checkOutAt) return null;
+  return Math.round(
+    (new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000
+  );
 }
 
 const SETS = [1, 2, 3, 4, 5, 6] as const;
@@ -587,6 +602,9 @@ export function LiveSessionPanel({
   const [syncing, setSyncing] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [showSig, setShowSig] = useState(false);
+  // Ký check-out xong thì tới bước chụp ảnh cùng khách; giữ tạm chữ ký ở đây để
+  // gửi kèm ảnh trong CÙNG một lần gọi check-out (server đòi đủ cả hai).
+  const [pendingSig, setPendingSig] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [copyTargetSet, setCopyTargetSet] = useState<number>(SETS.length);
@@ -867,7 +885,7 @@ export function LiveSessionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, setLogs]);
 
-  async function checkOut(method: "client_app" | "signature", signatureUrl = "") {
+  async function checkOut(method: "client_app" | "signature", signatureUrl = "", checkOutPhotoUrl = "") {
     setFinishing(true);
     setError("");
     try {
@@ -877,6 +895,7 @@ export function LiveSessionPanel({
         body: JSON.stringify({
           method,
           signatureUrl,
+          checkOutPhotoUrl,
           notes: notes || null,
           setLogs: buildSetLogPayload(),
           // Kèm đánh giá buổi tập (server sinh gợi ý cho buổi sau). Log AWAITING
@@ -889,6 +908,7 @@ export function LiveSessionPanel({
         throw new Error(data.error ?? "Có lỗi xảy ra");
       }
       setShowSig(false);
+      setPendingSig(null);
       if (!data.valid) {
         // Includes the over-cap case (data.autoCancelled): the server voided the
         // session instead of completing it — it won't count for the PT's salary.
@@ -1415,8 +1435,10 @@ export function LiveSessionPanel({
               {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
               Khách ký check-out & kết thúc buổi
             </button>
-            <p className="text-[11px] text-gray-400 mt-1.5 text-center">
+            <p className="text-[11px] text-gray-400 mt-1.5 text-center leading-relaxed">
               Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT.
+              <br />
+              Sau khi ký sẽ cần <span className="font-semibold text-gray-500">chụp một ảnh cùng khách</span> — chụp trực tiếp, không chọn được ảnh có sẵn.
             </p>
           </div>
         ) : (
@@ -1432,11 +1454,21 @@ export function LiveSessionPanel({
         )}
       </div>
 
+      {/* Ký check-out → chụp ảnh cùng khách → mới gọi check-out. Hai bước chứ
+          không gộp: ảnh chụp tại chỗ là thứ chữ ký tay không thay thế được. */}
       {showSig && (
         <SignaturePad
-          saving={finishing}
+          saving={false}
           onCancel={() => setShowSig(false)}
-          onConfirm={(dataUrl) => checkOut("signature", dataUrl)}
+          onConfirm={(dataUrl) => { setShowSig(false); setPendingSig(dataUrl); }}
+        />
+      )}
+
+      {pendingSig && (
+        <CheckOutPhotoCapture
+          saving={finishing}
+          onCancel={() => { if (!finishing) setPendingSig(null); }}
+          onConfirm={(photoUrl) => checkOut("signature", pendingSig, photoUrl)}
         />
       )}
 
@@ -1791,10 +1823,14 @@ export function WeekLogOverview({
                     {latest ? (
                       <span className="inline-flex flex-wrap items-center gap-2 text-xs text-gray-500">
                         <span className="font-semibold text-gray-600">{fmtDate(latest.sessionDate)}</span>
-                        {latest.checkInAt && latest.checkOutAt && (
+                        {latest.checkInAt && (
                           <span className="inline-flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {Math.round((new Date(latest.checkOutAt).getTime() - new Date(latest.checkInAt).getTime()) / 60000)} phút
+                            {fmtTime(latest.checkInAt)}
+                            {latest.checkOutAt && ` → ${fmtTime(latest.checkOutAt)}`}
+                            {sessionMinutes(latest) != null && (
+                              <span className="text-gray-400">({sessionMinutes(latest)} phút)</span>
+                            )}
                           </span>
                         )}
                         <span className={cn(
@@ -1814,6 +1850,10 @@ export function WeekLogOverview({
                             />
                           </span>
                         )}
+                        <CheckOutPhotoThumb
+                          src={latest.checkOutPhotoUrl}
+                          label={`Ảnh check-out · ${fmtDate(latest.sessionDate)} · PT ${latest.createdBy.name ?? "—"}`}
+                        />
                         {s.logs.length > 1 && (
                           <span className="text-gray-400">(+{s.logs.length - 1} lần khác)</span>
                         )}
@@ -2116,10 +2156,16 @@ export function SessionLogHistory({
                         {/* Check-in/check-out confirmation */}
                         {(log.signatureUrl || log.checkInAt) && (
                           <div className="mt-3 flex flex-wrap items-center gap-3">
-                            {log.checkInAt && log.checkOutAt && (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1">
+                            {log.checkInAt && (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1">
                                 <Clock className="w-3 h-3" />
-                                Thời lượng: {Math.round((new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000)} phút
+                                <span>
+                                  Check-in <span className="font-bold text-gray-700">{fmtTime(log.checkInAt)}</span>
+                                  {log.checkOutAt && (
+                                    <> · Check-out <span className="font-bold text-gray-700">{fmtTime(log.checkOutAt)}</span></>
+                                  )}
+                                  {sessionMinutes(log) != null && <> · {sessionMinutes(log)} phút</>}
+                                </span>
                               </span>
                             )}
                             {log.confirmationMethod === "CLIENT_APP" && (
@@ -2142,6 +2188,10 @@ export function SessionLogHistory({
                                 />
                               </div>
                             ) : null}
+                            <CheckOutPhotoThumb
+                              src={log.checkOutPhotoUrl}
+                              label={`Ảnh check-out · ${fmtDate(log.sessionDate)} · PT ${log.createdBy.name ?? "—"}`}
+                            />
                           </div>
                         )}
                       </div>

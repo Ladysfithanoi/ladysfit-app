@@ -738,6 +738,10 @@ model WorkoutLog {
   signatureUrl       String?          @db.Text
   // Client's hand-drawn signature at CHECK-IN (proof client showed up → deducts package).
   checkInSignatureUrl String?         @db.Text
+  // Ảnh PT chụp CÙNG KHÁCH tại thời điểm check-out — bằng chứng buổi tập có thật,
+  // chống ký khống. Bắt buộc khi ký check-out, và chỉ chụp trực tiếp bằng camera
+  // (giao diện không có ô tải ảnh từ máy). Lưu dạng data URL JPEG đã nén.
+  checkOutPhotoUrl    String?         @db.Text
   // Whether this log has already incremented the package's sessionsUsed. Set at
   // check-in (when the client signs in); used to reverse exactly once on delete/void.
   packageCounted     Boolean          @default(false)
