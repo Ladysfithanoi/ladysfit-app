@@ -1186,6 +1186,8 @@ model SalaryRecord {
   showsL3L4L5         Int          @default(0)
   // Buổi dạy gói tài trợ "Cư dân" — 35.000đ/buổi
   showsResident       Int          @default(0)
+  // Buổi dạy gói trải nghiệm "L0" (4 buổi / 2 triệu) — 50.000đ/buổi
+  showsL0             Int          @default(0)
   showPay             Float        @default(0)
   goalBonus           Float        @default(0)
   clientsAchievedGoal Int          @default(0)

@@ -18,6 +18,7 @@ type SalaryRecord = {
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
   showsResident:        number;
+  showsL0:              number;
   showPay:              number;
   goalBonus:            number;
   clientsAchievedGoal:  number;
@@ -85,7 +86,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const totalShows = record
-    ? record.showsL1L2Loyal + record.showsL3L4L5 + (record.showsResident ?? 0)
+    ? record.showsL1L2Loyal + record.showsL3L4L5 + (record.showsResident ?? 0) + (record.showsL0 ?? 0)
     : 0;
 
   return (

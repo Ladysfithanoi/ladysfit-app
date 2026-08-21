@@ -21,6 +21,7 @@ type SalaryRecord = {
   showsL1L2Loyal: number;
   showsL3L4L5: number;
   showsResident: number;
+  showsL0: number;
   showPay: number;
   goalBonus: number;
   googleBonus: number;
@@ -48,6 +49,7 @@ type GenEntry = {
   showsL1L2Loyal: number;
   showsL3L4L5: number;
   showsResident: number;
+  showsL0: number;
   clientsAchievedGoal: number;
   googleReviews: number;
   renewContracts: number;
@@ -56,7 +58,7 @@ type GenEntry = {
   leaveDays: number;
 };
 
-type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }>;
+type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number; showsL0: number }>;
 
 type ImgModalState = {
   recordId: string;
@@ -90,8 +92,11 @@ function standardWorkDays(month: number, year: number) {
 }
 
 /** Tiền buổi dạy ước tính trong modal tạo bảng lương — khớp công thức phía server. */
-function showPayOf(e: { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }) {
-  return e.showsL1L2Loyal * 60_000 + e.showsL3L4L5 * 100_000 + e.showsResident * 35_000;
+function showPayOf(e: { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number; showsL0: number }) {
+  return e.showsL1L2Loyal * 60_000
+       + e.showsL3L4L5 * 100_000
+       + e.showsResident * 35_000
+       + e.showsL0 * 50_000;
 }
 
 const STATUS_LABELS = { PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán" };
@@ -177,19 +182,19 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     const entries: GenEntry[] = [
       {
         userId: currentFMId, name: currentFMName, userRole: "FM",
-        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
       },
       ...branchPTs.map(pt => ({
         userId: pt.id, name: pt.name ?? pt.email, userRole: "PT" as const,
-        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
       })),
       ...branchAdmins.map(a => ({
         userId: a.id, name: a.name ?? a.email, userRole: "ADMIN" as const,
-        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
       })),
@@ -217,6 +222,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           showsL1L2Loyal: counts[e.userId]?.showsL1L2Loyal ?? 0,
           showsL3L4L5:    counts[e.userId]?.showsL3L4L5    ?? 0,
           showsResident:  counts[e.userId]?.showsResident  ?? 0,
+          showsL0:        counts[e.userId]?.showsL0        ?? 0,
           leaveDays,
           actualWorkDays: Math.max(0, stdDays - leaveDays),
         };
@@ -242,6 +248,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 showsL1L2Loyal: sessionCounts[userId]?.showsL1L2Loyal ?? 0,
                 showsL3L4L5:    sessionCounts[userId]?.showsL3L4L5    ?? 0,
                 showsResident:  sessionCounts[userId]?.showsResident  ?? 0,
+                showsL0:        sessionCounts[userId]?.showsL0        ?? 0,
               }
             : e
         ));
@@ -397,7 +404,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   function SessionCountCard({ entry }: { entry: GenEntry }) {
     return (
       <div className="space-y-3">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-[10px] font-semibold text-blue-400 mb-1">L1/L2/Loyal</p>
             <p className="text-xl font-extrabold text-blue-700">
@@ -411,6 +418,13 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               {fetchingCounts ? "…" : entry.showsL3L4L5}
             </p>
             <p className="text-[10px] text-purple-400">buổi × 100,000đ</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-3 text-center">
+            <p className="text-[10px] font-semibold text-amber-400 mb-1">L0</p>
+            <p className="text-xl font-extrabold text-amber-700">
+              {fetchingCounts ? "…" : entry.showsL0}
+            </p>
+            <p className="text-[10px] text-amber-400">buổi × 50,000đ</p>
           </div>
           <div className="bg-teal-50 rounded-xl p-3 text-center">
             <p className="text-[10px] font-semibold text-teal-400 mb-1">Cư dân</p>
@@ -447,6 +461,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             {([
               { label: "Show L1/L2/Loyal", field: "showsL1L2Loyal" as const },
               { label: "Show L3/L4/L5",    field: "showsL3L4L5"   as const },
+              { label: "Show L0",          field: "showsL0"       as const },
               { label: "Show Cư dân",      field: "showsResident" as const },
             ] as const).map(({ label, field }) => (
               <div key={field} className="space-y-1">
@@ -661,6 +676,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.commissionAmount)}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                             {r.showsL1L2Loyal}L1/L2 + {r.showsL3L4L5}L3+
+                            {r.showsL0 > 0 && ` + ${r.showsL0} L0`}
                             {r.showsResident > 0 && ` + ${r.showsResident} Cư dân`}
                           </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.showPay)}</td>

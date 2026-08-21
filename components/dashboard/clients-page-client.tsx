@@ -64,6 +64,7 @@ type TabKey = (typeof TABS)[number]["key"];
 
 const PACKAGE_OPTIONS = [
   { value: "", label: "Tất cả lộ trình" },
+  { value: "L0", label: "L0" },
   { value: "L1", label: "L1" },
   { value: "L2", label: "L2" },
   { value: "L3", label: "L3" },

@@ -1,7 +1,7 @@
 import { NextResponse }     from "next/server";
 import { getServerSession }  from "next-auth";
 import { authOptions }       from "@/lib/auth";
-import { RESIDENT_PACKAGE }  from "@/lib/packages";
+import { RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 
 const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
@@ -28,9 +28,9 @@ export async function GET(req: Request) {
   // "Số buổi PT" — chỉ buổi đã check-out có chữ ký kèm nhật ký buổi tập.
   const rows = await getTaughtSessions(userIds, gte, lt);
 
-  const result: Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number }> = {};
+  const result: Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number; showsL0: number }> = {};
   for (const userId of userIds) {
-    result[userId] = { showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0 };
+    result[userId] = { showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0 };
   }
 
   for (const row of rows) {
@@ -39,6 +39,7 @@ export async function GET(req: Request) {
     // KOL có cách tính hoa hồng riêng (60k/buổi), không nằm trong tiền buổi dạy.
     if (row.contractType === "KOL") continue;
     if (row.packageName === RESIDENT_PACKAGE) bucket.showsResident++;
+    else if (row.packageName === TRIAL_PACKAGE) bucket.showsL0++;
     else if (L1_L2_LOYAL.has(row.packageName)) bucket.showsL1L2Loyal++;
     else bucket.showsL3L4L5++;
   }
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     if (!bucket) continue;
     if (adj.contractType === "KOL") continue;
     if (adj.packageName === RESIDENT_PACKAGE) bucket.showsResident += adj.delta;
+    else if (adj.packageName === TRIAL_PACKAGE) bucket.showsL0 += adj.delta;
     else if (L1_L2_LOYAL.has(adj.packageName)) bucket.showsL1L2Loyal += adj.delta;
     else bucket.showsL3L4L5 += adj.delta;
   }
@@ -59,6 +61,7 @@ export async function GET(req: Request) {
     bucket.showsL1L2Loyal = Math.max(0, bucket.showsL1L2Loyal);
     bucket.showsL3L4L5    = Math.max(0, bucket.showsL3L4L5);
     bucket.showsResident  = Math.max(0, bucket.showsResident);
+    bucket.showsL0        = Math.max(0, bucket.showsL0);
   }
 
   return NextResponse.json(result);

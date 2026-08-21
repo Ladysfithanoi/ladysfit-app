@@ -13,6 +13,18 @@ export type PackageDef = {
 };
 
 export const PACKAGES: Record<string, PackageDef> = {
+  L0: {
+    name: "L0",
+    stage: "1",
+    stageLabel: "Lộ trình trải nghiệm - Giai đoạn 1",
+    sessions: 4,
+    durationDays: 30,
+    price: 2_000_000,
+    commitment: "Trải nghiệm 4 buổi tập cùng PT",
+    conditions:
+      "Được hoàn tiền: sau khi tập xong buổi 1, và khi tập hết 4 buổi. PT nhận 50.000đ/buổi dạy. Chỉ mua 1 lần.",
+    canBuyMultiple: false,
+  },
   L1: {
     name: "L1",
     stage: "1",
@@ -114,7 +126,11 @@ export function isSponsoredPackage(packageName: string) {
   return packageName === RESIDENT_PACKAGE || packageName === "KOC";
 }
 
+/** Gói trải nghiệm 4 buổi — có riêng một bậc tiền buổi dạy. */
+export const TRIAL_PACKAGE = "L0";
+
 export const SESSION_PAY_RESIDENT = 35_000;
+export const SESSION_PAY_TRIAL = 50_000;
 export const SESSION_PAY_L1_L2_LOYAL = 60_000;
 export const SESSION_PAY_L3_L4_L5 = 100_000;
 
@@ -124,6 +140,7 @@ export const SESSION_PAY_L3_L4_L5 = 100_000;
  */
 export function sessionPayRate(packageName: string): number {
   if (packageName === RESIDENT_PACKAGE) return SESSION_PAY_RESIDENT;
+  if (packageName === TRIAL_PACKAGE) return SESSION_PAY_TRIAL;
   return ["L1", "L2", "Loyalfit"].includes(packageName)
     ? SESSION_PAY_L1_L2_LOYAL
     : SESSION_PAY_L3_L4_L5;

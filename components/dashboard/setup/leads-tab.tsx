@@ -33,7 +33,7 @@ const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
 // ── Package multi-select helpers ──────────────────────────────────────────────
-const PACKAGE_OPTIONS = ["L1", "L2", "L3", "L4", "L5", "Loyalfit"] as const;
+const PACKAGE_OPTIONS = ["L0", "L1", "L2", "L3", "L4", "L5", "Loyalfit"] as const;
 
 function parsePackageList(pkg: string | null | undefined): string[] {
   if (!pkg?.trim()) return [];

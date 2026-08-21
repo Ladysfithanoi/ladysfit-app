@@ -21,7 +21,7 @@ import type { MealPlanRow } from "@/components/dashboard/nutrition-designer";
 import { StepsBarChart, MinutesBarChart, type ActivityChartPoint } from "@/components/dashboard/activity-log-charts";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { BodyMeasurementsSection } from "@/components/dashboard/body-measurements-section";
-import { PACKAGES, RESIDENT_PACKAGE } from "@/lib/packages";
+import { PACKAGES, RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 import { cn } from "@/lib/utils";
 
 type Branch = { id: string; name: string };
@@ -224,7 +224,8 @@ function getAvailablePackages(
   let names: string[] = ["L3", "L4", "L5"];
   if (hasAny) names.push("Loyalfit");
   // Gói tài trợ luôn chọn được — điều kiện là "cư dân toà nhà", không xét cân nặng.
-  names.push(RESIDENT_PACKAGE, "KOC");
+  // L0 (trải nghiệm 4 buổi) cũng không xét cân nặng nên luôn có mặt.
+  names.push(TRIAL_PACKAGE, RESIDENT_PACKAGE, "KOC");
 
   let note: string;
   let noteOk = false;
