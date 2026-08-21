@@ -691,6 +691,12 @@ model WorkoutMovement {
   sets             Int
   reps             String
   order            Int
+  // Set 1 nhân sự chuẩn bị TRƯỚC khi khách đến (Hồ sơ khách → CT Tập → buổi tập).
+  // Đây chính là Set 1 của nhật ký, chỉ khác thời điểm nhập: lúc check-in giá trị
+  // này được đổ thẳng vào Set 1 (nên gợi ý tự động không đè lên), và ngược lại sửa
+  // Set 1 trong nhật ký thì ghi lại về đây. Xem lib/workout-session.ts.
+  plannedLoad      String?
+  plannedReps      String?
 
   session WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   setLogs WorkoutSetLog[]

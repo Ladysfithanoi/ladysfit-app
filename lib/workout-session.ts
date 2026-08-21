@@ -208,3 +208,61 @@ export function serializeWorkoutLog(log: any) {
     confirmedAt: log.confirmedAt?.toISOString?.() ?? null,
   };
 }
+
+// ── Set 1 chuẩn bị trước ↔ Set 1 trong nhật ký ──────────────────────────────
+//
+// Nhân sự điền trước Reps/Mức tạ của Set 1 ngay trong giáo án (WorkoutMovement
+// .plannedLoad/.plannedReps) để buổi tập đã sẵn sàng trước khi khách đến. Đây
+// KHÔNG phải một ô riêng chạy song song với Set 1 của nhật ký — nó chính là Set
+// 1, chỉ nhập sớm hơn:
+//   • Lúc check-in, giá trị chuẩn bị được đổ thẳng vào Set 1 của nhật ký. Nhờ vậy
+//     phần điền sẵn tự động theo tuần trước (chỉ điền khi Set 1 còn TRỐNG) không
+//     bao giờ đè lên thứ nhân sự đã chuẩn bị tay.
+//   • Sửa Set 1 trong nhật ký thì ghi ngược lại giáo án bằng hàm dưới đây, để mở
+//     lại buổi tập vẫn thấy đúng con số mới nhất.
+
+/** Chuỗi rỗng/space coi như chưa nhập, để hai bên so sánh được với nhau. */
+function normalizeSetValue(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
+}
+
+/**
+ * Chiều nhật ký → giáo án: đẩy Set 1 vừa nhập về `plannedLoad`/`plannedReps` của
+ * chuyển động tương ứng. Chỉ ghi những dòng THỰC SỰ đổi (autosave chạy mỗi ~1.2s
+ * nên ghi hết mọi dòng mỗi lần là phí).
+ */
+export async function syncPlannedSetsFromLog(
+  setLogs: { id: string; set1Load?: string | null; set1Reps?: string | null }[]
+): Promise<void> {
+  if (setLogs.length === 0) return;
+
+  const rows = await prisma.workoutSetLog.findMany({
+    where: { id: { in: setLogs.map((s) => s.id) } },
+    select: {
+      id: true,
+      movementId: true,
+      movement: { select: { plannedLoad: true, plannedReps: true } },
+    },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+
+  const jobs: Promise<unknown>[] = [];
+  for (const sl of setLogs) {
+    const row = byId.get(sl.id);
+    // Nhật ký cũ có thể mất liên kết chuyển động (movementId = null khi giáo án
+    // bị sửa) — không có chỗ nào để ghi về thì bỏ qua.
+    if (!row?.movementId || !row.movement) continue;
+    const load = normalizeSetValue(sl.set1Load);
+    const reps = normalizeSetValue(sl.set1Reps);
+    if (row.movement.plannedLoad === load && row.movement.plannedReps === reps) continue;
+    jobs.push(
+      prisma.workoutMovement.update({
+        where: { id: row.movementId },
+        data: { plannedLoad: load, plannedReps: reps },
+      })
+    );
+  }
+  await Promise.all(jobs);
+}

@@ -116,18 +116,18 @@ const REP_RANGES: Record<string, { min: number; max: number }> = {
   "Giai đoạn 3": { min: 10, max: 12 },
 };
 
-function getRepRange(phase: string): { min: number; max: number } | null {
+export function getRepRange(phase: string): { min: number; max: number } | null {
   if (phase.startsWith("Giai đoạn 1")) return REP_RANGES["Giai đoạn 1"];
   if (phase.startsWith("Giai đoạn 2")) return REP_RANGES["Giai đoạn 2"];
   if (phase.startsWith("Giai đoạn 3")) return REP_RANGES["Giai đoạn 3"];
   return null;
 }
 
-function isCardioSession(sessionName: string): boolean {
+export function isCardioSession(sessionName: string): boolean {
   return sessionName.includes("Cardio") || sessionName.includes("cardio");
 }
 
-type Suggestion =
+export type Suggestion =
   | { type: "increase_weight"; avgReps: number }
   | { type: "keep_reps"; reps: string }
   | { type: "increase_reps"; targetReps: number; avgReps: number }
@@ -170,7 +170,7 @@ function calcSuggestion(avgReps: number, range: { min: number; max: number }): S
 // KHÔNG đồng đều mà reps lại GIỐNG HỆT nhau thì giữ nguyên reps (khách đang dò
 // mức tạ với cùng số reps). Ngược lại dùng reps trung bình so với khoảng reps
 // của giai đoạn.
-function getSuggestion(sl: SetLogRow, range: { min: number; max: number } | null): Suggestion {
+export function getSuggestion(sl: SetLogRow, range: { min: number; max: number } | null): Suggestion {
   if (!range) return null;
   const { loadsVary, repsUniform, repsValue } = analyzeSets(sl);
   if (loadsVary && repsUniform && repsValue != null) {
@@ -206,7 +206,7 @@ function bumpLoad(load: string): string {
 }
 
 // Build "Lần trước" reference summary for a SetLogRow
-function buildPrevRef(sl: SetLogRow): string | null {
+export function buildPrevRef(sl: SetLogRow): string | null {
   const sets = [
     { load: sl.set1Load, reps: sl.set1Reps },
     { load: sl.set2Load, reps: sl.set2Reps },
@@ -225,7 +225,7 @@ function buildPrevRef(sl: SetLogRow): string | null {
 
 // ── SuggestionBadge ────────────────────────────────────────────────────────
 
-function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
+export function SuggestionBadge({ suggestion }: { suggestion: Suggestion }) {
   if (!suggestion) return null;
   if (suggestion.type === "increase_weight") {
     return (
@@ -315,7 +315,7 @@ function prevWeekReps(sl: SetLogRow): string | null {
 // reps khi reps là số (buổi tạ), ngược lại lấy thẳng reps của set làm việc tuần
 // trước (buổi Circuit/Cardio nhập reps kiểu chữ/thời lượng) — nhờ vậy Set 1 được
 // điền sẵn cho MỌI loại buổi.
-function buildPrevWeekPrefill(
+export function buildPrevWeekPrefill(
   prevWeekLogs: WorkoutLogRow[],
   range: { min: number; max: number } | null
 ): Map<string, { load: string; reps: string }> {

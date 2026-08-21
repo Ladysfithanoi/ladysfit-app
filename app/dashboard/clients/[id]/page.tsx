@@ -256,6 +256,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
           sets: m.sets,
           reps: m.reps,
           order: m.order,
+          plannedLoad: m.plannedLoad,
+          plannedReps: m.plannedReps,
         })),
       })),
     })),
@@ -271,6 +273,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
         sets: m.sets,
         reps: m.reps,
         order: m.order,
+        plannedLoad: m.plannedLoad,
+        plannedReps: m.plannedReps,
       })),
     })),
   }));

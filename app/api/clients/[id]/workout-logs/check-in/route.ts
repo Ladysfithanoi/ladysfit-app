@@ -67,10 +67,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         packageCounted: true,
         createdById: session.user.id,
         setLogs: {
+          // Set 1 lấy luôn thông số nhân sự đã chuẩn bị sẵn trong giáo án. Đổ vào
+          // ngay từ đây nên phần điền sẵn theo tuần trước ở nhật ký (chỉ điền khi
+          // Set 1 còn trống) sẽ không đè lên — hai bên là MỘT Set 1, không phải
+          // hai ô chạy song song.
           create: workoutSession.movements.map((m) => ({
             movementId: m.id,
             movementName: m.movementName,
             exerciseName: m.selectedExercise,
+            set1Load: m.plannedLoad,
+            set1Reps: m.plannedReps,
           })),
         },
       },

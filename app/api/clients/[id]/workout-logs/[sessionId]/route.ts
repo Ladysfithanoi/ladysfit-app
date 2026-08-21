@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { reversePackageSession } from "@/lib/workout-session";
+import { reversePackageSession, syncPlannedSetsFromLog } from "@/lib/workout-session";
 
 export async function GET(
   _req: Request,
@@ -80,6 +80,9 @@ export async function PUT(
         })
       )
     );
+
+    // Set 1 vừa nhập ghi ngược về giáo án, để ô "chuẩn bị trước" luôn khớp.
+    await syncPlannedSetsFromLog(body.setLogs);
 
     // For an in-progress session, stamp the first interaction (server time) the
     // first time any set data is saved — used to enforce the 10-minute rule.

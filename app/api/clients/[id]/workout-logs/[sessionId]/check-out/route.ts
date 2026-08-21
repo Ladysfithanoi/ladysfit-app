@@ -8,6 +8,7 @@ import {
   serializeWorkoutLog,
   MAX_SESSION_MINUTES,
   OVER_CAP_VOID_REASON,
+  syncPlannedSetsFromLog,
 } from "@/lib/workout-session";
 import { buildNextSessionSuggestion, isValidSurvey } from "@/lib/session-evaluation";
 
@@ -97,6 +98,8 @@ export async function POST(
           })
         )
       );
+      // Set 1 chốt lại lúc check-out cũng ghi ngược về giáo án.
+      await syncPlannedSetsFromLog(setLogs);
     }
 
     const now = new Date();

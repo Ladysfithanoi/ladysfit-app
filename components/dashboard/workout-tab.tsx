@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArrowRightLeft, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,19 @@ import {
   getSlotsForSessionType,
   basePhase,
 } from "@/lib/workout-structure";
-import { LiveSessionPanel, SessionLogHistory, SignaturePad, WeekLogOverview } from "./session-log-panel";
+import {
+  LiveSessionPanel,
+  SessionLogHistory,
+  SignaturePad,
+  SuggestionBadge,
+  WeekLogOverview,
+  buildPrevRef,
+  buildPrevWeekPrefill,
+  getRepRange,
+  getSuggestion,
+  isCardioSession,
+  type Suggestion,
+} from "./session-log-panel";
 import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-modal";
 import { CheckOutPhotoThumb } from "./checkout-photo";
 import { PhaseSwitchModal } from "./phase-switch-modal";
@@ -36,6 +48,9 @@ export type WorkoutMovement = {
   sets: number;
   reps: string;
   order: number;
+  /** Set 1 nhân sự chuẩn bị trước — chính là Set 1 của nhật ký, nhập sớm hơn. */
+  plannedLoad?: string | null;
+  plannedReps?: string | null;
 };
 
 export type WorkoutSession = {
@@ -1020,7 +1035,18 @@ function ProgramView({
             ))}
           </div>
           {legacySessions[activeSessionIdx] && (
-            <SessionMovementsTable session={legacySessions[activeSessionIdx]} />
+            /* Cấu trúc cũ không có tuần nên không có endpoint để lưu Set 1 chuẩn
+               bị trước — chỉ xem. Giáo án mới đều là cấu trúc theo tuần. */
+            <SessionMovementsTable
+              session={legacySessions[activeSessionIdx]}
+              clientId={clientId}
+              programId={program.id}
+              weekId=""
+              phase={program.phase}
+              prevWeekLogs={[]}
+              readOnly
+              onSaved={() => {}}
+            />
           )}
         </div>
       )}
@@ -1448,7 +1474,30 @@ function ProgramView({
 
                   return (
                     <>
-                      <SessionMovementsTable session={activeSession} />
+                      <SessionMovementsTable
+                        session={activeSession}
+                        clientId={clientId}
+                        programId={program.id}
+                        weekId={currentWeekData.id}
+                        phase={program.phase}
+                        prevWeekLogs={effectivePrevWeekLogs}
+                        readOnly={isReadOnly}
+                        onSaved={(movements) =>
+                          onUpdate({
+                            id: program.id,
+                            weeks: program.weeks.map((w) =>
+                              w.id !== currentWeekData.id
+                                ? w
+                                : {
+                                    ...w,
+                                    sessions: w.sessions.map((s) =>
+                                      s.id === activeSession.id ? { ...s, movements } : s
+                                    ),
+                                  }
+                            ),
+                          })
+                        }
+                      />
 
                       {/* ── Log section ── */}
                       <div className="mt-4 pt-3 border-t border-gray-50">
@@ -1797,37 +1846,230 @@ function ProgramView({
 
 // ── SessionMovementsTable (read-only) ──────────────────────────────────────
 
-function SessionMovementsTable({ session }: { session: WorkoutSession }) {
+/**
+ * Bảng buổi tập trong CT Tập. Ngoài phần xem giáo án, nhân sự điền TRƯỚC được
+ * Mức tạ + Reps của Set 1 để buổi đã sẵn sàng trước khi khách đến.
+ *
+ * Đây chính là Set 1 của nhật ký chứ không phải ô thứ hai chạy song song:
+ *   • Lúc check-in, giá trị ở đây được đổ thẳng vào Set 1 → phần điền sẵn tự động
+ *     theo tuần trước (chỉ điền khi Set 1 còn trống) không đè lên.
+ *   • Sửa Set 1 trong nhật ký thì server ghi ngược về đây, và sửa ở đây khi buổi
+ *     đang tập dở thì server đẩy sang nhật ký. Hai nơi luôn khớp.
+ *
+ * Gợi ý tuần trước dùng chung hàm với nhật ký (`buildPrevWeekPrefill`,
+ * `getSuggestion`) nên hai màn không bao giờ khuyên hai đằng khác nhau.
+ */
+function SessionMovementsTable({
+  session,
+  clientId,
+  programId,
+  weekId,
+  phase,
+  prevWeekLogs,
+  readOnly,
+  onSaved,
+}: {
+  session: WorkoutSession;
+  clientId: string;
+  programId: string;
+  weekId: string;
+  phase: string;
+  prevWeekLogs: WorkoutLogRow[];
+  readOnly: boolean;
+  onSaved: (movements: WorkoutMovement[]) => void;
+}) {
   const sessionType = session.sessionName.includes("—")
     ? session.sessionName.split("—").slice(1).join("—").trim()
     : "";
 
+  const repRange = getRepRange(phase);
+  const isCardio = isCardioSession(session.sessionName);
+  const showSuggestions = !isCardio && repRange != null;
+
+  // Gợi ý + "Lần trước" theo TÊN CHUYỂN ĐỘNG, y hệt nhật ký.
+  const prefill = buildPrevWeekPrefill(prevWeekLogs, repRange);
+  const prevRefs = new Map<string, string>();
+  const suggestions = new Map<string, Suggestion>();
+  if (prevWeekLogs.length > 0) {
+    for (const sl of prevWeekLogs[0].setLogs) {
+      const ref = buildPrevRef(sl);
+      if (ref) prevRefs.set(sl.movementName, ref);
+      if (showSuggestions) {
+        const s = getSuggestion(sl, repRange);
+        if (s) suggestions.set(sl.movementName, s);
+      }
+    }
+  }
+
+  // Bản nháp cục bộ để gõ không giật; đồng bộ lại khi đổi buổi hoặc khi server
+  // trả về giá trị mới (vd nhật ký vừa ghi ngược sang).
+  const [draft, setDraft] = useState<Record<string, { load: string; reps: string }>>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const dirty = useRef(false);
+  const lastSessionId = useRef(session.id);
+
+  useEffect(() => {
+    // Đổi buổi thì nạp lại từ đầu. Còn ở cùng buổi mà người dùng đang gõ dở thì
+    // KHÔNG đè: lần lưu vừa xong trả dữ liệu về ngay giữa lúc gõ sẽ nuốt mất chữ.
+    const switched = lastSessionId.current !== session.id;
+    if (switched) {
+      lastSessionId.current = session.id;
+      dirty.current = false;
+    } else if (dirty.current) {
+      return;
+    }
+    const next: Record<string, { load: string; reps: string }> = {};
+    for (const m of session.movements) {
+      next[m.id] = { load: m.plannedLoad ?? "", reps: m.plannedReps ?? "" };
+    }
+    setDraft(next);
+  }, [session.id, session.movements]);
+
+  // Autosave sau 1.2s ngừng gõ — cùng nhịp với nhật ký, nhân sự không phải nhớ bấm Lưu.
+  useEffect(() => {
+    if (!dirty.current || readOnly) return;
+    setSaved(false);
+    const handle = setTimeout(async () => {
+      setSaving(true);
+      setError("");
+      try {
+        const res = await fetch(
+          `/api/clients/${clientId}/programs/${programId}/weeks/${weekId}/sessions/${session.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              movements: session.movements.map((m) => ({
+                id: m.id,
+                plannedLoad: draft[m.id]?.load ?? "",
+                plannedReps: draft[m.id]?.reps ?? "",
+              })),
+            }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Không lưu được");
+        dirty.current = false;
+        setSaved(true);
+        if (data.session?.movements) onSaved(data.session.movements as WorkoutMovement[]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không lưu được");
+      } finally {
+        setSaving(false);
+      }
+    }, 1200);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
+  function update(movementId: string, field: "load" | "reps", value: string) {
+    dirty.current = true;
+    setDraft((prev) => ({
+      ...prev,
+      [movementId]: { load: prev[movementId]?.load ?? "", reps: prev[movementId]?.reps ?? "", [field]: value },
+    }));
+  }
+
   return (
     <div className="border border-gray-100 rounded-xl overflow-hidden">
-      {sessionType && (
-        <div className="px-4 py-2 bg-gray-50/60 border-b border-gray-100">
-          <span className="text-xs font-semibold text-gray-500">{sessionType}</span>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 bg-gray-50/60 border-b border-gray-100">
+        {sessionType && <span className="text-xs font-semibold text-gray-500">{sessionType}</span>}
+        {!readOnly && (
+          <span className="text-[11px] text-gray-400">
+            Điền sẵn Set 1 trước khi khách đến — check-in xong nhật ký lấy đúng số này.
+          </span>
+        )}
+        <span className="ml-auto text-[11px] font-semibold">
+          {error ? (
+            <span className="text-[#f15b5c]">{error}</span>
+          ) : saving ? (
+            <span className="text-gray-400 inline-flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />Đang lưu
+            </span>
+          ) : saved ? (
+            <span className="text-emerald-600">Đã lưu</span>
+          ) : null}
+        </span>
+      </div>
+
+      {/* Trượt ngang trên cả mobile lẫn PC: bảng có min-width nên không bao giờ
+          bị bóp tràn viền, thiếu chỗ thì kéo ngang. */}
       <div className="px-4 py-3 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-        <table className="w-full min-w-[360px]">
+        <table className="w-full" style={{ minWidth: showSuggestions ? 720 : 560 }}>
           <thead>
             <tr className="border-b border-gray-100">
-              {["Chuyển động", "Bài tập", "Lượng"].map((h) => (
-                <th key={h} className="pb-2 text-left text-xs font-bold text-gray-400 pr-4">{h}</th>
-              ))}
+              <th className="pb-2 text-left text-xs font-bold text-gray-400 pr-4 w-28">Chuyển động</th>
+              <th className="pb-2 text-left text-xs font-bold text-gray-400 pr-4 w-40">Bài tập</th>
+              <th className="pb-2 text-left text-xs font-bold text-gray-400 pr-4 w-24 whitespace-nowrap">Lượng</th>
+              <th className="pb-2 text-left text-xs font-bold text-gray-400 pr-3 w-24 whitespace-nowrap">
+                Mức tạ <span className="font-normal text-gray-300">(Set 1)</span>
+              </th>
+              <th className="pb-2 text-left text-xs font-bold text-gray-400 pr-3 w-20 whitespace-nowrap">
+                Reps <span className="font-normal text-gray-300">(Set 1)</span>
+              </th>
+              {showSuggestions && (
+                <th className="pb-2 text-left text-xs font-bold text-gray-400 w-32">Gợi ý</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {session.movements.map((m) => (
-              <tr key={m.id} className="border-b border-gray-50 last:border-0">
-                <td className="py-2.5 pr-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{m.movementName}</td>
-                <td className="py-2.5 pr-4 text-sm font-medium text-gray-800">
-                  {m.selectedExercise || <span className="text-gray-300 italic text-xs">Chưa chọn</span>}
-                </td>
-                <td className="py-2.5 text-sm text-gray-500 whitespace-nowrap">{m.sets} sets × {m.reps}</td>
-              </tr>
-            ))}
+            {session.movements.map((m) => {
+              const hint = prefill.get(m.movementName);
+              const prevRef = prevRefs.get(m.movementName);
+              const d = draft[m.id] ?? { load: "", reps: "" };
+              const filled = d.load !== "" || d.reps !== "";
+              return (
+                <tr key={m.id} className="border-b border-gray-50 last:border-0 align-top">
+                  <td className="py-2.5 pr-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{m.movementName}</td>
+                  <td className="py-2.5 pr-4 text-sm font-medium text-gray-800">
+                    {m.selectedExercise || <span className="text-gray-300 italic text-xs">Chưa chọn</span>}
+                    {prevRef && (
+                      <span className="block text-[10px] text-gray-400 mt-0.5">📅 Lần trước: {prevRef}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 pr-4 text-sm text-gray-500 whitespace-nowrap">{m.sets} sets × {m.reps}</td>
+                  <td className="py-2 pr-3">
+                    <input
+                      type="text"
+                      value={d.load}
+                      readOnly={readOnly}
+                      onChange={(e) => update(m.id, "load", e.target.value)}
+                      placeholder={hint?.load || "kg"}
+                      title="Mức tạ Set 1 — chuẩn bị trước, sẽ thành Set 1 của nhật ký"
+                      className={cn(
+                        "w-20 h-8 rounded-lg border px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40",
+                        readOnly && "bg-gray-50 text-gray-400",
+                        filled ? "border-[#f15b5c]/30 bg-white text-gray-800" : "border-gray-200 bg-white text-gray-700"
+                      )}
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      type="text"
+                      value={d.reps}
+                      readOnly={readOnly}
+                      onChange={(e) => update(m.id, "reps", e.target.value)}
+                      placeholder={hint?.reps || "reps"}
+                      title="Reps Set 1 — chuẩn bị trước, sẽ thành Set 1 của nhật ký"
+                      className={cn(
+                        "w-16 h-8 rounded-lg border px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#f15b5c]/40",
+                        readOnly && "bg-gray-50 text-gray-400",
+                        filled ? "border-[#f15b5c]/30 bg-white text-gray-800" : "border-gray-200 bg-white text-gray-700"
+                      )}
+                    />
+                  </td>
+                  {showSuggestions && (
+                    <td className="py-2.5">
+                      {suggestions.get(m.movementName)
+                        ? <SuggestionBadge suggestion={suggestions.get(m.movementName)!} />
+                        : <span className="text-gray-200 text-xs">—</span>}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

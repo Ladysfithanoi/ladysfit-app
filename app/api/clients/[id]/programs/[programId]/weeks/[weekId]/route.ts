@@ -70,6 +70,23 @@ export async function PUT(
   // thời đánh số lại `order` về 0..n-1 để dữ liệu cũ bị lệch tự lành.
   const incoming = [...body.sessions].sort((a, b) => a.order - b.order);
 
+  // Set 1 nhân sự đã chuẩn bị trước gắn vào từng chuyển động, mà lưu giáo án lại
+  // XOÁ & TẠO LẠI toàn bộ chuyển động — không bê qua thì mỗi lần sửa giáo án là
+  // mất sạch. Chỉ giữ khi chuyển động vẫn dùng ĐÚNG bài tập cũ; đổi bài tập thì
+  // mức tạ chuẩn bị trước không còn nghĩa gì nên để trống lại.
+  const plannedKey = (sessionId: string, code: string, exercise: string) =>
+    `${sessionId}|${code}|${exercise}`;
+  const plannedByKey = new Map<string, { plannedLoad: string | null; plannedReps: string | null }>();
+  for (const s of week.sessions) {
+    for (const m of s.movements) {
+      if (m.plannedLoad == null && m.plannedReps == null) continue;
+      plannedByKey.set(plannedKey(s.id, m.movementCode, m.selectedExercise), {
+        plannedLoad: m.plannedLoad,
+        plannedReps: m.plannedReps,
+      });
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     for (let i = 0; i < incoming.length; i++) {
       const s = incoming[i];
@@ -84,7 +101,11 @@ export async function PUT(
         // Replace only the movement list (movements carry no log history of their own)
         await tx.workoutMovement.deleteMany({ where: { sessionId: existing.id } });
         await tx.workoutMovement.createMany({
-          data: s.movements.map((m) => ({ ...m, sessionId: existing.id })),
+          data: s.movements.map((m) => ({
+            ...m,
+            sessionId: existing.id,
+            ...(plannedByKey.get(plannedKey(existing.id, m.movementCode, m.selectedExercise)) ?? {}),
+          })),
         });
       } else {
         // Brand-new session — safe to create from scratch
