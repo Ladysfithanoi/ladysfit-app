@@ -174,7 +174,11 @@ export async function GET(req: Request) {
       ? (branchRevenueMap[r.branchId] ?? 0)
       : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0);
 
-    const rate           = role === "FM" ? fmRate(totalRevenue) : ptRate(totalRevenue);
+    // FM bị bỏ tích "hưởng hoa hồng doanh số phòng" thì tính lại vẫn phải giữ 0 —
+    // nếu không, mỗi lần mở bảng lương là hoa hồng tự mọc lại khi doanh số phòng đổi.
+    const rate = role === "FM"
+      ? (r.branchCommission === false ? 0 : fmRate(totalRevenue))
+      : ptRate(totalRevenue);
     const commissionRate   = rate * 100;
     const commissionAmount = totalRevenue * rate;
 
@@ -267,6 +271,8 @@ type GenEntry = {
   showsL3L4L5:          number;
   showsResident:        number;
   showsL0:              number;
+  /** FM: có hưởng hoa hồng doanh số cả phòng không (mặc định có). */
+  branchCommission?:    boolean;
   clientsAchievedGoal:  number;
   googleReviews:        number;
   renewContracts:       number;
@@ -371,7 +377,11 @@ export async function POST(req: Request) {
 
       const fixedAllowances  = lunchAllowance + phoneAllowance + transportAllowance;
       const seniorityBonus   = Math.min(seniorityYears, 4) * 9_000_000;
-      const rate             = fmRate(totalBranchRevenue);
+      // Hoa hồng FM tính trên doanh số CẢ PHÒNG, nên cơ sở có nhiều FM mà ai cũng
+      // hưởng thì phòng trả hoa hồng nhiều lần. Người tạo bảng lương quyết định ai
+      // được hưởng; bỏ trống = hưởng (giữ đúng hành vi cũ cho cơ sở một FM).
+      const takesBranchCommission = entry.branchCommission !== false;
+      const rate             = takesBranchCommission ? fmRate(totalBranchRevenue) : 0;
       const commissionAmount = totalBranchRevenue * rate;
 
       // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất (100k → 60k → 50k → 35k)
@@ -402,6 +412,7 @@ export async function POST(req: Request) {
           leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showsResident: residentShows,
           showsL0: l0Shows, showPay,
+          branchCommission: takesBranchCommission,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
           renewBonus, renewContracts: entry.renewContracts,

@@ -21,8 +21,31 @@ export default async function SalaryPageRoute() {
   let branches: { id: string; name: string }[] = [];
   let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string }[] = [];
 
+  // FM cũng dạy khách nên phải có mặt trong danh sách tạo bảng lương như PT/Admin.
+  // FM gắn với cơ sở qua FMBranchAssignment (một cơ sở có thể có nhiều FM), KHÔNG
+  // qua User.branchId — nên phải đọc riêng rồi ghép vào staffList theo từng cơ sở.
+  async function fmStaffFor(branchIds: string[]) {
+    const rows = await prisma.fMBranchAssignment.findMany({
+      where: {
+        ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
+        user: { role: "FM", deletedAt: null },
+      },
+      select: {
+        branchId: true,
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.user.id,
+      name: r.user.name,
+      email: r.user.email,
+      branchId: r.branchId,
+      role: "FM",
+    }));
+  }
+
   if (isCOO) {
-    [branches, staffList] = await Promise.all([
+    const [branchRows, staffRows, fmRows] = await Promise.all([
       prisma.branch.findMany({
         where: { name: { not: { contains: "Fitpartner" } } },
         select: { id: true, name: true },
@@ -33,9 +56,12 @@ export default async function SalaryPageRoute() {
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }),
+      fmStaffFor([]),
     ]);
+    branches = branchRows;
+    staffList = [...staffRows, ...fmRows];
   } else if (isFM) {
-    [branches, staffList] = await Promise.all([
+    const [branchRows, staffRows, fmRows] = await Promise.all([
       prisma.branch.findMany({
         where: { id: { in: managedBranchIds } },
         select: { id: true, name: true },
@@ -46,7 +72,10 @@ export default async function SalaryPageRoute() {
         select: { id: true, name: true, email: true, branchId: true, role: true },
         orderBy: { name: "asc" },
       }),
+      fmStaffFor(managedBranchIds),
     ]);
+    branches = branchRows;
+    staffList = [...staffRows, ...fmRows];
   }
 
   return (

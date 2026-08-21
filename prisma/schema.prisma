@@ -1198,6 +1198,10 @@ model SalaryRecord {
   showsResident       Int          @default(0)
   // Buổi dạy gói trải nghiệm "L0" (4 buổi / 2 triệu) — 50.000đ/buổi
   showsL0             Int          @default(0)
+  // FM: dòng này có hưởng hoa hồng doanh số cả phòng không. Hoa hồng FM tính trên
+  // doanh số CẢ PHÒNG nên cơ sở có nhiều FM mà ai cũng hưởng thì phòng trả nhiều
+  // lần — người tạo bảng lương chọn ai được hưởng. PT/Admin không dùng cờ này.
+  branchCommission    Boolean      @default(true)
   showPay             Float        @default(0)
   goalBonus           Float        @default(0)
   clientsAchievedGoal Int          @default(0)

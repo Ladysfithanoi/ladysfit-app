@@ -12,11 +12,14 @@ import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
   id: string;
+  branchId: string;
   user: { id: string; name: string | null; email: string; role: string };
   baseSalary: number;
   totalRevenue: number;
   commissionRate: number;
   commissionAmount: number;
+  /** FM: dòng này có hưởng hoa hồng doanh số cả phòng không. */
+  branchCommission?: boolean;
   seniorityBonus: number;
   showsL1L2Loyal: number;
   showsL3L4L5: number;
@@ -56,6 +59,9 @@ type GenEntry = {
   actualWorkDays: number;
   /** Ngày công bị trừ theo lịch nghỉ (nửa ngày = 0,5) — đã trừ sẵn vào actualWorkDays. */
   leaveDays: number;
+  /** FM: có hưởng hoa hồng doanh số cả phòng không. Cơ sở nhiều FM thì chỉ tích
+   *  cho người được hưởng, tránh phòng trả hoa hồng nhiều lần. */
+  branchCommission?: boolean;
 };
 
 type SessionCounts = Record<string, { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number; showsL0: number }>;
@@ -176,16 +182,37 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   async function openGenModal() {
     const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && s.role === "PT");
     const branchAdmins = staffList.filter(s => s.branchId === selectedBranchId && s.role === "ADMIN");
+    // FM của cơ sở này — LẤY CẢ DANH SÁCH chứ không chỉ người đang đăng nhập. FM
+    // cũng dạy khách, mà cơ sở có thể có nhiều FM; trước đây chỉ người bấm tạo
+    // bảng lương mới có dòng, nên FM còn lại dạy bao nhiêu buổi cũng không được
+    // đếm show. Không tìm thấy ai thì vẫn giữ chính mình để không tạo thiếu.
+    const branchFMs = staffList.filter(s => s.branchId === selectedBranchId && s.role === "FM");
+    const fmList = branchFMs.length > 0
+      ? branchFMs.map(f => ({ id: f.id, name: f.name ?? f.email }))
+      : [{ id: currentFMId, name: currentFMName }];
+
     // Mặc định đi làm đủ ngày công chuẩn; số ngày nghỉ trên lịch được trừ ngay
     // sau khi tải xong, FM vẫn sửa lại được cho từng người.
     const stdDays = standardWorkDays(month, year);
     const entries: GenEntry[] = [
-      {
-        userId: currentFMId, name: currentFMName, userRole: "FM",
+      // Cơ sở nhiều FM: bật hoa hồng phòng cho người đang tạo bảng lương nếu họ là
+      // FM của cơ sở này; COO tạo hộ (không nằm trong danh sách) thì bật cho FM
+      // đầu danh sách để không ai bị sót, người tạo tự chỉnh lại nếu cần.
+      ...(() => {
+        const primaryId = fmList.some(f => f.id === currentFMId) ? currentFMId : fmList[0]?.id;
+        return fmList.map(fm => ({
+        userId: fm.id, name: fm.name, userRole: "FM" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
-      },
+        // Hoa hồng FM tính trên doanh số CẢ PHÒNG. Cơ sở có 2 FM mà cả hai cùng
+        // hưởng thì phòng trả hoa hồng hai lần — đó là quyết định của quản lý,
+        // không phải mặc định của hệ thống. Nên chỉ bật sẵn cho MỘT người (người
+        // đang tạo bảng lương, giữ đúng hành vi cũ); FM còn lại vẫn được tính
+        // lương cứng + tiền buổi dạy, muốn cho hưởng hoa hồng thì tích tay.
+        branchCommission: fmList.length === 1 || fm.id === primaryId,
+        }));
+      })(),
       ...branchPTs.map(pt => ({
         userId: pt.id, name: pt.name ?? pt.email, userRole: "PT" as const,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
@@ -233,6 +260,10 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   }
 
   function updateEntry(userId: string, field: keyof GenEntry, value: number) {
+    setGenEntries(prev => prev.map(e => e.userId === userId ? { ...e, [field]: value } : e));
+  }
+
+  function updateEntryFlag(userId: string, field: "branchCommission", value: boolean) {
     setGenEntries(prev => prev.map(e => e.userId === userId ? { ...e, [field]: value } : e));
   }
 
@@ -347,13 +378,32 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   const ptRecords    = records.filter(r => r.user.role === "PT");
   const adminRecords = records.filter(r => r.user.role === "ADMIN");
-  const fmRecord     = records.find(r => r.user.role === "FM");
+  const fmRecords    = records.filter(r => r.user.role === "FM");
   const totalFund      = records.reduce((s, r) => s + r.totalSalary, 0);
   const totalPaid      = records.filter(r => r.status === "PAID").reduce((s, r) => s + r.totalSalary, 0);
   const totalRemaining = records.reduce((s, r) => s + r.remainingPayment, 0);
   // Doanh số phòng nằm ở dòng FM (đã gồm doanh số của toàn bộ PT/Admin trong cơ sở) nên
-  // chỉ cộng các dòng FM — cộng cả bảng sẽ đếm trùng doanh số từng người.
-  const branchRevenue  = records.filter(r => r.user.role === "FM").reduce((s, r) => s + r.totalRevenue, 0);
+  // chỉ cộng các dòng FM — cộng cả bảng sẽ đếm trùng doanh số từng người. Một cơ sở
+  // có thể có NHIỀU FM, mỗi dòng cùng mang doanh số của chính cơ sở đó, nên gộp
+  // theo cơ sở trước rồi mới cộng; cộng thẳng mọi dòng FM sẽ nhân đôi doanh số.
+  const branchRevenue = Array.from(
+    fmRecords.reduce((m, r) => m.set(r.branchId, r.totalRevenue), new Map<string, number>()).values()
+  ).reduce((s, v) => s + v, 0);
+
+  /** Tổng số buổi dạy đã tính lương của một dòng lương. */
+  function showsTotalOf(r: SalaryRecord) {
+    return r.showsL1L2Loyal + r.showsL3L4L5 + (r.showsResident ?? 0) + (r.showsL0 ?? 0);
+  }
+
+  /** Tách buổi theo bậc đơn giá, để nhìn ra tiền buổi dạy đến từ đâu. */
+  function showsBreakdown(r: SalaryRecord) {
+    const parts: string[] = [];
+    if (r.showsL3L4L5 > 0) parts.push(`${r.showsL3L4L5} L3+`);
+    if (r.showsL1L2Loyal > 0) parts.push(`${r.showsL1L2Loyal} L1/L2`);
+    if ((r.showsL0 ?? 0) > 0) parts.push(`${r.showsL0} L0`);
+    if ((r.showsResident ?? 0) > 0) parts.push(`${r.showsResident} Cư dân`);
+    return parts.join(" + ");
+  }
 
   const numInput = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
@@ -737,8 +787,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
           {/* FM edit row colSpan placeholder — FM table uses 15 cols */}
 
-          {/* FM table */}
-          {fmRecord && (
+          {/* FM table — FM cũng dạy khách nên có cột show + tiền buổi dạy và nút
+              "Chi tiết" y như PT, để đối soát được từng buổi. */}
+          {fmRecords.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
                 <span className="text-xs font-bold bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">FM</span>
@@ -748,56 +799,99 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương cố định","Ngày công","Thâm niên","DS phòng","% HH","Tiền HH","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động"].map(h => (
+                      {["Nhân viên","Lương cố định","Ngày công","Thâm niên","DS phòng","% HH","Tiền HH","Show dạy","Tiền buổi dạy","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    <React.Fragment key={fmRecord.id}>
+                    {fmRecords.map(r => (
+                    <React.Fragment key={r.id}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{fmRecord.user.name ?? fmRecord.user.email}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.baseSalary + fmRecord.fixedAllowances)}</td>
-                        {workDaysCell(fmRecord)}
+                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary + r.fixedAllowances)}</td>
+                        {workDaysCell(r)}
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          {fmRecord.seniorityBonus > 0 ? (
+                          {r.seniorityBonus > 0 ? (
                             <span className="inline-flex flex-col gap-0.5">
-                              <span className="font-semibold text-gray-700">{Math.round(fmRecord.seniorityBonus / 9_000_000)} năm</span>
-                              <span className="text-[10px] text-gray-400">{vnd(fmRecord.seniorityBonus)}</span>
+                              <span className="font-semibold text-gray-700">{Math.round(r.seniorityBonus / 9_000_000)} năm</span>
+                              <span className="text-[10px] text-gray-400">{vnd(r.seniorityBonus)}</span>
                             </span>
                           ) : <span className="text-gray-400">—</span>}
                         </td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.totalRevenue)}</td>
-                        <td className="px-3 py-2.5 text-gray-600">{fmRecord.commissionRate}%</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.commissionAmount)}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.googleBonus)}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.renewBonus)}</td>
-                        <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(fmRecord.totalSalary)}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(fmRecord.advancePaid)}</td>
-                        <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(fmRecord.remainingPayment)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.totalRevenue)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                          {r.branchCommission === false
+                            ? <span className="text-[10px] font-semibold text-gray-400">Không hưởng</span>
+                            : `${r.commissionRate}%`}
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.commissionAmount)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                          {showsTotalOf(r) > 0 ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span className="font-semibold text-gray-700">{showsTotalOf(r)} buổi</span>
+                              <span className="text-[10px] text-gray-400">{showsBreakdown(r)}</span>
+                            </span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.showPay)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.googleBonus)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.renewBonus)}</td>
+                        <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
+                        <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
                         <td className="px-3 py-2.5">
-                          <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold whitespace-nowrap", STATUS_COLORS[fmRecord.status])}>
-                            {STATUS_LABELS[fmRecord.status]}
+                          <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold whitespace-nowrap", STATUS_COLORS[r.status])}>
+                            {STATUS_LABELS[r.status]}
                           </span>
                         </td>
-                        {sessionImgCell(fmRecord)}
-                        <ActionCell r={fmRecord} editingId={editingId}
-                          onEdit={() => toggleEdit(fmRecord)}
+                        {sessionImgCell(r)}
+                        <ActionCell r={r} editingId={editingId}
+                          onEdit={() => toggleEdit(r)}
                           onStatus={handleStatusChange} />
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <button
+                            onClick={() => toggleDetail(r.id)}
+                            className={cn(
+                              "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-colors",
+                              expandedIds.has(r.id)
+                                ? "bg-[#f15b5c]/10 text-[#f15b5c]"
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            )}
+                          >
+                            {expandedIds.has(r.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            Chi tiết
+                          </button>
+                        </td>
                       </tr>
-                      {editingId === fmRecord.id && (
-                        <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
-                          editWorkDays={editWorkDays} standardDays={fmRecord.standardWorkDays > 0 ? fmRecord.standardWorkDays : standardWorkDays(month, year)}
-                          leaveDays={fmRecord.leaveDays ?? 0}
+                      {editingId === r.id && (
+                        <EditRow colSpan={18} editAdvance={editAdvance} editNotes={editNotes}
+                          editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                          leaveDays={r.leaveDays ?? 0}
                           saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                           onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                       )}
+                      {expandedIds.has(r.id) && (
+                        <tr>
+                          <td colSpan={18} className="px-4 py-3 bg-[#fdf8f8] border-b border-gray-100">
+                            <SessionDetailTable
+                              ptId={r.user.id}
+                              ptName={r.user.name ?? r.user.email}
+                              month={month}
+                              year={year}
+                              canEdit
+                            />
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
                 * Giới hạn 60 show dạy/tháng | Thưởng Renew từ lần mua thứ 2 trở đi
+                {fmRecords.length > 1 && " | Cơ sở nhiều FM: hoa hồng doanh số phòng chỉ tính cho FM được tích khi tạo bảng lương"}
               </p>
             </div>
           )}
@@ -882,6 +976,21 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         </div>
                       ))}
                       <p className="col-span-2 text-[10px] text-gray-400">Tối đa 60 show dạy/tháng</p>
+                      <label className="col-span-2 flex items-start gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={entry.branchCommission ?? true}
+                          onChange={e => updateEntryFlag(entry.userId, "branchCommission", e.target.checked)}
+                          className="accent-[#f15b5c] w-4 h-4 mt-0.5"
+                        />
+                        <span className="text-[11px] text-gray-500 leading-relaxed">
+                          Hưởng hoa hồng doanh số cả phòng
+                          <span className="block text-[10px] text-gray-400">
+                            Bỏ tích thì FM này chỉ nhận lương cứng + tiền buổi dạy. Cơ sở có nhiều FM
+                            nên chỉ tích cho người được hưởng, không thì phòng trả hoa hồng nhiều lần.
+                          </span>
+                        </span>
+                      </label>
                     </div>
                   )}
 
