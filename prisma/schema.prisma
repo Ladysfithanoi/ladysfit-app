@@ -806,6 +806,10 @@ model MealPlan {
   dislikes       String?        @db.Text
   status         MealPlanStatus @default(ACTIVE)
   createdById    String
+  // Lần gần nhất KHÁCH tự sửa thực đơn ở cổng /my. Khách chỉ đổi được món ăn
+  // (tự chọn hoặc nhờ AI soạn); mốc calo và macro do PT tính vẫn giữ nguyên.
+  // Có mốc này để PT nhìn là biết thực đơn đang chạy không còn là bản mình soạn.
+  clientEditedAt DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 

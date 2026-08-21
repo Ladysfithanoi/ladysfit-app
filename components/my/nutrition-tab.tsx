@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Salad, Camera, Trash2, Loader2, Plus, X } from "lucide-react";
+import { Salad, Camera, Trash2, Loader2, Plus, X, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MealPlanRow, MealItem } from "@/components/dashboard/nutrition-designer";
+import { MenuBuilder } from "./menu-builder";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function MacroBadge({ label, value, unit = "g", color }: { label: string; value:
 // ── NutritionTab ───────────────────────────────────────────────────────────
 
 export function NutritionTab({
-  mealPlan,
+  mealPlan: initialMealPlan,
   initialLogs,
   myPlateImageUrl,
   myPlateNote,
@@ -62,6 +63,9 @@ export function NutritionTab({
 }) {
   const [activeTab, setActiveTab] = useState<"myplate" | "menu">(myPlateImageUrl ? "myplate" : "menu");
   const [showMyPlateModal, setShowMyPlateModal] = useState(false);
+  // Khách tự soạn được MÓN ĂN của chế độ ăn; mốc calo/macro của PT thì không.
+  const [mealPlan, setMealPlan] = useState<MealPlanRow | null>(initialMealPlan);
+  const [showBuilder, setShowBuilder] = useState(false);
 
   const [logs, setLogs] = useState<FoodLog[]>(initialLogs);
   const [scanning, setScanning] = useState(false);
@@ -246,7 +250,7 @@ export function NutritionTab({
               </div>
 
               {/* Meal cards */}
-              {meals.length > 0 && (
+              {meals.length > 0 ? (
                 <div className="space-y-2">
                   {meals.map((meal, i) => (
                     <div key={i} className="border border-gray-100 rounded-2xl overflow-hidden" style={{ borderLeftWidth: 3, borderLeftColor: "#f15b5c" }}>
@@ -258,7 +262,25 @@ export function NutritionTab({
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-4 border border-dashed border-gray-150 rounded-2xl">
+                  Chưa có món nào — bấm bên dưới để tự chọn thực đơn.
+                </p>
               )}
+
+              {/* Khách tự soạn món trong đúng mốc calo PT đã tính */}
+              <button
+                onClick={() => setShowBuilder(true)}
+                className="mt-3 w-full h-11 rounded-2xl text-white text-sm font-bold flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                <Pencil className="w-4 h-4" />
+                {meals.length > 0 ? "Đổi thực đơn của tôi" : "Tự chọn thực đơn"}
+              </button>
+              <p className="text-[10px] text-gray-400 text-center mt-1.5 leading-relaxed">
+                Bạn chọn món (tự tìm hoặc nhờ AI soạn) trong đúng mốc calo PT đã tính. Mốc calo và
+                macro do PT quyết định, bạn không đổi được.
+              </p>
             </div>
 
             {/* ── Daily tracking ── */}
@@ -371,6 +393,15 @@ export function NutritionTab({
             </div>
           </div>
         )
+      )}
+
+      {/* ── Khách tự soạn thực đơn ── */}
+      {showBuilder && mealPlan && (
+        <MenuBuilder
+          plan={mealPlan}
+          onSaved={(updated) => { setMealPlan(updated); setShowBuilder(false); }}
+          onClose={() => setShowBuilder(false)}
+        />
       )}
 
       {/* ── Fullscreen MyPlate modal ── */}

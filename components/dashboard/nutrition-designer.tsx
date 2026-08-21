@@ -84,6 +84,8 @@ export type MealPlanRow = {
   dislikes: string | null;
   status: "ACTIVE" | "ARCHIVED";
   createdAt: string;
+  /** Lần gần nhất khách tự đổi món ở cổng /my; null = vẫn đúng bản PT soạn. */
+  clientEditedAt?: string | null;
   days: {
     id: string;
     dayLabel: string;

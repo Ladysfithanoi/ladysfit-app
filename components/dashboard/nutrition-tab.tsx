@@ -365,6 +365,13 @@ export function NutritionTab({
             <div>
               <h2 className="text-sm font-extrabold text-gray-800">Chế độ ăn hiện tại</h2>
               <p className="text-xs text-gray-400 mt-0.5">Cập nhật lần cuối {fmtDate(activePlan.createdAt)}</p>
+              {/* Khách tự đổi món ở cổng /my — PT phải nhìn ra ngay là thực đơn
+                  đang chạy không còn đúng bản mình soạn. Mốc calo/macro không đổi. */}
+              {activePlan.clientEditedAt && (
+                <span className="inline-flex items-center gap-1 mt-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+                  🍽️ Khách tự đổi món ngày {fmtDate(activePlan.clientEditedAt)}
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
               <button

@@ -44,6 +44,7 @@ export default async function NutritionPage() {
         dislikes: mealPlan.dislikes,
         status: mealPlan.status as "ACTIVE" | "ARCHIVED",
         createdAt: mealPlan.createdAt.toISOString(),
+        clientEditedAt: mealPlan.clientEditedAt?.toISOString() ?? null,
         days: mealPlan.days.map((d) => ({
           id: d.id,
           dayLabel: d.dayLabel,
