@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSlotsForSessionType } from "@/lib/workout-structure";
+import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 
 const weekInclude = {
   orderBy: { weekNumber: "asc" as const },
@@ -96,12 +96,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (sessions.length === 0 && body.phaseId) {
     const phaseData = await prisma.workoutPhase.findUnique({ where: { id: body.phaseId } });
     if (phaseData) {
+      // Chuyển động lấy từ Kho bài tập — giai đoạn Admin mới tạo chỉ có chuyển
+      // động ở đó, mẫu tĩnh không biết tới nên buổi sẽ dựng ra rỗng.
+      const movements = await loadPhaseMovements(phaseData);
       sessions = Array.from({ length: body.sessionsPerWeek }, (_, i) => {
         const sessionType =
           phaseData.sessionTypes.length > 0
             ? phaseData.sessionTypes[i % phaseData.sessionTypes.length]
             : "Tạ 1";
-        const slots = getSlotsForSessionType(sessionType, phaseData.templateKey || undefined);
+        const slots = slotsForSession(
+          movements,
+          sessionType,
+          phaseData.templateKey,
+          phaseData.defaultReps
+        );
         return {
           sessionName: `Buổi ${i + 1} — ${sessionType}`,
           order: i,

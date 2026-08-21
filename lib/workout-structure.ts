@@ -332,3 +332,30 @@ export function getSlotsForSessionType(sessionType: string, workoutType?: string
 export function basePhase(phase: string): string {
   return phase.split(":")[0].trim();
 }
+
+/**
+ * Dựng slot chuyển động từ danh sách mã lấy ở Kho bài tập (WorkoutMovementTemplate).
+ *
+ * Số set / số rep mượn của slot cùng mã trong mẫu tĩnh phía trên, để các giai
+ * đoạn có sẵn giữ nguyên thông số quen thuộc. Chuyển động mới do Admin thêm thì
+ * lấy 3 set và số rep mặc định của giai đoạn.
+ */
+export function slotsFromMovementCodes(
+  codes: string[],
+  sessionType: string,
+  workoutType?: string,
+  defaultReps?: string
+): MovementSlot[] {
+  const known = new Map(
+    getSlotsForSessionType(sessionType, workoutType).map((s) => [s.code, s])
+  );
+  return codes.map((code) => {
+    const match = known.get(code);
+    return {
+      code,
+      name: match?.name ?? code,
+      defaultSets: match?.defaultSets ?? 3,
+      defaultReps: match?.defaultReps ?? defaultReps ?? "15-20",
+    };
+  });
+}

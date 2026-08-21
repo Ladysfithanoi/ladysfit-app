@@ -23,6 +23,8 @@ type PhaseData = {
   sessionTypes: string[];
   defaultReps: string;
   templateKey: string;
+  /** Chuyển động nền tảng theo tên buổi, lấy từ Kho bài tập (/api/admin/phases). */
+  movements?: Record<string, string[]>;
 };
 
 export type WorkoutMovement = {
@@ -272,9 +274,20 @@ function sessionToDraft(s: WorkoutSession): DraftSession {
   };
 }
 
-function buildMovementsFromType(sessionType: string, templateKey: string, defaultReps: string): DraftMovement[] {
+// Chuyển động của một buổi: ưu tiên Kho bài tập (chỉ ở đó mới có giai đoạn Admin
+// tự tạo), rơi về mẫu tĩnh khi giai đoạn chưa được cấu hình chuyển động nào.
+function slotsOf(phase: PhaseData, sessionType: string) {
+  const codes = phase.movements?.[sessionType];
+  if (codes && codes.length > 0) {
+    return codes.map((code) => ({ code, name: code }));
+  }
+  return getSlotsForSessionType(sessionType, phase.templateKey || undefined);
+}
+
+function buildMovementsFromType(phase: PhaseData, sessionType: string): DraftMovement[] {
   const isCardio = sessionType === "Cardio";
-  return getSlotsForSessionType(sessionType, templateKey || undefined).map((slot, i) => ({
+  const defaultReps = phase.defaultReps;
+  return slotsOf(phase, sessionType).map((slot, i) => ({
     movementCode: slot.code,
     movementName: slot.name,
     selectedExercise: "",
@@ -623,25 +636,24 @@ function ProgramView({
 
   function applyPhaseChange() {
     if (!editSelectedPhase) return;
-    const { sessionTypes, templateKey, defaultReps } = editSelectedPhase;
+    const { sessionTypes } = editSelectedPhase;
     setIsDirty(true);
     setDraftSessions((prev) =>
       prev.map((s, i) => {
         const sessionType = sessionTypes[i % sessionTypes.length] ?? "";
-        return { ...s, sessionType, movements: buildMovementsFromType(sessionType, templateKey, defaultReps) };
+        return { ...s, sessionType, movements: buildMovementsFromType(editSelectedPhase, sessionType) };
       })
     );
     setShowPhaseChange(false);
   }
 
   function handleSessionTypeChange(sessionIdx: number, newType: string) {
-    const templateKey = editSelectedPhase?.templateKey ?? "";
-    const defaultReps = editSelectedPhase?.defaultReps ?? "15-20";
+    if (!editSelectedPhase) return;
     setIsDirty(true);
     setDraftSessions((prev) =>
       prev.map((s, i) =>
         i === sessionIdx
-          ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, templateKey, defaultReps) }
+          ? { ...s, sessionType: newType, movements: buildMovementsFromType(editSelectedPhase, newType) }
           : s
       )
     );

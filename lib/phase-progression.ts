@@ -1,10 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { RESIDENT_PACKAGE } from "@/lib/packages";
-import {
-  WORKOUT_TYPE_OPTIONS,
-  getSessionTypeOptions,
-  getSlotsForSessionType,
-} from "@/lib/workout-structure";
+import { WORKOUT_TYPE_OPTIONS, getSessionTypeOptions } from "@/lib/workout-structure";
+import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 
 // ── Chuyển giai đoạn tập — THỦ CÔNG ─────────────────────────────────────────
 //
@@ -373,20 +370,27 @@ async function createPhaseProgram(
     workoutType = WORKOUT_TYPE_OPTIONS[baseName]?.[0]?.dbValue ?? null;
   }
 
-  const sessionTypes = getSessionTypeOptions(baseName, workoutType ?? baseName).map(
-    (o) => o.value
-  );
+  // Tìm WorkoutPhase tương ứng trong DB để giữ liên kết, và quan trọng hơn: lấy
+  // tên buổi + chuyển động do Admin cấu hình. Giai đoạn Admin tự tạo không có
+  // trong mẫu tĩnh, nên nếu chỉ đọc mẫu tĩnh thì buổi sẽ rỗng.
+  const dbPhases = await prisma.workoutPhase.findMany({
+    select: { id: true, name: true, templateKey: true, sessionTypes: true, defaultReps: true },
+  });
+  let dbPhase: (typeof dbPhases)[number] | null = null;
+  if (workoutType) dbPhase = dbPhases.find((p) => p.templateKey === workoutType) ?? null;
+  if (!dbPhase) dbPhase = dbPhases.find((p) => p.name === baseName) ?? null;
+  if (!dbPhase) dbPhase = dbPhases.find((p) => phaseOrderOf(p.name) === order) ?? null;
+  const phaseId: string | null = dbPhase?.id ?? null;
+  if (dbPhase?.templateKey) workoutType = dbPhase.templateKey;
+
+  const sessionTypes =
+    dbPhase && dbPhase.sessionTypes.length > 0
+      ? dbPhase.sessionTypes
+      : getSessionTypeOptions(baseName, workoutType ?? baseName).map((o) => o.value);
   const fallbackTypes = sessionTypes.length > 0 ? sessionTypes : ["Tạ 1"];
   const spw = sessionsPerWeek > 0 ? sessionsPerWeek : 3;
 
-  // Tìm phaseId tương ứng trong DB (nếu có) để giữ liên kết WorkoutPhase.
-  const dbPhases = await prisma.workoutPhase.findMany({
-    select: { id: true, name: true, templateKey: true },
-  });
-  let phaseId: string | null = null;
-  if (workoutType) phaseId = dbPhases.find((p) => p.templateKey === workoutType)?.id ?? null;
-  if (!phaseId) phaseId = dbPhases.find((p) => p.name === baseName)?.id ?? null;
-  if (!phaseId) phaseId = dbPhases.find((p) => phaseOrderOf(p.name) === order)?.id ?? null;
+  const movements = dbPhase ? await loadPhaseMovements(dbPhase) : {};
 
   const program = await prisma.workoutProgram.create({
     data: {
@@ -408,7 +412,7 @@ async function createPhaseProgram(
 
   for (let i = 0; i < spw; i++) {
     const sessionType = fallbackTypes[i % fallbackTypes.length];
-    const slots = getSlotsForSessionType(sessionType, workoutType ?? undefined);
+    const slots = slotsForSession(movements, sessionType, workoutType, dbPhase?.defaultReps);
     await prisma.workoutSession.create({
       data: {
         programId: program.id,

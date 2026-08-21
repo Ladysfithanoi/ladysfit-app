@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loadMovementsForPhases } from "@/lib/movement-templates";
 
 const DEFAULT_PHASES = [
   { name: "Giai đoạn 1", order: 1 },
@@ -19,10 +20,19 @@ export async function GET() {
       await prisma.workoutPhase.createMany({ data: DEFAULT_PHASES });
     }
 
-    const phases = await prisma.workoutPhase.findMany({
+    const rows = await prisma.workoutPhase.findMany({
       include: { _count: { select: { programs: true } } },
       orderBy: { order: "asc" },
     });
+
+    // Kèm chuyển động nền tảng của từng buổi (Kho bài tập). Giao diện dựng sẵn
+    // giáo án theo đây; mẫu tĩnh trong lib/workout-structure không biết các giai
+    // đoạn Admin mới tạo nên nếu thiếu trường này buổi tập sẽ hiện ra rỗng.
+    const movementMap = await loadMovementsForPhases(rows);
+    const phases = rows.map((p) => ({
+      ...p,
+      movements: movementMap.get(p.name) ?? {},
+    }));
 
     if (session.user.role === "PT") {
       const [sysConfig, user] = await Promise.all([

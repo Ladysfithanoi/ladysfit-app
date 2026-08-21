@@ -19,6 +19,8 @@ type PhaseData = {
   sessionTypes: string[];
   defaultReps: string;
   templateKey: string;
+  /** Chuyển động nền tảng theo tên buổi, lấy từ Kho bài tập (/api/admin/phases). */
+  movements?: Record<string, string[]>;
 };
 
 type DraftMovement = {
@@ -154,9 +156,20 @@ function MovementRow({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function buildMovementsFromType(sessionType: string, templateKey: string, defaultReps: string): DraftMovement[] {
+// Chuyển động của một buổi: ưu tiên Kho bài tập (chỉ ở đó mới có giai đoạn Admin
+// tự tạo), rơi về mẫu tĩnh khi giai đoạn chưa được cấu hình chuyển động nào.
+function slotsOf(phase: PhaseData, sessionType: string) {
+  const codes = phase.movements?.[sessionType];
+  if (codes && codes.length > 0) {
+    return codes.map((code) => ({ code, name: code }));
+  }
+  return getSlotsForSessionType(sessionType, phase.templateKey || undefined);
+}
+
+function buildMovementsFromType(phase: PhaseData, sessionType: string): DraftMovement[] {
   const isCardio = sessionType === "Cardio";
-  return getSlotsForSessionType(sessionType, templateKey || undefined).map((slot, i) => ({
+  const defaultReps = phase.defaultReps;
+  return slotsOf(phase, sessionType).map((slot, i) => ({
     movementCode: slot.code,
     movementName: slot.name,
     selectedExercise: "",
@@ -173,7 +186,7 @@ function buildDraftSessions(phase: PhaseData, spw: number): DraftSession[] {
     return {
       key: SESSION_LABELS[i] ?? String(i + 1),
       sessionType,
-      movements: buildMovementsFromType(sessionType, phase.templateKey, phase.defaultReps),
+      movements: buildMovementsFromType(phase, sessionType),
     };
   });
 }
@@ -262,7 +275,7 @@ export function Step3Workout({
       prev
         ? prev.map((s, i) =>
             i === idx
-              ? { ...s, sessionType: newType, movements: buildMovementsFromType(newType, selectedPhase.templateKey, selectedPhase.defaultReps) }
+              ? { ...s, sessionType: newType, movements: buildMovementsFromType(selectedPhase, newType) }
               : s
           )
         : prev

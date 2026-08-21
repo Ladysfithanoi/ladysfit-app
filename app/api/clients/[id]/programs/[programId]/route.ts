@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSlotsForSessionType } from "@/lib/workout-structure";
+import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
 import { sessionIdsWithLogs } from "@/lib/workout-session";
 
@@ -132,6 +132,8 @@ export async function PATCH(
       const phaseData = prog.workoutPhase;
       const sessionTypes = phaseData?.sessionTypes ?? [];
       const templateKey = phaseData?.templateKey ?? "";
+      // Chuyển động của buổi thêm mới lấy từ Kho bài tập theo tên giai đoạn.
+      const movements = phaseData ? await loadPhaseMovements(phaseData) : {};
 
       // Sau khi đồng bộ, mỗi tuần có đúng newCount buổi → buổi được đánh số liên
       // tục qua các tuần (tuần thứ wi bắt đầu từ wi * newCount + 1).
@@ -147,7 +149,12 @@ export async function PATCH(
           for (let i = currentCount; i < newCount; i++) {
             const sessionType =
               sessionTypes.length > 0 ? sessionTypes[i % sessionTypes.length] : "Tạ 1";
-            const slots = getSlotsForSessionType(sessionType, templateKey || undefined);
+            const slots = slotsForSession(
+              movements,
+              sessionType,
+              templateKey,
+              phaseData?.defaultReps
+            );
             await prisma.workoutSession.create({
               data: {
                 programId: params.programId,
