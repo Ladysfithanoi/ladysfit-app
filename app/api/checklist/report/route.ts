@@ -9,13 +9,10 @@ import { mondayOf, todayVN, weekKey, weekLabel } from "@/lib/week";
 // weekNumber) qua weekKey() nên client chỉ cần gửi `weekStart`.
 
 type ReportBody = {
-  weekStart:   string;
-  userId?:     string;
-  results?:    string;
-  completed?:  string;
-  incomplete?: string;
-  nextPlan?:   string;
-  submit?:     boolean;
+  weekStart:    string;
+  userId?:      string;
+  content?:     string;
+  submit?:      boolean;
   aiGenerated?: boolean;
 };
 
@@ -96,11 +93,14 @@ export async function POST(req: Request) {
 
   const { year, month, weekNumber } = weekKey(weekStart);
 
+  // Nội dung báo cáo giờ là một ô duy nhất, lưu ở cột `results`. Ba cột cũ được
+  // xoá đi vì client đã gộp chúng vào ô này khi mở báo cáo cũ ra — giữ lại sẽ
+  // thành nội dung trùng lặp.
   const data = {
-    results:     body.results?.trim()    || null,
-    completed:   body.completed?.trim()  || null,
-    incomplete:  body.incomplete?.trim() || null,
-    nextPlan:    body.nextPlan?.trim()   || null,
+    results:     body.content?.trim() || null,
+    completed:   null,
+    incomplete:  null,
+    nextPlan:    null,
     aiGenerated: body.aiGenerated ?? false,
     ...(body.submit ? { submittedAt: new Date() } : {}),
   };

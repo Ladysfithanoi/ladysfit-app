@@ -10,11 +10,14 @@ import type { StaffMember } from "./checklist-page";
 import { addDaysISO, mondayOf, weekLabel, ymd, VN_DAY_NAMES } from "@/lib/week";
 
 // ── types ─────────────────────────────────────────────────────────────────────
-type Draft = {
-  results:    string;
-  completed:  string;
-  incomplete: string;
-  nextPlan:   string;
+// Nội dung báo cáo giờ là MỘT ô duy nhất, lưu vào cột `results`. Ba cột cũ
+// (completed / incomplete / nextPlan) chỉ còn để đọc lại các báo cáo viết theo
+// bố cục 4 ô trước đây — xem mergeReport().
+type LegacyReport = {
+  results:    string | null;
+  completed:  string | null;
+  incomplete: string | null;
+  nextPlan:   string | null;
 };
 
 type WeekTask = {
@@ -47,14 +50,39 @@ type Props = {
   staffList:       StaffMember[];
 };
 
-const EMPTY_DRAFT: Draft = { results: "", completed: "", incomplete: "", nextPlan: "" };
+const PLACEHOLDER = `📈 Kết quả nổi bật trong tuần:
+-
 
-const FIELDS: { key: keyof Draft; label: string; hint: string; emoji: string }[] = [
-  { key: "results",    label: "Kết quả nổi bật trong tuần", hint: "Doanh số, buổi dạy, khách mới… kèm số liệu",  emoji: "📈" },
-  { key: "completed",  label: "Việc đã hoàn thành",         hint: "Những đầu việc đã chốt xong trong tuần",       emoji: "✅" },
-  { key: "incomplete", label: "Việc chưa hoàn thành",       hint: "Việc còn dở dang và lý do",                    emoji: "⏳" },
-  { key: "nextPlan",   label: "Kế hoạch tuần tới",          hint: "Giải pháp và mục tiêu cho tuần sau",           emoji: "➡️" },
+✅ Việc đã hoàn thành:
+-
+
+⏳ Việc chưa hoàn thành:
+-
+
+➡️ Kế hoạch tuần tới:
+- `;
+
+const LEGACY_LABELS: [keyof LegacyReport, string][] = [
+  ["results",    "📈 Kết quả nổi bật trong tuần"],
+  ["completed",  "✅ Việc đã hoàn thành"],
+  ["incomplete", "⏳ Việc chưa hoàn thành"],
+  ["nextPlan",   "➡️ Kế hoạch tuần tới"],
 ];
+
+/**
+ * Gộp báo cáo về một đoạn văn bản duy nhất. Báo cáo viết theo bố cục 4 ô cũ được
+ * ghép lại kèm tiêu đề để không mất chữ nào; báo cáo mới chỉ có `results` thì trả
+ * về nguyên văn.
+ */
+function mergeReport(r: LegacyReport | null | undefined): string {
+  if (!r) return "";
+  const hasLegacy = [r.completed, r.incomplete, r.nextPlan].some((v) => v?.trim());
+  if (!hasLegacy) return r.results?.trim() ?? "";
+  return LEGACY_LABELS
+    .filter(([k]) => r[k]?.trim())
+    .map(([k, label]) => `${label}:\n${r[k]!.trim()}`)
+    .join("\n\n");
+}
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
@@ -80,8 +108,8 @@ export function WeeklyReportTab({
   const [subTab, setSubTab]       = useState<"own" | "team">("own");
   const [weekStart, setWeekStart] = useState(thisMonday);
 
-  // Own report
-  const [draft, setDraft]         = useState<Draft>(EMPTY_DRAFT);
+  // Own report — một ô nội dung duy nhất
+  const [content, setContent]     = useState("");
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [savedAt, setSavedAt]     = useState<string | null>(null);
   const [aiGenerated, setAiGenerated] = useState(false);
@@ -127,12 +155,7 @@ export function WeeklyReportTab({
       if (r1.ok) {
         const d = await r1.json();
         const rep = d.report;
-        setDraft({
-          results:    rep?.results    ?? "",
-          completed:  rep?.completed  ?? "",
-          incomplete: rep?.incomplete ?? "",
-          nextPlan:   rep?.nextPlan   ?? "",
-        });
+        setContent(mergeReport(rep));
         setSubmittedAt(rep?.submittedAt ?? null);
         setSavedAt(rep?.updatedAt ?? null);
         setAiGenerated(rep?.aiGenerated ?? false);
@@ -166,11 +189,6 @@ export function WeeklyReportTab({
   }, [subTab, fetchOwn, fetchTeam]);
 
   // ── actions ────────────────────────────────────────────────────────────────
-  function setField(key: keyof Draft, v: string) {
-    setDraft((p) => ({ ...p, [key]: v }));
-    setIsDirty(true);
-  }
-
   async function handleSummarize() {
     setAiLoading(true);
     setError("");
@@ -182,12 +200,7 @@ export function WeeklyReportTab({
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? "Tổng hợp thất bại"); return; }
-      setDraft({
-        results:    d.draft?.results    ?? "",
-        completed:  d.draft?.completed  ?? "",
-        incomplete: d.draft?.incomplete ?? "",
-        nextPlan:   d.draft?.nextPlan   ?? "",
-      });
+      setContent(d.content ?? "");
       setAiGenerated(true);
       setIsDirty(true);
       flash("AI đã tổng hợp xong — kiểm tra lại rồi bấm Lưu ✓");
@@ -205,7 +218,7 @@ export function WeeklyReportTab({
       const res = await fetch("/api/checklist/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekStart, ...draft, submit, aiGenerated }),
+        body: JSON.stringify({ weekStart, content, submit, aiGenerated }),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error ?? "Lưu thất bại"); return; }
@@ -226,7 +239,7 @@ export function WeeklyReportTab({
     }
   }
 
-  const hasContent = FIELDS.some((f) => draft[f.key].trim());
+  const hasContent = content.trim().length > 0;
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
@@ -444,7 +457,7 @@ export function WeeklyReportTab({
             )}
           </div>
 
-          {/* 4 ô nội dung báo cáo */}
+          {/* Nội dung báo cáo — một ô duy nhất */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: "#f15b5c" }}>
               <p className="text-sm font-extrabold text-white tracking-wide uppercase">
@@ -454,29 +467,28 @@ export function WeeklyReportTab({
                 <span className="text-xs text-white/80 italic">👁️ Chế độ xem</span>
               )}
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-1.5">
               {loading ? (
                 <p className="py-8 text-center text-sm text-gray-400">Đang tải...</p>
               ) : (
-                FIELDS.map((f) => (
-                  <div key={f.key} className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-600">
-                      {f.emoji} {f.label}
-                      <span className="ml-1.5 font-normal text-gray-300">— {f.hint}</span>
-                    </label>
-                    <textarea
-                      value={draft[f.key]}
-                      onChange={(e) => setField(f.key, e.target.value)}
-                      disabled={!canEdit}
-                      rows={4}
-                      placeholder={canEdit ? f.hint : ""}
-                      className={cn(
-                        "w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-y",
-                        canEdit ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
-                      )}
-                    />
-                  </div>
-                ))
+                <>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Tổng kết <span className="font-semibold text-gray-500">kết quả nổi bật</span>,{" "}
+                    <span className="font-semibold text-gray-500">việc đã / chưa hoàn thành</span> và{" "}
+                    <span className="font-semibold text-gray-500">kế hoạch tuần tới</span> trong một ô.
+                  </p>
+                  <textarea
+                    value={content}
+                    onChange={(e) => { setContent(e.target.value); setIsDirty(true); }}
+                    disabled={!canEdit}
+                    rows={16}
+                    placeholder={canEdit ? PLACEHOLDER : ""}
+                    className={cn(
+                      "w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-y leading-relaxed",
+                      canEdit ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
+                    )}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -589,17 +601,12 @@ export function WeeklyReportTab({
                             Nhân sự chưa viết báo cáo cho tuần này.
                           </p>
                         ) : (
-                          <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                            {FIELDS.map((f) => (
-                              <div key={f.key}>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
-                                  {f.emoji} {f.label}
-                                </p>
-                                <p className="text-[12px] text-gray-600 whitespace-pre-wrap leading-relaxed">
-                                  {t[f.key]?.trim() || <span className="text-gray-300 italic">—</span>}
-                                </p>
-                              </div>
-                            ))}
+                          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                            <p className="text-[12px] text-gray-600 whitespace-pre-wrap leading-relaxed">
+                              {mergeReport(t) || (
+                                <span className="text-gray-300 italic">Báo cáo còn trống</span>
+                              )}
+                            </p>
                           </div>
                         )}
                       </div>

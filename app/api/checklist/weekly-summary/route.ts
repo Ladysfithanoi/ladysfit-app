@@ -12,13 +12,6 @@ import { addDaysISO, mondayOf, todayVN, weekLabel, VN_DAY_NAMES } from "@/lib/we
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-type Draft = {
-  results:    string;
-  completed:  string;
-  incomplete: string;
-  nextPlan:   string;
-};
-
 function toUTC(dateStr: string): Date {
   return new Date(dateStr + "T00:00:00.000Z");
 }
@@ -46,19 +39,31 @@ async function callGemini(keys: string[], payload: any): Promise<Response> {
   return last ?? new Response(null, { status: 429 });
 }
 
-function parseDraft(text: string): Draft {
+const SECTION_LABELS: [string, string][] = [
+  ["results",    "📈 Kết quả nổi bật trong tuần"],
+  ["completed",  "✅ Việc đã hoàn thành"],
+  ["incomplete", "⏳ Việc chưa hoàn thành"],
+  ["nextPlan",   "➡️ Kế hoạch tuần tới"],
+];
+
+/**
+ * Báo cáo tuần chỉ còn một ô nội dung, nên mong đợi model trả về {"content": …}.
+ * Nếu nó vẫn trả về 4 mục rời (định dạng cũ) thì ghép lại kèm tiêu đề, để một
+ * lần model "cứng đầu" không làm hỏng nút Tổng hợp.
+ */
+function parseContent(text: string): string {
   const stripped = text.replace(/```json/gi, "").replace(/```/g, "").trim();
   const start = stripped.indexOf("{");
   const end = stripped.lastIndexOf("}");
   const json = start !== -1 && end > start ? stripped.slice(start, end + 1) : stripped;
   const raw = JSON.parse(json) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  return {
-    results:    str(raw.results),
-    completed:  str(raw.completed),
-    incomplete: str(raw.incomplete),
-    nextPlan:   str(raw.nextPlan),
-  };
+
+  if (str(raw.content)) return str(raw.content);
+  return SECTION_LABELS
+    .filter(([k]) => str(raw[k]))
+    .map(([k, label]) => `${label}:\n${str(raw[k])}`)
+    .join("\n\n");
 }
 
 // GET — dữ liệu thô 7 ngày của chính mình, để nhân sự tự tổng hợp thủ công
@@ -218,15 +223,24 @@ ${dayBlocks.join("\n\n")}
 
 Hãy viết báo cáo tuần bằng tiếng Việt, giọng văn ngắn gọn chuyên nghiệp, xưng "em" khi báo cáo cấp trên.
 Bám sát dữ liệu thật ở trên, KHÔNG bịa thêm số liệu hay công việc không có trong check-list.
-Mỗi mục dùng gạch đầu dòng "- ", tối đa 5 gạch đầu dòng.
+
+Báo cáo là MỘT đoạn văn bản liền mạch gồm 4 phần theo đúng thứ tự và đúng tiêu đề sau,
+mỗi phần cách nhau một dòng trống, mỗi ý là một gạch đầu dòng "- ", tối đa 5 gạch mỗi phần:
+
+📈 Kết quả nổi bật trong tuần:
+- (có số liệu cụ thể)
+
+✅ Việc đã hoàn thành:
+-
+
+⏳ Việc chưa hoàn thành:
+- (kèm lý do)
+
+➡️ Kế hoạch tuần tới:
+- (giải pháp và mục tiêu)
 
 TRẢ VỀ DUY NHẤT một object JSON đúng format sau, không thêm chữ nào khác:
-{
-  "results": "Kết quả nổi bật trong tuần, có số liệu cụ thể",
-  "completed": "Những đầu việc đã hoàn thành",
-  "incomplete": "Những việc chưa hoàn thành và lý do",
-  "nextPlan": "Kế hoạch / giải pháp cho tuần tới"
-}`;
+{"content": "toàn bộ báo cáo, dùng \\n để xuống dòng"}`;
 
   const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
   const apiKeys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
@@ -255,7 +269,7 @@ TRẢ VỀ DUY NHẤT một object JSON đúng format sau, không thêm chữ n�
   try {
     return NextResponse.json({
       weekStart,
-      draft: parseDraft(text),
+      content: parseContent(text),
       stats: { days: checklists.length, tasksTotal: weekTasks, tasksDone: weekDone, taskRate },
     });
   } catch {
