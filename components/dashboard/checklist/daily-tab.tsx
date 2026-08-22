@@ -182,6 +182,13 @@ function DateInput({
         min={min}
         max={max}
         onChange={(e) => e.target.value && onChange(e.target.value)}
+        // Chrome/Edge trên desktop chỉ mở lịch khi bấm đúng icon lịch — mà icon
+        // đang bị ẩn (opacity-0), nên bấm vào ô thấy "không hiện gì". Gọi tay
+        // showPicker() để bấm chỗ nào trong ô cũng mở được.
+        onClick={(e) => {
+          const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+          try { el.showPicker?.(); } catch { /* trình duyệt cũ: để hành vi mặc định */ }
+        }}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
       />
     </div>
@@ -903,10 +910,16 @@ export function DailyTab({
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-500">Ngày báo cáo</label>
+            {/* Trước đây quản lý chỉ thấy ô xám tĩnh, bấm vào không ra gì — phải
+                lên tận thanh công cụ phía trên mới đổi được ngày. Giờ ô này là
+                lịch bấm được cho mọi vai trò. */}
             {isManager ? (
-              <div className="h-9 rounded-xl border border-gray-100 bg-gray-50 px-3 flex items-center text-sm text-gray-600 font-medium">
-                {fmtDate(date)}
-              </div>
+              <MonthCalendarPicker
+                value={date}
+                maxDate={maxEdit}
+                onChange={(v) => (isTeamView ? setTeamDate(v) : setOwnDate(v))}
+                className="w-full"
+              />
             ) : (
               <DateInput
                 value={date}
