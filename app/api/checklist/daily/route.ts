@@ -2,9 +2,19 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { addDaysISO, todayVN } from "@/lib/week";
 
 function toDateOnly(dateStr: string): Date {
   return new Date(dateStr + "T00:00:00.000Z");
+}
+
+// Nhân sự được điền trước cho hôm nay và các ngày sắp tới (tối đa 31 ngày),
+// còn ngày đã qua thì chỉ xem lại chứ không sửa được nữa.
+const EDIT_AHEAD_DAYS = 31;
+
+function editableRange(): { from: string; to: string } {
+  const from = todayVN();
+  return { from, to: addDaysISO(from, EDIT_AHEAD_DAYS) };
 }
 
 export async function GET(req: Request) {
@@ -36,21 +46,9 @@ export async function GET(req: Request) {
   }
   // ADMIN: có thể xem bất kỳ user nào — không cần kiểm tra thêm
 
-  // PT may only view the current month. FM (and ADMIN) can review the full
-  // history of staff in their managed branches — viewing past months is read-only,
-  // enforced on the save path below.
-  if (isPT) {
-    const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000); // UTC+7
-    const currentMonth = nowVN.getUTCMonth();
-    const currentYear = nowVN.getUTCFullYear();
-    const [reqYear, reqMonth] = date.split("-").map(Number);
-    if (reqYear !== currentYear || reqMonth - 1 !== currentMonth) {
-      return NextResponse.json(
-        { error: "Chỉ được xem dữ liệu trong tháng hiện tại" },
-        { status: 403 }
-      );
-    }
-  }
+  // Xem thì không giới hạn ngày: ai cũng xem lại được toàn bộ lịch sử của mình,
+  // FM/ADMIN xem được của nhân sự trong chi nhánh mình quản lý. Quyền ghi mới là
+  // thứ bị chặn theo ngày (xem POST bên dưới).
 
   const reportDate = toDateOnly(date);
   const nextDay = new Date(reportDate);
@@ -109,13 +107,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Editing is restricted to the current month — past months are review-only.
+  // Được điền cho hôm nay và các ngày phía trước (điền trước cả tuần cũng được);
+  // ngày đã qua thì khoá lại, chỉ xem.
   {
-    const nowVN = new Date(Date.now() + 7 * 60 * 60 * 1000); // UTC+7
-    const [reqYear, reqMonth] = body.date.split("-").map(Number);
-    if (reqYear !== nowVN.getUTCFullYear() || reqMonth - 1 !== nowVN.getUTCMonth()) {
+    const { from, to } = editableRange();
+    if (body.date < from) {
       return NextResponse.json(
-        { error: "Chỉ được chỉnh sửa check-list trong tháng hiện tại" },
+        { error: "Ngày đã qua chỉ xem lại được, không chỉnh sửa được nữa" },
+        { status: 403 }
+      );
+    }
+    if (body.date > to) {
+      return NextResponse.json(
+        { error: `Chỉ được điền trước tối đa ${EDIT_AHEAD_DAYS} ngày` },
         { status: 403 }
       );
     }

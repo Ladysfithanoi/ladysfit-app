@@ -14,9 +14,16 @@ function localYMD(d: Date): string {
 function todayISO() {
   return localYMD(new Date());
 }
-function firstDayOfMonthISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+function addDaysISO(iso: string, n: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return localYMD(dt);
+}
+// Nhân sự được điền trước cho hôm nay và tối đa 31 ngày tới; ngày đã qua chỉ xem.
+const EDIT_AHEAD_DAYS = 31;
+function maxEditableISO() {
+  return addDaysISO(todayISO(), EDIT_AHEAD_DAYS);
 }
 function fmtDate(iso: string) {
   const [y, m, d] = iso.split("-");
@@ -37,15 +44,6 @@ function mergeLegacyReflection(c: {
   if (c.dailyIncomplete?.trim()) parts.push(`⏳ Chưa hoàn thành:\n${c.dailyIncomplete.trim()}`);
   if (c.dailyNextPlan?.trim()) parts.push(`➡️ Giải pháp / kế hoạch:\n${c.dailyNextPlan.trim()}`);
   return parts.join("\n\n");
-}
-function currentMonthLabel() {
-  const d = new Date();
-  return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
-}
-function isCurrentMonthISO(iso: string): boolean {
-  const [y, m] = iso.split("-").map(Number);
-  const d = new Date();
-  return y === d.getFullYear() && m === d.getMonth() + 1;
 }
 // Normalize arbitrary time input → "HH:MM" (24h), returns "" if invalid
 function normalizeTime(raw: string): string {
@@ -74,14 +72,11 @@ function sortRowsByTime(rows: Row[]): Row[] {
   return [...withTime, ...withoutTime].map((r, i) => ({ ...r, order: i + 1 }));
 }
 
+// Mặc định lấy ngày hôm qua để nhập lại danh sách công việc; nếu đang xem đúng
+// ngày hôm qua thì lùi thêm một ngày nữa cho khác ngày đang mở.
 function defaultImportDate(ownDate: string): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const yesterday = localYMD(d);
-  const first = firstDayOfMonthISO();
-  if (yesterday >= first && yesterday !== ownDate) return yesterday;
-  if (first !== ownDate) return first;
-  return first;
+  const yesterday = addDaysISO(todayISO(), -1);
+  return yesterday === ownDate ? addDaysISO(yesterday, -1) : yesterday;
 }
 
 // ── calendar helpers ──────────────────────────────────────────────────────────
@@ -193,13 +188,14 @@ function DateInput({
   );
 }
 
-// ── MonthCalendarPicker — full-history month calendar (FM review) ────────────
-// A click-to-open month grid that lets FM browse back to any past month. Future
-// days are disabled; there is no lower bound so the whole history is reachable.
+// ── MonthCalendarPicker — full-history month calendar ────────────────────────
+// A click-to-open month grid with no lower bound, so the whole history stays
+// reachable. `maxDate` (default: today) is the last selectable day — the daily
+// tab passes a future date so staff can plan the days ahead.
 function MonthCalendarPicker({
-  value, onChange, className,
+  value, onChange, className, maxDate,
 }: {
-  value: string; onChange: (v: string) => void; className?: string;
+  value: string; onChange: (v: string) => void; className?: string; maxDate?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => {
@@ -248,10 +244,9 @@ function MonthCalendarPicker({
   }, [open]);
 
   const today = todayISO();
-  const todayD = new Date();
-  const curY = todayD.getFullYear();
-  const curM = todayD.getMonth();
-  const canNext = view.y < curY || (view.y === curY && view.m < curM);
+  const limit = maxDate ?? today;
+  const [limY, limM] = limit.split("-").map(Number);
+  const canNext = view.y < limY || (view.y === limY && view.m < limM - 1);
 
   function prevMonth() {
     setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }));
@@ -308,7 +303,7 @@ function MonthCalendarPicker({
             {cells.map((d, i) => {
               if (d === null) return <div key={i} />;
               const ymd = ymdOf(d);
-              const isFuture = ymd > today;
+              const isFuture = ymd > limit;
               const isSel = ymd === value;
               const isToday = ymd === today;
               return (
@@ -557,11 +552,15 @@ export function DailyTab({
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewStaff, setOverviewStaff]     = useState<OverviewStaff[]>([]);
 
-  // Editing is allowed only on your own current-month checklist. FM can browse
-  // their own (and their team's) past months, but those are review-only.
-  const dateInCurrentMonth = isCurrentMonthISO(date);
-  const canEdit           = !isTeamView && dateInCurrentMonth;
+  // Điền được cho check-list của chính mình từ hôm nay trở đi (điền trước cả
+  // tuần cũng được, tối đa 31 ngày). Ngày đã qua — của mình hay của nhân sự —
+  // đều chỉ xem lại.
+  const today     = todayISO();
+  const maxEdit   = maxEditableISO();
+  const isPastDay = date < today;
+  const canEdit           = !isTeamView && !isPastDay && date <= maxEdit;
   const canEditReflection = canEdit;
+  const isFutureDay       = date > today;
 
   // ── Auto-save draft (own checklist only) ──────────────────────────────────
   const draftKey = `ladysfit_draft_checklist_${currentUserId}_${ownDate}`;
@@ -573,7 +572,7 @@ export function DailyTab({
 
   const selectedUser = staffList.find((s) => s.id === selectedUserId);
   const displayName  = selectedUser?.name ?? selectedUser?.email ?? currentUserName;
-  const minDate = firstDayOfMonthISO();
+  // Không còn giới hạn dưới: nhân sự xem lại được toàn bộ lịch sử của mình.
 
   // ── fetch main ─────────────────────────────────────────────────────────────
   const fetchChecklist = useCallback(async () => {
@@ -832,6 +831,7 @@ export function DailyTab({
               <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Ngày:</label>
               <MonthCalendarPicker
                 value={fmSubTab === "team" ? teamDate : ownDate}
+                maxDate={maxEdit}
                 onChange={(v) => fmSubTab === "team" ? setTeamDate(v) : setOwnDate(v)}
               />
             </div>
@@ -843,7 +843,9 @@ export function DailyTab({
                 : "bg-amber-50 text-amber-600 border-amber-200"
             )}>
               {canEdit
-                ? `✏️ Của bạn · ${currentMonthLabel()}`
+                ? isFutureDay
+                  ? `✏️ Điền trước · ${fmtDate(date)}`
+                  : `✏️ Của bạn · ${fmtDate(date)}`
                 : fmSubTab === "own"
                   ? `👁 Xem lại · ${fmtDate(date)}`
                   : `👁 Chỉ xem · ${fmtDate(date)}`}
@@ -892,8 +894,7 @@ export function DailyTab({
             ) : (
               <DateInput
                 value={date}
-                min={minDate}
-                max={todayISO()}
+                max={maxEdit}
                 onChange={(v) => setOwnDate(v)}
                 className="w-full focus-within:ring-2 focus-within:ring-[#f15b5c]/30"
               />
@@ -957,6 +958,26 @@ export function DailyTab({
           </div>
         )}
       </div>
+
+      {/* ── Thông báo trạng thái ngày (điền trước / chỉ xem) ──────────────── */}
+      {!isTeamView && isPastDay && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 flex items-start gap-2.5">
+          <span className="text-base leading-none mt-0.5">👁</span>
+          <p className="text-xs text-amber-700 leading-relaxed">
+            <span className="font-bold">Ngày {fmtDate(date)} đã qua</span> — bạn xem lại được nhưng
+            không chỉnh sửa được nữa. Muốn điền thì chọn hôm nay hoặc các ngày sắp tới.
+          </p>
+        </div>
+      )}
+      {!isTeamView && isFutureDay && canEdit && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-4 py-3 flex items-start gap-2.5">
+          <span className="text-base leading-none mt-0.5">📝</span>
+          <p className="text-xs text-blue-700 leading-relaxed">
+            <span className="font-bold">Đang điền trước cho ngày {fmtDate(date)}.</span>{" "}
+            Cứ lên kế hoạch sẵn, đến ngày đó chỉ cần vào điền phần thực đạt.
+          </p>
+        </div>
+      )}
 
       {/* ── Bảng công việc ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -1377,7 +1398,7 @@ export function DailyTab({
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
               <div>
                 <p className="text-sm font-extrabold text-gray-800">Nhập từ ngày khác</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Chọn ngày trong tháng để xem trước và nhập danh sách</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Chọn một ngày đã làm để xem trước và nhập lại danh sách công việc</p>
               </div>
               <button onClick={() => setImportOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
                 <X className="w-5 h-5" />
@@ -1389,8 +1410,7 @@ export function DailyTab({
                 <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Chọn ngày:</label>
                 <DateInput
                   value={importDate}
-                  min={minDate}
-                  max={todayISO()}
+                  max={today}
                   onChange={(v) => setImportDate(v)}
                   className="flex-1"
                 />

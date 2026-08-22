@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckSquare, Bell, ClipboardList, BarChart3 } from "lucide-react";
+import { CheckSquare, Bell, ClipboardList, BarChart3, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DailyTab } from "./daily-tab";
+import { WeeklyReportTab } from "./weekly-report";
 import { ChecklistMonthlyStats } from "./monthly-stats";
 
 export type StaffMember = { id: string; name: string | null; email: string; branchId: string | null; role: string };
@@ -21,7 +22,15 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
   const isFM = currentUserRole === "FM";
   // Monthly performance view is for managers (FM/Admin) only.
   const showMonthly = isFM || !!isAdmin;
-  const [view, setView] = useState<"daily" | "monthly">("daily");
+  type View = "daily" | "weekly" | "monthly";
+  const [view, setView] = useState<View>("daily");
+
+  // Ai cũng có Check-list ngày + Báo cáo tuần; Thống kê tháng chỉ dành cho quản lý.
+  const tabs: { key: View; label: string; icon: typeof ClipboardList }[] = [
+    { key: "daily",  label: "Check-list ngày", icon: ClipboardList },
+    { key: "weekly", label: "Báo cáo tuần",    icon: FileText },
+    ...(showMonthly ? [{ key: "monthly" as const, label: "Thống kê tháng", icon: BarChart3 }] : []),
+  ];
 
   // Admin test notifications
   const [testLoading, setTestLoading] = useState(false);
@@ -85,36 +94,38 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
         </div>
       </div>
 
-      {/* Top-level view switcher (managers only) */}
-      {showMonthly && (
-        <div className="bg-white border-b border-gray-100 px-4 sm:px-8">
-          <div className="flex gap-1">
-            {([
-              { key: "daily", label: "Check-list ngày", icon: ClipboardList },
-              { key: "monthly", label: "Thống kê tháng", icon: BarChart3 },
-            ] as const).map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setView(key)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors -mb-px",
-                  view === key
-                    ? "border-[#f15b5c] text-[#f15b5c]"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+      {/* Top-level view switcher */}
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-8">
+        <div className="flex gap-1 overflow-x-auto">
+          {tabs.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors -mb-px whitespace-nowrap",
+                view === key
+                  ? "border-[#f15b5c] text-[#f15b5c]"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Content */}
       <div className="px-3 sm:px-8 py-6">
         {showMonthly && view === "monthly" ? (
           <ChecklistMonthlyStats />
+        ) : view === "weekly" ? (
+          <WeeklyReportTab
+            currentUserId={currentUserId}
+            currentUserName={currentUserName}
+            currentUserRole={currentUserRole}
+            staffList={staffList}
+          />
         ) : (
           <DailyTab
             currentUserId={currentUserId}
