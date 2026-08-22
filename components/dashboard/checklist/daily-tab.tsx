@@ -80,8 +80,10 @@ function defaultImportDate(ownDate: string): string {
 }
 
 // ── calendar helpers ──────────────────────────────────────────────────────────
-const CAL_START = 6;   // 06:00
-const CAL_END   = 22;  // 22:00
+// Trục thời gian phủ trọn 24 giờ như Google Calendar — không cắt đầu/cuối ngày,
+// công việc lúc 5h sáng hay 23h đêm đều nằm đúng chỗ trên lịch.
+const CAL_START = 0;   // 00:00
+const CAL_END   = 24;  // 24:00
 const HOUR_PX   = 60;  // px per hour slot
 
 const VN_DAY_SHORT: Record<number, string> = {
@@ -389,6 +391,24 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
 
   const { dayName, dayNum } = getDayHeader(date);
 
+  // Trục 24h dài 1440px nên mở ra sẽ đứng ở 00:00 — vô nghĩa. Cuộn sẵn tới khung
+  // giờ đáng quan tâm: công việc sớm nhất trong ngày, hoặc giờ hiện tại nếu là
+  // hôm nay (giống cách Google Calendar mở ở "bây giờ").
+  const timelineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = timelineRef.current;
+    const scroller = el?.closest("[data-cal-scroll]") as HTMLElement | null;
+    if (!el || !scroller) return;
+    const focusMins = scheduled.length > 0
+      ? scheduled[0].startMins
+      : isToday ? nowMins : 7 * 60;
+    const offset =
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTop = Math.max(0, offset + minutesToPx(focusMins) - 24);
+    // Chỉ chạy khi mở lịch — modal được mount lại mỗi lần mở.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Rendered as a fragment — the modal body div handles scrolling
   return (
     <>
@@ -431,7 +451,7 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
       )}
 
       {/* Timeline — explicit fixed height so parent can scroll over it */}
-      <div className="flex" style={{ height: timelineHeight + 16 }}>
+      <div ref={timelineRef} className="flex" style={{ height: timelineHeight + 16 }}>
 
         {/* Hour labels column */}
         <div className="w-14 flex-shrink-0 select-none">
@@ -1414,6 +1434,7 @@ export function DailyTab({
 
             {/* Calendar body — this div scrolls, CalendarGrid renders flat content */}
             <div
+              data-cal-scroll
               className="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
               style={{ WebkitOverflowScrolling: "touch" } as CSSProperties}
             >
