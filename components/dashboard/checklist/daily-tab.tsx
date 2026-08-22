@@ -535,6 +535,7 @@ export function DailyTab({
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [isDirty, setIsDirty] = useState(false);
 
   // Import modal state
@@ -577,9 +578,20 @@ export function DailyTab({
   // ── fetch main ─────────────────────────────────────────────────────────────
   const fetchChecklist = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await fetch(`/api/checklist/daily?date=${date}&userId=${selectedUserId}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        // Trước đây lỗi bị nuốt im lặng nên màn hình vẫn giữ nguyên dữ liệu của
+        // ngày trước đó — nhìn như "không mở được ngày này". Giờ dọn form và
+        // báo rõ lý do.
+        const msg = await res.json().catch(() => null);
+        setLoadError(msg?.error ?? "Không tải được check-list của ngày này");
+        setPosition(""); setTargetNote(""); setTotalTarget("");
+        setDailyResults(""); setRows([]); setTotalActual(0);
+        setIsDirty(false);
+        return;
+      }
       const data = (await res.json()) as ChecklistData;
       setTotalActual(data.totalActual);
       type ChecklistDraft = {
@@ -760,6 +772,10 @@ export function DailyTab({
         setToast("Đã lưu check-list ✓");
         setTimeout(() => setToast(""), 3000);
         fetchChecklist();
+      } else {
+        const msg = await res.json().catch(() => null);
+        setToast(`❌ ${msg?.error ?? "Không lưu được check-list"}`);
+        setTimeout(() => setToast(""), 5000);
       }
     } finally {
       setSaving(false);
@@ -960,6 +976,12 @@ export function DailyTab({
       </div>
 
       {/* ── Thông báo trạng thái ngày (điền trước / chỉ xem) ──────────────── */}
+      {loadError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 flex items-start gap-2.5">
+          <span className="text-base leading-none mt-0.5">⚠️</span>
+          <p className="text-xs text-red-700 leading-relaxed font-semibold">{loadError}</p>
+        </div>
+      )}
       {!isTeamView && isPastDay && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 flex items-start gap-2.5">
           <span className="text-base leading-none mt-0.5">👁</span>
