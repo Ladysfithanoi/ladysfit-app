@@ -86,6 +86,11 @@ function weekdayLabel(day: number, month: number, year: number) {
 }
 
 export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, branches }: Props) {
+  // Chỉ quản lý mới tích được lịch nghỉ. PT xem lịch của mình, muốn nghỉ thì
+  // báo FM tích hộ — server cũng chặn bằng canEditLeaveOf() nên đây chỉ là
+  // phần hiển thị cho khớp.
+  const canEdit = currentUserRole === "ADMIN" || currentUserRole === "FM";
+
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear]   = useState(today.getFullYear());
@@ -131,7 +136,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
    * phép và giới hạn 5 ngày liền — hiện đúng kết quả server trả về.
    */
   async function setDayType(day: number, type: LeaveType | "NONE") {
-    if (isSunday(day, month, year) || savingDay !== null) return;
+    if (!canEdit || isSunday(day, month, year) || savingDay !== null) return;
     setPickerDay(null);
     setSavingDay(day);
     try {
@@ -193,9 +198,18 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
           <CalendarDays className="w-5 h-5 text-[#f15b5c]" />
         </div>
         <div>
-          <h1 className="text-xl font-extrabold text-gray-800">Lịch nghỉ</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-extrabold text-gray-800">Lịch nghỉ</h1>
+            {!canEdit && (
+              <span className="text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                👁️ Chế độ xem
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-400 font-medium">
-            Bấm vào ngày để chọn nghỉ phép (đủ lương), nghỉ thường (trừ 1 công) hoặc nghỉ nửa ngày (trừ 0,5 công).
+            {canEdit
+              ? "Bấm vào ngày để chọn nghỉ phép (đủ lương), nghỉ thường (trừ 1 công) hoặc nghỉ nửa ngày (trừ 0,5 công)."
+              : "Xem lịch nghỉ của bạn — nghỉ phép (đủ lương), nghỉ thường (trừ 1 công), nghỉ nửa ngày (trừ 0,5 công)."}
           </p>
         </div>
       </div>
@@ -337,19 +351,22 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                 key={day}
                 type="button"
                 onClick={() => setPickerDay(day)}
-                disabled={sunday || loading}
+                disabled={!canEdit || sunday || loading}
                 className={cn(
                   "min-h-[84px] sm:min-h-[104px] p-2 flex flex-col items-start gap-1.5 text-left",
                   "border-r border-b border-gray-100 transition-colors",
+                  // Không có quyền tích thì ô ngày chỉ là ô hiển thị: giữ nguyên
+                  // màu trạng thái nhưng bỏ hiệu ứng hover và con trỏ bấm được.
+                  !canEdit && !sunday && "cursor-default",
                   sunday
                     ? "bg-gray-50/60 cursor-not-allowed"
                     : type === "ANNUAL"
-                      ? "bg-emerald-50 hover:bg-emerald-100/70"
+                      ? cn("bg-emerald-50", canEdit && "hover:bg-emerald-100/70")
                       : type === "UNPAID"
-                        ? "bg-[#f15b5c]/10 hover:bg-[#f15b5c]/15"
+                        ? cn("bg-[#f15b5c]/10", canEdit && "hover:bg-[#f15b5c]/15")
                         : type === "HALF_DAY"
-                          ? "bg-amber-50 hover:bg-amber-100/70"
-                          : "bg-white hover:bg-gray-50",
+                          ? cn("bg-amber-50", canEdit && "hover:bg-amber-100/70")
+                          : cn("bg-white", canEdit && "hover:bg-gray-50"),
                   savingDay === day && "opacity-60",
                 )}
               >
@@ -407,14 +424,14 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
         <p className="px-5 pb-3 text-[11px] text-gray-400 italic">
           * Phép năm: mỗi tháng làm việc được 1 ngày, tối đa 12 ngày/năm, nghỉ liên tiếp
           tối đa 5 ngày, không dùng hết thì mất khi hết năm (không cộng dồn).
-          {currentUserRole === "PT"
-            ? " FM vẫn có thể chỉnh lại ngày công khi chốt lương."
-            : " Bảng lương chỉ trừ nghỉ thường (1 công) và nghỉ nửa ngày (0,5 công)."}
+          {canEdit
+            ? " Bảng lương chỉ trừ nghỉ thường (1 công) và nghỉ nửa ngày (0,5 công)."
+            : " Lịch này do quản lý cập nhật — cần nghỉ thì báo FM để được duyệt và tích hộ."}
         </p>
       </div>
 
       {/* Chọn loại nghỉ cho một ngày */}
-      {pickerDay !== null && (
+      {canEdit && pickerDay !== null && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
           onClick={() => setPickerDay(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>

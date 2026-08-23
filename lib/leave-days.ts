@@ -214,18 +214,8 @@ export type LeaveActor = {
   managedBranchIds?: string[];
 };
 
-/**
- * Ai được xem và tích lịch nghỉ của ai: bản thân mỗi người, Admin với tất cả,
- * FM với nhân sự thuộc cơ sở mình quản lý. CEO/COO không dùng lịch nghỉ.
- */
-export async function canManageLeaveOf(
-  actor:        LeaveActor,
-  targetUserId: string,
-): Promise<boolean> {
-  if (targetUserId === actor.id) return true;
-  if (actor.role === "ADMIN") return true;
-  if (actor.role !== "FM") return false;
-
+/** FM có phụ trách cơ sở của nhân sự này không. */
+async function fmManages(actor: LeaveActor, targetUserId: string): Promise<boolean> {
   const managed = actor.managedBranchIds ?? [];
   if (managed.length === 0) return false;
 
@@ -234,4 +224,33 @@ export async function canManageLeaveOf(
     select: { branchId: true },
   });
   return !!target?.branchId && managed.includes(target.branchId);
+}
+
+/**
+ * Ai được XEM lịch nghỉ của ai: bản thân mỗi người, Admin với tất cả,
+ * FM với nhân sự thuộc cơ sở mình quản lý. CEO/COO không dùng lịch nghỉ.
+ */
+export async function canViewLeaveOf(
+  actor:        LeaveActor,
+  targetUserId: string,
+): Promise<boolean> {
+  if (targetUserId === actor.id) return true;
+  if (actor.role === "ADMIN") return true;
+  if (actor.role !== "FM") return false;
+  return fmManages(actor, targetUserId);
+}
+
+/**
+ * Ai được TÍCH / SỬA lịch nghỉ: chỉ Admin và FM (cho chính mình và nhân sự cơ
+ * sở mình phụ trách). PT chỉ được xem lịch của mình chứ không tự đăng ký nghỉ —
+ * việc nghỉ phải do quản lý duyệt và tích hộ.
+ */
+export async function canEditLeaveOf(
+  actor:        LeaveActor,
+  targetUserId: string,
+): Promise<boolean> {
+  if (actor.role === "ADMIN") return true;
+  if (actor.role !== "FM") return false;
+  if (targetUserId === actor.id) return true;
+  return fmManages(actor, targetUserId);
 }

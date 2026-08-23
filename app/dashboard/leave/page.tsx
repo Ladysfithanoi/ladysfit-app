@@ -45,7 +45,8 @@ export default async function LeavePageRoute() {
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
-  // Nhân sự mà người đang đăng nhập được tích lịch — khớp canManageLeaveOf().
+  // Nhân sự mà người đang đăng nhập được xem lịch — khớp canViewLeaveOf().
+  // Riêng quyền TÍCH lịch chỉ Admin/FM mới có, xem canEditLeaveOf().
   // Cơ sở kèm theo để lọc theo cơ sở trước rồi mới chọn tên.
   let staffRows: StaffRow[] = [];
   let branches: { id: string; name: string }[] = [];

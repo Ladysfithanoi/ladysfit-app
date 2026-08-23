@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { canManageLeaveOf, sumLeaveDeductionByUser } from "@/lib/leave-days";
+import { canViewLeaveOf, sumLeaveDeductionByUser } from "@/lib/leave-days";
 
 /**
  * Số NGÀY CÔNG bị trừ trong tháng của nhiều nhân sự cùng lúc (nghỉ thường 1,
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   if (ids.length === 0) return NextResponse.json({});
 
   // Chỉ trả về những người mà người gọi được xem lịch nghỉ.
-  const allowedFlags = await Promise.all(ids.map(id => canManageLeaveOf(session.user, id)));
+  const allowedFlags = await Promise.all(ids.map(id => canViewLeaveOf(session.user, id)));
   const allowedIds   = ids.filter((_, i) => allowedFlags[i]);
 
   return NextResponse.json(await sumLeaveDeductionByUser(allowedIds, month, year));

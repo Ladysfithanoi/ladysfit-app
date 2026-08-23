@@ -7,7 +7,8 @@ import {
   LEAVE_DEDUCTION,
   MAX_CONSECUTIVE_ANNUAL,
   annualRunLengthWith,
-  canManageLeaveOf,
+  canViewLeaveOf,
+  canEditLeaveOf,
   getAnnualLeaveBalance,
   getLeaveDaysOfMonth,
   isSunday,
@@ -63,7 +64,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Tháng/năm không hợp lệ" }, { status: 400 });
   }
 
-  const allowed = await canManageLeaveOf(session.user, userId);
+  const allowed = await canViewLeaveOf(session.user, userId);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   return NextResponse.json(await monthState(userId, month, year));
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Ngày không hợp lệ" }, { status: 400 });
   }
 
-  const allowed = await canManageLeaveOf(session.user, userId);
+  const allowed = await canEditLeaveOf(session.user, userId);
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const date = utcDay(year, month, day);
