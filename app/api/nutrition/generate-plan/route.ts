@@ -114,6 +114,51 @@ function matchesAny(foodName: string, keywords: Keyword[]): boolean {
   return keywords.some((kw) => matchPhrase(kw.accented ? strictName : looseName, kw.text));
 }
 
+// ── Khoá nguồn đạm theo sở thích / kiêng kị ───────────────────────────────
+// Khách ghi "thịt gà" thì cả ngày CHỈ ăn gà: mọi nhóm đạm khác (kể cả trứng,
+// đậu hũ, sữa) bị loại thẳng khỏi bảng gửi cho AI. Chỉ khi ô sở thích để
+// trống thì database mới hiện đầy đủ.
+// Chiều ngược lại: nhóm đạm nằm trong ô "không thích" bị loại vô điều kiện.
+type ProteinGroup = { id: string; label: string; terms: string[] };
+
+const PROTEIN_GROUPS: ProteinGroup[] = [
+  { id: "ga",      label: "thịt gà",           terms: ["gà"] },
+  { id: "bo",      label: "thịt bò",           terms: ["bò", "bê", "trâu"] },
+  { id: "heo",     label: "thịt heo/lợn",      terms: ["heo", "lợn", "ba chỉ", "sườn", "thịt nguội", "giò lụa", "chả lụa", "lạp xưởng", "xúc xích", "nem chua", "pate", "patê"] },
+  { id: "ca",      label: "cá",                terms: ["cá", "lươn", "ếch"] },
+  { id: "haisan",  label: "hải sản",           terms: ["hải sản", "tôm", "cua", "ghẹ", "mực", "bạch tuộc", "ngao", "sò", "ốc", "hàu", "hến"] },
+  { id: "vit",     label: "thịt vịt/ngan",     terms: ["vịt", "ngan", "ngỗng", "chim", "bồ câu"] },
+  { id: "de",      label: "thịt dê/cừu/thỏ",   terms: ["dê", "cừu", "thỏ"] },
+  { id: "trung",   label: "trứng",             terms: ["trứng", "ốp la", "ốp lết"] },
+  { id: "dau",     label: "đậu hũ/đậu nành",   terms: ["đậu hũ", "đậu phụ", "đậu nành", "tàu hũ"] },
+  { id: "sua",     label: "sữa/whey",          terms: ["sữa", "whey", "phô mai", "phomai"] },
+];
+
+// Các nhóm đạm mà tên món chạm tới (một món có thể thuộc nhiều nhóm: "Cơm gà xối mỡ")
+function foodProteinGroups(foodName: string): Set<string> {
+  const strictName = normalizeKeepAccent(foodName);
+  const looseName = normalizeVi(foodName);
+  const noAccent = strictName === looseName; // tên món admin nhập không dấu
+  const found = new Set<string>();
+  for (const g of PROTEIN_GROUPS) {
+    const hit = g.terms.some(
+      (t) => matchPhrase(strictName, t) || (noAccent && matchPhrase(looseName, normalizeVi(t)))
+    );
+    if (hit) found.add(g.id);
+  }
+  return found;
+}
+
+// Nhóm đạm khách nêu trong ô sở thích / ô không thích. Chỉ so khớp không dấu
+// khi khách gõ không dấu, để "bơ" không bị hiểu thành "bò".
+function matchProteinGroups(keywords: Keyword[]): ProteinGroup[] {
+  return PROTEIN_GROUPS.filter((g) =>
+    keywords.some((kw) =>
+      g.terms.some((t) => matchPhrase(kw.text, kw.accented ? t : normalizeVi(t)))
+    )
+  );
+}
+
 export async function POST(req: Request) {
   // Dùng chung cho dashboard lẫn cổng khách — khách tự soạn thực đơn được.
   const actor = await getNutritionActor();
@@ -164,19 +209,62 @@ export async function POST(req: Request) {
   const likeKeywords    = splitKeywords(likesStr);
   const dislikeKeywords = splitKeywords(dislikesStr);
 
-  // Loại thẳng thực phẩm bị kiêng ra khỏi bảng gửi cho AI — AI không thấy thì không chọn được
-  const allowedFoods = dislikeKeywords.length
-    ? dbFoods.filter((f) => !matchesAny(f.name, dislikeKeywords))
+  // ── Ô KHÔNG THÍCH: loại vô điều kiện ────────────────────────────────────
+  // Đã ghi là không thích thì món đó KHÔNG được hiện ra, dù có phải lọc gần
+  // hết database. Ngoài khớp theo tên, còn loại theo cả nhóm đạm: khách ghi
+  // "thịt bò" thì Phở bò, Bún bò Huế, Cơm bò lúc lắc cũng biến mất.
+  const banGroups = matchProteinGroups(dislikeKeywords);
+  const banIds = new Set(banGroups.map((g) => g.id));
+
+  const usableFoods = dislikeKeywords.length
+    ? dbFoods.filter((f) => {
+        if (matchesAny(f.name, dislikeKeywords)) return false;
+        if (!banIds.size) return true;
+        return !Array.from(foodProteinGroups(f.name)).some((id) => banIds.has(id));
+      })
     : dbFoods;
 
-  // Nếu lọc quá tay (còn quá ít món) thì giữ nguyên bảng gốc, chỉ dựa vào prompt để né
-  const usableFoods =
-    allowedFoods.length >= 15 && allowedFoods.length >= dbFoods.length * 0.2
-      ? allowedFoods
-      : dbFoods;
+  if (usableFoods.length === 0) {
+    return NextResponse.json(
+      { error: "Danh sách kiêng quá rộng — không còn thực phẩm nào để xếp thực đơn 😥" },
+      { status: 400 }
+    );
+  }
 
+  // ── Ô SỞ THÍCH: khoá nguồn đạm ──────────────────────────────────────────
+  // Khách nêu nguồn đạm cụ thể → CHỈ giữ nhóm đó, mọi nhóm đạm khác (kể cả
+  // trứng/đậu hũ/sữa) bị loại thẳng. AI không nhìn thấy thịt bò thì không thể
+  // xếp thịt bò vào bữa nào. Ô sở thích để trống mới hiện đủ database.
+  const lockGroups = matchProteinGroups(likeKeywords);
+  const lockIds = new Set(lockGroups.map((g) => g.id));
+
+  const isLockedMain = (name: string) =>
+    Array.from(foodProteinGroups(name)).some((id) => lockIds.has(id));
+
+  const lockedPool = lockIds.size
+    ? usableFoods.filter((f) => {
+        const groups = foodProteinGroups(f.name);
+        if (groups.size === 0) return true;                       // cơm, rau, trái cây, dầu...
+        return Array.from(groups).some((id) => lockIds.has(id));  // chỉ đúng nhóm khách thích
+      })
+    : usableFoods;
+
+  const lockedMainCount = lockIds.size
+    ? lockedPool.filter((f) => isLockedMain(f.name)).length
+    : 0;
+
+  // Database không có món nào thuộc nhóm khách thích thì khoá sẽ ra thực đơn
+  // không có đạm — trường hợp đó mới quay về bảng đầy đủ và chỉ nhắc bằng prompt.
+  const proteinLocked = lockedMainCount > 0;
+  const menuFoods = proteinLocked ? lockedPool : usableFoods;
+  const lockLabels = lockGroups.map((g) => g.label).join(", ");
+
+  // Khi đã khoá nhóm đạm, MỌI món thuộc nhóm đó đều tính là "món khách thích"
+  // — khách gõ "thịt gà" thì "Ức gà nướng sả" cũng phải được coi là món gà.
   const likedMatches = likeKeywords.length
-    ? usableFoods.filter((f) => matchesAny(f.name, likeKeywords))
+    ? menuFoods.filter(
+        (f) => matchesAny(f.name, likeKeywords) || (proteinLocked && isLockedMain(f.name))
+      )
     : [];
 
   // Một từ khoá rộng (vd "cá") có thể khớp hàng chục món — bốc ngẫu nhiên tối đa
@@ -185,13 +273,21 @@ export async function POST(req: Request) {
   const likedFoods = shuffle(likedMatches).slice(0, MAX_FAVORITES);
   const likedNames = new Set(likedFoods.map((f) => f.name));
 
-  // Từ khoá khách thích nhưng database chưa có món nào khớp
+  // Từ khoá khách thích nhưng database chưa có món nào khớp.
+  // Từ khoá đã kích hoạt khoá nhóm đạm ("thịt gà") coi như đã được phục vụ.
+  const coveredByLock = (kw: Keyword) =>
+    lockGroups.some((g) =>
+      g.terms.some((t) => matchPhrase(kw.text, kw.accented ? t : normalizeVi(t)))
+    );
+
   const unmatchedLikes = likeKeywords.filter(
-    (kw) => !usableFoods.some((f) => matchesAny(f.name, [kw]))
+    (kw) =>
+      !menuFoods.some((f) => matchesAny(f.name, [kw])) &&
+      !(proteinLocked && coveredByLock(kw))
   );
 
   // Nén dữ liệu dạng bảng nhỏ gọn để đưa vào prompt (⭐ = món khách thích)
-  const foodTable = usableFoods
+  const foodTable = menuFoods
     .map((f) => {
       const parts = [f.name, f.calories, f.protein, f.carbs, f.fat, f.weight_g];
       if (f.meal_type) parts.push(`[${f.meal_type}]`);
@@ -224,15 +320,31 @@ ${favoriteTable}`
         }`
       : `Khách thích: ${likesStr}. Database chưa có món trùng tên — hãy chọn những món GẦN GIỐNG NHẤT (cùng nguyên liệu hoặc cùng cách chế biến) trong database.`;
 
+  // Khối nhắc AI về việc đã khoá nguồn đạm (dùng lại ở prompt chính và prompt cứu hộ)
+  const lockBlock = proteinLocked
+    ? `
+🔒 KHOÁ NGUỒN ĐẠM — KHÁCH CHỈ ĂN: ${lockLabels.toUpperCase()}
+   - TẤT CẢ các bữa đều phải lấy ${lockLabels} làm NGUỒN ĐẠM CHÍNH. Không có ngoại lệ.
+   - Database phía trên đã loại sạch MỌI nguồn đạm khác (bò, heo, cá, hải sản, vịt, trứng, đậu hũ, sữa...). TUYỆT ĐỐI không tự thêm lại chúng, kể cả làm nguyên liệu phụ hay dưới tên món khác.
+   - Không có đạm thay thế: bữa nào cũng phải lấy đạm từ ${lockLabels}, phần còn lại chỉ là tinh bột, rau, trái cây, dầu/hạt.
+   - Tạo đa dạng bằng cách đổi PHẦN THỊT (ức, đùi, nguyên con...), CÁCH CHẾ BIẾN (luộc, hấp, nướng, xào, cháo, phở...) và TINH BỘT/RAU ăn kèm — KHÔNG phải bằng cách đổi sang loại thịt khác.`
+    : "";
+
   const dislikesContext = dislikesStr
-    ? `Tuyệt đối KHÔNG dùng các thực phẩm sau và mọi món có chứa chúng: ${dislikesStr}`
+    ? `Tuyệt đối KHÔNG dùng các thực phẩm sau và mọi món có chứa chúng: ${dislikesStr}${
+        banGroups.length
+          ? ` — bao gồm TẤT CẢ món thuộc nhóm ${banGroups
+              .map((g) => g.label)
+              .join(", ")} (đã bị xoá khỏi database phía trên, không được nhắc tới dưới bất kỳ tên gọi nào)`
+          : ""
+      }`
     : "Không có dị ứng — được sử dụng linh hoạt mọi thực phẩm trong database";
 
   const systemInstruction = `Cậu là thuật toán xếp hình thực đơn siêu tốc của hệ thống Ladysfit.
 Hãy nhận mục tiêu Calo và tỷ lệ P-C-F từ user, sau đó LỰA CHỌN và KẾT HỢP các thực phẩm phù hợp TỪ MẢNG DỮ LIỆU THỰC PHẨM SUPABASE DƯỚI ĐÂY.
 
 FORMAT DATABASE (Tên|Cal|P|C|F|g_định_lượng|[Loại bữa]|(Mục đích)):
-${foodTable}${favoriteBlock}
+${foodTable}${favoriteBlock}${lockBlock}
 
 QUY TẮC BẮT BUỘC:
 1. Tuyệt đối không tự chế món mới nằm ngoài database trên. Chỉ dùng đúng các tên thực phẩm có trong bảng.
@@ -243,9 +355,16 @@ QUY TẮC BẮT BUỘC:
 
 ⛔ QUY TẮC ĐA DẠNG BỮA ĂN — VI PHẠM = KẾT QUẢ SAI:
 6. NGHIÊM CẤM TUYỆT ĐỐI: Các bữa trong cùng một ngày KHÔNG được trùng lặp trên 70% danh sách thực phẩm. Copy-paste thực đơn giữa các bữa là lỗi nghiêm trọng.
-7. MỖI BỮA PHẢI DÙNG NGUỒN ĐẠM CHÍNH KHÁC NHAU (trừ khi đó là món khách yêu thích ⭐ — sở thích khách hàng luôn thắng quy tắc đa dạng):
+${
+  proteinLocked
+    ? `7. KHÔNG ÁP DỤNG quy tắc "mỗi bữa một loại đạm khác nhau" cho lần tạo này — nguồn đạm đã bị KHOÁ ở ${lockLabels} theo sở thích khách (xem mục 🔒 phía trên).
+   - Mọi bữa đều dùng ${lockLabels}. Việc lặp lại nguồn đạm này giữa các bữa là ĐÚNG, không phải lỗi.
+   - Đa dạng bằng phần thịt + cách chế biến + món ăn kèm, không bằng cách đổi loại thịt.
+   - Quy tắc 6 (không trùng >70%) vẫn áp dụng cho phần tinh bột, rau và cách chế biến.`
+    : `7. MỖI BỮA PHẢI DÙNG NGUỒN ĐẠM CHÍNH KHÁC NHAU (trừ khi đó là món khách yêu thích ⭐ — sở thích khách hàng luôn thắng quy tắc đa dạng):
    - Nếu Bữa 1 đã dùng thịt bò → Bữa 2, 3 PHẢI chọn: cá, ức gà, thịt heo nạc, hải sản, tôm, trứng (nếu chưa dùng), đậu hũ...
-   - Không lặp lại cùng một loại đạm chủ lực quá 1 lần trong toàn bộ ngày.
+   - Không lặp lại cùng một loại đạm chủ lực quá 1 lần trong toàn bộ ngày.`
+}
 8. NGUỒN TINH BỘT và CHẤT BÉO cũng phải đa dạng: không dùng cùng một loại tinh bột (vd: cơm trắng) cho tất cả các bữa — hãy xen kẽ khoai lang, bún, bánh mì, cháo yến mạch...
 9. ƯU TIÊN SỞ THÍCH KHÁCH HÀNG — CAO HƠN MỌI QUY TẮC ĐA DẠNG:
    - MỖI BỮA PHẢI có ít nhất 1 món lấy từ danh sách ⭐ (nếu danh sách ⭐ không rỗng). Đây là yêu cầu bắt buộc, không phải gợi ý.
@@ -257,14 +376,18 @@ QUY TẮC BẮT BUỘC:
   const prompt = `Tạo thực đơn ${mealsNum} bữa cho 1 ngày:
 - Calories mục tiêu: ${Math.round(derNum)} kcal
 - Protein: ${Math.round(proteinNum)}g | Fat: ${Math.round(fatNum)}g | Carbs: ${Math.round(carbsNum)}g
-- Thực phẩm yêu thích: ${likesContext}
+- Thực phẩm yêu thích: ${proteinLocked ? `KHÁCH CHỈ ĂN ${lockLabels.toUpperCase()} — mọi bữa đều phải có. ` : ""}${likesContext}
 - Thực phẩm kiêng/dị ứng: ${dislikesContext}
 
 BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần tử (${mealsNum} bữa riêng biệt).
 Không được gộp bữa, không được bỏ sót bữa cuối. Ưu tiên hoàn thành đủ ${mealsNum} bữa hơn là chi tiết quá kỹ từng bữa.
 Chia đúng ${mealsNum} bữa, tổng macro sai số ≤5%.
 
-⛔ NHẮC LẠI ANTI-DUPLICATE: Mỗi bữa PHẢI dùng nguồn đạm khác nhau (không lặp thịt bò/gà/cá/heo liên tiếp). Kiểm tra lại trước khi trả về — nếu 2 bữa có >70% thực phẩm giống nhau, hãy thay thế ngay.${
+${
+    proteinLocked
+      ? `🔒 NHẮC LẠI KHOÁ ĐẠM (ưu tiên cao nhất): TẤT CẢ ${mealsNum} bữa đều phải dùng ${lockLabels} làm nguồn đạm chính. Không được thay bằng bò, heo, cá, hải sản hay bất kỳ loại thịt nào khác. Trước khi trả về, tự soát từng bữa — bữa nào không có ${lockLabels} thì sửa ngay. Đa dạng bằng cách chế biến và món ăn kèm, KHÔNG bằng cách đổi loại thịt.`
+      : `⛔ NHẮC LẠI ANTI-DUPLICATE: Mỗi bữa PHẢI dùng nguồn đạm khác nhau (không lặp thịt bò/gà/cá/heo liên tiếp). Kiểm tra lại trước khi trả về — nếu 2 bữa có >70% thực phẩm giống nhau, hãy thay thế ngay.`
+  }${
     likedFoods.length
       ? `
 
@@ -276,7 +399,9 @@ Chia đúng ${mealsNum} bữa, tổng macro sai số ≤5%.
     dislikesStr
       ? `
 
-🚫 NHẮC LẠI KIÊNG KỊ: tuyệt đối không có ${dislikesStr} (và món chứa chúng) trong bất kỳ bữa nào.`
+🚫 NHẮC LẠI KIÊNG KỊ: tuyệt đối không có ${dislikesStr} (và món chứa chúng) trong bất kỳ bữa nào${
+          banGroups.length ? `, kể cả mọi món thuộc nhóm ${banGroups.map((g) => g.label).join(", ")}` : ""
+        }.`
       : ""
   }
 
@@ -359,7 +484,14 @@ Mục tiêu: ${Math.round(derNum)} kcal | P:${Math.round(proteinNum)}g F:${Math.
 Món yêu thích BẮT BUỘC có mặt: ${
       likedFoods.length ? likedFoods.map((f) => f.name).join(", ") : likesStr || "không có"
     }
-Kiêng/dị ứng TUYỆT ĐỐI KHÔNG dùng: ${dislikesStr || "không có"}
+Kiêng/dị ứng TUYỆT ĐỐI KHÔNG dùng: ${dislikesStr || "không có"}${
+      banGroups.length ? ` (và toàn bộ nhóm ${banGroups.map((g) => g.label).join(", ")})` : ""
+    }${
+      proteinLocked
+        ? `
+🔒 KHOÁ NGUỒN ĐẠM: khách CHỈ ăn ${lockLabels}. CẢ ${mealsNum} bữa đều phải dùng ${lockLabels} làm đạm chính; tuyệt đối không dùng bò, heo, cá, hải sản hay loại thịt nào khác. Đa dạng bằng cách chế biến và món ăn kèm.`
+        : ""
+    }
 BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum} objects). Không thiếu bữa. Chỉ trả về JSON thuần.`;
     const rescuePayload = {
       contents: [{ role: "user", parts: [{ text: rescuePrompt }] }],
