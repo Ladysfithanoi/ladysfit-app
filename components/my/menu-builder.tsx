@@ -69,7 +69,14 @@ export function MenuBuilder({
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "AI đang bận, thử lại sau");
       const data = await res.json();
-      setMeals(Array.isArray(data) ? data : data.meals);
+      const list: MealItem[] = Array.isArray(data) ? data : data.meals ?? [];
+      setMeals(list);
+      // Thiếu bữa thì báo thẳng thay vì hiện thực đơn cụt cho khách.
+      if (list.length !== mealsPerDay) {
+        setError(
+          `AI chỉ soạn được ${list.length}/${mealsPerDay} bữa. Bấm soạn lại hoặc tự thêm bữa còn thiếu bên dưới.`
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {

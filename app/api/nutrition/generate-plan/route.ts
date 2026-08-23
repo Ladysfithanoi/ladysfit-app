@@ -414,14 +414,43 @@ Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗ
 - "fat": lượng chất béo tính bằng gam (number)
 - "carbs": lượng tinh bột tính bằng gam (number)`;
 
+  // Ép Gemini trả về ĐÚNG cấu trúc và ĐÚNG số phần tử. Trước đây chỉ nhờ prompt
+  // nên model hay tự gộp bữa hoặc bỏ bữa cuối → thực đơn 3 bữa chỉ hiện 2 bữa.
+  const mealArraySchema = (count: number) => ({
+    type: "ARRAY",
+    minItems: count,
+    maxItems: count,
+    items: {
+      type: "OBJECT",
+      properties: {
+        mealName: { type: "STRING" },
+        name:     { type: "STRING" },
+        calories: { type: "NUMBER" },
+        protein:  { type: "NUMBER" },
+        fat:      { type: "NUMBER" },
+        carbs:    { type: "NUMBER" },
+      },
+      required: ["mealName", "name", "calories", "protein", "fat", "carbs"],
+      propertyOrdering: ["mealName", "name", "calories", "protein", "fat", "carbs"],
+    },
+  });
+
+  // gemini-2.5-flash mặc định bật "thinking", và token suy nghĩ ĂN CHUNG hạn mức
+  // maxOutputTokens. Bảng thực phẩm trong prompt rất dài nên model nghĩ nhiều,
+  // hết hạn mức giữa chừng (finishReason = MAX_TOKENS) và JSON bị cắt cụt ngay ở
+  // bữa cuối — đúng triệu chứng "mất 1 bữa". Tắt thinking để cả hạn mức dành cho JSON.
+  const genConfig = (count: number, temperature: number) => ({
+    temperature,
+    maxOutputTokens: 8192,
+    responseMimeType: "application/json",
+    responseSchema: mealArraySchema(count),
+    thinkingConfig: { thinkingBudget: 0 },
+  });
+
   const geminiPayload = {
     systemInstruction: { parts: [{ text: systemInstruction }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.9,
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-    },
+    generationConfig: genConfig(mealsNum, 0.9),
   };
 
   const geminiRes = await callGeminiWithKeyRotation(apiKeys, geminiPayload);
@@ -455,27 +484,57 @@ Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗ
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function parseRaw(raw: string): any[] | null {
-    let text = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-    text = text.replace(/\\n/g, "\n");
-    const trimmed = text.trim();
-    if (!trimmed.endsWith("]")) {
-      const lastBrace = trimmed.lastIndexOf("}");
-      if (lastBrace !== -1) text = trimmed.substring(0, lastBrace + 1) + "]";
-    }
+  function tryArray(text: string): any[] | null {
     try {
-      const direct = JSON.parse(text);
-      if (Array.isArray(direct)) return normalize(direct);
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+      // Model đôi khi bọc lại: { "meals": [...] } / { "data": [...] }
+      if (parsed && typeof parsed === "object") {
+        const inner = Object.values(parsed).find((v) => Array.isArray(v));
+        if (Array.isArray(inner)) return inner;
+      }
     } catch {}
+    return null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function attempt(text: string): any[] | null {
+    const direct = tryArray(text);
+    if (direct) return direct;
+
     const s = text.indexOf("[");
     const e = text.lastIndexOf("]");
     if (s !== -1 && e > s) {
-      try { return normalize(JSON.parse(text.substring(s, e + 1))); } catch {}
+      const sliced = tryArray(text.substring(s, e + 1));
+      if (sliced) return sliced;
+    }
+
+    // JSON bị cắt giữa chừng: vớt lại tối đa các object đã hoàn chỉnh
+    if (s !== -1) {
+      const lastBrace = text.lastIndexOf("}");
+      if (lastBrace > s) {
+        const salvaged = tryArray(text.substring(s, lastBrace + 1) + "]");
+        if (salvaged) return salvaged;
+      }
     }
     return null;
   }
 
-  let meals = parseRaw(rawText);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function parseRaw(raw: string): any[] | null {
+    const text = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    const parsed = attempt(text);
+    if (parsed) return normalize(parsed);
+
+    // Chỉ khi bản gốc parse hỏng mới bung \n escape — bung vô điều kiện như trước
+    // sẽ phá vỡ chính những JSON hợp lệ có "\n" nằm trong mô tả món ăn.
+    const unescaped = attempt(text.replace(/\\n/g, "\n"));
+    return unescaped ? normalize(unescaped) : null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let meals: any[] | null = parseRaw(rawText);
 
   // Retry once if Gemini truncated the response or returned fewer meals than requested
   if (!meals || meals.length < mealsNum || finishReason === "MAX_TOKENS") {
@@ -495,7 +554,7 @@ Kiêng/dị ứng TUYỆT ĐỐI KHÔNG dùng: ${dislikesStr || "không có"}${
 BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum} objects). Không thiếu bữa. Chỉ trả về JSON thuần.`;
     const rescuePayload = {
       contents: [{ role: "user", parts: [{ text: rescuePrompt }] }],
-      generationConfig: { temperature: 0.6, maxOutputTokens: 2048, responseMimeType: "application/json" },
+      generationConfig: genConfig(mealsNum, 0.6),
     };
     try {
       const rescueRes = await callGeminiWithKeyRotation(apiKeys, rescuePayload);
@@ -513,6 +572,58 @@ BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum}
 
   if (!meals || meals.length === 0) {
     return NextResponse.json({ error: "Cannot parse AI response", rawText, rawTextLength: rawText.length }, { status: 500 });
+  }
+
+  // ── BÙ BỮA CÒN THIẾU ──────────────────────────────────────────────────────
+  // Cả prompt chính lẫn prompt cứu hộ đều có lúc trả về thiếu bữa. Trước đây
+  // route trả luôn phần thiếu đó ra giao diện → khách chọn 3 bữa/1200 kcal mà
+  // chỉ thấy 2 bữa/750 kcal. Giờ soạn tiếp đúng số bữa còn thiếu với phần calo
+  // và macro CÒN LẠI, nên vừa đủ bữa vừa đủ mốc calo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sumOf = (list: any[], key: "calories" | "protein" | "fat" | "carbs") =>
+    list.reduce((s, m) => s + (Number(m[key]) || 0), 0);
+
+  for (let round = 0; round < 2 && meals.length < mealsNum; round++) {
+    const missing: number = mealsNum - meals.length;
+    // Sàn 120 kcal/bữa: phòng trường hợp AI đã dồn hết calo vào các bữa đã có,
+    // để bữa bù ra không phải là bữa rỗng 0 kcal.
+    const remainCal     = Math.max(derNum     - sumOf(meals, "calories"), 120 * missing);
+    const remainProtein = Math.max(proteinNum - sumOf(meals, "protein"), 5 * missing);
+    const remainFat     = Math.max(fatNum     - sumOf(meals, "fat"), 3 * missing);
+    const remainCarbs   = Math.max(carbsNum   - sumOf(meals, "carbs"), 5 * missing);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doneNames = meals.map((m: any, i: number) => `${i + 1}. ${m.mealName}: ${m.name}`).join("\n");
+
+    const topUpPrompt = `Thực đơn ${mealsNum} bữa/ngày này đang THIẾU ${missing} bữa cuối. Hãy soạn tiếp ĐÚNG ${missing} bữa còn thiếu (bữa số ${meals.length + 1}${missing > 1 ? ` đến số ${mealsNum}` : ""}).
+
+CÁC BỮA ĐÃ CÓ (không soạn lại, không lặp lại món của các bữa này):
+${doneNames}
+
+PHẦN DINH DƯỠNG CÒN LẠI cho ${missing} bữa cần soạn:
+- Calories: ${Math.round(remainCal)} kcal
+- Protein: ${Math.round(remainProtein)}g | Fat: ${Math.round(remainFat)}g | Carbs: ${Math.round(remainCarbs)}g
+- Thực phẩm yêu thích: ${proteinLocked ? `KHÁCH CHỈ ĂN ${lockLabels.toUpperCase()} — bữa bù cũng phải dùng ${lockLabels} làm đạm chính. ` : ""}${likesContext}
+- Thực phẩm kiêng/dị ứng: ${dislikesContext}
+
+Chỉ dùng thực phẩm có trong database ở phần hướng dẫn hệ thống.
+Trả về DUY NHẤT mảng JSON có ĐÚNG ${missing} phần tử — chỉ ${missing} bữa còn thiếu, KHÔNG kèm lại các bữa đã có.
+Đặt "mealName" tiếp nối đúng thứ tự (ví dụ "Bữa ${meals.length + 1} - Tối").`;
+
+    try {
+      const topUpRes = await callGeminiWithKeyRotation(apiKeys, {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: "user", parts: [{ text: topUpPrompt }] }],
+        generationConfig: genConfig(missing, 0.7),
+      });
+      if (!topUpRes.ok) break;
+      const topUpData = await topUpRes.json();
+      const extra = parseRaw(topUpData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
+      if (!extra || extra.length === 0) break;
+      meals = [...meals, ...extra.slice(0, missing)];
+    } catch {
+      break; // hết lượt gọi được thì trả về những gì đang có
+    }
   }
 
   return NextResponse.json(meals);

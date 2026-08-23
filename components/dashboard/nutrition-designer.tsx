@@ -242,7 +242,15 @@ export function NutritionDesigner({
       }
       const data = await res.json();
       console.log("🟡 Response data:", data);
-      setMeals(Array.isArray(data) ? data : data.meals);
+      const list: MealItem[] = Array.isArray(data) ? data : data.meals ?? [];
+      setMeals(list);
+      // Không im lặng nuốt bữa thiếu nữa: nếu AI vẫn trả sai số bữa thì nói rõ,
+      // PT bấm tạo lại hoặc tự thêm bữa còn thiếu bằng ô tra cứu bên dưới.
+      if (list.length !== mealsPerDay) {
+        setGenError(
+          `AI chỉ soạn được ${list.length}/${mealsPerDay} bữa. Bấm tạo lại hoặc tự thêm bữa còn thiếu bên dưới.`
+        );
+      }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
