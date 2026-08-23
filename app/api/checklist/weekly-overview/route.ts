@@ -38,9 +38,17 @@ export async function GET(req: Request) {
     deletedAt: null,
   };
   if (isFM) {
+    // Ưu tiên các chi nhánh FM được gán quản lý; FM chưa có bản ghi quản lý nào
+    // thì vẫn phải xem được nhân sự chi nhánh mình đang thuộc về, nếu không
+    // bảng báo cáo sẽ trống trơn dù nhân sự đã gửi.
     const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
-    if (managedBranchIds.length === 0) return NextResponse.json({ weekStart, staff: [] });
-    staffWhere.branchId = { in: managedBranchIds };
+    const branchIds = managedBranchIds.length
+      ? managedBranchIds
+      : session.user.branchId
+        ? [session.user.branchId]
+        : [];
+    if (branchIds.length === 0) return NextResponse.json({ weekStart, staff: [] });
+    staffWhere.branchId = { in: branchIds };
   }
 
   const staff = await prisma.user.findMany({

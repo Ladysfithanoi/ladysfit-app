@@ -105,7 +105,9 @@ export function WeeklyReportTab({
   const dow        = new Date(todayISO + "T00:00:00").getDay(); // 0 = CN
   const isWeekend  = dow === 0 || dow === 6;
 
-  const [subTab, setSubTab]       = useState<"own" | "team">("own");
+  // FM/ADMIN mở tab Báo cáo tuần là thấy ngay báo cáo của nhân sự, không phải
+  // bấm chuyển tab hay đi vòng qua thông báo. Nhân sự thường vẫn vào ô của mình.
+  const [subTab, setSubTab]       = useState<"own" | "team">(isManager ? "team" : "own");
   const [weekStart, setWeekStart] = useState(thisMonday);
 
   // Own report — một ô nội dung duy nhất
@@ -261,7 +263,9 @@ export function WeeklyReportTab({
                 )}
               >
                 {tab === "own" ? <User className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-                {tab === "own" ? "Báo cáo của tôi" : `Báo cáo nhân sự (${staffList.length})`}
+                {tab === "own"
+                  ? "Báo cáo của tôi"
+                  : `Báo cáo nhân sự (${team.length || staffList.length})`}
               </button>
             ))}
           </div>
