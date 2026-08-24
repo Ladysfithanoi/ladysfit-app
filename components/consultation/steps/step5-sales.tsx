@@ -3,11 +3,12 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Package, Clock } from "lucide-react";
+import { Check, Package, Clock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
+import { PackagesCatalogModal } from "./packages-catalog-modal";
 import { BodyFatCard } from "./body-fat-card";
 import { TransformGallery } from "./transform-gallery";
 
@@ -359,6 +360,7 @@ export function Step5Sales({
   const [completeError, setCompleteError] = useState("");
   const [saving, setSaving]             = useState(false);
   const [detailPkg, setDetailPkg]       = useState<string | null>(null);
+  const [showCatalog, setShowCatalog]   = useState(false);
 
   function selectOption(opt: RoadmapOption) {
     setSelectedOptionNum(opt.num);
@@ -437,12 +439,27 @@ export function Step5Sales({
         {/* 3-option selector — hidden in read-only mode */}
         {!isReadOnly && (
           <div className="p-5">
-            <div className="flex items-center gap-2 mb-1">
+            <button
+              type="button"
+              onClick={() => setShowCatalog(true)}
+              className="flex items-center gap-2 mb-1 group"
+              title="Xem toàn bộ danh sách gói tập Ladysfit"
+            >
               <Package className="w-4 h-4 text-[#f15b5c]" />
-              <p className="text-sm font-extrabold text-gray-800">Chọn lộ trình tập luyện</p>
-            </div>
+              <span className="text-sm font-extrabold text-gray-800 group-hover:text-[#f15b5c] group-hover:underline transition-colors">
+                Chọn lộ trình tập luyện
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#f15b5c] transition-colors" />
+            </button>
             <p className="text-xs text-gray-400 mb-4">
-              Ấn chọn một trong 3 lộ trình để xem danh sách gói tập tương ứng
+              Ấn chọn một trong 3 lộ trình để xem danh sách gói tập tương ứng —{" "}
+              <button
+                type="button"
+                onClick={() => setShowCatalog(true)}
+                className="font-bold text-[#f15b5c] hover:underline"
+              >
+                xem toàn bộ gói tập
+              </button>
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -679,6 +696,8 @@ export function Step5Sales({
           onClose={() => setDetailPkg(null)}
         />
       )}
+
+      {showCatalog && <PackagesCatalogModal onClose={() => setShowCatalog(false)} />}
     </>
   );
 }
