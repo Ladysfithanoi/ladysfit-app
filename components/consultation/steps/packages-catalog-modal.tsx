@@ -24,7 +24,7 @@ const CATALOG_META: Record<CatalogKey, CatalogMeta> = {
     tagline: "Gói trải nghiệm",
     description:
       "4 buổi tập 1-1 cùng PT để làm quen phương pháp Ladysfit, đo chỉ số cơ thể và được tư vấn lộ trình phù hợp trước khi cam kết dài hạn.",
-    frequency: "Linh hoạt trong 30 ngày",
+    frequency: "4 buổi trong 7 ngày",
     program: "Đánh giá thể trạng + làm quen 5 chuyển động nền tảng",
     highlights: [
       "Được hoàn tiền sau khi tập xong buổi 1",

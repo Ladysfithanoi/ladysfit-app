@@ -18,7 +18,7 @@ export const PACKAGES: Record<string, PackageDef> = {
     stage: "1",
     stageLabel: "Lộ trình trải nghiệm - Giai đoạn 1",
     sessions: 4,
-    durationDays: 30,
+    durationDays: 7,
     price: 2_000_000,
     commitment: "Trải nghiệm 4 buổi tập cùng PT",
     conditions:
