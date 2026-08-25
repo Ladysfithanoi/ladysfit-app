@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
+import { captureTrash } from "@/lib/trash";
 
 export async function DELETE(
   _req: Request,
@@ -16,6 +17,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  await captureTrash("BODY_MEASUREMENT", params.logId, session.user);
   await prisma.bodyMeasurementLog.delete({ where: { id: params.logId } });
   return NextResponse.json({ success: true });
 }

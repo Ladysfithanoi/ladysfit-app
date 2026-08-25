@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
 import { sessionIdsWithLogs } from "@/lib/workout-session";
+import { captureTrash } from "@/lib/trash";
 
 const fullProgramInclude = {
   createdBy: { select: { id: true, name: true, email: true } },
@@ -204,6 +205,9 @@ export async function DELETE(
 ) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Cất cả cây chương trình (tuần → buổi → bài tập → nhật ký) vào Thùng rác.
+  await captureTrash("WORKOUT_PROGRAM", params.programId, session.user);
 
   await prisma.workoutProgram.delete({
     where: { id: params.programId, clientId: params.id },

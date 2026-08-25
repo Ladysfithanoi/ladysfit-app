@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reversePackageSession, sessionIdsWithLogs } from "@/lib/workout-session";
+import { captureTrash } from "@/lib/trash";
 
 const sessionInclude = {
   orderBy: { order: "asc" as const },
@@ -198,6 +199,8 @@ export async function DELETE(
   for (const counted of countedLogs) {
     await reversePackageSession(params.id, counted.packageEnrollmentId);
   }
+
+  await captureTrash("WORKOUT_WEEK", params.weekId, session.user);
 
   // WorkoutLog, WorkoutSession, WorkoutMovement đều onDelete: Cascade → xóa week là xong
   await prisma.workoutWeek.delete({ where: { id: params.weekId } });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { captureTrash } from "@/lib/trash";
 
 type Params = { params: { id: string; logId: string } };
 
@@ -58,6 +59,7 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
   }
 
+  await captureTrash("WEIGHT_LOG", params.logId, session.user);
   await prisma.weightLog.delete({ where: { id: params.logId } });
 
   // Recalculate currentWeight from the new latest log

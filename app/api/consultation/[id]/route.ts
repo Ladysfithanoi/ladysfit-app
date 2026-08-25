@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format-date";
+import { captureTrash } from "@/lib/trash";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -263,6 +264,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!isAdmin && !isFMManaged && c.createdById !== session.user.id) {
     return NextResponse.json({ error: "Bạn không có quyền xóa hồ sơ này" }, { status: 403 });
   }
+
+  // Cất hồ sơ tư vấn (kèm thông tin, đánh giá, gói, thiết kế buổi tập) vào Thùng rác.
+  await captureTrash("CONSULTATION", params.id, session.user);
 
   await prisma.consultation.delete({ where: { id: params.id } });
   return NextResponse.json({ ok: true });

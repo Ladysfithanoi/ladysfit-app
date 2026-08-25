@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reversePackageSession } from "@/lib/workout-session";
+import { captureTrash } from "@/lib/trash";
 
 const sessionInclude = {
   orderBy: { order: "asc" as const },
@@ -56,6 +57,7 @@ export async function DELETE(
       if (reversed) packageUpdate = reversed;
     }
 
+    await captureTrash("WORKOUT_SESSION", params.sessionId, session.user);
     await prisma.workoutSession.delete({ where: { id: params.sessionId } });
 
     const week = await prisma.workoutWeek.findUnique({

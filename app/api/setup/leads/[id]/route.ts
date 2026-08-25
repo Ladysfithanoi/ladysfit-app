@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { captureTrash } from "@/lib/trash";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { syncLeadToClient } from "@/lib/sync-lead-to-client";
@@ -126,6 +127,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (isFM && !managedBranchIds.includes(lead.branchId)) {
     return NextResponse.json({ error: "Không có quyền quản lý chi nhánh này" }, { status: 403 });
   }
+
+  // Chụp cả lead lẫn dòng thu chi sinh ra từ nó trước khi xóa.
+  await captureTrash("SALES_LEAD", params.id, session.user);
 
   await prisma.transaction.deleteMany({ where: { referenceId: params.id } });
   await prisma.salesLead.delete({ where: { id: params.id } });

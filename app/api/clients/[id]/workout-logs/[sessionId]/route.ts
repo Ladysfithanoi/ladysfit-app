@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reversePackageSession, syncPlannedSetsFromLog } from "@/lib/workout-session";
+import { captureTrash } from "@/lib/trash";
 
 export async function GET(
   _req: Request,
@@ -146,6 +147,7 @@ export async function DELETE(
       ? await reversePackageSession(params.id, existing.packageEnrollmentId)
       : null;
 
+    await captureTrash("WORKOUT_LOG", logId, session.user);
     await prisma.workoutLog.delete({ where: { id: logId } });
     return NextResponse.json({ ok: true, deletedId: logId, packageUpdate });
   } catch (error: unknown) {

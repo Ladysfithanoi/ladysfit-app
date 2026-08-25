@@ -1433,6 +1433,9 @@ model SystemConfig {
   minSessionMinutes Int      @default(30)
   // Ngưỡng % điểm để ĐẠT bài kiểm tra thực hành (rubric FM chấm).
   practicalPassPercent Int   @default(70)
+  // Số ngày giữ dữ liệu trong Thùng rác trước khi tự động xóa vĩnh viễn.
+  // 0 = giữ mãi (không tự dọn). Admin chỉnh ngay trong mục Thùng rác.
+  trashRetentionDays Int    @default(30)
   updatedAt         DateTime @updatedAt
 
   @@map("system_config")
@@ -1528,4 +1531,37 @@ model Food {
 
   @@index([name])
   @@map("foods")
+}
+
+// ── Thùng rác ─────────────────────────────────────────────────────────────
+//
+// Mọi thao tác xóa dữ liệu của PT / FM / Admin đều chụp lại toàn bộ bản ghi
+// (kèm các bảng con bị cascade) vào đây TRƯỚC khi xóa thật. Admin xem lại ở
+// mục "Thùng rác", lọc theo loại dữ liệu / ngày xóa, khôi phục lại hoặc dọn
+// sạch. Bản ghi quá hạn (SystemConfig.trashRetentionDays) tự bị dọn.
+//
+// `payload` là ảnh chụp dạng JSON: { "<tên model prisma>": [ ...dòng dữ liệu ] }.
+// Khôi phục = ghi lại từng bảng theo đúng thứ tự phụ thuộc, giữ nguyên id cũ
+// nên mọi khóa ngoại trỏ tới nhau vẫn khớp. Xem lib/trash.ts.
+model TrashItem {
+  id            String   @id @default(cuid())
+  // Khóa loại dữ liệu, khớp với TRASH_TYPES trong lib/trash.ts (vd "CLIENT").
+  entityType    String
+  // Id bản ghi gốc — dùng để chặn khôi phục trùng khi bản ghi đã tồn tại lại.
+  entityId      String
+  // Tên hiển thị trong danh sách thùng rác (vd tên khách hàng).
+  label         String
+  // Mô tả phụ (vd "Cơ sở Q7 · PT Ngọc Anh").
+  summary       String?  @db.Text
+  payload       String   @db.Text
+  branchId      String?
+  branchName    String?
+  deletedById   String?
+  deletedByName String?
+  deletedByRole String?
+  deletedAt     DateTime @default(now())
+
+  @@index([entityType])
+  @@index([deletedAt])
+  @@map("trash_items")
 }

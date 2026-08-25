@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { captureTrash } from "@/lib/trash";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -45,6 +46,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
       { status: 400 }
     );
   }
+
+  // Nhân sự chỉ bị xóa mềm — Thùng rác giữ lại email gốc để khôi phục.
+  await captureTrash("STAFF", params.id, session.user);
 
   try {
     await prisma.user.update({

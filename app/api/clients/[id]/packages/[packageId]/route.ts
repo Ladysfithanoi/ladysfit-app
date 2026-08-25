@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { refreshClientChurnStatus } from "@/lib/client-status";
 import { closeFinishedPackages } from "@/lib/package-status";
+import { captureTrash } from "@/lib/trash";
 
 export async function PUT(
   req: Request,
@@ -84,6 +85,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  await captureTrash("PACKAGE_ENROLLMENT", params.packageId, session.user);
   await prisma.packageEnrollment.delete({ where: { id: params.packageId } });
   await recountClientContracts(params.id);
   return NextResponse.json({ ok: true });

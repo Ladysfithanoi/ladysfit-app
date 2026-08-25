@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { captureTrash } from "@/lib/trash";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -52,6 +53,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const managed: string[] = session.user.managedBranchIds ?? [];
   if (!managed.includes(tx.branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  await captureTrash("TRANSACTION", params.id, session.user);
   await prisma.transaction.delete({ where: { id: params.id } });
   return NextResponse.json({ success: true });
 }

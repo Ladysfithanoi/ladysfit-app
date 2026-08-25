@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { captureTrash } from "@/lib/trash";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -48,6 +49,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
+
+  // Cất toàn bộ hồ sơ khách (kèm lộ trình, nhật ký, thực đơn...) vào Thùng rác
+  // trước khi cascade xóa thật, để Admin khôi phục được nếu xóa nhầm.
+  await captureTrash("CLIENT", params.id, session.user);
 
   try {
     await prisma.$transaction(async (tx) => {
