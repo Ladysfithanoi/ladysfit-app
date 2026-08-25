@@ -166,40 +166,110 @@ async function programsByOrder(clientId: string): Promise<Map<number, ProgRow>> 
   return byOrder;
 }
 
-/**
- * Các thứ tự giai đoạn mà cấp độ của PT được phép truy cập. Trả về null khi
- * không cần giới hạn (không phải PT, hệ thống cấp độ đang tắt, hoặc cấp độ chưa
- * cấu hình quyền giai đoạn nào) — giống hệt cách /api/admin/phases đang lọc.
- */
-async function allowedPhaseOrdersForActor(actor: Actor): Promise<Set<number> | null> {
-  if (actor.role !== "PT") return null;
-  const [sysConfig, user] = await Promise.all([
-    prisma.systemConfig.findUnique({ where: { id: "main" } }),
-    prisma.user.findUnique({
-      where: { id: actor.id },
-      select: {
-        ptLevel: {
-          select: { phaseAccess: { select: { phaseId: true, hasAccess: true } } },
-        },
-      },
-    }),
-  ]);
-  const access = user?.ptLevel?.phaseAccess ?? [];
-  if (!sysConfig?.enableLevelSystem || access.length === 0) return null;
+/** Một giáo án cụ thể của một bậc giai đoạn, vd "Giai đoạn 2: Giảm béo". */
+export type PhaseVariant = {
+  id: string;
+  /** Tên đầy đủ trong Kho bài tập ("Giai đoạn 2: Giảm béo"). */
+  name: string;
+  /** Nhãn ngắn để chọn ("Giảm béo"); rơi về tên đầy đủ nếu không có dấu ":". */
+  label: string;
+  templateKey: string;
+  order: number;
+};
 
-  const allowedIds = access.filter((a) => a.hasAccess).map((a) => a.phaseId);
-  if (allowedIds.length === 0) return new Set();
-  const phases = await prisma.workoutPhase.findMany({
-    where: { id: { in: allowedIds } },
-    select: { name: true, order: true },
-  });
-  const orders = new Set<number>();
+/**
+ * Các giáo án người này được phép chuyển khách sang, gom theo bậc 1/2/3.
+ *
+ * PT có hệ thống cấp độ BẬT và cấp độ đã cấu hình quyền → chỉ những giai đoạn
+ * cấp độ được cấp quyền (giống hệt cách /api/admin/phases đang lọc). FM/Admin,
+ * và PT chưa cấu hình quyền, lấy toàn bộ giai đoạn đang bật.
+ *
+ * `restricted` cho biết có đang giới hạn theo cấp độ hay không — chỉ khi đó một
+ * bậc rỗng mới bị chặn với lý do "chưa được cấp quyền".
+ */
+async function targetablePhasesForActor(
+  actor: Actor
+): Promise<{ byOrder: Map<number, PhaseVariant[]>; restricted: boolean }> {
+  const [phases, sysConfig, user] = await Promise.all([
+    prisma.workoutPhase.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, templateKey: true, order: true },
+      orderBy: { order: "asc" },
+    }),
+    prisma.systemConfig.findUnique({ where: { id: "main" } }),
+    actor.role === "PT"
+      ? prisma.user.findUnique({
+          where: { id: actor.id },
+          select: {
+            ptLevel: {
+              select: { phaseAccess: { select: { phaseId: true, hasAccess: true } } },
+            },
+          },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const access = user?.ptLevel?.phaseAccess ?? [];
+  const restricted =
+    actor.role === "PT" && sysConfig?.enableLevelSystem === true && access.length > 0;
+  const allowedIds = restricted
+    ? new Set(access.filter((a) => a.hasAccess).map((a) => a.phaseId))
+    : null;
+
+  const byOrder = new Map<number, PhaseVariant[]>();
   for (const p of phases) {
+    if (allowedIds && !allowedIds.has(p.id)) continue;
     // Ưu tiên số trong tên ("Giai đoạn 2"), rơi về cột order nếu tên không chuẩn.
     const ord = phaseOrderOf(p.name) || p.order;
-    if (ord >= 1) orders.add(ord);
+    if (ord < 1 || ord > MAX_PHASE_ORDER) continue;
+    const sep = p.name.indexOf(":");
+    const label = sep >= 0 ? p.name.slice(sep + 1).trim() || p.name : p.name;
+    const list = byOrder.get(ord) ?? [];
+    list.push({ id: p.id, name: p.name, label, templateKey: p.templateKey, order: ord });
+    byOrder.set(ord, list);
   }
-  return orders;
+  return { byOrder, restricted };
+}
+
+/**
+ * Chương trình sẵn có của ĐÚNG một giáo án. Khớp theo phaseId; CT cũ chưa gắn
+ * phaseId thì khớp theo bậc + loại hình tập (workoutType lưu chính templateKey).
+ * Ưu tiên CT đang áp dụng, cùng hạng lấy CT mới nhất — như programsByOrder.
+ */
+async function programForPhase(clientId: string, phase: PhaseVariant): Promise<ProgRow | null> {
+  const programs = await prisma.workoutProgram.findMany({
+    where: { clientId },
+    select: {
+      id: true,
+      phase: true,
+      phaseId: true,
+      status: true,
+      sessionsPerWeek: true,
+      manualPhaseOverride: true,
+      createdById: true,
+      createdAt: true,
+      workoutType: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const rank = (s: string) => (s === "ACTIVE" ? 2 : 1);
+  let best: ProgRow | null = null;
+  for (const p of programs) {
+    const matches =
+      p.phaseId === phase.id ||
+      (p.phaseId == null &&
+        phaseOrderOf(p.phase) === phase.order &&
+        (phase.templateKey ? p.workoutType === phase.templateKey : p.phase === phase.name));
+    if (!matches) continue;
+    if (
+      !best ||
+      rank(p.status) > rank(best.status) ||
+      (rank(p.status) === rank(best.status) && p.createdAt > best.createdAt)
+    ) {
+      best = p;
+    }
+  }
+  return best;
 }
 
 export type PhaseSwitchOption = {
@@ -212,6 +282,11 @@ export type PhaseSwitchOption = {
   reason?: string;
   /** Chuyển được nhưng đang vượt rào số tuần (chỉ FM/Admin có trường hợp này). */
   bypassesWeekGate: boolean;
+  /**
+   * Các giáo án của bậc này người đang đăng nhập được chuyển sang (đã lọc theo
+   * cấp độ). Nhiều hơn 1 thì giao diện hỏi chọn; đúng 1 thì chuyển thẳng.
+   */
+  phases: PhaseVariant[];
 };
 
 export type PhaseSwitchInfo = {
@@ -236,11 +311,11 @@ export async function evaluatePhaseSwitch(
   clientId: string,
   actor: Actor
 ): Promise<PhaseSwitchInfo> {
-  const [byOrder, canBypass, phase1Weeks, allowedOrders] = await Promise.all([
+  const [byOrder, canBypass, phase1Weeks, targetable] = await Promise.all([
     programsByOrder(clientId),
     canBypassPhaseGate(actor, clientId),
     requiredWeeksForPhase1(clientId),
-    allowedPhaseOrdersForActor(actor),
+    targetablePhasesForActor(actor),
   ]);
 
   const isAdmin = actor.role === "ADMIN";
@@ -254,8 +329,16 @@ export async function evaluatePhaseSwitch(
   const options: PhaseSwitchOption[] = [];
   for (let order = 1; order <= MAX_PHASE_ORDER; order++) {
     const label = `Giai đoạn ${order}`;
+    const variants = targetable.byOrder.get(order) ?? [];
     if (order === currentOrder) {
-      options.push({ order, label, isCurrent: true, allowed: false, bypassesWeekGate: false });
+      options.push({
+        order,
+        label,
+        isCurrent: true,
+        allowed: false,
+        bypassesWeekGate: false,
+        phases: variants,
+      });
       continue;
     }
 
@@ -264,7 +347,7 @@ export async function evaluatePhaseSwitch(
 
     if (order < currentOrder && !isAdmin) {
       reason = "Chỉ Admin mới được chuyển khách về giai đoạn trước đó.";
-    } else if (allowedOrders && !allowedOrders.has(order)) {
+    } else if (targetable.restricted && variants.length === 0) {
       reason = `Cấp độ PT của bạn chưa được cấp quyền ${label}. Nhờ Quản lý (FM) hoặc Admin chuyển giúp.`;
     } else if (order > currentOrder && !canBypass && currentOrder > 0) {
       // Người thường đi tuần tự từng bậc và phải đủ số tuần của bậc hiện tại.
@@ -284,6 +367,7 @@ export async function evaluatePhaseSwitch(
       allowed: reason === undefined,
       reason,
       bypassesWeekGate,
+      phases: variants,
     });
   }
 
@@ -301,11 +385,16 @@ export async function evaluatePhaseSwitch(
  * Chuyển khách sang một giai đoạn: đặt CT của giai đoạn đó thành ACTIVE (tạo mới
  * từ mẫu nếu khách chưa có), mọi CT còn lại thành ARCHIVED. Kiểm tra lại quyền
  * trước khi làm — trả `{ ok: false, error, status }` để API dịch thành 403/400.
+ *
+ * `targetPhaseId` là giáo án cụ thể của bậc đó (GĐ2: Giảm béo / Skinny Fat…).
+ * Bỏ trống thì: đúng một giáo án được cấp quyền → dùng luôn giáo án đó; nhiều
+ * hơn một → trả lỗi 400 để giao diện hỏi người dùng chọn.
  */
 export async function switchClientPhase(
   clientId: string,
   targetOrder: number,
-  actor: Actor
+  actor: Actor,
+  targetPhaseId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   if (!Number.isInteger(targetOrder) || targetOrder < 1 || targetOrder > MAX_PHASE_ORDER) {
     return { ok: false, error: "Giai đoạn không hợp lệ.", status: 400 };
@@ -321,8 +410,30 @@ export async function switchClientPhase(
     return { ok: false, error: option.reason ?? "Bạn không có quyền chuyển giai đoạn.", status: 403 };
   }
 
+  // Một bậc có thể có nhiều giáo án. `option.phases` đã lọc theo cấp độ, nên
+  // gửi lên id của giáo án ngoài quyền (hoặc id bịa) đều bị chặn ngay tại đây —
+  // giao diện chỉ là nơi hiển thị, luật vẫn nằm ở server.
+  let chosen: PhaseVariant | null = null;
+  if (targetPhaseId) {
+    chosen = option.phases.find((p) => p.id === targetPhaseId) ?? null;
+    if (!chosen) {
+      return { ok: false, error: "Bạn chưa được cấp quyền giáo án này.", status: 403 };
+    }
+  } else if (option.phases.length === 1) {
+    // Chỉ một giáo án được cấp quyền → chuyển thẳng, khỏi hỏi.
+    chosen = option.phases[0];
+  } else if (option.phases.length > 1) {
+    return {
+      ok: false,
+      error: `Hãy chọn giáo án cho ${option.label}: ${option.phases.map((p) => p.label).join(", ")}.`,
+      status: 400,
+    };
+  }
+
   const byOrder = await programsByOrder(clientId);
-  let target = byOrder.get(targetOrder) ?? null;
+  // Mở lại CT của ĐÚNG giáo án được chọn. Khách từng tập một giáo án khác cùng
+  // bậc (vd Skinny Fat) không tính là đã có CT "Giảm béo".
+  let target = chosen ? await programForPhase(clientId, chosen) : byOrder.get(targetOrder) ?? null;
 
   if (!target) {
     // Chưa có CT cho giai đoạn này → dựng từ mẫu, bài tập để trống cho PT điền.
@@ -331,7 +442,8 @@ export async function switchClientPhase(
       clientId,
       base?.createdById ?? actor.id,
       targetOrder,
-      base?.sessionsPerWeek ?? 3
+      base?.sessionsPerWeek ?? 3,
+      chosen
     );
     if (!target) {
       return { ok: false, error: "Không tạo được chương trình cho giai đoạn này.", status: 500 };
@@ -355,12 +467,17 @@ export async function switchClientPhase(
   return { ok: true };
 }
 
-/** Tạo chương trình tập cho một giai đoạn từ template (bài tập để trống). */
+/**
+ * Tạo chương trình tập cho một giai đoạn từ template (bài tập để trống).
+ * `chosen` là giáo án người dùng đã chọn — có thì dùng thẳng, không có mới đoán
+ * theo mẫu tĩnh như trước (đường cũ, dành cho DB chưa cấu hình Kho bài tập).
+ */
 async function createPhaseProgram(
   clientId: string,
   createdById: string,
   order: number,
-  sessionsPerWeek: number
+  sessionsPerWeek: number,
+  chosen: PhaseVariant | null = null
 ): Promise<ProgRow | null> {
   const baseName = `Giai đoạn ${order}`;
 
@@ -377,11 +494,18 @@ async function createPhaseProgram(
     select: { id: true, name: true, templateKey: true, sessionTypes: true, defaultReps: true },
   });
   let dbPhase: (typeof dbPhases)[number] | null = null;
-  if (workoutType) dbPhase = dbPhases.find((p) => p.templateKey === workoutType) ?? null;
-  if (!dbPhase) dbPhase = dbPhases.find((p) => p.name === baseName) ?? null;
-  if (!dbPhase) dbPhase = dbPhases.find((p) => phaseOrderOf(p.name) === order) ?? null;
+  if (chosen) {
+    dbPhase = dbPhases.find((p) => p.id === chosen.id) ?? null;
+  } else {
+    if (workoutType) dbPhase = dbPhases.find((p) => p.templateKey === workoutType) ?? null;
+    if (!dbPhase) dbPhase = dbPhases.find((p) => p.name === baseName) ?? null;
+    if (!dbPhase) dbPhase = dbPhases.find((p) => phaseOrderOf(p.name) === order) ?? null;
+  }
   const phaseId: string | null = dbPhase?.id ?? null;
-  if (dbPhase?.templateKey) workoutType = dbPhase.templateKey;
+  // Giáo án đã chọn quyết định loại hình tập — kể cả khi nó không có templateKey
+  // (giai đoạn Admin tự tạo), tuyệt đối không rơi về mặc định "Skinny Fat".
+  if (chosen) workoutType = dbPhase?.templateKey || null;
+  else if (dbPhase?.templateKey) workoutType = dbPhase.templateKey;
 
   const sessionTypes =
     dbPhase && dbPhase.sessionTypes.length > 0
@@ -402,7 +526,7 @@ async function createPhaseProgram(
       sessionsPerWeek: spw,
       currentWeek: 1,
       status: "ACTIVE",
-      notes: `Tạo khi chuyển sang ${baseName}. PT vui lòng chọn bài tập.`,
+      notes: `Tạo khi chuyển sang ${dbPhase?.name ?? baseName}. PT vui lòng chọn bài tập.`,
     },
   });
 

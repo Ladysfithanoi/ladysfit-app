@@ -76,11 +76,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 /**
- * Chuyển khách sang giai đoạn `order` — body: { order: number }.
+ * Chuyển khách sang giai đoạn `order` — body: { order: number, phaseId?: string }.
  *
  * Đây là thao tác THỦ CÔNG duy nhất đổi giai đoạn; hệ thống không còn tự chuyển.
  * Luật kiểm tra nằm trong lib/phase-progression (tuần tự, lùi lại chỉ Admin, đủ
  * số tuần, và quyền giai đoạn theo cấp độ của PT).
+ *
+ * `phaseId` là giáo án cụ thể của bậc đó (GĐ2: Giảm béo / Skinny Fat…) — chỉ
+ * nhận giáo án người bấm được cấp quyền; bỏ trống mà bậc có đúng một giáo án thì
+ * server tự chọn giáo án đó.
  */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -95,8 +99,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Bạn không phụ trách khách hàng này." }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { order?: number };
-  const result = await switchClientPhase(params.id, Number(body.order), actor);
+  const body = (await req.json().catch(() => ({}))) as { order?: number; phaseId?: string };
+  const result = await switchClientPhase(
+    params.id,
+    Number(body.order),
+    actor,
+    body.phaseId ?? null
+  );
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

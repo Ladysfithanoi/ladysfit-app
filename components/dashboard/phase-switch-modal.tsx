@@ -14,6 +14,13 @@ import type { WorkoutProgram } from "@/components/dashboard/workout-tab";
 // và được trả về qua GET /api/clients/[id]/phase-switch. Màn này chỉ hiển thị
 // đúng kết quả đánh giá đó, nên giao diện không bao giờ lệch luật với API.
 
+/** Một giáo án của bậc giai đoạn, vd "Giảm béo" của Giai đoạn 2. */
+type PhaseVariant = {
+  id: string;
+  name: string;
+  label: string;
+};
+
 type PhaseSwitchOption = {
   order: number;
   label: string;
@@ -21,6 +28,8 @@ type PhaseSwitchOption = {
   allowed: boolean;
   reason?: string;
   bypassesWeekGate: boolean;
+  /** Giáo án của bậc này người đang đăng nhập được chuyển sang — server đã lọc theo cấp độ. */
+  phases: PhaseVariant[];
 };
 
 type PhaseSwitchInfo = {
@@ -46,6 +55,8 @@ export function PhaseSwitchModal({
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState("");
   const [confirmOrder, setConfirmOrder] = useState<number | null>(null);
+  // Giáo án đã chọn trong bước xác nhận. Bậc chỉ có một giáo án thì chọn sẵn.
+  const [variantId, setVariantId] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -67,14 +78,14 @@ export function PhaseSwitchModal({
     };
   }, [clientId]);
 
-  async function doSwitch(order: number) {
+  async function doSwitch(order: number, phaseId: string | null) {
     setSwitching(true);
     setError("");
     try {
       const res = await fetch(`/api/clients/${clientId}/phase-switch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order }),
+        body: JSON.stringify({ order, phaseId }),
       });
       const data = (await res.json()) as { error?: string; programs?: WorkoutProgram[] };
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
@@ -89,6 +100,9 @@ export function PhaseSwitchModal({
   }
 
   const pending = info?.options.find((o) => o.order === confirmOrder) ?? null;
+  const pendingVariant = pending?.phases.find((p) => p.id === variantId) ?? null;
+  // Tên hiện trong lời xác nhận: giáo án cụ thể nếu đã rõ, không thì tên bậc.
+  const pendingName = pendingVariant?.name ?? pending?.label ?? "";
 
   return (
     <div
@@ -166,6 +180,8 @@ export function PhaseSwitchModal({
                       <button
                         onClick={() => {
                           setError("");
+                          // Đúng một giáo án → chọn sẵn, bước xác nhận không hỏi thêm.
+                          setVariantId(o.phases.length === 1 ? o.phases[0].id : "");
                           setConfirmOrder(o.order);
                         }}
                         disabled={!o.allowed || switching}
@@ -194,16 +210,42 @@ export function PhaseSwitchModal({
             <p className="text-sm font-extrabold text-gray-900">
               Chuyển khách sang {pending.label}?
             </p>
+            {/* Một bậc giai đoạn có nhiều giáo án (GĐ2: Giảm béo, Skinny Fat…).
+                Danh sách này do server trả về và đã lọc theo cấp độ, nên PT chỉ
+                thấy đúng giáo án mình được tiếp cận. Chỉ có một thì không hỏi. */}
+            {pending.phases.length > 1 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-600">Chọn giáo án cho {pending.label}</p>
+                <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                  {pending.phases.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setVariantId(p.id)}
+                      disabled={switching}
+                      className={cn(
+                        "w-full text-left rounded-xl border px-3 py-2.5 text-sm transition-colors disabled:opacity-60",
+                        variantId === p.id
+                          ? "border-[#f15b5c] bg-[#f15b5c]/5 font-bold text-gray-900"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 leading-relaxed">
               Chương trình đang áp dụng sẽ chuyển sang <span className="font-bold">Đã lưu trữ</span>{" "}
               (vẫn xem lại được; nhật ký và chữ ký của khách giữ nguyên). Nếu khách chưa có chương
-              trình {pending.label}, hệ thống dựng sẵn tuần 1 theo mẫu để PT chọn bài tập.
+              trình {pendingName}, hệ thống dựng sẵn tuần 1 theo mẫu để PT chọn bài tập.
             </p>
             {error && <p className="text-xs text-[#f15b5c] font-medium">{error}</p>}
             <div className="flex gap-3">
               <button
-                onClick={() => doSwitch(pending.order)}
-                disabled={switching}
+                onClick={() => doSwitch(pending.order, variantId || null)}
+                disabled={switching || (pending.phases.length > 1 && !variantId)}
                 className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
                 style={{ backgroundColor: "#f15b5c" }}
               >
