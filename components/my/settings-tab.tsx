@@ -7,14 +7,13 @@ const inputCls =
   "w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50";
 
 export function SettingsTab() {
-  const [current, setCurrent] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const isEmpty = !current.trim() || !newPw.trim() || !confirm.trim();
+  const isEmpty = !newPw.trim() || !confirm.trim();
   const mismatch = confirm.length > 0 && newPw !== confirm;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -30,12 +29,11 @@ export function SettingsTab() {
       const res = await fetch("/api/my/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: current, newPassword: newPw }),
+        body: JSON.stringify({ newPassword: newPw }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
       setSuccess(true);
-      setCurrent("");
       setNewPw("");
       setConfirm("");
       setTimeout(() => setSuccess(false), 4000);
@@ -57,24 +55,12 @@ export function SettingsTab() {
         {success && (
           <div className="mb-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
             <p className="text-sm font-bold text-emerald-600 text-center">
-              ✓ Đổi mật khẩu thành công!
+              ✓ Đổi mật khẩu thành công! Lần đăng nhập sau hãy dùng mật khẩu mới.
             </p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-bold text-gray-700">Mật khẩu hiện tại *</label>
-            <input
-              type="password"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-              placeholder="Nhập mật khẩu hiện tại"
-              className={inputCls}
-              autoComplete="current-password"
-            />
-          </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-gray-700">Mật khẩu mới *</label>
             <input
