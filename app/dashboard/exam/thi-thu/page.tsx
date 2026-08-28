@@ -1,0 +1,14 @@
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { ExamTakePage } from "@/components/dashboard/exam/exam-take-page";
+
+// Thi thử — chỉ Admin, để tự kiểm đề mình vừa soạn: câu chữ có rõ không, ảnh
+// /video có hiện đúng không, chấm điểm có chuẩn không. Bài không được lưu.
+export default async function MockExamPage() {
+  const session = await getServerSession(authOptions);
+  if (!session) redirect("/login");
+  if (session.user.role !== "ADMIN") redirect("/dashboard");
+
+  return <ExamTakePage mock />;
+}

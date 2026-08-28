@@ -29,10 +29,13 @@ export type QuestionPreviewData = {
 export function QuestionPreview({
   data,
   index,
+  label = "Xem trước — PT sẽ thấy thế này",
 }: {
   data: QuestionPreviewData;
   /** Số thứ tự câu để nhãn "Câu N." giống hệt lúc thi; bỏ trống thì hiện "Câu 1." */
   index?: number;
+  /** Dòng tiêu đề nhỏ phía trên khung — đổi khi dùng để soi lại bài thi thử. */
+  label?: string;
 }) {
   const missing = !data.question.trim();
 
@@ -40,7 +43,7 @@ export function QuestionPreview({
     <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
       <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-400">
         <Eye className="h-3.5 w-3.5" />
-        Xem trước — PT sẽ thấy thế này
+        {label}
       </p>
 
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">

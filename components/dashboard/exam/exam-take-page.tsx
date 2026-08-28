@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, XCircle, ArrowLeft, Send, CalendarClock } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, Send, CalendarClock, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
+import { QuestionPreview } from "./question-preview";
 
 type Question = {
   id: string;
@@ -27,7 +28,12 @@ type ExamResult = {
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
 
-export function ExamTakePage() {
+/**
+ * Trang làm bài. `mock` = Admin thi thử: cùng một giao diện, cùng cách bốc đề,
+ * nhưng chấm qua /api/exam/mock-grade nên không ghi vào lịch sử thi và không
+ * đụng tới cấp độ PT — và chấm xong thì soi lại được từng câu kèm đáp án đúng.
+ */
+export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -38,11 +44,13 @@ export function ExamTakePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<ExamResult | null>(null);
+  // Đáp án đúng từng câu — chỉ có ở bài thi thử, để soi lại đề sau khi chấm.
+  const [correctById, setCorrectById] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function loadExam() {
       try {
-        const res = await fetch("/api/exam/take");
+        const res = await fetch(`/api/exam/take${mock ? "?mock=1" : ""}`);
         if (!res.ok) {
           const data = await res.json();
           setError(data.error ?? "Không thể tải đề thi");
@@ -59,14 +67,14 @@ export function ExamTakePage() {
       }
     }
     loadExam();
-  }, []);
+  }, [mock]);
 
   async function handleSubmit() {
     if (Object.keys(answers).length < questions.length) return;
     setSubmitting(true);
     setSubmitError("");
     try {
-      const res = await fetch("/api/exam/attempts", {
+      const res = await fetch(mock ? "/api/exam/mock-grade" : "/api/exam/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers }),
@@ -76,6 +84,7 @@ export function ExamTakePage() {
         setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
       } else {
         const data = await res.json();
+        setCorrectById(data.correctById ?? {});
         setResult({
           scorePct: data.scorePct,
           correctCount: data.correctCount,
@@ -120,7 +129,7 @@ export function ExamTakePage() {
 
   if (result) {
     return (
-      <div className="max-w-lg mx-auto py-8">
+      <div className={cn("mx-auto py-8", mock ? "max-w-2xl" : "max-w-lg")}>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div
             className={cn(
@@ -139,14 +148,22 @@ export function ExamTakePage() {
                 result.passed ? "text-emerald-700" : "text-red-600"
               )}
             >
-              {result.passed ? "Chúc mừng! Bạn đã đạt!" : "Chưa đạt"}
+              {mock
+                ? result.passed
+                  ? "Bài thi thử: ĐẠT"
+                  : "Bài thi thử: CHƯA ĐẠT"
+                : result.passed
+                  ? "Chúc mừng! Bạn đã đạt!"
+                  : "Chưa đạt"}
             </p>
             <p className="text-sm font-semibold text-gray-500 mt-1">
-              {result.passed
-                ? result.promoted
-                  ? "Bạn đã đủ điều kiện và được thăng lên cấp độ mới!"
-                  : "Bạn đã đạt phần lý thuyết. Cần đạt thêm thực hành, doanh số và transform để được thăng hạng."
-                : "Bạn có thể thử lại sau"}
+              {mock
+                ? "Đây là bài thi thử — kết quả không được lưu và không ảnh hưởng cấp độ của ai."
+                : result.passed
+                  ? result.promoted
+                    ? "Bạn đã đủ điều kiện và được thăng lên cấp độ mới!"
+                    : "Bạn đã đạt phần lý thuyết. Cần đạt thêm thực hành, doanh số và transform để được thăng hạng."
+                  : "Bạn có thể thử lại sau"}
             </p>
           </div>
           <div className="px-6 py-5">
@@ -169,15 +186,67 @@ export function ExamTakePage() {
               </div>
             </div>
 
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="mt-6 w-full h-11 rounded-xl text-white font-bold text-sm hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              Về trang chủ
-            </button>
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => router.push(mock ? "/dashboard/exam" : "/dashboard")}
+                className="flex-1 h-11 rounded-xl text-white font-bold text-sm hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {mock ? "Về ngân hàng câu hỏi" : "Về trang chủ"}
+              </button>
+              {mock && (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Thi thử lại
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Soi lại từng câu — chỉ có ở bài thi thử: đây là lúc người soạn đề
+            kiểm xem câu chữ có rõ không và đáp án đúng đã đặt chuẩn chưa. */}
+        {mock && (
+          <div className="mt-6 space-y-3">
+            <p className="text-sm font-extrabold text-gray-900">Soi lại đề ({questions.length} câu)</p>
+            {questions.map((q, idx) => {
+              const chosen = answers[q.id];
+              const correct = correctById[q.id];
+              const ok = chosen === correct;
+              return (
+                <div key={q.id}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold",
+                        ok ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
+                      )}
+                    >
+                      {ok ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                      {ok ? "Bạn chọn đúng" : `Bạn chọn ${chosen ?? "—"}, đáp án đúng là ${correct ?? "—"}`}
+                    </span>
+                  </div>
+                  <QuestionPreview
+                    index={idx + 1}
+                    label="Câu hỏi trong đề"
+                    data={{
+                      question: q.question,
+                      optionA: q.optionA,
+                      optionB: q.optionB,
+                      optionC: q.optionC,
+                      optionD: q.optionD,
+                      correct: correct ?? "",
+                      imageUrl: q.imageUrl ?? "",
+                      videoUrl: q.videoUrl ?? "",
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -186,7 +255,9 @@ export function ExamTakePage() {
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Bài kiểm tra thăng cấp</h1>
+          <h1 className="text-2xl font-extrabold text-gray-900">
+            {mock ? "Thi thử — Bài kiểm tra thăng cấp" : "Bài kiểm tra thăng cấp"}
+          </h1>
           <p className="text-sm text-gray-400 mt-0.5 font-medium">
             Điểm đạt: {passingScore}% — {questions.length} câu hỏi
           </p>
@@ -196,6 +267,17 @@ export function ExamTakePage() {
           <p className="text-xs text-gray-400">đã trả lời</p>
         </div>
       </div>
+
+      {mock && (
+        <div className="flex items-start gap-2 px-4 py-2.5 mb-4 rounded-xl bg-violet-50 border border-violet-100">
+          <FlaskConical className="w-4 h-4 text-violet-500 shrink-0 mt-px" />
+          <p className="text-xs font-semibold text-violet-700 leading-snug">
+            Bài thi thử: đề bốc đúng như thi thật, chấm đúng công thức thật, nhưng kết quả
+            không lưu vào lịch sử thi và không ảnh hưởng cấp độ của ai. Nộp xong sẽ soi lại
+            được từng câu kèm đáp án đúng.
+          </p>
+        </div>
+      )}
 
       {scheduleNote && (
         <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-xl bg-amber-50 border border-amber-100">
@@ -260,11 +342,11 @@ export function ExamTakePage() {
 
       <div className="mt-6 flex items-center justify-between">
         <button
-          onClick={() => router.push("/dashboard")}
+          onClick={() => router.push(mock ? "/dashboard/exam" : "/dashboard")}
           className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Hủy bài thi
+          {mock ? "Thoát thi thử" : "Hủy bài thi"}
         </button>
         <button
           onClick={handleSubmit}

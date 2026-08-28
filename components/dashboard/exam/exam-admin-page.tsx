@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -157,6 +158,14 @@ export function ExamAdminPage({
   const [configSaved, setConfigSaved] = useState(false);
   const [configError, setConfigError] = useState("");
 
+  // Ngân hàng câu hỏi — phân trang. Trang được kẹp lại thay vì reset về 0 để
+  // xoá câu cuối cùng của trang cuối không văng người dùng về đầu danh sách.
+  const [questionPage, setQuestionPage] = useState(0);
+  const questionTotalPages = Math.max(1, Math.ceil(questions.length / PAGE_SIZE));
+  const questionSafePage = Math.min(questionPage, questionTotalPages - 1);
+  const questionStart = questionSafePage * PAGE_SIZE;
+  const pageQuestions = questions.slice(questionStart, questionStart + PAGE_SIZE);
+
   // Danh sách dự thi — phân trang
   const [rosterPage, setRosterPage] = useState(0);
   const rosterTotalPages = Math.max(1, Math.ceil(roster.length / PAGE_SIZE));
@@ -197,6 +206,8 @@ export function ExamAdminPage({
       if (res.ok) {
         const created = await res.json();
         setQuestions((prev) => [...prev, created]);
+        // Câu mới nằm cuối danh sách — mở đúng trang cuối để thấy nó ngay.
+        setQuestionPage(Math.ceil((questions.length + 1) / PAGE_SIZE) - 1);
         setForm(emptyForm);
         setShowAdd(false);
       }
@@ -378,6 +389,15 @@ export function ExamAdminPage({
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => router.push("/dashboard/exam/thi-thu")}
+                disabled={questions.length === 0}
+                title={questions.length === 0 ? "Chưa có câu hỏi nào để thi thử" : "Tự làm thử đề — không lưu kết quả"}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600"
+              >
+                <FlaskConical className="w-4 h-4" />
+                Thi thử
+              </button>
+              <button
                 onClick={() => setImportOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
               >
@@ -417,7 +437,10 @@ export function ExamAdminPage({
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {questions.map((q, idx) => (
+              {pageQuestions.map((q, i) => {
+                // Số câu đánh theo cả ngân hàng, không theo vị trí trong trang.
+                const idx = questionStart + i;
+                return (
                 <div key={q.id} className="px-6 py-4">
                   {editId === q.id ? (
                     <div>
@@ -487,7 +510,35 @@ export function ExamAdminPage({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
+            </div>
+          )}
+
+          {questionTotalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-50">
+              <span className="text-xs font-semibold text-gray-400">
+                Trang {questionSafePage + 1}/{questionTotalPages} — câu {questionStart + 1}–
+                {questionStart + pageQuestions.length} / {questions.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setQuestionPage(Math.max(0, questionSafePage - 1))}
+                  disabled={questionSafePage === 0}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Trang trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setQuestionPage(Math.min(questionTotalPages - 1, questionSafePage + 1))}
+                  disabled={questionSafePage >= questionTotalPages - 1}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Trang sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
