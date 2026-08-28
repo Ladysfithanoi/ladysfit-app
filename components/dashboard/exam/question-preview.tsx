@@ -25,17 +25,24 @@ export type QuestionPreviewData = {
  * Đây là màn hình của người soạn đề, thứ cần kiểm là "câu hỏi trông đã ổn chưa
  * và mình có chọn nhầm đáp án không" — nên phải nhìn thấy đáp án đúng. Trang
  * làm bài của PT lấy dữ liệu từ API riêng, không bao giờ kèm trường `correct`.
+ *
+ * Truyền `chosen` khi soi lại bài đã nộp: ô người thi chọn sai được tô ĐỎ và
+ * giữ nguyên tại chỗ, cạnh ô đáp án đúng màu xanh — nhìn một lần là thấy mình
+ * đã chọn gì và lẽ ra phải chọn gì, thay vì phải đọc một dòng chữ mô tả.
  */
 export function QuestionPreview({
   data,
   index,
   label = "Xem trước — PT sẽ thấy thế này",
+  chosen,
 }: {
   data: QuestionPreviewData;
   /** Số thứ tự câu để nhãn "Câu N." giống hệt lúc thi; bỏ trống thì hiện "Câu 1." */
   index?: number;
   /** Dòng tiêu đề nhỏ phía trên khung — đổi khi dùng để soi lại bài thi thử. */
   label?: string;
+  /** Đáp án người thi đã chọn (A/B/C/D) khi dùng để soi lại bài đã nộp. */
+  chosen?: string;
 }) {
   const missing = !data.question.trim();
 
@@ -64,20 +71,24 @@ export function QuestionPreview({
               {OPTIONS.map((opt) => {
                 const value = data[`option${opt}` as keyof QuestionPreviewData] as string;
                 const isCorrect = data.correct === opt;
+                const isChosen = chosen === opt;
+                const isWrongPick = isChosen && !isCorrect;
                 return (
                   <div
                     key={opt}
                     className={cn(
                       "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium",
-                      isCorrect
-                        ? "border-2 border-emerald-500 bg-emerald-50 text-gray-800"
-                        : "border border-gray-200 bg-gray-50 text-gray-600"
+                      isCorrect && "border-2 border-emerald-500 bg-emerald-50 text-gray-800",
+                      isWrongPick && "border-2 border-red-400 bg-red-50 text-gray-800",
+                      !isCorrect && !isWrongPick && "border border-gray-200 bg-gray-50 text-gray-600"
                     )}
                   >
                     <span
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                        isCorrect ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-500"
+                        isCorrect && "bg-emerald-500 text-white",
+                        isWrongPick && "bg-red-500 text-white",
+                        !isCorrect && !isWrongPick && "bg-gray-200 text-gray-500"
                       )}
                     >
                       {opt}
@@ -86,7 +97,12 @@ export function QuestionPreview({
                       {value || <span className="italic text-gray-300">(chưa nhập)</span>}
                     </span>
                     {isCorrect && (
-                      <span className="shrink-0 text-[11px] font-bold text-emerald-600">Đáp án đúng</span>
+                      <span className="shrink-0 text-[11px] font-bold text-emerald-600">
+                        {isChosen ? "Đáp án đúng · Bạn chọn" : "Đáp án đúng"}
+                      </span>
+                    )}
+                    {isWrongPick && (
+                      <span className="shrink-0 text-[11px] font-bold text-red-500">Bạn chọn</span>
                     )}
                   </div>
                 );
