@@ -86,6 +86,7 @@ model User {
   leaveDays                  LeaveDay[]                   @relation("UserLeaveDays")
   createdLeaveDays           LeaveDay[]                   @relation("LeaveDayCreator")
   clientAssignments          ClientPTAssignment[]         @relation("PTClientAssignments")
+  packageProgressNotifs      PackageProgressNotification[] @relation("FMPackageProgressNotifs")
 
   @@map("users")
 }
@@ -182,6 +183,7 @@ model Client {
   kocContracts                 KOCContract[]
   substituteRequests           SubstituteRequest[]
   ptAssignments                ClientPTAssignment[]
+  packageProgressNotifs        PackageProgressNotification[]
 
   @@map("clients")
 }
@@ -422,6 +424,7 @@ model PackageEnrollment {
   sessionPhotos   SessionPhoto[]
   kocContract     KOCContract?
   ptSessionAdjustments PTSessionAdjustment[]
+  progressNotifications PackageProgressNotification[]
 
   @@map("package_enrollments")
 }
@@ -1311,6 +1314,38 @@ model MeasurementNotification {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("measurement_notifications")
+}
+
+// Thông báo tiến độ lộ trình gửi FM: 3 mốc theo SỐ BUỔI (50/70/90%) và 3 mốc
+// theo NGÀY TẬP (đã tập 2 tháng / còn 1 tháng / còn 2 tuần). Mỗi mốc chỉ gửi
+// một lần cho mỗi FM — khoá duy nhất (FM · lộ trình · mốc) là thứ đảm bảo điều
+// đó, kể cả khi cron chạy lại nhiều lần trong ngày. Xem lib/package-progress.ts.
+model PackageProgressNotification {
+  id           String                   @id @default(cuid())
+  userId       String
+  clientId     String
+  enrollmentId String
+  milestone    PackageProgressMilestone
+  message      String                   @db.Text
+  isRead       Boolean                  @default(false)
+  createdAt    DateTime                 @default(now())
+
+  user       User              @relation("FMPackageProgressNotifs", fields: [userId], references: [id], onDelete: Cascade)
+  client     Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  enrollment PackageEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, enrollmentId, milestone])
+  @@index([userId, isRead])
+  @@map("package_progress_notifications")
+}
+
+enum PackageProgressMilestone {
+  SESSIONS_50
+  SESSIONS_70
+  SESSIONS_90
+  DAYS_2_MONTHS
+  DAYS_1_MONTH_LEFT
+  DAYS_2_WEEKS_LEFT
 }
 
 // ── Số đo cơ thể ──────────────────────────────────────────────────────────

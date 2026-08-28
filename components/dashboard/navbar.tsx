@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
-  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, Menu,
+  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, TrendingUp, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChecklistReportModal } from "@/components/dashboard/checklist-notif-modal";
@@ -100,6 +100,15 @@ type ComplaintItem = {
   client: { id: string; fullName: string; phone: string };
 };
 
+type PackageProgressNotif = {
+  id: string;
+  message: string;
+  milestone: string;
+  isRead: boolean;
+  createdAt: string;
+  client: { id: string; fullName: string };
+};
+
 type ChecklistNotif = {
   id:        string;
   type:      "REMINDER" | "DAILY_REPORT" | "LEAD_REMINDER" | "SUBSTITUTE_REQUEST" | "WEEKLY_REPORT";
@@ -155,6 +164,14 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const [measUnread,     setMeasUnread]     = useState(0);
   const [measLoaded,     setMeasLoaded]     = useState(false);
 
+  // Package progress notification bell (FM only) — 50/70/90% số buổi và
+  // 2 tháng / còn 1 tháng / còn 2 tuần theo ngày tập.
+  const [pkgBellOpen,    setPkgBellOpen]    = useState(false);
+  const pkgBellRef                          = useRef<HTMLDivElement>(null);
+  const [pkgNotifs,      setPkgNotifs]      = useState<PackageProgressNotif[]>([]);
+  const [pkgUnread,      setPkgUnread]      = useState(0);
+  const [pkgLoaded,      setPkgLoaded]      = useState(false);
+
   // Info slide-over
   const [infoOpen, setInfoOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -190,12 +207,15 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
       if (measBellRef.current && !measBellRef.current.contains(e.target as Node)) {
         setMeasBellOpen(false);
       }
+      if (pkgBellRef.current && !pkgBellRef.current.contains(e.target as Node)) {
+        setPkgBellOpen(false);
+      }
     }
-    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen || checklistBellOpen || measBellOpen) {
+    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen || checklistBellOpen || measBellOpen || pkgBellOpen) {
       document.addEventListener("mousedown", handleClick);
     }
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen, checklistBellOpen, measBellOpen]);
+  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen, checklistBellOpen, measBellOpen, pkgBellOpen]);
 
   // Poll unread count for admin
   useEffect(() => {
@@ -327,6 +347,44 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     await fetch("/api/notifications/measurement", { method: "PATCH" });
     setMeasNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setMeasUnread(0);
+  }
+
+  // Poll package progress unread (FM only)
+  useEffect(() => {
+    if (!isFM) return;
+    async function fetchPkgUnread() {
+      try {
+        const res = await fetch("/api/notifications/package-progress");
+        if (res.ok) {
+          const data = await res.json();
+          setPkgUnread(data.unreadCount ?? 0);
+        }
+      } catch { /* ignore */ }
+    }
+    fetchPkgUnread();
+    const interval = setInterval(fetchPkgUnread, 60000);
+    return () => clearInterval(interval);
+  }, [isFM]);
+
+  async function openPkgBell() {
+    setPkgBellOpen((v) => !v);
+    if (!pkgLoaded) {
+      try {
+        const res = await fetch("/api/notifications/package-progress");
+        if (res.ok) {
+          const data = await res.json();
+          setPkgNotifs(data.notifications ?? []);
+          setPkgUnread(data.unreadCount ?? 0);
+          setPkgLoaded(true);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  async function markPkgRead() {
+    await fetch("/api/notifications/package-progress", { method: "PATCH" });
+    setPkgNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setPkgUnread(0);
   }
 
   async function openChecklistBell() {
@@ -786,6 +844,100 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0" />}
                       </a>
                     ))}
+                  </div>
+                )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Package progress bell — FM only: khách sắp hết buổi / sắp hết hạn */}
+        {isFM && (
+          <div ref={pkgBellRef} className="relative">
+            <button
+              onClick={openPkgBell}
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Tiến độ lộ trình khách hàng"
+            >
+              <TrendingUp className="w-5 h-5" />
+              {pkgUnread > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                  {pkgUnread > 9 ? "9+" : pkgUnread}
+                </span>
+              )}
+            </button>
+
+            {pkgBellOpen && (
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setPkgBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-bold text-gray-900">Tiến độ lộ trình khách hàng</p>
+                  {pkgUnread > 0 && (
+                    <button onClick={markPkgRead} className="text-xs font-semibold text-[#f15b5c] hover:opacity-80">
+                      Đánh dấu đã đọc
+                    </button>
+                  )}
+                </div>
+                {pkgNotifs.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <TrendingUp className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs text-gray-300 font-semibold">Không có thông báo</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+                    {pkgNotifs.map((n) => {
+                      const urgent = n.milestone === "SESSIONS_90" || n.milestone === "DAYS_2_WEEKS_LEFT";
+                      return (
+                        <a
+                          key={n.id}
+                          href={`/dashboard/clients/${n.client.id}`}
+                          onClick={() => {
+                            setPkgBellOpen(false);
+                            if (!n.isRead) {
+                              fetch("/api/notifications/package-progress", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ ids: [n.id] }),
+                              });
+                              setPkgNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                              setPkgUnread((c) => Math.max(0, c - 1));
+                            }
+                          }}
+                          className={cn(
+                            "flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors",
+                            !n.isRead && (urgent ? "bg-red-50/60" : "bg-amber-50/50")
+                          )}
+                        >
+                          <div className={cn(
+                            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                            urgent ? "bg-red-100" : "bg-amber-100"
+                          )}>
+                            {urgent
+                              ? <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                              : <TrendingUp className="w-3.5 h-3.5 text-amber-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-gray-800" : "font-semibold text-gray-500")}>
+                              {n.message}
+                            </p>
+                            <p className={cn("text-[10px] mt-0.5 font-semibold", urgent ? "text-red-400" : "text-amber-500")}>
+                              Nhấn để xem hồ sơ khách →
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {new Date(n.createdAt).toLocaleString("vi-VN", {
+                                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                          {!n.isRead && (
+                            <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", urgent ? "bg-red-500" : "bg-amber-500")} />
+                          )}
+                        </a>
+                      );
+                    })}
                   </div>
                 )}
                 </div>

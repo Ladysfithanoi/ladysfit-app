@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countPackageSession } from "@/lib/workout-session";
 import { findCheckInBlock } from "@/lib/checkin-eligibility";
+import { generatePackageProgressNotifications } from "@/lib/package-progress";
 
 // POST /api/clients/[id]/workout-logs/check-in
 // Starts a session: the client signs to confirm they showed up, then we create
@@ -111,6 +112,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         where: { id: log.id },
         data: { packageEnrollmentId: packageUpdate.id },
       });
+    }
+
+    // Vừa trừ buổi xong thì soát luôn mốc tiến độ (50/70/90% số buổi) để FM thấy
+    // ngay trong ngày thay vì đợi cron sáng hôm sau. Chỉ quét đúng khách này nên
+    // rất nhẹ. Chờ hẳn thay vì thả trôi vì hàm serverless có thể kết thúc trước
+    // khi promise chạy xong; lỗi thì nuốt, cron hằng ngày vẫn hứng lại.
+    if (packageUpdate) {
+      try {
+        await generatePackageProgressNotifications({ clientId: params.id });
+      } catch {
+        // thông báo cho FM là phụ — không được làm hỏng việc bắt đầu buổi tập
+      }
     }
 
     return NextResponse.json({ ...serialize(log), packageUpdate });
