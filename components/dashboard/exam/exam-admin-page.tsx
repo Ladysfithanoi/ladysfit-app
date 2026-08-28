@@ -99,6 +99,10 @@ type Tab = typeof TABS[number]["key"];
 
 const PAGE_SIZE = 10;
 
+// Hàng tab/nút trên màn hẹp: trượt ngang thay vì xuống dòng làm ô to, hàng lệch.
+const SLIDER =
+  "w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full";
+
 // Ba tiêu chí tính điểm xếp hạng — chỉnh trọng số ngay tại đây
 const WEIGHT_FIELDS = [
   { key: "rankWeightExam", label: "Điểm thi lý thuyết", hint: "% bài thi gần nhất trong năm" },
@@ -356,72 +360,77 @@ export function ExamAdminPage({
         <div className="p-2.5 rounded-xl bg-[#f15b5c]/10">
           <FileText className="w-5 h-5 text-[#f15b5c]" />
         </div>
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Đề thi thăng cấp</h1>
-          <p className="text-sm text-gray-400 font-medium mt-0.5">
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold text-gray-900 sm:text-2xl">Đề thi thăng cấp</h1>
+          <p className="text-xs text-gray-400 font-medium mt-0.5 sm:text-sm">
             Quản lý ngân hàng câu hỏi và cấu hình bài kiểm tra
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-              tab === key
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
+      {/* Tabs — màn hẹp trượt ngang, mỗi tab luôn gọn trong 1 hàng */}
+      <div className={cn("mb-6", SLIDER)}>
+        <div className="flex w-max gap-1 bg-gray-100 rounded-xl p-1">
+          {TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={cn(
+                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-semibold transition-all sm:px-4 sm:text-sm",
+                tab === key
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ─── Bank Tab ─── */}
       {tab === "bank" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <div>
+          <div className="flex flex-col gap-3 px-4 py-4 border-b border-gray-100 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
+            <div className="min-w-0">
               <p className="text-base font-extrabold text-gray-900">Ngân hàng câu hỏi</p>
               <p className="text-xs text-gray-400 mt-0.5">{questions.length} câu hỏi</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/dashboard/exam/thi-thu")}
-                disabled={questions.length === 0}
-                title={questions.length === 0 ? "Chưa có câu hỏi nào để thi thử" : "Tự làm thử đề — không lưu kết quả"}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600"
-              >
-                <FlaskConical className="w-4 h-4" />
-                Thi thử
-              </button>
-              <button
-                onClick={() => setImportOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
-              >
-                <Upload className="w-4 h-4" />
-                Nhập từ Excel
-              </button>
-              <button
-                onClick={() => { setShowAdd(true); setForm(emptyForm); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: "#f15b5c" }}
-              >
-                <Plus className="w-4 h-4" />
-                Thêm câu hỏi
-              </button>
+            {/* Ba nút hành động: màn hẹp trượt ngang, chữ không xuống dòng */}
+            <div className={cn(SLIDER, "sm:w-auto sm:overflow-visible")}>
+              <div className="flex w-max items-center gap-2 sm:w-auto">
+                <button
+                  onClick={() => router.push("/dashboard/exam/thi-thu")}
+                  disabled={questions.length === 0}
+                  title={questions.length === 0 ? "Chưa có câu hỏi nào để thi thử" : "Tự làm thử đề — không lưu kết quả"}
+                  className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 px-3.5 py-2 text-[13px] font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 sm:px-4 sm:text-sm"
+                >
+                  <FlaskConical className="w-4 h-4 shrink-0" />
+                  Thi thử
+                </button>
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 px-3.5 py-2 text-[13px] font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] sm:px-4 sm:text-sm"
+                >
+                  <Upload className="w-4 h-4 shrink-0" />
+                  Nhập từ Excel
+                </button>
+                <button
+                  onClick={() => { setShowAdd(true); setForm(emptyForm); }}
+                  className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  <Plus className="w-4 h-4 shrink-0" />
+                  Thêm câu hỏi
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Add form */}
           {showAdd && (
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+            <div className="px-4 py-4 bg-gray-50 border-b border-gray-100 sm:px-6">
               <p className="text-sm font-bold text-gray-700 mb-3">Câu hỏi mới</p>
               <QuestionForm
                 form={form}
@@ -445,7 +454,7 @@ export function ExamAdminPage({
                 // Số câu đánh theo cả ngân hàng, không theo vị trí trong trang.
                 const idx = questionStart + i;
                 return (
-                <div key={q.id} className="px-6 py-4">
+                <div key={q.id} className="px-4 py-4 sm:px-6">
                   {editId === q.id ? (
                     <div>
                       <p className="text-sm font-bold text-gray-700 mb-3">Chỉnh sửa câu {idx + 1}</p>
@@ -484,7 +493,7 @@ export function ExamAdminPage({
                           </button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mt-2.5">
+                      <div className="grid grid-cols-1 gap-2 mt-2.5 sm:grid-cols-2">
                         {(["A", "B", "C", "D"] as const).map((opt) => (
                           <div
                             key={opt}
@@ -505,7 +514,7 @@ export function ExamAdminPage({
                             >
                               {opt}
                             </span>
-                            <span className={cn("font-medium", q.correct === opt ? "text-emerald-700" : "text-gray-600")}>
+                            <span className={cn("min-w-0 break-words font-medium", q.correct === opt ? "text-emerald-700" : "text-gray-600")}>
                               {q[`option${opt}` as keyof Question] as string}
                             </span>
                           </div>
@@ -520,8 +529,8 @@ export function ExamAdminPage({
           )}
 
           {questionTotalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-50">
-              <span className="text-xs font-semibold text-gray-400">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-50 sm:px-6">
+              <span className="min-w-0 text-xs font-semibold text-gray-400">
                 Trang {questionSafePage + 1}/{questionTotalPages} — câu {questionStart + 1}–
                 {questionStart + pageQuestions.length} / {questions.length}
               </span>
@@ -552,7 +561,7 @@ export function ExamAdminPage({
       {tab === "schedule" && (
         <div className="space-y-5">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm max-w-lg">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between gap-3 sm:px-6">
               <div>
                 <p className="text-base font-extrabold text-gray-900">Lịch thi</p>
                 <p className="text-xs text-gray-400 mt-0.5">
@@ -569,7 +578,7 @@ export function ExamAdminPage({
               </span>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
+            <div className="px-4 py-5 space-y-5 sm:px-6">
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-gray-700">Bật lịch thi</label>
                 <div className="flex items-center gap-3">
@@ -714,7 +723,7 @@ export function ExamAdminPage({
 
           {/* Danh sách dự thi — ai không thi tính 0 điểm */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-4 py-4 border-b border-gray-100 sm:px-6">
               <p className="text-base font-extrabold text-gray-900">Danh sách dự thi</p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {initialConfig.examDate
@@ -732,7 +741,7 @@ export function ExamAdminPage({
               </div>
             ) : (
               <>
-                <div className="px-6 py-3 flex items-center gap-5 border-b border-gray-50 bg-gray-50/50 text-xs font-semibold">
+                <div className="px-4 py-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-gray-50 bg-gray-50/50 text-xs font-semibold sm:px-6">
                   <span className="text-gray-500">
                     Tổng <span className="font-bold text-gray-800">{roster.length}</span>
                   </span>
@@ -869,11 +878,11 @@ export function ExamAdminPage({
       {/* ─── Config Tab ─── */}
       {tab === "config" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm max-w-lg">
-          <div className="px-6 py-4 border-b border-gray-100">
+          <div className="px-4 py-4 border-b border-gray-100 sm:px-6">
             <p className="text-base font-extrabold text-gray-900">Cấu hình bài thi</p>
             <p className="text-xs text-gray-400 mt-0.5">Số câu hỏi và điểm đạt</p>
           </div>
-          <div className="px-6 py-5 space-y-5">
+          <div className="px-4 py-5 space-y-5 sm:px-6">
             <div className="space-y-1.5">
               <label className="text-sm font-bold text-gray-700">
                 Số câu hỏi mỗi bài thi
@@ -1031,7 +1040,7 @@ export function ExamAdminPage({
       {/* ─── Results Tab ─── */}
       {tab === "results" && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+          <div className="px-4 py-4 border-b border-gray-100 sm:px-6">
             <p className="text-base font-extrabold text-gray-900">Kết quả thi</p>
             <p className="text-xs text-gray-400 mt-0.5">{attempts.length} lượt thi</p>
           </div>
@@ -1169,7 +1178,7 @@ function QuestionForm({
         value={{ imageUrl: form.imageUrl, videoUrl: form.videoUrl }}
         onChange={(m) => onChange({ ...form, imageUrl: m.imageUrl, videoUrl: m.videoUrl })}
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(["A", "B", "C", "D"] as const).map((opt) => (
           <div key={opt} className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">{opt}.</span>
@@ -1204,18 +1213,18 @@ function QuestionForm({
         </div>
       </div>
       {showPreview && <QuestionPreview data={form} index={previewIndex} />}
-      <div className="flex items-center gap-2 pt-1">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           onClick={onSave}
           disabled={saving || !form.question.trim() || !form.optionA || !form.optionB || !form.optionC || !form.optionD}
-          className="px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
+          className="whitespace-nowrap px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#f15b5c" }}
         >
           {saving ? "Đang lưu..." : "Lưu"}
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+          className="whitespace-nowrap px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
         >
           Hủy
         </button>
@@ -1223,7 +1232,7 @@ function QuestionForm({
           type="button"
           onClick={() => setShowPreview((v) => !v)}
           className={cn(
-            "ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold transition-colors",
+            "ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-bold transition-colors",
             showPreview ? "bg-gray-100 text-gray-700" : "text-gray-500 hover:bg-gray-100"
           )}
         >

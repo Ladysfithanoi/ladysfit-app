@@ -311,19 +311,19 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       <div className="lg:flex lg:items-start lg:gap-6">
       {/* ── Cột trái: bài kiểm tra ── */}
       <div className="min-w-0 flex-1">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold text-gray-900 sm:text-2xl">
             {mock ? "Thi thử — Bài kiểm tra thăng cấp" : "Bài kiểm tra thăng cấp"}
           </h1>
-          <p className="text-sm text-gray-400 mt-0.5 font-medium">
+          <p className="text-xs text-gray-400 mt-0.5 font-medium sm:text-sm">
             Điểm đạt: {passingScore}% — {questions.length} câu hỏi
           </p>
         </div>
         {!result && (
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <p className="text-sm font-bold text-gray-700">{answeredCount}/{questions.length}</p>
-            <p className="text-xs text-gray-400">đã trả lời</p>
+            <p className="text-xs text-gray-400 whitespace-nowrap">đã trả lời</p>
           </div>
         )}
       </div>
@@ -490,19 +490,19 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
 
       {!result && (
         <>
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-6 flex items-center justify-between gap-3">
             <button
               onClick={() => router.push(exitPath)}
-              className="flex items-center gap-2 text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4 shrink-0" />
               {mock ? "Thoát thi thử" : "Hủy bài thi"}
             </button>
             <button
               onClick={() => handleSubmit()}
               disabled={!allAnswered || submitting}
               className={cn(
-                "flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-sm transition-opacity",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap px-5 py-2.5 rounded-xl text-white font-bold text-sm transition-opacity sm:px-6",
                 allAnswered && !submitting ? "hover:opacity-90" : "opacity-50 cursor-not-allowed"
               )}
               style={{ backgroundColor: "#f15b5c" }}
