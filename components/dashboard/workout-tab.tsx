@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowRightLeft, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
+import { AlertCircle, Archive, ArrowRightLeft, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, Lock, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -26,6 +26,7 @@ import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-moda
 import { CheckOutPhotoThumb } from "./checkout-photo";
 import { PhaseSwitchModal } from "./phase-switch-modal";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
+import { findCheckInBlock, type CheckInBlock, type PackageForCheckIn } from "@/lib/checkin-eligibility";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -390,6 +391,7 @@ function ProgramView({
   canBypassPhase = false,
   minSessionMinutes = 30,
   inheritedByExercise = null,
+  checkInBlock = null,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -407,6 +409,8 @@ function ProgramView({
   minSessionMinutes?: number;
   /** Thông số gần nhất theo TÊN BÀI TẬP kế thừa từ giai đoạn trước (chỉ xem). */
   inheritedByExercise?: Map<string, SetLogRow> | null;
+  /** Khác null = lộ trình đã hết buổi/hết hạn → khoá nút cho khách ký check-in. */
+  checkInBlock?: CheckInBlock | null;
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -475,6 +479,12 @@ function ProgramView({
   // Check-in requires the client's signature first (proof they showed up). This
   // is also the moment the package is deducted, so the signature is mandatory.
   async function handleCheckIn(sessionId: string, weekId: string, checkInSignatureUrl: string) {
+    // Chốt chặn cuối ở giao diện; server vẫn tự kiểm tra lại (API trả 409).
+    if (checkInBlock) {
+      setCheckInError(checkInBlock.message);
+      setSignCheckIn(null);
+      return;
+    }
     setCheckInSigning(true);
     setCheckingInId(sessionId);
     setCheckInError("");
@@ -1522,17 +1532,27 @@ function ProgramView({
                             <div className="flex flex-col gap-1">
                               <button
                                 onClick={() => { setCheckInError(""); setSignCheckIn({ sessionId: activeSession.id, weekId: currentWeekData.id }); }}
-                                disabled={checkingInId === activeSession.id || isReadOnly}
-                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60"
-                                style={{ backgroundColor: "#f15b5c" }}
+                                disabled={checkingInId === activeSession.id || isReadOnly || !!checkInBlock}
+                                title={checkInBlock?.message}
+                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                                style={{ backgroundColor: checkInBlock ? "#9ca3af" : "#f15b5c" }}
                               >
                                 {checkingInId === activeSession.id
                                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  : <ClipboardList className="w-3.5 h-3.5" />}
+                                  : checkInBlock
+                                    ? <Lock className="w-3.5 h-3.5" />
+                                    : <ClipboardList className="w-3.5 h-3.5" />}
                                 Khách ký check-in & bắt đầu buổi
                               </button>
+                              {/* Hết buổi / hết hạn: nói rõ vì sao không ký được, đỡ phải đoán. */}
+                              {checkInBlock && (
+                                <span className="inline-flex items-start gap-1.5 max-w-md rounded-xl bg-red-50 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-red-600">
+                                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                                  {checkInBlock.message}
+                                </span>
+                              )}
                               {checkInError && <span className="text-[11px] text-[#f15b5c] font-medium">{checkInError}</span>}
-                              {signCheckIn?.sessionId === activeSession.id && (
+                              {!checkInBlock && signCheckIn?.sessionId === activeSession.id && (
                                 <SignaturePad
                                   saving={checkInSigning}
                                   onCancel={() => { if (!checkInSigning) setSignCheckIn(null); }}
@@ -2098,6 +2118,7 @@ export function WorkoutTab({
   assignedPTId = null,
   canBypassPhase = false,
   minSessionMinutes = 30,
+  packages,
 }: {
   clientId: string;
   /** Danh sách chương trình do trang hồ sơ khách nắm giữ. KHÔNG sao chép vào state
@@ -2114,6 +2135,8 @@ export function WorkoutTab({
   /** FM/Admin được sửa nhãn giai đoạn của chương trình. PT thì không. */
   canBypassPhase?: boolean;
   minSessionMinutes?: number;
+  /** Lộ trình của khách — dùng để chặn check-in khi hết buổi/hết hạn. */
+  packages?: PackageForCheckIn[];
 }) {
   const router = useRouter();
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
@@ -2122,6 +2145,10 @@ export function WorkoutTab({
 
   const active = programs.filter((p) => p.status === "ACTIVE");
   const archived = programs.filter((p) => p.status === "ARCHIVED");
+
+  // Hết buổi hoặc hết hạn thì không cho mở buổi mới. Tính lại mỗi lần render nên
+  // ngay khi buổi cuối vừa bị trừ (onPackageUpdated), nút check-in khoá luôn.
+  const checkInBlock = packages ? findCheckInBlock(packages) : null;
 
   // Thứ tự giai đoạn từ tên ("Giai đoạn 2: ..." → 2) để biết đâu là giai đoạn trước.
   const phaseOrder = (name: string) => {
@@ -2263,6 +2290,7 @@ export function WorkoutTab({
           canBypassPhase={canBypassPhase}
           minSessionMinutes={minSessionMinutes}
           inheritedByExercise={inheritedFor(p)}
+          checkInBlock={checkInBlock}
         />
       ))}
 
@@ -2293,6 +2321,7 @@ export function WorkoutTab({
                   assignedPTId={assignedPTId}
                   canBypassPhase={canBypassPhase}
                   minSessionMinutes={minSessionMinutes}
+                  checkInBlock={checkInBlock}
                 />
               ))}
             </div>

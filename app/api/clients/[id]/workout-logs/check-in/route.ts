@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countPackageSession } from "@/lib/workout-session";
+import { findCheckInBlock } from "@/lib/checkin-eligibility";
 
 // POST /api/clients/[id]/workout-logs/check-in
 // Starts a session: the client signs to confirm they showed up, then we create
@@ -42,6 +43,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     if (existing) {
       return NextResponse.json({ ...serialize(existing), packageUpdate: null });
+    }
+
+    // HẾT BUỔI / HẾT HẠN → không cho bắt đầu buổi mới. Buổi tập chỉ được mở khi
+    // khách còn một lộ trình trừ được buổi; nếu không, buổi vẫn chạy nhưng không
+    // trừ vào lộ trình nào (countPackageSession trả null) — khách tập không mất
+    // buổi mà PT vẫn được tính lương. Chặn ngay tại đây, trước khi tạo nhật ký.
+    const packages = await prisma.packageEnrollment.findMany({
+      where: { clientId: params.id },
+      select: { status: true, sessions: true, sessionsUsed: true, endDate: true, createdAt: true },
+    });
+    const block = findCheckInBlock(packages);
+    if (block) {
+      return NextResponse.json({ error: block.message, reason: block.reason }, { status: 409 });
     }
 
     // Build the set-log scaffold from the session's current movements.

@@ -2350,6 +2350,7 @@ export function ClientDetailPage({
           userRole={userRole}
           canBypassPhase={canBypassPhase}
           minSessionMinutes={minSessionMinutes}
+          packages={packages}
         />
       )}
 
