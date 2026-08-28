@@ -19,12 +19,14 @@ import {
   Trophy,
   ChevronLeft,
   ChevronRight,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
 import { fmtExamDate, todayVN, type ExamWindowState } from "@/lib/exam-schedule";
 import { ExamImportModal } from "./exam-import-modal";
 import { QuestionMedia, QuestionMediaFields } from "./question-media";
+import { QuestionPreview } from "./question-preview";
 
 type Question = {
   id: string;
@@ -403,6 +405,7 @@ export function ExamAdminPage({
                 onSave={handleAddQuestion}
                 onCancel={() => setShowAdd(false)}
                 saving={saving}
+                previewIndex={questions.length + 1}
               />
             </div>
           )}
@@ -425,6 +428,7 @@ export function ExamAdminPage({
                         onSave={() => handleUpdateQuestion(q.id)}
                         onCancel={() => setEditId(null)}
                         saving={saving}
+                        previewIndex={idx + 1}
                       />
                     </div>
                   ) : (
@@ -1056,14 +1060,19 @@ function QuestionForm({
   onSave,
   onCancel,
   saving,
+  previewIndex,
 }: {
   form: typeof emptyForm;
   onChange: (f: typeof emptyForm) => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  /** Số thứ tự câu, để nhãn “Câu N.” trong bản xem trước khớp với lúc thi. */
+  previewIndex?: number;
 }) {
   const inputCls = "w-full h-10 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white";
+  // Mặc định đóng để form gọn; ai cần soi ảnh/video hay đáp án thì mở ra.
+  const [showPreview, setShowPreview] = useState(false);
 
   return (
     <div className="space-y-3">
@@ -1112,7 +1121,8 @@ function QuestionForm({
           ))}
         </div>
       </div>
-      <div className="flex gap-2 pt-1">
+      {showPreview && <QuestionPreview data={form} index={previewIndex} />}
+      <div className="flex items-center gap-2 pt-1">
         <button
           onClick={onSave}
           disabled={saving || !form.question.trim() || !form.optionA || !form.optionB || !form.optionC || !form.optionD}
@@ -1126,6 +1136,17 @@ function QuestionForm({
           className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
         >
           Hủy
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowPreview((v) => !v)}
+          className={cn(
+            "ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold transition-colors",
+            showPreview ? "bg-gray-100 text-gray-700" : "text-gray-500 hover:bg-gray-100"
+          )}
+        >
+          <Eye className="w-4 h-4" />
+          {showPreview ? "Ẩn xem trước" : "Xem trước"}
         </button>
       </div>
     </div>
