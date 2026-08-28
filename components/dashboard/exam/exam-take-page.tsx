@@ -49,6 +49,100 @@ function fmtClock(ms: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
+/** Đồng hồ đếm ngược: xám bình thường, vàng dưới 5 phút, đỏ nhấp nháy dưới 1 phút. */
+function CountdownChip({ ms, className }: { ms: number; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-extrabold tabular-nums",
+        ms <= 60_000
+          ? "bg-red-50 text-red-600 animate-pulse"
+          : ms <= 5 * 60_000
+            ? "bg-amber-50 text-amber-600"
+            : "bg-gray-100 text-gray-700",
+        className
+      )}
+      title="Thời gian còn lại của bài thi"
+    >
+      <Timer className="h-3.5 w-3.5" />
+      {fmtClock(ms)}
+    </span>
+  );
+}
+
+/**
+ * Bảng theo dõi câu hỏi: xanh là đã làm, đỏ là chưa, bấm vào nhảy tới câu đó.
+ * Màn hình rộng thì nằm hẳn cột bên phải; màn hình hẹp thì cùng nội dung này
+ * mở ra trong một modal, vì nhét thêm một bảng vào giữa đề bài trên điện thoại
+ * chỉ tổ đẩy câu hỏi xuống và làm bài khó đọc hơn.
+ */
+function QuestionTracker({
+  questions,
+  answers,
+  remainingMs,
+  onGo,
+}: {
+  questions: { id: string }[];
+  answers: Record<string, string>;
+  remainingMs: number | null;
+  onGo: (id: string) => void;
+}) {
+  const answered = questions.filter((q) => !!answers[q.id]).length;
+  const left = questions.length - answered;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+          <ListChecks className="h-3.5 w-3.5 text-gray-400" />
+          Đã làm {answered}/{questions.length}
+        </p>
+        {remainingMs != null && <CountdownChip ms={remainingMs} />}
+      </div>
+
+      <p
+        className={cn(
+          "text-xs font-semibold",
+          left === 0 ? "text-emerald-600" : "text-red-500"
+        )}
+      >
+        {left === 0 ? "Đã làm hết các câu" : `Còn ${left} câu chưa làm`}
+      </p>
+
+      <div className="grid grid-cols-6 gap-1.5 lg:grid-cols-5 max-h-[45vh] overflow-y-auto">
+        {questions.map((q, idx) => {
+          const done = !!answers[q.id];
+          return (
+            <button
+              key={q.id}
+              type="button"
+              onClick={() => onGo(q.id)}
+              title={done ? `Câu ${idx + 1} — đã làm` : `Câu ${idx + 1} — chưa làm, bấm để tới`}
+              className={cn(
+                "h-9 rounded-lg text-xs font-extrabold text-white transition-transform hover:scale-105",
+                done ? "bg-emerald-500" : "bg-red-400"
+              )}
+            >
+              {idx + 1}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-3 text-[11px] font-semibold text-gray-400">
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          Đã làm
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+          Chưa làm
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Trang làm bài. `mock` = Admin thi thử: cùng một giao diện, cùng cách bốc đề,
  * nhưng chấm qua /api/exam/mock-grade nên không ghi vào lịch sử thi và không
@@ -71,6 +165,8 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   // lên đầu trang rồi bắt kéo xuống tìm.
   const [showResultModal, setShowResultModal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  // Màn hình hẹp: bảng theo dõi nằm trong modal, mở bằng nút nổi góc phải.
+  const [trackerOpen, setTrackerOpen] = useState(false);
 
   // ── Thời lượng làm bài ───────────────────────────────────────────────────
   // Mốc hết giờ do server tính và ký (lib/exam-ticket.ts); ở đây chỉ đếm ngược
@@ -210,7 +306,11 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-10">
+    // Đệm đáy rộng ở màn hình hẹp để nút nổi không đè lên nút Nộp bài.
+    <div className="mx-auto max-w-2xl pb-24 lg:max-w-5xl lg:pb-10">
+      <div className="lg:flex lg:items-start lg:gap-6">
+      {/* ── Cột trái: bài kiểm tra ── */}
+      <div className="min-w-0 flex-1">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">
@@ -277,77 +377,15 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       )}
 
       {!result && (
-        <>
-          {/* Progress bar */}
-          <div className="h-2 bg-gray-100 rounded-full mb-4 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: questions.length > 0 ? `${(answeredCount / questions.length) * 100}%` : "0%",
-                backgroundColor: "#f15b5c",
-              }}
-            />
-          </div>
-
-          {/* Bảng theo dõi câu hỏi — dính dưới thanh điều hướng khi cuộn, để biết
-              còn sót câu nào và nhảy thẳng tới câu đó. */}
-          <div className="sticky top-16 z-20 mb-5 rounded-2xl border border-gray-100 bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
-                <ListChecks className="h-3.5 w-3.5 text-gray-400" />
-                {allAnswered
-                  ? "Đã làm hết các câu"
-                  : `Còn ${questions.length - answeredCount} câu chưa làm`}
-              </p>
-              <div className="flex items-center gap-3 text-[11px] font-semibold text-gray-400">
-                <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  Đã làm
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-                  Chưa làm
-                </span>
-                {/* Đồng hồ đếm ngược — vàng khi còn dưới 5 phút, đỏ dưới 1 phút. */}
-                {remainingMs != null && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-extrabold tabular-nums",
-                      remainingMs <= 60_000
-                        ? "bg-red-50 text-red-600 animate-pulse"
-                        : remainingMs <= 5 * 60_000
-                          ? "bg-amber-50 text-amber-600"
-                          : "bg-gray-100 text-gray-700"
-                    )}
-                    title="Thời gian còn lại của bài thi"
-                  >
-                    <Timer className="h-3.5 w-3.5" />
-                    {fmtClock(remainingMs)}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
-              {questions.map((q, idx) => {
-                const done = !!answers[q.id];
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => goToQuestion(q.id)}
-                    title={done ? `Câu ${idx + 1} — đã làm` : `Câu ${idx + 1} — chưa làm, bấm để tới`}
-                    className={cn(
-                      "h-8 w-8 shrink-0 rounded-lg text-xs font-extrabold text-white transition-transform hover:scale-105",
-                      done ? "bg-emerald-500" : "bg-red-400"
-                    )}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </>
+        <div className="h-2 bg-gray-100 rounded-full mb-4 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: questions.length > 0 ? `${(answeredCount / questions.length) * 100}%` : "0%",
+              backgroundColor: "#f15b5c",
+            }}
+          />
+        </div>
       )}
 
       {/* ── Danh sách câu hỏi: đang làm bài, hoặc soi lại sau khi nộp ── */}
@@ -482,6 +520,75 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
             <p className="text-xs font-semibold text-red-500 text-right mt-2">{submitError}</p>
           )}
         </>
+      )}
+
+      </div>
+
+      {/* ── Cột phải: bảng theo dõi, chỉ có ở màn hình rộng ── */}
+      {!result && (
+        <aside className="hidden lg:block lg:w-60 lg:shrink-0 lg:sticky lg:top-20">
+          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <QuestionTracker
+              questions={questions}
+              answers={answers}
+              remainingMs={remainingMs}
+              onGo={goToQuestion}
+            />
+          </div>
+        </aside>
+      )}
+      </div>
+
+      {/* ── Màn hình hẹp: nút nổi góc phải, bấm mở bảng theo dõi ── */}
+      {!result && (
+        <button
+          type="button"
+          onClick={() => setTrackerOpen(true)}
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full py-3 pl-4 pr-5 text-sm font-extrabold text-white shadow-lg lg:hidden"
+          style={{ backgroundColor: "#f15b5c" }}
+        >
+          <ListChecks className="h-4 w-4" />
+          <span className="tabular-nums">
+            {answeredCount}/{questions.length}
+          </span>
+          {remainingMs != null && (
+            <span className="border-l border-white/40 pl-2 tabular-nums">{fmtClock(remainingMs)}</span>
+          )}
+        </button>
+      )}
+
+      {trackerOpen && !result && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center lg:hidden"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={() => setTrackerOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl bg-white p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-gray-200" />
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-extrabold text-gray-900">Theo dõi câu hỏi</p>
+              <button
+                onClick={() => setTrackerOpen(false)}
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <QuestionTracker
+              questions={questions}
+              answers={answers}
+              remainingMs={remainingMs}
+              onGo={(id) => {
+                setTrackerOpen(false);
+                goToQuestion(id);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {/* ── Hộp thoại điểm ── */}
