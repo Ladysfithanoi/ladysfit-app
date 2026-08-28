@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeMediaUrl, isSafeMediaUrl } from "@/lib/exam-media";
 
 type QuestionInput = {
   question: string;
@@ -10,7 +11,16 @@ type QuestionInput = {
   optionC: string;
   optionD: string;
   correctAnswer: string;
+  imageUrl?: string;
+  videoUrl?: string;
 };
+
+/** Link minh hoạ trong file Excel: bỏ trống hoặc sai định dạng → không lấy,
+ *  câu hỏi vẫn nhập bình thường chứ không báo lỗi cả dòng. */
+function mediaFromRow(raw?: string): string | null {
+  const url = normalizeMediaUrl(raw);
+  return url && isSafeMediaUrl(url) ? url : null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -41,6 +51,8 @@ export async function POST(req: Request) {
           optionC: q.optionC.trim(),
           optionD: q.optionD.trim(),
           correct: q.correctAnswer,
+          imageUrl: mediaFromRow(q.imageUrl),
+          videoUrl: mediaFromRow(q.videoUrl),
         })),
       });
     }

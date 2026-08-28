@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle, XCircle, ArrowLeft, Send, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuestionMedia } from "./question-media";
 
 type Question = {
   id: string;
@@ -12,6 +13,8 @@ type Question = {
   optionB: string;
   optionC: string;
   optionD: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
 };
 
 type ExamResult = {
@@ -217,11 +220,13 @@ export function ExamTakePage() {
       <div className="space-y-4">
         {questions.map((q, idx) => (
           <div key={q.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-sm font-semibold text-gray-800 mb-3">
+            <p className="text-sm font-semibold text-gray-800">
               <span className="text-[#f15b5c] font-extrabold mr-1.5">Câu {idx + 1}.</span>
               {q.question}
             </p>
-            <div className="space-y-2">
+            {/* Ảnh / video minh hoạ (nếu câu hỏi có) — xem xong mới chọn đáp án. */}
+            <QuestionMedia imageUrl={q.imageUrl} videoUrl={q.videoUrl} />
+            <div className="space-y-2 mt-3">
               {OPTIONS.map((opt) => {
                 const value = q[`option${opt}` as keyof Question] as string;
                 const selected = answers[q.id] === opt;

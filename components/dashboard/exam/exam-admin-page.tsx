@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
 import { fmtExamDate, todayVN, type ExamWindowState } from "@/lib/exam-schedule";
 import { ExamImportModal } from "./exam-import-modal";
+import { QuestionMedia, QuestionMediaFields } from "./question-media";
 
 type Question = {
   id: string;
@@ -35,6 +36,8 @@ type Question = {
   correct: string;
   order: number;
   createdAt: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
 };
 
 type Config = {
@@ -114,6 +117,9 @@ const emptyForm = {
   optionC: "",
   optionD: "",
   correct: "A",
+  // Ảnh / video minh hoạ — để trống là câu hỏi chỉ có chữ.
+  imageUrl: "",
+  videoUrl: "",
 };
 
 export function ExamAdminPage({
@@ -322,6 +328,8 @@ export function ExamAdminPage({
       optionC: q.optionC,
       optionD: q.optionD,
       correct: q.correct,
+      imageUrl: q.imageUrl ?? "",
+      videoUrl: q.videoUrl ?? "",
     });
   }
 
@@ -422,10 +430,13 @@ export function ExamAdminPage({
                   ) : (
                     <div>
                       <div className="flex items-start justify-between gap-4">
-                        <p className="text-sm font-semibold text-gray-800">
-                          <span className="text-gray-400 mr-1.5">{idx + 1}.</span>
-                          {q.question}
-                        </p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">
+                            <span className="text-gray-400 mr-1.5">{idx + 1}.</span>
+                            {q.question}
+                          </p>
+                          <QuestionMedia imageUrl={q.imageUrl} videoUrl={q.videoUrl} compact />
+                        </div>
                         <div className="flex gap-1.5 shrink-0">
                           <button
                             onClick={() => startEdit(q)}
@@ -1062,6 +1073,10 @@ function QuestionForm({
         onChange={(e) => onChange({ ...form, question: e.target.value })}
         rows={2}
         className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-white resize-none"
+      />
+      <QuestionMediaFields
+        value={{ imageUrl: form.imageUrl, videoUrl: form.videoUrl }}
+        onChange={(m) => onChange({ ...form, imageUrl: m.imageUrl, videoUrl: m.videoUrl })}
       />
       <div className="grid grid-cols-2 gap-3">
         {(["A", "B", "C", "D"] as const).map((opt) => (

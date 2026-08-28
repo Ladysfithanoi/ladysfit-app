@@ -16,6 +16,9 @@ type ParsedRow = {
   optionC: string;
   optionD: string;
   correctAnswer: string;
+  // Hai cột minh hoạ cuối file, để trống cũng được.
+  imageUrl: string;
+  videoUrl: string;
   status: RowStatus;
   errorMsg?: string;
 };
@@ -65,6 +68,8 @@ export function ExamImportModal({
             optionC: String((row as unknown[])[3] ?? "").trim(),
             optionD: String((row as unknown[])[4] ?? "").trim(),
             correctAnswer: String((row as unknown[])[5] ?? "").trim().toUpperCase(),
+            imageUrl: String((row as unknown[])[6] ?? "").trim(),
+            videoUrl: String((row as unknown[])[7] ?? "").trim(),
           }));
 
         console.log("Parsed questions:", parsed);
@@ -134,13 +139,15 @@ export function ExamImportModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          questions: validRows.map(({ question, optionA, optionB, optionC, optionD, correctAnswer }) => ({
+          questions: validRows.map(({ question, optionA, optionB, optionC, optionD, correctAnswer, imageUrl, videoUrl }) => ({
             question,
             optionA,
             optionB,
             optionC,
             optionD,
             correctAnswer,
+            imageUrl,
+            videoUrl,
           })),
         }),
       });
@@ -184,7 +191,8 @@ export function ExamImportModal({
                 <p className="text-sm font-semibold text-amber-800 mb-1">Tải file mẫu</p>
                 <p className="text-xs text-amber-700 mb-3">
                   File mẫu gồm 6 cột:{" "}
-                  <strong>Câu hỏi, Đáp án A, Đáp án B, Đáp án C, Đáp án D, Đáp án đúng</strong>.
+                  <strong>Câu hỏi, Đáp án A, Đáp án B, Đáp án C, Đáp án D, Đáp án đúng</strong>,
+                  và hai cột tuỳ chọn <strong>Link ảnh, Link video</strong> để minh hoạ.
                   Cột Đáp án đúng nhập A, B, C hoặc D.
                 </p>
                 <a

@@ -634,6 +634,11 @@ model ExamQuestion {
   correct   String
   order     Int      @default(0)
   createdAt DateTime @default(now())
+  // Minh hoạ cho câu hỏi — có thể có ảnh, có video, có cả hai, hoặc không có
+  // gì (câu hỏi chỉ có chữ như trước). imageUrl là link ảnh đã tải lên Storage;
+  // videoUrl thường là link YouTube, xem lib/exam-media.ts.
+  imageUrl  String?  @db.Text
+  videoUrl  String?  @db.Text
 
   @@map("exam_questions")
 }

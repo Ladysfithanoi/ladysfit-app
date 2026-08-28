@@ -12,7 +12,7 @@ export async function GET() {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Câu hỏi", "Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D", "Đáp án đúng"],
+      ["Câu hỏi", "Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D", "Đáp án đúng", "Link ảnh", "Link video"],
       [
         "Squat đúng kỹ thuật cần chú ý điều gì?",
         "Giữ lưng thẳng",
@@ -20,6 +20,8 @@ export async function GET() {
         "Gối vượt mũi chân",
         "Thở vào khi đứng lên",
         "A",
+        "",
+        "https://www.youtube.com/watch?v=aclHkVaku9U",
       ],
       [
         "Cơ nào được kích hoạt chủ yếu khi thực hiện Romanian Deadlift?",
@@ -28,6 +30,8 @@ export async function GET() {
         "Cơ vai",
         "Cơ bắp tay",
         "B",
+        "",
+        "",
       ],
     ]);
     ws["!cols"] = [
@@ -37,6 +41,8 @@ export async function GET() {
       { wch: 25 },
       { wch: 25 },
       { wch: 15 },
+      { wch: 40 },
+      { wch: 40 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "Câu hỏi");
 

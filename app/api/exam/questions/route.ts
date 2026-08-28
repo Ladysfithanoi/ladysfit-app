@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseQuestionMedia } from "@/lib/exam-media";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -26,9 +27,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Thiếu thông tin" }, { status: 400 });
   }
 
+  const media = parseQuestionMedia(body);
+  if (!media.ok) return NextResponse.json({ error: media.error }, { status: 400 });
+
   const count = await prisma.examQuestion.count();
   const created = await prisma.examQuestion.create({
-    data: { question, optionA, optionB, optionC, optionD, correct, order: count },
+    data: {
+      question,
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      correct,
+      order: count,
+      imageUrl: media.imageUrl,
+      videoUrl: media.videoUrl,
+    },
   });
 
   return NextResponse.json(created, { status: 201 });

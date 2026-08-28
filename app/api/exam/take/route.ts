@@ -43,15 +43,20 @@ export async function GET() {
     : [...allQuestions];
   const picked = pool.slice(0, Math.min(numQuestions, pool.length));
 
-  // Strip correct answer before sending to client
-  const questions = picked.map(({ id, question, optionA, optionB, optionC, optionD }) => ({
-    id,
-    question,
-    optionA,
-    optionB,
-    optionC,
-    optionD,
-  }));
+  // Strip correct answer before sending to client. Ảnh/video minh hoạ đi kèm
+  // câu hỏi — không lộ đáp án nên gửi thoải mái.
+  const questions = picked.map(
+    ({ id, question, optionA, optionB, optionC, optionD, imageUrl, videoUrl }) => ({
+      id,
+      question,
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      imageUrl,
+      videoUrl,
+    })
+  );
 
   return NextResponse.json({
     questions,

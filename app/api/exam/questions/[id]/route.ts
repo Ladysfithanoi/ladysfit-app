@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseQuestionMedia } from "@/lib/exam-media";
 
 export async function PUT(
   req: NextRequest,
@@ -15,9 +16,22 @@ export async function PUT(
   const body = await req.json();
   const { question, optionA, optionB, optionC, optionD, correct } = body;
 
+  const media = parseQuestionMedia(body);
+  if (!media.ok) return NextResponse.json({ error: media.error }, { status: 400 });
+
   const updated = await prisma.examQuestion.update({
     where: { id: params.id },
-    data: { question, optionA, optionB, optionC, optionD, correct },
+    data: {
+      question,
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      correct,
+      // Xoá ảnh/video khỏi câu hỏi = gửi lên chuỗi rỗng → null.
+      imageUrl: media.imageUrl,
+      videoUrl: media.videoUrl,
+    },
   });
 
   return NextResponse.json(updated);
