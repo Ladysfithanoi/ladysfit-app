@@ -51,6 +51,7 @@ type Config = {
   examDate: string | null;
   examStartTime: string;
   examEndTime: string;
+  durationMinutes: number;
   rankWeightExam: number;
   rankWeightRevenue: number;
   rankWeightTransform: number;
@@ -189,6 +190,7 @@ export function ExamAdminPage({
     examDate: initialConfig.examDate ?? "",
     examStartTime: initialConfig.examStartTime,
     examEndTime: initialConfig.examEndTime,
+    durationMinutes: String(initialConfig.durationMinutes ?? 0),
   });
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [scheduleSaved, setScheduleSaved] = useState(false);
@@ -303,6 +305,7 @@ export function ExamAdminPage({
           examDate: scheduleForm.examDate || null,
           examStartTime: scheduleForm.examStartTime,
           examEndTime: scheduleForm.examEndTime,
+          durationMinutes: Number(scheduleForm.durationMinutes || 0),
         }),
       });
       const data = await res.json();
@@ -315,6 +318,7 @@ export function ExamAdminPage({
         examDate: data.examDate ?? "",
         examStartTime: data.examStartTime,
         examEndTime: data.examEndTime,
+        durationMinutes: String(data.durationMinutes ?? 0),
       });
       setScheduleSaved(true);
       setTimeout(() => setScheduleSaved(false), 2000);
@@ -653,8 +657,35 @@ export function ExamAdminPage({
                 </div>
               </div>
               <p className="text-xs text-gray-400 -mt-2">
+                Khung giờ trên là lúc PHÒNG THI MỞ CỬA — vào thi được từ lúc nào tới lúc nào.
                 Để cả ngày thì đặt 00:00 → 23:59 (giờ Việt Nam).
               </p>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold text-gray-700">Thời lượng thi (phút)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={600}
+                  value={scheduleForm.durationMinutes}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({ ...prev, durationMinutes: e.target.value }))
+                  }
+                  className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50"
+                />
+                <p className="text-xs text-gray-400">
+                  Mỗi người được làm bài trong bấy nhiêu phút, tính từ lúc mở đề — hết giờ hệ
+                  thống tự nộp bài dù còn câu chưa làm. Ai mở đề sát giờ đóng phòng thi thì chỉ
+                  còn tới giờ đóng. Đặt 0 = không giới hạn thời gian.
+                </p>
+                {Number(scheduleForm.durationMinutes || 0) === 0 && (
+                  <p className="flex items-start gap-1.5 text-xs font-semibold text-amber-600">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                    Đang để KHÔNG GIỚI HẠN: người thi có trọn khung giờ trên để làm bài và không
+                    có đồng hồ đếm ngược.
+                  </p>
+                )}
+              </div>
 
               {scheduleError && (
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-red-500">

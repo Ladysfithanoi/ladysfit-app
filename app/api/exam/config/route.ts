@@ -34,6 +34,7 @@ export async function PUT(req: NextRequest) {
     examDate,
     examStartTime,
     examEndTime,
+    durationMinutes,
     rankWeightExam,
     rankWeightRevenue,
     rankWeightTransform,
@@ -93,6 +94,20 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Giờ kết thúc phải sau giờ bắt đầu" }, { status: 400 });
   }
 
+  // Thời lượng làm bài (phút). 0 = không giới hạn. Trần 600 phút để một lần gõ
+  // nhầm không biến kỳ thi thành vô hạn.
+  let nextDuration = config.durationMinutes;
+  if (durationMinutes !== undefined) {
+    const n = Number(durationMinutes);
+    if (!Number.isInteger(n) || n < 0 || n > 600) {
+      return NextResponse.json(
+        { error: "Thời lượng thi phải là số phút từ 0 đến 600 (0 = không giới hạn)" },
+        { status: 400 }
+      );
+    }
+    nextDuration = n;
+  }
+
   if (nextEnabled && !nextDate) {
     return NextResponse.json({ error: "Cần chọn ngày thi khi bật lịch thi" }, { status: 400 });
   }
@@ -107,6 +122,7 @@ export async function PUT(req: NextRequest) {
       examDate: nextDate,
       examStartTime: nextStart,
       examEndTime: nextEnd,
+      durationMinutes: nextDuration,
       rankWeightExam: weights.exam,
       rankWeightRevenue: weights.revenue,
       rankWeightTransform: weights.transform,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { verifyExamTicket } from "@/lib/exam-ticket";
 
 /**
  * Chấm bài THI THỬ của Admin.
@@ -21,13 +22,25 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { answers } = body as { answers?: Record<string, string> };
+  const { answers, examToken } = body as {
+    answers?: Record<string, string>;
+    examToken?: string;
+  };
   if (!answers || typeof answers !== "object") {
     return NextResponse.json({ error: "Thiếu câu trả lời" }, { status: 400 });
   }
 
   const config = await prisma.examConfig.findFirst();
   const passingScore = config?.passingScore ?? 80;
+
+  // Thi thử cũng canh giờ như thi thật — có canh đúng thì mới biết thời lượng
+  // đặt bao nhiêu là vừa cho đề của mình.
+  if ((config?.durationMinutes ?? 0) > 0) {
+    const check = verifyExamTicket(examToken, { userId: session.user.id, mock: true });
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: 403 });
+    }
+  }
 
   const questions = await prisma.examQuestion.findMany({
     where: { id: { in: Object.keys(answers) } },

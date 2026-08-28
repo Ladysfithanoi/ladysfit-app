@@ -10,6 +10,7 @@ import {
   CalendarClock,
   FlaskConical,
   ListChecks,
+  Timer,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,17 @@ type ExamResult = {
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
 
+/** Mili giây → "MM:SS" (hoặc "H:MM:SS" khi thời lượng dài hơn một tiếng). */
+function fmtClock(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 /**
  * Trang làm bài. `mock` = Admin thi thử: cùng một giao diện, cùng cách bốc đề,
  * nhưng chấm qua /api/exam/mock-grade nên không ghi vào lịch sử thi và không
@@ -60,6 +72,16 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const [showResultModal, setShowResultModal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
+  // ── Thời lượng làm bài ───────────────────────────────────────────────────
+  // Mốc hết giờ do server tính và ký (lib/exam-ticket.ts); ở đây chỉ đếm ngược
+  // tới mốc đó. Hết giờ là tự nộp, còn câu chưa làm cũng nộp.
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [examToken, setExamToken] = useState<string | null>(null);
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+  // Cờ chống nộp hai lần: hết giờ nộp tự động trong lúc người thi cũng vừa bấm nộp.
+  const submitLock = useRef(false);
+
   // Bảng theo dõi câu hỏi bấm vào là nhảy tới đúng thẻ câu đó.
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -76,6 +98,12 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
         setQuestions(data.questions);
         setPassingScore(data.passingScore);
         setScheduleNote(data.scheduleNote ?? "");
+        setExamToken(data.examToken ?? null);
+        if (data.endsAt) {
+          const deadline = new Date(data.endsAt).getTime();
+          setEndsAt(deadline);
+          setRemainingMs(Math.max(0, deadline - Date.now()));
+        }
       } catch {
         setError("Có lỗi xảy ra khi tải đề thi");
       } finally {
@@ -85,19 +113,29 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
     loadExam();
   }, [mock]);
 
-  async function handleSubmit() {
-    if (Object.keys(answers).length < questions.length) return;
+  async function handleSubmit(force = false) {
+    if (submitLock.current) return;
+    if (!force && Object.keys(answers).length < questions.length) return;
+    submitLock.current = true;
     setSubmitting(true);
     setSubmitError("");
     try {
+      // Gửi ĐỦ id của mọi câu trong đề, câu chưa làm gửi chuỗi rỗng. Nếu chỉ gửi
+      // các câu đã làm thì lúc hết giờ tự nộp, server lấy "tổng số câu" bằng số
+      // câu nhận được — làm 5/20 câu đúng cả 5 sẽ thành 100%.
+      const payload: Record<string, string> = {};
+      for (const q of questions) payload[q.id] = answers[q.id] ?? "";
+
       const res = await fetch(mock ? "/api/exam/mock-grade" : "/api/exam/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: payload, examToken }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
+        // Nộp hỏng thì mở khoá để còn thử lại; hết giờ thì thôi, khoá luôn.
+        if (!force) submitLock.current = false;
       } else {
         const data = await res.json();
         setCorrectById(data.correctById ?? {});
@@ -115,6 +153,24 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       setSubmitting(false);
     }
   }
+
+  // Đồng hồ đếm ngược. Đếm theo mốc tuyệt đối chứ không trừ dần, để tab bị ẩn
+  // rồi mở lại (trình duyệt bóp nhịp setInterval) vẫn ra đúng thời gian còn lại.
+  useEffect(() => {
+    if (endsAt == null || result) return;
+    function tick() {
+      const left = Math.max(0, endsAt! - Date.now());
+      setRemainingMs(left);
+      if (left === 0 && !submitLock.current) {
+        setAutoSubmitted(true);
+        handleSubmit(true);
+      }
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endsAt, result, questions, answers, examToken]);
 
   function goToQuestion(id: string) {
     cardRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -252,6 +308,23 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
                   <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
                   Chưa làm
                 </span>
+                {/* Đồng hồ đếm ngược — vàng khi còn dưới 5 phút, đỏ dưới 1 phút. */}
+                {remainingMs != null && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-extrabold tabular-nums",
+                      remainingMs <= 60_000
+                        ? "bg-red-50 text-red-600 animate-pulse"
+                        : remainingMs <= 5 * 60_000
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-gray-100 text-gray-700"
+                    )}
+                    title="Thời gian còn lại của bài thi"
+                  >
+                    <Timer className="h-3.5 w-3.5" />
+                    {fmtClock(remainingMs)}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
@@ -388,7 +461,7 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
               {mock ? "Thoát thi thử" : "Hủy bài thi"}
             </button>
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               disabled={!allAnswered || submitting}
               className={cn(
                 "flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-sm transition-opacity",
@@ -453,6 +526,12 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
                       : "Bạn đã đạt phần lý thuyết. Cần đạt thêm thực hành, doanh số và transform để được thăng hạng."
                     : "Bạn có thể thử lại sau"}
               </p>
+              {autoSubmitted && (
+                <p className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-bold text-gray-600">
+                  <Timer className="h-3.5 w-3.5" />
+                  Hết thời lượng làm bài — hệ thống đã tự nộp bài
+                </p>
+              )}
             </div>
 
             <div className="px-6 py-5">

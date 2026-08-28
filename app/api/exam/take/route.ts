@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
+import { signExamTicket } from "@/lib/exam-ticket";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -21,6 +22,7 @@ export async function GET(req: Request) {
   const numQuestions = config?.numQuestions ?? 10;
   const passingScore = config?.passingScore ?? 80;
   const shuffleQuestions = config?.shuffleQuestions ?? true;
+  const durationMinutes = Math.max(0, config?.durationMinutes ?? 0);
 
   // Chỉ mở đề trong đúng khung giờ thi đã đặt (thi thử thì bỏ qua)
   const window = getExamWindow({
@@ -62,10 +64,25 @@ export async function GET(req: Request) {
     })
   );
 
+  // Hết giờ làm bài = lúc này + thời lượng, nhưng không bao giờ quá giờ đóng
+  // phòng thi: mở đề trước giờ đóng 5 phút thì chỉ còn 5 phút, không phải cả
+  // thời lượng. Thi thử không có phòng thi nên chỉ chặn theo thời lượng.
+  let endsAt: Date | null = null;
+  if (durationMinutes > 0) {
+    endsAt = new Date(Date.now() + durationMinutes * 60_000);
+    if (!mock && window.endAt && window.endAt < endsAt) endsAt = window.endAt;
+  }
+
   return NextResponse.json({
     questions,
     passingScore,
     closesAt: mock ? null : window.endAt?.toISOString() ?? null,
     scheduleNote: mock ? null : window.message,
+    durationMinutes,
+    endsAt: endsAt?.toISOString() ?? null,
+    // Vé có chữ ký — máy người thi giữ rồi nộp kèm bài để server kiểm lại hạn.
+    examToken: endsAt
+      ? signExamTicket({ u: session.user.id, e: endsAt.getTime(), m: mock })
+      : null,
   });
 }

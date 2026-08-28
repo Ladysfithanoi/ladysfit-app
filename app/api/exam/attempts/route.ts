@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tryPromotePt } from "@/lib/pt-promotion";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
+import { verifyExamTicket } from "@/lib/exam-ticket";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -29,7 +30,10 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { answers } = body as { answers: Record<string, string> };
+  const { answers, examToken } = body as {
+    answers: Record<string, string>;
+    examToken?: string;
+  };
 
   if (!answers || typeof answers !== "object") {
     return NextResponse.json({ error: "Thiếu câu trả lời" }, { status: 400 });
@@ -58,6 +62,15 @@ export async function POST(req: NextRequest) {
     Date.now() - window.endAt.getTime() <= SUBMIT_GRACE_MS;
   if (!window.open && !withinGrace) {
     return NextResponse.json({ error: window.message }, { status: 403 });
+  }
+
+  // Hết thời lượng làm bài thì không nộp được nữa. Hạn nằm trong tấm vé đã ký
+  // lúc mở đề nên người thi không tự nới ra được — xem lib/exam-ticket.ts.
+  if ((config?.durationMinutes ?? 0) > 0) {
+    const check = verifyExamTicket(examToken, { userId: session.user.id, mock: false });
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: 403 });
+    }
   }
 
   // Fetch the actual questions to grade

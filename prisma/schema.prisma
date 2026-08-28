@@ -654,6 +654,10 @@ model ExamConfig {
   examDate         String?
   examStartTime    String   @default("00:00")
   examEndTime      String   @default("23:59")
+  // Thời lượng mỗi người được làm bài, tính bằng phút. Khác với khung giờ ở
+  // trên: khung giờ là lúc phòng thi MỞ CỬA, còn đây là thời gian mỗi thí sinh
+  // được ngồi làm kể từ lúc mở đề. 0 = không giới hạn.
+  durationMinutes  Int      @default(0)
   // Trọng số (%) 3 tiêu chí của bảng xếp hạng — tổng phải bằng 100
   rankWeightExam      Int   @default(30)
   rankWeightRevenue   Int   @default(40)
