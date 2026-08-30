@@ -11,13 +11,20 @@ export default async function ExamPage() {
   if (!session) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  const [questions, configRaw, attempts] = await Promise.all([
+  const [questions, configRaw, attempts, fmUsers, requiredFMs] = await Promise.all([
     prisma.examQuestion.findMany({ orderBy: { order: "asc" } }),
     prisma.examConfig.findFirst(),
     prisma.examAttempt.findMany({
       include: { user: { select: { id: true, name: true, email: true, role: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    // Danh sách FM để Admin tick ai phải thi — xem lib/exam-required-fm.ts.
+    prisma.user.findMany({
+      where: { role: "FM", deletedAt: null },
+      select: { id: true, name: true, email: true, branch: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.examRequiredFM.findMany({ select: { userId: true } }),
   ]);
 
   const config = configRaw ?? {
@@ -58,6 +65,9 @@ export default async function ExamPage() {
     takenAt: string | null;
   }[] = [];
 
+  // Bài thi trong kỳ của từng người — dùng chung cho bảng HLV và bảng FM.
+  const attemptByUser = new Map<string, { score: number; total: number; passed: boolean; createdAt: Date }>();
+
   if (window.startAt && window.endAt) {
     const [pts, windowAttempts] = await Promise.all([
       prisma.user.findMany({
@@ -76,14 +86,13 @@ export default async function ExamPage() {
       }),
     ]);
 
-    // Lần thi gần nhất trong kỳ của mỗi PT
-    const byUser = new Map<string, (typeof windowAttempts)[number]>();
+    // Lần thi gần nhất trong kỳ của mỗi người
     for (const a of windowAttempts) {
-      if (!byUser.has(a.userId)) byUser.set(a.userId, a);
+      if (!attemptByUser.has(a.userId)) attemptByUser.set(a.userId, a);
     }
 
     roster = pts.map((pt) => {
-      const a = byUser.get(pt.id);
+      const a = attemptByUser.get(pt.id);
       return {
         userId: pt.id,
         name: pt.name,
@@ -99,6 +108,26 @@ export default async function ExamPage() {
       };
     });
   }
+
+  // Toàn bộ FM kèm cờ "bắt buộc thi" và điểm của kỳ này. Khác bảng HLV ở chỗ
+  // FM không thi thì để trống chứ không tính 0 điểm — họ không nằm trong xếp
+  // hạng và không bị phạt vì bài thi này (lib/exam-required-fm.ts).
+  const requiredIds = new Set(requiredFMs.map((r) => r.userId));
+  const fms = fmUsers.map((fm) => {
+    const a = attemptByUser.get(fm.id);
+    return {
+      userId: fm.id,
+      name: fm.name,
+      email: fm.email,
+      branchName: fm.branch?.name ?? null,
+      required: requiredIds.has(fm.id),
+      score: a ? a.score : null,
+      total: a ? a.total : null,
+      scorePct: a && a.total > 0 ? Math.round((a.score / a.total) * 100) : null,
+      passed: a ? a.passed : false,
+      takenAt: a ? a.createdAt.toISOString() : null,
+    };
+  });
 
   const serializedAttempts = attempts.map((a) => ({
     id: a.id,
@@ -129,6 +158,7 @@ export default async function ExamPage() {
       attempts={serializedAttempts}
       windowState={window.state}
       roster={roster}
+      fms={fms}
     />
   );
 }

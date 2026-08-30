@@ -9,6 +9,7 @@ import { TransformStats } from "./transform-stats";
 import { TransformQualityStats } from "./transform-quality-stats";
 import { NotTransformedTable } from "./not-transformed-table";
 import { ChurnStats } from "./churn-stats";
+import { FMExamCard } from "./exam/fm-exam-card";
 
 export type AdminStats = {
   totalClients: number;
@@ -136,6 +137,9 @@ export function AdminDashboard({
           Tổng quan toàn hệ thống Ladysfit.
         </p>
       </div>
+
+      {/* FM được chỉ định bắt buộc thi — thẻ tự ẩn nếu không có tên trong danh sách */}
+      {isFM && <FMExamCard />}
 
       {/* 4 stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

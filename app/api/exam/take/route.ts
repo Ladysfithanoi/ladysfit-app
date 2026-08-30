@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { signExamTicket } from "@/lib/exam-ticket";
+import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -14,9 +15,23 @@ export async function GET(req: Request) {
 
   const mock = new URL(req.url).searchParams.get("mock") === "1";
   const role = session.user.role;
-  if (mock ? role !== "ADMIN" : role !== "PT") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // HLV thi để thăng cấp; FM chỉ vào được khi Admin chỉ định bắt buộc thi
+  // (xem lib/exam-required-fm.ts) và bài của họ không kéo theo hệ quả gì.
+  if (mock) {
+    if (role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else if (!(await canSitExam(session.user.id, role))) {
+    return NextResponse.json(
+      { error: role === "FM" ? NOT_REQUIRED_MESSAGE : "Forbidden" },
+      { status: 403 }
+    );
   }
+
+  // Bài của FM chỉ để ghi nhận trình độ — báo cho trang làm bài biết để nói rõ
+  // với người thi là trượt cũng không sao.
+  const noPenalty = !mock && role === "FM";
 
   const config = await prisma.examConfig.findFirst();
   const numQuestions = config?.numQuestions ?? 10;
@@ -79,6 +94,7 @@ export async function GET(req: Request) {
     closesAt: mock ? null : window.endAt?.toISOString() ?? null,
     scheduleNote: mock ? null : window.message,
     durationMinutes,
+    noPenalty,
     endsAt: endsAt?.toISOString() ?? null,
     // Vé có chữ ký — máy người thi giữ rồi nộp kèm bài để server kiểm lại hạn.
     examToken: endsAt

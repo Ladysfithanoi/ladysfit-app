@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
+import { isRequiredExamFM } from "@/lib/exam-required-fm";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -10,7 +11,7 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  const [user, lastAttempt, config, sysConfig, defaultLevel, allLevels] = await Promise.all([
+  const [user, lastAttempt, config, sysConfig, defaultLevel, allLevels, requiredFM] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, ptLevel: { select: { id: true, name: true, color: true, retestIntervalDays: true, order: true } } },
@@ -23,6 +24,8 @@ export async function GET() {
     prisma.systemConfig.findUnique({ where: { id: "main" } }),
     prisma.pTLevel.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true, name: true, color: true, order: true } }),
     prisma.pTLevel.findMany({ where: { isActive: true }, select: { id: true, name: true, color: true, order: true }, orderBy: { order: "asc" } }),
+    // FM được Admin chỉ định bắt buộc thi — xem lib/exam-required-fm.ts.
+    session.user.role === "FM" ? isRequiredExamFM(userId) : Promise.resolve(false),
   ]);
 
   const passingScore = config?.passingScore ?? 80;
@@ -69,6 +72,9 @@ export async function GET() {
     passingScore,
     numQuestions,
     enableLevelSystem,
+    // FM bắt buộc thi: làm cùng đề với HLV nhưng điểm chỉ để Admin nắm trình
+    // độ — trượt không bị phạt, không ảnh hưởng cấp bậc.
+    isRequiredFM: requiredFM,
     exam: {
       state: examWindow.state,
       open: examWindow.open,

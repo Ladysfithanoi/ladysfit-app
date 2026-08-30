@@ -21,6 +21,8 @@ import {
   ChevronRight,
   Eye,
   FlaskConical,
+  ShieldCheck,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -66,6 +68,21 @@ type RosterRow = {
   score: number | null;
   total: number | null;
   scorePct: number;
+  passed: boolean;
+  takenAt: string | null;
+};
+
+// FM bắt buộc thi: Admin tick tên ai phải làm bài. Điểm chỉ để nắm chuyên môn
+// nên không có cột "vắng thi 0 điểm" như bảng HLV — xem lib/exam-required-fm.ts.
+type FMRow = {
+  userId: string;
+  name: string | null;
+  email: string;
+  branchName: string | null;
+  required: boolean;
+  score: number | null;
+  total: number | null;
+  scorePct: number | null;
   passed: boolean;
   takenAt: string | null;
 };
@@ -136,12 +153,14 @@ export function ExamAdminPage({
   attempts: initialAttempts,
   windowState,
   roster,
+  fms,
 }: {
   questions: Question[];
   config: Config;
   attempts: Attempt[];
   windowState: ExamWindowState;
   roster: RosterRow[];
+  fms: FMRow[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("bank");
@@ -199,6 +218,64 @@ export function ExamAdminPage({
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [scheduleSaved, setScheduleSaved] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
+
+  // ── FM bắt buộc thi ──────────────────────────────────────────────────────
+  // Danh sách tick giữ trong state, chỉ ghi xuống DB khi bấm Lưu — Admin sửa
+  // qua sửa lại vài tên trước khi chốt là chuyện thường.
+  const [fmRequired, setFmRequired] = useState<Set<string>>(
+    () => new Set(fms.filter((f) => f.required).map((f) => f.userId))
+  );
+  const [fmSearch, setFmSearch] = useState("");
+  const [fmSaving, setFmSaving] = useState(false);
+  const [fmSaved, setFmSaved] = useState(false);
+  const [fmError, setFmError] = useState("");
+
+  const fmQuery = fmSearch.trim().toLowerCase();
+  const visibleFms = fmQuery
+    ? fms.filter(
+        (f) =>
+          (f.name ?? "").toLowerCase().includes(fmQuery) ||
+          f.email.toLowerCase().includes(fmQuery) ||
+          (f.branchName ?? "").toLowerCase().includes(fmQuery)
+      )
+    : fms;
+
+  // So với lúc mở trang — chưa đổi gì thì không cần bấm Lưu.
+  const fmDirty =
+    fmRequired.size !== fms.filter((f) => f.required).length ||
+    fms.some((f) => f.required !== fmRequired.has(f.userId));
+
+  function toggleFm(userId: string) {
+    setFmSaved(false);
+    setFmRequired((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
+
+  async function handleSaveRequiredFms() {
+    setFmError("");
+    setFmSaving(true);
+    try {
+      const res = await fetch("/api/exam/required-fms", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: Array.from(fmRequired) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFmError(data.error ?? "Không lưu được danh sách FM bắt buộc thi");
+        return;
+      }
+      setFmSaved(true);
+      setTimeout(() => setFmSaved(false), 2000);
+      router.refresh();
+    } finally {
+      setFmSaving(false);
+    }
+  }
 
   async function handleAddQuestion() {
     if (!form.question.trim() || !form.optionA || !form.optionB || !form.optionC || !form.optionD) return;
@@ -869,6 +946,130 @@ export function ExamAdminPage({
                     </div>
                   </div>
                 )}
+              </>
+            )}
+          </div>
+
+          {/* FM bắt buộc thi — chỉ định ai phải làm bài và xem điểm của họ */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex flex-col gap-3 px-4 py-4 border-b border-gray-100 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+              <div className="min-w-0">
+                <p className="text-base font-extrabold text-gray-900">FM bắt buộc thi</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Tick tên FM phải làm bài kỳ này. Họ thi cùng đề, cùng khung giờ với HLV.
+                </p>
+              </div>
+              <span className="shrink-0 self-start rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-600 whitespace-nowrap">
+                Đã chọn {fmRequired.size}/{fms.length}
+              </span>
+            </div>
+
+            <div className="flex items-start gap-2 px-4 py-3 bg-sky-50/60 border-b border-sky-100 sm:px-6">
+              <ShieldCheck className="w-4 h-4 text-sky-500 shrink-0 mt-px" />
+              <p className="text-xs font-semibold text-sky-700 leading-snug">
+                Bài thi của FM chỉ để bạn nắm chuyên môn: điểm lưu lại cho bạn xem, nhưng thi
+                trượt KHÔNG bị phạt — không hạ cấp, không thông báo, không tính vào xếp hạng.
+                Bỏ tick là kỳ sau họ không phải thi nữa.
+              </p>
+            </div>
+
+            {fms.length === 0 ? (
+              <div className="py-16 flex flex-col items-center gap-2">
+                <ShieldCheck className="w-8 h-8 text-gray-200" />
+                <p className="text-sm text-gray-300 font-semibold">Chưa có FM nào</p>
+              </div>
+            ) : (
+              <>
+                {fms.length > 5 && (
+                  <div className="px-4 py-3 border-b border-gray-50 sm:px-6">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+                      <input
+                        value={fmSearch}
+                        onChange={(e) => setFmSearch(e.target.value)}
+                        placeholder="Tìm FM theo tên, email hoặc chi nhánh"
+                        className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {visibleFms.length === 0 ? (
+                  <div className="py-10 text-center text-sm font-semibold text-gray-300">
+                    Không tìm thấy FM nào khớp
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {visibleFms.map((fm) => {
+                      const checked = fmRequired.has(fm.userId);
+                      return (
+                        <label
+                          key={fm.userId}
+                          className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50/60 sm:px-6"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleFm(fm.userId)}
+                            className="h-4 w-4 shrink-0 accent-[#f15b5c]"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-gray-800">
+                              {fm.name ?? fm.email}
+                            </p>
+                            <p className="truncate text-xs text-gray-400">
+                              {fm.branchName ? fm.branchName + " · " : ""}
+                              {fm.email}
+                            </p>
+                          </div>
+                          {/* Điểm kỳ này — chỉ hiện khi người đó đã nộp bài */}
+                          <div className="shrink-0 text-right">
+                            {fm.takenAt ? (
+                              <>
+                                <p className="text-sm font-bold text-gray-800 whitespace-nowrap">
+                                  {fm.score}/{fm.total} ({fm.scorePct}%)
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-xs font-bold",
+                                    fm.passed ? "text-emerald-600" : "text-gray-400"
+                                  )}
+                                >
+                                  {fm.passed ? "Đạt" : "Chưa đạt"} · {fmtDateTime(new Date(fm.takenAt))}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-xs font-semibold text-gray-300 whitespace-nowrap">
+                                {checked ? "Chưa làm bài" : "Không phải thi"}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-gray-50 px-4 py-4 sm:px-6">
+                  <button
+                    onClick={handleSaveRequiredFms}
+                    disabled={fmSaving || !fmDirty}
+                    className="rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: "#f15b5c" }}
+                  >
+                    {fmSaving ? "Đang lưu..." : "Lưu danh sách FM"}
+                  </button>
+                  {fmSaved && (
+                    <span className="flex items-center gap-1 text-sm font-semibold text-emerald-600">
+                      <Check className="w-4 h-4" /> Đã lưu
+                    </span>
+                  )}
+                  {fmError && (
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-red-500">
+                      <AlertCircle className="w-4 h-4" /> {fmError}
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </div>

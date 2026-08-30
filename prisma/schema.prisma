@@ -57,6 +57,7 @@ model User {
   workoutPrograms       WorkoutProgram[]
   workoutLogs           WorkoutLog[]
   examAttempts          ExamAttempt[]
+  examRequirement       ExamRequiredFM?      @relation("RequiredExamFM")
   upgradeNotifications  UpgradeNotification[]
   mealPlans             MealPlan[]
   ptAlerts              PerformanceAlert[] @relation("PTPerformanceAlerts")
@@ -679,6 +680,20 @@ model ExamAttempt {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("exam_attempts")
+}
+
+// FM bắt buộc thi — Admin chỉ định trong tab Lịch thi. FM có tên ở đây vào thi
+// được như HLV và Admin xem được điểm, nhưng đó chỉ để nắm trình độ: thi trượt
+// KHÔNG bị hạ cấp, không sinh thông báo, không đụng tới xếp hạng hay cấp bậc
+// của họ. Bỏ tên khỏi danh sách là hết bắt buộc.
+model ExamRequiredFM {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation("RequiredExamFM", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("exam_required_fms")
 }
 
 model UpgradeNotification {

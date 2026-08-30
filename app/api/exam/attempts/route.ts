@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { tryPromotePt } from "@/lib/pt-promotion";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
 import { verifyExamTicket } from "@/lib/exam-ticket";
+import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -25,9 +26,16 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (role !== "PT") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // HLV, và FM được Admin chỉ định bắt buộc thi — xem lib/exam-required-fm.ts.
+  if (!(await canSitExam(session.user.id, role))) {
+    return NextResponse.json(
+      { error: role === "FM" ? NOT_REQUIRED_MESSAGE : "Forbidden" },
+      { status: 403 }
+    );
   }
+  // Bài của FM chỉ ghi nhận điểm cho Admin xem: không thăng, không hạ, không
+  // thông báo, và không phụ thuộc hệ thống phân cấp độ của HLV.
+  const noPenalty = role === "FM";
 
   const body = await req.json();
   const { answers, examToken } = body as {
@@ -45,7 +53,7 @@ export async function POST(req: NextRequest) {
   ]);
   const passingScore = config?.passingScore ?? 80;
 
-  if (sysConfig?.enableLevelSystem === false) {
+  if (!noPenalty && sysConfig?.enableLevelSystem === false) {
     return NextResponse.json({ error: "Hệ thống phân cấp độ đang tắt" }, { status: 403 });
   }
 
@@ -100,21 +108,25 @@ export async function POST(req: NextRequest) {
 
   const userName = session.user.name ?? session.user.email ?? "PT";
 
+  // FM thì dừng ở đây: điểm đã lưu cho Admin xem, không thăng, không hạ, không
+  // thông báo — đúng nghĩa "thi để biết trình độ, trượt cũng không bị gì".
   let promoted = false;
-  if (passed) {
-    // Đậu lý thuyết CHỈ là một trong các điều kiện — chỉ thăng hạng nếu đủ cả
-    // (thực hành đạt + doanh số + transform). Ngược lại vẫn ghi nhận đậu để chờ.
-    promoted = await tryPromotePt(session.user.id);
-    if (!promoted) {
+  if (!noPenalty) {
+    if (passed) {
+      // Đậu lý thuyết CHỈ là một trong các điều kiện — chỉ thăng hạng nếu đủ cả
+      // (thực hành đạt + doanh số + transform). Ngược lại vẫn ghi nhận đậu để chờ.
+      promoted = await tryPromotePt(session.user.id);
+      if (!promoted) {
+        await prisma.upgradeNotification.create({
+          data: { userId: session.user.id, userName, passed: true },
+        });
+      }
+    } else {
       await prisma.upgradeNotification.create({
-        data: { userId: session.user.id, userName, passed: true },
+        data: { userId: session.user.id, userName, passed: false },
       });
     }
-  } else {
-    await prisma.upgradeNotification.create({
-      data: { userId: session.user.id, userName, passed: false },
-    });
   }
 
-  return NextResponse.json({ attempt, scorePct, passed, promoted, correctCount, total });
+  return NextResponse.json({ attempt, scorePct, passed, promoted, noPenalty, correctCount, total });
 }

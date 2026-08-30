@@ -11,6 +11,7 @@ import {
   FlaskConical,
   ListChecks,
   Timer,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -155,6 +156,9 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [passingScore, setPassingScore] = useState(80);
   const [scheduleNote, setScheduleNote] = useState("");
+  // FM bắt buộc thi: điểm chỉ để Admin nắm trình độ, trượt không bị phạt gì.
+  // Nói rõ ngay trên đề để người thi không tưởng mình đang bị đem ra đánh giá.
+  const [noPenalty, setNoPenalty] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -194,6 +198,7 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
         setQuestions(data.questions);
         setPassingScore(data.passingScore);
         setScheduleNote(data.scheduleNote ?? "");
+        setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
         if (data.endsAt) {
           const deadline = new Date(data.endsAt).getTime();
@@ -314,7 +319,11 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold text-gray-900 sm:text-2xl">
-            {mock ? "Thi thử — Bài kiểm tra thăng cấp" : "Bài kiểm tra thăng cấp"}
+            {mock
+              ? "Thi thử — Bài kiểm tra thăng cấp"
+              : noPenalty
+                ? "Bài kiểm tra chuyên môn"
+                : "Bài kiểm tra thăng cấp"}
           </h1>
           <p className="text-xs text-gray-400 mt-0.5 font-medium sm:text-sm">
             Điểm đạt: {passingScore}% — {questions.length} câu hỏi
@@ -335,6 +344,17 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
             Bài thi thử: đề bốc đúng như thi thật, chấm đúng công thức thật, nhưng kết quả
             không lưu vào lịch sử thi và không ảnh hưởng cấp độ của ai. Nộp xong sẽ soi lại
             được từng câu kèm đáp án đúng.
+          </p>
+        </div>
+      )}
+
+      {noPenalty && !result && (
+        <div className="flex items-start gap-2 px-4 py-2.5 mb-4 rounded-xl bg-sky-50 border border-sky-100">
+          <ShieldCheck className="w-4 h-4 text-sky-500 shrink-0 mt-px" />
+          <p className="text-xs font-semibold text-sky-700 leading-snug">
+            Bạn được chỉ định làm bài kiểm tra này. Điểm chỉ để ban quản lý nắm chuyên môn
+            của bạn — không đạt cũng không bị phạt, không ảnh hưởng chức vụ hay lương
+            thưởng. Cứ làm thoải mái.
           </p>
         </div>
       )}
@@ -622,11 +642,15 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
                     : "Bài thi thử: CHƯA ĐẠT"
                   : result.passed
                     ? "Chúc mừng! Bạn đã đạt!"
-                    : "Chưa đạt"}
+                    : noPenalty
+                      ? "Chưa đạt — không sao cả"
+                      : "Chưa đạt"}
               </p>
               <p className="mt-1 text-sm font-semibold text-gray-500">
                 {mock
                   ? "Kết quả không được lưu và không ảnh hưởng cấp độ của ai."
+                  : noPenalty
+                  ? "Điểm đã gửi cho ban quản lý để nắm chuyên môn. Kết quả này không ảnh hưởng chức vụ hay quyền lợi của bạn."
                   : result.passed
                     ? result.promoted
                       ? "Bạn đã đủ điều kiện và được thăng lên cấp độ mới!"
