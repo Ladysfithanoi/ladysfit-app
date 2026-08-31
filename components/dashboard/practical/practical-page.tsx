@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { AlertDialog } from "@/components/ui/alert-dialog";
 import { Check, X, ClipboardCheck, Plus, Trash2, ChevronUp, Loader2, Award, Search } from "lucide-react";
 import {
   FIXED_SECTIONS,
@@ -105,6 +106,8 @@ export function PracticalPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [promoting, setPromoting] = useState<string | null>(null);
+  // Người đang chờ xác nhận thăng tay — mở hộp thoại của app thay cho confirm().
+  const [promoteTarget, setPromoteTarget] = useState<Row | null>(null);
 
   // Filters
   const [branchFilter, setBranchFilter] = useState("");
@@ -202,9 +205,9 @@ export function PracticalPage() {
     }
   }
 
-  async function manualPromote(row: Row) {
+  /** Chạy sau khi người dùng bấm xác nhận trong hộp thoại thăng tay. */
+  async function runPromote(row: Row) {
     if (!row.nextLevelId) return;
-    if (!confirm(`Thăng ${row.name} lên cấp ${row.nextLevelName}? (Thủ công — bỏ qua điều kiện)`)) return;
     setPromoting(row.ptId);
     try {
       const res = await fetch("/api/practical/promote", {
@@ -223,6 +226,9 @@ export function PracticalPage() {
       }
     } finally {
       setPromoting(null);
+      // Đóng hộp thoại ở đây chứ không đóng lúc vừa bấm: nút xác nhận giữ
+      // trạng thái "Đang xử lý..." cho tới khi server trả lời.
+      setPromoteTarget(null);
     }
   }
 
@@ -343,7 +349,7 @@ export function PracticalPage() {
                         </button>
                         {row.nextLevelId && (
                           <button
-                            onClick={() => manualPromote(row)}
+                            onClick={() => setPromoteTarget(row)}
                             disabled={promoting === row.ptId}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50"
                           >
@@ -508,6 +514,25 @@ export function PracticalPage() {
           </div>
         </div>
       )}
+
+      {/* Thăng tay — hỏi lại bằng hộp thoại của app, không dùng confirm() của
+          trình duyệt: khung xám chữ Arial kèm URL giữa giao diện đã dựng theo
+          nhận diện thương hiệu trông như lỗi trang. */}
+      <AlertDialog
+        open={promoteTarget !== null}
+        onClose={() => setPromoteTarget(null)}
+        title="Thăng hạng thủ công"
+        description={
+          promoteTarget
+            ? `Thăng ${promoteTarget.name} lên cấp ${promoteTarget.nextLevelName}.\n\nĐây là thăng tay, bỏ qua toàn bộ điều kiện xét duyệt.`
+            : ""
+        }
+        confirmLabel="Thăng hạng"
+        loading={promoting !== null}
+        onConfirm={() => {
+          if (promoteTarget) runPromote(promoteTarget);
+        }}
+      />
     </div>
   );
 }
