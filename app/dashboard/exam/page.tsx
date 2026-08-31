@@ -37,6 +37,7 @@ export default async function ExamPage() {
     examStartTime: "00:00",
     examEndTime: "23:59",
     durationMinutes: 0,
+    focusPenaltyMinutes: 30,
     rankWeightExam: DEFAULT_RANK_WEIGHTS.exam,
     rankWeightRevenue: DEFAULT_RANK_WEIGHTS.revenue,
     rankWeightTransform: DEFAULT_RANK_WEIGHTS.transform,
@@ -63,10 +64,14 @@ export default async function ExamPage() {
     scorePct: number;
     passed: boolean;
     takenAt: string | null;
+    violations: number;
   }[] = [];
 
   // Bài thi trong kỳ của từng người — dùng chung cho bảng HLV và bảng FM.
-  const attemptByUser = new Map<string, { score: number; total: number; passed: boolean; createdAt: Date }>();
+  const attemptByUser = new Map<
+    string,
+    { score: number; total: number; passed: boolean; createdAt: Date; violations: number }
+  >();
 
   if (window.startAt && window.endAt) {
     const [pts, windowAttempts] = await Promise.all([
@@ -82,11 +87,12 @@ export default async function ExamPage() {
       }),
       prisma.examAttempt.findMany({
         where: { createdAt: { gte: window.startAt, lte: window.endAt } },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
       }),
     ]);
 
-    // Lần thi gần nhất trong kỳ của mỗi người
+    // Mỗi người chỉ thi một lần một kỳ. Dữ liệu cũ lỡ có hai bài thì lấy bài
+    // ĐẦU TIÊN — bài sau là lần thi thừa, không tính.
     for (const a of windowAttempts) {
       if (!attemptByUser.has(a.userId)) attemptByUser.set(a.userId, a);
     }
@@ -105,6 +111,7 @@ export default async function ExamPage() {
         scorePct: a && a.total > 0 ? Math.round((a.score / a.total) * 100) : 0,
         passed: a ? a.passed : false,
         takenAt: a ? a.createdAt.toISOString() : null,
+        violations: a?.violations ?? 0,
       };
     });
   }
@@ -126,6 +133,7 @@ export default async function ExamPage() {
       scorePct: a && a.total > 0 ? Math.round((a.score / a.total) * 100) : null,
       passed: a ? a.passed : false,
       takenAt: a ? a.createdAt.toISOString() : null,
+      violations: a?.violations ?? 0,
     };
   });
 
@@ -136,6 +144,7 @@ export default async function ExamPage() {
     total: a.total,
     passed: a.passed,
     createdAt: a.createdAt.toISOString(),
+    violations: a.violations,
     user: a.user,
   }));
 
@@ -151,6 +160,7 @@ export default async function ExamPage() {
         examStartTime: config.examStartTime,
         examEndTime: config.examEndTime,
         durationMinutes: config.durationMinutes,
+        focusPenaltyMinutes: config.focusPenaltyMinutes,
         rankWeightExam: config.rankWeightExam,
         rankWeightRevenue: config.rankWeightRevenue,
         rankWeightTransform: config.rankWeightTransform,

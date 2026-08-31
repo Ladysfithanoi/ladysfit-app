@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { GraduationCap, CalendarClock, Lock } from "lucide-react";
+import { GraduationCap, CalendarClock, Lock, CheckCircle2, EyeOff } from "lucide-react";
 import { fmtExamDate, type ExamWindowState } from "@/lib/exam-schedule";
 
 type ExamStatus = {
@@ -25,6 +25,8 @@ type ExamStatus = {
   passingScore: number;
   numQuestions: number;
   enableLevelSystem: boolean;
+  // Mỗi người chỉ thi một lần một kỳ — thi rồi thì không còn nút vào thi.
+  alreadyTaken: boolean;
   exam: {
     state: ExamWindowState;
     open: boolean;
@@ -32,6 +34,8 @@ type ExamStatus = {
     examDate: string | null;
     examStartTime: string;
     examEndTime: string;
+    durationMinutes: number;
+    focusPenaltyMinutes: number;
   };
 };
 
@@ -58,6 +62,8 @@ export function UpgradeCard() {
     examDate: null,
     examStartTime: "00:00",
     examEndTime: "23:59",
+    durationMinutes: 0,
+    focusPenaltyMinutes: 0,
   };
   const lastFailed = status.lastAttempt && !status.lastAttempt.passed;
   const currentLevelName = status.ptLevelName;
@@ -111,14 +117,35 @@ export function UpgradeCard() {
             </p>
           )}
 
-          {exam.open ? (
+          {/* Luật thi: mỗi người một lần, và rời trang là mất giờ */}
+          {exam.open && !status.alreadyTaken && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
+              <EyeOff className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-orange-700 leading-snug">
+                Mỗi người chỉ được thi <span className="font-extrabold">một lần duy nhất</span>.
+                {exam.focusPenaltyMinutes > 0 && (
+                  <> Rời khỏi trang thi bị trừ {exam.focusPenaltyMinutes} phút mỗi lần.</>
+                )}
+              </p>
+            </div>
+          )}
+
+          {status.alreadyTaken ? (
+            <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-emerald-700">
+                Bạn đã hoàn thành bài thi của kỳ này. Mỗi người chỉ thi một lần duy nhất nên
+                không vào thi lại được nữa.
+              </p>
+            </div>
+          ) : exam.open ? (
             <Link
               href="/dashboard/exam/take"
               className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white hover:opacity-90 transition-opacity"
               style={{ backgroundColor: "#f15b5c" }}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              {lastFailed ? "Thi lại ngay" : "Bắt đầu thi"}
+              Bắt đầu thi
             </Link>
           ) : (
             <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">

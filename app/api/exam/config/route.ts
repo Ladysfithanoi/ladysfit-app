@@ -35,6 +35,7 @@ export async function PUT(req: NextRequest) {
     examStartTime,
     examEndTime,
     durationMinutes,
+    focusPenaltyMinutes,
     rankWeightExam,
     rankWeightRevenue,
     rankWeightTransform,
@@ -108,6 +109,20 @@ export async function PUT(req: NextRequest) {
     nextDuration = n;
   }
 
+  // Phạt rời khỏi trang thi (phút mỗi lần). 0 = chỉ ghi nhận số lần, không trừ
+  // giờ. Trần 180 phút cho khỏi gõ nhầm thành con số vô nghĩa.
+  let nextFocusPenalty = config.focusPenaltyMinutes;
+  if (focusPenaltyMinutes !== undefined) {
+    const n = Number(focusPenaltyMinutes);
+    if (!Number.isInteger(n) || n < 0 || n > 180) {
+      return NextResponse.json(
+        { error: "Phạt rời trang phải là số phút từ 0 đến 180 (0 = không trừ giờ)" },
+        { status: 400 }
+      );
+    }
+    nextFocusPenalty = n;
+  }
+
   if (nextEnabled && !nextDate) {
     return NextResponse.json({ error: "Cần chọn ngày thi khi bật lịch thi" }, { status: 400 });
   }
@@ -123,6 +138,7 @@ export async function PUT(req: NextRequest) {
       examStartTime: nextStart,
       examEndTime: nextEnd,
       durationMinutes: nextDuration,
+      focusPenaltyMinutes: nextFocusPenalty,
       rankWeightExam: weights.exam,
       rankWeightRevenue: weights.revenue,
       rankWeightTransform: weights.transform,

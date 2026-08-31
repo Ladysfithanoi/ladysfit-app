@@ -23,6 +23,7 @@ import {
   FlaskConical,
   ShieldCheck,
   Search,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -54,6 +55,7 @@ type Config = {
   examStartTime: string;
   examEndTime: string;
   durationMinutes: number;
+  focusPenaltyMinutes: number;
   rankWeightExam: number;
   rankWeightRevenue: number;
   rankWeightTransform: number;
@@ -70,6 +72,8 @@ type RosterRow = {
   scorePct: number;
   passed: boolean;
   takenAt: string | null;
+  /** Số lần rời khỏi trang thi trong lúc làm bài. */
+  violations: number;
 };
 
 // FM bắt buộc thi: Admin tick tên ai phải làm bài. Điểm chỉ để nắm chuyên môn
@@ -85,6 +89,7 @@ type FMRow = {
   scorePct: number | null;
   passed: boolean;
   takenAt: string | null;
+  violations: number;
 };
 
 type Attempt = {
@@ -94,6 +99,8 @@ type Attempt = {
   total: number;
   passed: boolean;
   createdAt: string;
+  /** Số lần rời khỏi trang thi trong lúc làm bài. */
+  violations: number;
   user: { id: string; name: string | null; email: string; role: string };
 };
 
@@ -165,7 +172,8 @@ export function ExamAdminPage({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("bank");
   const [questions, setQuestions] = useState(initialQuestions);
-  const [attempts] = useState(initialAttempts);
+  const [attempts, setAttempts] = useState(initialAttempts);
+  const [deletingAttemptId, setDeletingAttemptId] = useState<string | null>(null);
 
   // Question form state
   const [showAdd, setShowAdd] = useState(false);
@@ -214,6 +222,7 @@ export function ExamAdminPage({
     examStartTime: initialConfig.examStartTime,
     examEndTime: initialConfig.examEndTime,
     durationMinutes: String(initialConfig.durationMinutes ?? 0),
+    focusPenaltyMinutes: String(initialConfig.focusPenaltyMinutes ?? 0),
   });
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [scheduleSaved, setScheduleSaved] = useState(false);
@@ -387,6 +396,7 @@ export function ExamAdminPage({
           examStartTime: scheduleForm.examStartTime,
           examEndTime: scheduleForm.examEndTime,
           durationMinutes: Number(scheduleForm.durationMinutes || 0),
+          focusPenaltyMinutes: Number(scheduleForm.focusPenaltyMinutes || 0),
         }),
       });
       const data = await res.json();
@@ -400,12 +410,45 @@ export function ExamAdminPage({
         examStartTime: data.examStartTime,
         examEndTime: data.examEndTime,
         durationMinutes: String(data.durationMinutes ?? 0),
+        focusPenaltyMinutes: String(data.focusPenaltyMinutes ?? 0),
       });
       setScheduleSaved(true);
       setTimeout(() => setScheduleSaved(false), 2000);
       router.refresh();
     } finally {
       setScheduleSaving(false);
+    }
+  }
+
+  /**
+   * Xoá một bài thi — đây cũng là cách CHO THI LẠI.
+   *
+   * Mỗi người chỉ thi một lần một kỳ, khoá nằm ở lượt thi phía server. Xoá bài
+   * là xoá luôn lượt, nên người đó vào thi lại được (miễn còn trong khung giờ).
+   * Bài đã kéo theo thăng cấp thì xoá bài KHÔNG hạ cấp lại — phải sửa tay ở
+   * trang Cấp độ.
+   */
+  async function handleDeleteAttempt(a: Attempt) {
+    const who = a.user.name ?? a.user.email;
+    if (
+      !confirm(
+        `Xoá bài thi của ${who} (${a.score}/${a.total})?
+
+` +
+          "Bài thi và thông báo thăng cấp đi kèm sẽ bị xoá, và người này được vào thi lại " +
+          "nếu kỳ thi còn mở. Không hoàn tác được."
+      )
+    )
+      return;
+    setDeletingAttemptId(a.id);
+    try {
+      const res = await fetch(`/api/exam/attempts/${a.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setAttempts((prev) => prev.filter((x) => x.id !== a.id));
+        router.refresh();
+      }
+    } finally {
+      setDeletingAttemptId(null);
     }
   }
 
@@ -773,6 +816,46 @@ export function ExamAdminPage({
                 )}
               </div>
 
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-sm font-bold text-gray-700">
+                  <EyeOff className="w-3.5 h-3.5 text-gray-400" />
+                  Phạt rời khỏi trang thi (phút)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={180}
+                  value={scheduleForm.focusPenaltyMinutes}
+                  onChange={(e) =>
+                    setScheduleForm((prev) => ({ ...prev, focusPenaltyMinutes: e.target.value }))
+                  }
+                  className="w-full h-11 rounded-xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50"
+                />
+                <p className="text-xs text-gray-400">
+                  Mỗi lần thí sinh chuyển sang tab khác, mở cửa sổ khác hay thu nhỏ trình duyệt
+                  để đọc tài liệu thì bị trừ bấy nhiêu phút vào thời gian làm bài của chính họ.
+                  Trừ ở máy chủ nên tắt mạng, sửa giờ máy hay tải lại trang đều không gỡ được.
+                  Đặt 0 = chỉ đếm số lần rời trang cho Admin xem, không trừ giờ.
+                </p>
+                {Number(scheduleForm.focusPenaltyMinutes || 0) > 0 &&
+                  Number(scheduleForm.durationMinutes || 0) === 0 && (
+                    <p className="flex items-start gap-1.5 text-xs font-semibold text-amber-600">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                      Chưa đặt thời lượng thi thì không có giờ nào để trừ — hệ thống chỉ đếm số
+                      lần rời trang. Đặt thời lượng ở ô trên để hình phạt có hiệu lực.
+                    </p>
+                  )}
+              </div>
+
+              <div className="flex items-start gap-2 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+                <ShieldCheck className="w-4 h-4 text-gray-400 shrink-0 mt-px" />
+                <p className="text-xs font-semibold text-gray-500 leading-snug">
+                  Mỗi người chỉ được thi MỘT lần mỗi kỳ — nộp bài xong là khoá, tải lại trang
+                  cũng ra đúng đề cũ và đúng thời gian còn lại. Cần cho ai thi lại thì xoá bài
+                  của họ ở tab Kết quả thi.
+                </p>
+              </div>
+
               {scheduleError && (
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-red-500">
                   <AlertCircle className="w-4 h-4" />
@@ -837,7 +920,7 @@ export function ExamAdminPage({
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-50 bg-gray-50/50">
-                        {["HLV", "Cấp độ", "Điểm", "Kết quả", "Thời gian thi"].map((h, i) => (
+                        {["HLV", "Cấp độ", "Điểm", "Kết quả", "Rời trang", "Thời gian thi"].map((h, i) => (
                           <th
                             key={h}
                             className={cn(
@@ -909,6 +992,21 @@ export function ExamAdminPage({
                                 "Chưa thi"
                               )}
                             </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            {r.violations > 0 ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-50 text-red-500"
+                                title="Số lần rời khỏi trang thi trong lúc làm bài"
+                              >
+                                <EyeOff className="w-3 h-3" />
+                                {r.violations}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300 font-semibold">
+                                {r.takenAt ? "0" : "—"}
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-3.5 text-center">
                             <span className="text-xs text-gray-400 font-medium">
@@ -1256,9 +1354,9 @@ export function ExamAdminPage({
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-50 bg-gray-50/50">
-                    {["PT", "Cấp độ", "Điểm", "Kết quả", "Thời gian"].map((h, i) => (
+                    {["PT", "Cấp độ", "Điểm", "Kết quả", "Rời trang", "Thời gian", ""].map((h, i) => (
                       <th
-                        key={h}
+                        key={h || "actions"}
                         className={cn(
                           "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
                           i === 0 ? "text-left" : "text-center"
@@ -1303,9 +1401,33 @@ export function ExamAdminPage({
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-center">
+                          {a.violations > 0 ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-50 text-red-500"
+                              title="Số lần rời khỏi trang thi trong lúc làm bài"
+                            >
+                              <EyeOff className="w-3 h-3" />
+                              {a.violations}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300 font-semibold">0</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
                           <span className="text-xs text-gray-400 font-medium">
                             {fmtDateTime(date)}
                           </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <button
+                            onClick={() => handleDeleteAttempt(a)}
+                            disabled={deletingAttemptId === a.id}
+                            title="Xoá bài thi này — người này được vào thi lại"
+                            className="p-1.5 rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 disabled:opacity-40 transition-colors"
+                            aria-label="Xoá bài thi"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     );

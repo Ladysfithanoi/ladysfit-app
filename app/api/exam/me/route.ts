@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { isRequiredExamFM } from "@/lib/exam-required-fm";
+import { hasTakenExam } from "@/lib/exam-session";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -41,6 +42,10 @@ export async function GET() {
     examEndTime: config?.examEndTime ?? "23:59",
   });
 
+  // Mỗi người chỉ thi một lần một kỳ — thi rồi thì thẻ mời thi đổi thành lời
+  // nhắn "đã hoàn thành" thay vì nút Thi lại. Xem lib/exam-session.ts.
+  const alreadyTaken = await hasTakenExam(userId, config?.examDate ?? null, examWindow);
+
   // Next level above the PT's current level
   const nextLevel = user?.ptLevel
     ? allLevels.find((l) => l.order > user.ptLevel!.order) ?? null
@@ -72,6 +77,8 @@ export async function GET() {
     passingScore,
     numQuestions,
     enableLevelSystem,
+    // Đã thi kỳ này rồi, không vào thi lại được nữa.
+    alreadyTaken,
     // FM bắt buộc thi: làm cùng đề với HLV nhưng điểm chỉ để Admin nắm trình
     // độ — trượt không bị phạt, không ảnh hưởng cấp bậc.
     isRequiredFM: requiredFM,
@@ -82,6 +89,8 @@ export async function GET() {
       examDate: config?.examDate ?? null,
       examStartTime: config?.examStartTime ?? "00:00",
       examEndTime: config?.examEndTime ?? "23:59",
+      durationMinutes: config?.durationMinutes ?? 0,
+      focusPenaltyMinutes: config?.focusPenaltyMinutes ?? 0,
     },
   });
 }

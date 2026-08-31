@@ -4,8 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { tryPromotePt } from "@/lib/pt-promotion";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
-import { verifyExamTicket } from "@/lib/exam-ticket";
 import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
+import {
+  ALREADY_TAKEN_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  sessionDeadline,
+} from "@/lib/exam-session";
+import { TICKET_GRACE_MS, verifyExamTicket } from "@/lib/exam-ticket";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -72,12 +77,58 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: window.message }, { status: 403 });
   }
 
-  // Hết thời lượng làm bài thì không nộp được nữa. Hạn nằm trong tấm vé đã ký
-  // lúc mở đề nên người thi không tự nới ra được — xem lib/exam-ticket.ts.
-  if ((config?.durationMinutes ?? 0) > 0) {
+  // ── Mỗi người chỉ thi một lần một kỳ ────────────────────────────────────
+  // Lượt thi được "giành" bằng một lệnh update có điều kiện submittedAt = null:
+  // bấm Nộp bài hai lần, hoặc hết giờ tự nộp trùng lúc người thi bấm nộp, thì
+  // chỉ một lệnh đi qua được. Xem lib/exam-session.ts.
+  const examKey = config?.examDate ?? null;
+  const examSession = examKey
+    ? await prisma.examSession.findUnique({
+        where: { userId_examKey: { userId: session.user.id, examKey } },
+      })
+    : null;
+
+  if (examSession?.submittedAt) {
+    return NextResponse.json({ error: ALREADY_TAKEN_MESSAGE }, { status: 403 });
+  }
+
+  // Không có lượt thi (bài mở dở từ trước khi có bảng exam_sessions) thì tra
+  // thẳng lịch sử: đã có bài trong kỳ là đã thi rồi.
+  if (!examSession && window.startAt && window.endAt) {
+    const prior = await prisma.examAttempt.count({
+      where: {
+        userId: session.user.id,
+        createdAt: { gte: window.startAt, lte: window.endAt },
+      },
+    });
+    if (prior > 0) {
+      return NextResponse.json({ error: ALREADY_TAKEN_MESSAGE }, { status: 403 });
+    }
+  }
+
+  // Hết thời lượng làm bài thì không nộp được nữa. Mốc hết giờ tính ở server
+  // từ lúc mở đề, đã trừ phạt rời trang — người thi không nới ra được. Bài mở
+  // dở từ trước khi có lượt thi thì vẫn kiểm bằng tấm vé đã ký (exam-ticket).
+  if (examSession) {
+    const deadline = sessionDeadline(examSession, window.endAt);
+    if (deadline && Date.now() > deadline.getTime() + TICKET_GRACE_MS) {
+      return NextResponse.json({ error: SESSION_EXPIRED_MESSAGE }, { status: 403 });
+    }
+  } else if ((config?.durationMinutes ?? 0) > 0) {
     const check = verifyExamTicket(examToken, { userId: session.user.id, mock: false });
     if (!check.ok) {
       return NextResponse.json({ error: check.error }, { status: 403 });
+    }
+  }
+
+  // Chốt lượt thi TRƯỚC khi chấm: ai giành được mới được ghi bài.
+  if (examSession) {
+    const claimed = await prisma.examSession.updateMany({
+      where: { id: examSession.id, submittedAt: null },
+      data: { submittedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: ALREADY_TAKEN_MESSAGE }, { status: 403 });
     }
   }
 
@@ -103,8 +154,17 @@ export async function POST(req: NextRequest) {
       total,
       passed,
       answers: JSON.stringify(answers),
+      // Số lần rời khỏi trang thi — giữ lại trong bài để Admin xem về sau.
+      violations: examSession?.violations ?? 0,
     },
   });
+
+  if (examSession) {
+    await prisma.examSession.update({
+      where: { id: examSession.id },
+      data: { attemptId: attempt.id },
+    });
+  }
 
   const userName = session.user.name ?? session.user.email ?? "PT";
 

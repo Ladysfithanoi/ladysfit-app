@@ -57,6 +57,7 @@ model User {
   workoutPrograms       WorkoutProgram[]
   workoutLogs           WorkoutLog[]
   examAttempts          ExamAttempt[]
+  examSessions          ExamSession[]
   examRequirement       ExamRequiredFM?      @relation("RequiredExamFM")
   upgradeNotifications  UpgradeNotification[]
   mealPlans             MealPlan[]
@@ -659,6 +660,11 @@ model ExamConfig {
   // trên: khung giờ là lúc phòng thi MỞ CỬA, còn đây là thời gian mỗi thí sinh
   // được ngồi làm kể từ lúc mở đề. 0 = không giới hạn.
   durationMinutes  Int      @default(0)
+  // Phạt rời khỏi trang thi: mỗi lần thí sinh chuyển tab / thu nhỏ trình duyệt
+  // để đi đọc tài liệu thì bị trừ bấy nhiêu phút vào thời lượng làm bài của
+  // chính họ. 0 = tắt (chỉ ghi nhận số lần rời trang, không trừ giờ). Chỉ có
+  // tác dụng khi durationMinutes > 0, vì không có đồng hồ thì không trừ được gì.
+  focusPenaltyMinutes Int   @default(30)
   // Trọng số (%) 3 tiêu chí của bảng xếp hạng — tổng phải bằng 100
   rankWeightExam      Int   @default(30)
   rankWeightRevenue   Int   @default(40)
@@ -676,10 +682,52 @@ model ExamAttempt {
   passed    Boolean
   answers   String   @db.Text
   createdAt DateTime @default(now())
+  // Số lần thí sinh rời khỏi trang thi trong lượt này — chép lại từ ExamSession
+  // lúc nộp bài để Admin còn xem được sau khi kỳ thi đã đóng.
+  violations Int      @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("exam_attempts")
+}
+
+// Một LƯỢT THI = một người × một kỳ thi (khoá theo ngày thi trong ExamConfig).
+//
+// Sinh ra để làm ba việc mà chỉ nhìn vào exam_attempts thì không làm được:
+//
+//  1. Mỗi người chỉ thi MỘT lần một kỳ. Nộp xong là submittedAt có giá trị,
+//     mở lại đề là bị chặn. Admin muốn cho ai thi lại thì xoá bài của họ ở tab
+//     Kết quả thi — xoá bài là xoá luôn lượt, khoá tự mở.
+//  2. Tải lại trang không đổi được đề, cũng không xin thêm được giờ: đề đã bốc
+//     nằm trong questionIds, mốc hết giờ tính từ startedAt nên F5 bao nhiêu lần
+//     cũng ra đúng đề cũ và đúng thời gian còn lại.
+//  3. Ghi phạt rời trang. Client báo về mỗi lần thí sinh chuyển tab, server
+//     cộng vào penaltyMinutes — trừ ở server nên sửa giờ máy hay chặn JS cũng
+//     không gỡ được. Xem app/api/exam/violation.
+model ExamSession {
+  id              String    @id @default(cuid())
+  userId          String
+  /// Khoá kỳ thi — chính là examDate ("YYYY-MM-DD") lúc mở đề.
+  examKey         String
+  /// JSON mảng id câu hỏi đã bốc, giữ đúng thứ tự hiển thị.
+  questionIds     String    @db.Text
+  /// Thời lượng (phút) chốt lúc mở đề. 0 = không giới hạn.
+  durationMinutes Int       @default(0)
+  startedAt       DateTime  @default(now())
+  /// Tổng số phút đã bị trừ vì rời trang.
+  penaltyMinutes  Int       @default(0)
+  /// Số lần rời trang.
+  violations      Int       @default(0)
+  lastViolationAt DateTime?
+  /// Có giá trị = đã nộp bài, không vào thi lại được nữa.
+  submittedAt     DateTime?
+  attemptId       String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, examKey])
+  @@index([examKey])
+  @@map("exam_sessions")
 }
 
 // FM bắt buộc thi — Admin chỉ định trong tab Lịch thi. FM có tên ở đây vào thi

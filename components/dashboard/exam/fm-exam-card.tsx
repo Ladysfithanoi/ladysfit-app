@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ClipboardCheck, CalendarClock, Lock, ShieldCheck } from "lucide-react";
+import { ClipboardCheck, CalendarClock, Lock, ShieldCheck, CheckCircle2, EyeOff } from "lucide-react";
 import { fmtExamDate, type ExamWindowState } from "@/lib/exam-schedule";
 
 /**
@@ -20,6 +20,8 @@ type ExamStatus = {
   isRequiredFM: boolean;
   passingScore: number;
   numQuestions: number;
+  // Mỗi người chỉ thi một lần một kỳ — thi rồi thì không còn nút vào thi.
+  alreadyTaken: boolean;
   lastAttempt: {
     score: number;
     total: number;
@@ -33,6 +35,8 @@ type ExamStatus = {
     examDate: string | null;
     examStartTime: string;
     examEndTime: string;
+    durationMinutes: number;
+    focusPenaltyMinutes: number;
   };
 };
 
@@ -96,13 +100,32 @@ export function FMExamCard() {
             </p>
           )}
 
-          {exam.open ? (
+          {exam.open && !status.alreadyTaken && (
+            <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
+              <EyeOff className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-orange-700 leading-snug">
+                Mỗi người chỉ được làm <span className="font-extrabold">một lần duy nhất</span>.
+                {exam.focusPenaltyMinutes > 0 && (
+                  <> Rời khỏi trang thi bị trừ {exam.focusPenaltyMinutes} phút mỗi lần.</>
+                )}
+              </p>
+            </div>
+          )}
+
+          {status.alreadyTaken ? (
+            <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-emerald-700">
+                Bạn đã hoàn thành bài kiểm tra của kỳ này.
+              </p>
+            </div>
+          ) : exam.open ? (
             <Link
               href="/dashboard/exam/take"
               className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-500 text-xs font-bold text-white hover:opacity-90 transition-opacity"
             >
               <ClipboardCheck className="w-3.5 h-3.5" />
-              {last ? "Làm lại bài kiểm tra" : "Bắt đầu làm bài"}
+              Bắt đầu làm bài
             </Link>
           ) : (
             <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">

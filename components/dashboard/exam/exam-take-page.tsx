@@ -13,6 +13,8 @@ import {
   Timer,
   ShieldCheck,
   X,
+  AlertTriangle,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -38,6 +40,13 @@ type ExamResult = {
 };
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
+
+/**
+ * Sau khi báo một lần rời trang thì nghỉ bấy nhiêu mili giây mới báo tiếp.
+ * Một lần alt-tab thường bắn cả 'blur' lẫn 'visibilitychange'; server cũng gộp
+ * lại bằng khoảng tương đương (VIOLATION_DEBOUNCE_MS trong lib/exam-session).
+ */
+const VIOLATION_COOLDOWN_MS = 6_000;
 
 /** Mili giây → "MM:SS" (hoặc "H:MM:SS" khi thời lượng dài hơn một tiếng). */
 function fmtClock(ms: number): string {
@@ -160,6 +169,16 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   // Nói rõ ngay trên đề để người thi không tưởng mình đang bị đem ra đánh giá.
   const [noPenalty, setNoPenalty] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  // ── Chống ra ngoài đọc tài liệu ──────────────────────────────────────────
+  // Số phút bị trừ mỗi lần rời khỏi trang thi (0 = kỳ thi này không phạt), số
+  // lần đã rời và tổng số phút đã mất. Server giữ con số thật; ở đây chỉ hiển thị.
+  const [focusPenaltyMinutes, setFocusPenaltyMinutes] = useState(0);
+  const [violations, setViolations] = useState(0);
+  const [penaltyMinutes, setPenaltyMinutes] = useState(0);
+  // Vừa bị bắt rời trang — hiện hộp thoại báo ngay khi người thi quay lại.
+  const [penaltyNotice, setPenaltyNotice] = useState<{ minutes: number; times: number } | null>(null);
+  // Mở lại đề đang làm dở: đề cũ, đồng hồ cũ, không phải bài mới.
+  const [resumed, setResumed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<ExamResult | null>(null);
@@ -184,6 +203,8 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
 
   // Bảng theo dõi câu hỏi bấm vào là nhảy tới đúng thẻ câu đó.
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Đang gửi báo cáo rời trang — chặn đếm trùng một lần alt-tab.
+  const reportingRef = useRef(false);
 
   useEffect(() => {
     async function loadExam() {
@@ -200,6 +221,10 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
         setScheduleNote(data.scheduleNote ?? "");
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
+        setFocusPenaltyMinutes(data.focusPenaltyMinutes ?? 0);
+        setViolations(data.violations ?? 0);
+        setPenaltyMinutes(data.penaltyMinutes ?? 0);
+        setResumed(!!data.resumed);
         if (data.endsAt) {
           const deadline = new Date(data.endsAt).getTime();
           setEndsAt(deadline);
@@ -272,6 +297,72 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endsAt, result, questions, answers, examToken]);
+
+  // ── Bắt quả tang rời khỏi trang thi ─────────────────────────────────────
+  // Hai nguồn tín hiệu, vì mỗi cái bắt thiếu một kiểu:
+  //   • visibilitychange: chuyển tab, thu nhỏ trình duyệt, khoá màn hình điện thoại.
+  //   • blur cửa sổ: mở CỬA SỔ khác (Word, PDF, Zalo) đè lên trong khi tab vẫn hiện.
+  // Bấm play video minh hoạ trong đề cũng làm cửa sổ mất tiêu điểm — nhưng lúc
+  // đó activeElement là chính cái iframe của trang, nên bỏ qua, không tính phạt.
+  //
+  // Trừ giờ là việc của server (app/api/exam/violation); ở đây chỉ báo về rồi
+  // nhận lại mốc hết giờ mới, nên tắt JS hay sửa giờ máy cũng không gỡ được.
+  useEffect(() => {
+    if (mock || result || questions.length === 0 || focusPenaltyMinutes <= 0) return;
+
+    async function report() {
+      if (reportingRef.current || submitLock.current) return;
+      reportingRef.current = true;
+      try {
+        // keepalive: rời trang xong đóng luôn tab thì yêu cầu vẫn tới được server.
+        const res = await fetch("/api/exam/violation", { method: "POST", keepalive: true });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.counted) return;
+        setViolations(data.violations ?? 0);
+        setPenaltyMinutes(data.penaltyMinutes ?? 0);
+        if (data.endsAt) setEndsAt(new Date(data.endsAt).getTime());
+        setPenaltyNotice({
+          minutes: data.lastPenaltyMinutes ?? 0,
+          times: data.violations ?? 0,
+        });
+      } catch {
+        // Mạng chập lúc đó thì thôi — không chặn người thi làm tiếp.
+      } finally {
+        setTimeout(() => {
+          reportingRef.current = false;
+        }, VIOLATION_COOLDOWN_MS);
+      }
+    }
+
+    function onVisibility() {
+      if (document.hidden) report();
+    }
+    function onBlur() {
+      if (document.activeElement?.tagName === "IFRAME") return;
+      report();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [mock, result, questions.length, focusPenaltyMinutes]);
+
+  // Đóng tab / F5 giữa chừng thì hỏi lại một câu. Tải lại không bốc được đề mới
+  // và cũng không được cấp thêm giờ, nhưng người thi không biết điều đó nên cứ
+  // nhắc — đỡ một phen hoảng.
+  useEffect(() => {
+    if (mock || result || questions.length === 0) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [mock, result, questions.length]);
 
   function goToQuestion(id: string) {
     cardRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -355,6 +446,51 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
             Bạn được chỉ định làm bài kiểm tra này. Điểm chỉ để ban quản lý nắm chuyên môn
             của bạn — không đạt cũng không bị phạt, không ảnh hưởng chức vụ hay lương
             thưởng. Cứ làm thoải mái.
+          </p>
+        </div>
+      )}
+
+      {/* Luật rời trang — nói trước khi người ta lỡ tay, không phải sau. */}
+      {!mock && !result && focusPenaltyMinutes > 0 && (
+        <div
+          className={cn(
+            "flex items-start gap-2 px-4 py-2.5 mb-4 rounded-xl border",
+            violations > 0 ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-100"
+          )}
+        >
+          <EyeOff
+            className={cn(
+              "w-4 h-4 shrink-0 mt-px",
+              violations > 0 ? "text-red-500" : "text-orange-500"
+            )}
+          />
+          <div className="min-w-0">
+            <p
+              className={cn(
+                "text-xs font-bold leading-snug",
+                violations > 0 ? "text-red-700" : "text-orange-700"
+              )}
+            >
+              Không được rời khỏi trang thi. Mỗi lần chuyển sang tab khác, mở cửa sổ khác hay
+              thu nhỏ trình duyệt sẽ bị trừ thẳng {focusPenaltyMinutes} phút vào thời gian làm
+              bài của bạn.
+            </p>
+            {violations > 0 && (
+              <p className="mt-1 text-xs font-extrabold text-red-600">
+                Bạn đã rời trang {violations} lần — đã bị trừ {penaltyMinutes} phút.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mở lại đề đang làm dở — nói rõ để khỏi tưởng mình được thi lại. */}
+      {resumed && !result && (
+        <div className="flex items-start gap-2 px-4 py-2.5 mb-4 rounded-xl bg-gray-50 border border-gray-200">
+          <Timer className="w-4 h-4 text-gray-400 shrink-0 mt-px" />
+          <p className="text-xs font-semibold text-gray-600 leading-snug">
+            Đây là bài thi bạn đang làm dở — vẫn đúng đề cũ và đồng hồ chạy tiếp từ lúc bạn
+            mở đề. Tải lại trang không đổi được đề, cũng không được cộng thêm giờ.
           </p>
         </div>
       )}
@@ -574,7 +710,57 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
           {remainingMs != null && (
             <span className="border-l border-white/40 pl-2 tabular-nums">{fmtClock(remainingMs)}</span>
           )}
+          {violations > 0 && (
+            <span className="flex items-center gap-1 border-l border-white/40 pl-2 tabular-nums">
+              <EyeOff className="h-3.5 w-3.5" />
+              {violations}
+            </span>
+          )}
         </button>
+      )}
+
+      {/* ── Vừa bị bắt rời trang ── */}
+      {penaltyNotice && !result && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-red-50 px-6 py-7 text-center">
+              <AlertTriangle className="mx-auto mb-3 h-12 w-12 text-red-500" />
+              <p className="text-lg font-extrabold text-red-700">Bạn vừa rời khỏi trang thi</p>
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                {penaltyNotice.minutes > 0 ? (
+                  <>
+                    Thời gian làm bài của bạn bị trừ{" "}
+                    <span className="font-extrabold text-red-600">
+                      {penaltyNotice.minutes} phút
+                    </span>
+                    .
+                  </>
+                ) : (
+                  "Hệ thống đã ghi nhận lần rời trang này."
+                )}
+              </p>
+              <p className="mt-1 text-xs font-bold text-gray-500">
+                Đây là lần thứ {penaltyNotice.times}. Tổng đã bị trừ {penaltyMinutes} phút.
+              </p>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-xs font-semibold text-gray-500 leading-snug">
+                Hãy ở nguyên trên trang thi cho tới khi nộp bài. Mỗi lần rời trang tiếp theo
+                vẫn bị trừ {focusPenaltyMinutes} phút.
+              </p>
+              <button
+                onClick={() => setPenaltyNotice(null)}
+                className="mt-4 h-11 w-full rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                Tôi đã hiểu, làm bài tiếp
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {trackerOpen && !result && (
