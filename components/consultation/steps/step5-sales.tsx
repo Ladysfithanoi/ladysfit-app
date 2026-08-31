@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Package, Clock, ChevronRight } from "lucide-react";
+import { Check, Package, Clock, ChevronRight, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import type { ConsultationData } from "../consultation-wizard";
@@ -11,6 +11,7 @@ import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
 import { BodyFatCard } from "./body-fat-card";
 import { TransformGallery } from "./transform-gallery";
+import { RoadmapBuilderModal } from "./roadmap-builder-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -361,10 +362,23 @@ export function Step5Sales({
   const [saving, setSaving]             = useState(false);
   const [detailPkg, setDetailPkg]       = useState<string | null>(null);
   const [showCatalog, setShowCatalog]   = useState(false);
+  // Bậc thang 3 giai đoạn — tự ghép gói thay vì lấy nguyên một trong 3 option.
+  const [showRoadmapBuilder, setShowRoadmapBuilder] = useState(false);
 
   function selectOption(opt: RoadmapOption) {
     setSelectedOptionNum(opt.num);
     setPackages(opt.packages);
+  }
+
+  /**
+   * Nhận lộ trình tự vẽ từ modal bậc thang. Gói đã xếp sẵn theo thứ tự Giai
+   * đoạn 1 → 3, đánh lại số order và coi như đã chốt. Bỏ đánh dấu option vì
+   * lộ trình này không còn là một trong 3 mẫu dựng tự động nữa.
+   */
+  function applyCustomRoadmap(keys: string[]) {
+    setPackages(keys.map((key, i) => makePkg(key, i + 1)));
+    setSelectedOptionNum(null);
+    setShowRoadmapBuilder(false);
   }
 
   function toggleConfirm(i: number) {
@@ -551,7 +565,27 @@ export function Step5Sales({
         {/* Body fat + Transform Gallery */}
         <div className="border-t border-gray-50">
           <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
-            <BodyFatCard info={info} />
+            <div className="min-w-0">
+              {/* Lối vào bậc thang 3 giai đoạn — nằm ngay trên Body Shape Goal */}
+              <div className="px-5 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowRoadmapBuilder(true)}
+                  className="flex items-center gap-2 group"
+                  title="Vẽ lộ trình tập theo 3 giai đoạn"
+                >
+                  <Route className="w-4 h-4 text-[#f15b5c]" />
+                  <span className="text-sm font-extrabold text-gray-800 group-hover:text-[#f15b5c] group-hover:underline transition-colors">
+                    Vẽ lộ trình tập
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#f15b5c] transition-colors" />
+                </button>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Bậc thang 3 giai đoạn — ghép gói vào từng bậc và xem tổng thời lượng
+                </p>
+              </div>
+              <BodyFatCard info={info} />
+            </div>
             <TransformGallery />
           </div>
         </div>
@@ -698,6 +732,16 @@ export function Step5Sales({
       )}
 
       {showCatalog && <PackagesCatalogModal onClose={() => setShowCatalog(false)} />}
+
+      {showRoadmapBuilder && (
+        <RoadmapBuilderModal
+          info={info}
+          packageNames={packages.map((p) => p.packageName)}
+          isReadOnly={isReadOnly}
+          onClose={() => setShowRoadmapBuilder(false)}
+          onApply={applyCustomRoadmap}
+        />
+      )}
     </>
   );
 }
