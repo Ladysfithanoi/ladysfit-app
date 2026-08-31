@@ -162,6 +162,72 @@ export default async function ExamPage() {
     };
   });
 
+  // Quyền vào thi từng người — Admin mở / khoá / gia hạn / cho thi lại ngay
+  // trong tab Lịch thi, khỏi phải nhờ sửa cơ sở dữ liệu.
+  let accessRows: {
+    userId: string;
+    name: string | null;
+    email: string;
+    role: string;
+    branchName: string | null;
+    blocked: boolean;
+    startedAt: string | null;
+    endsAt: string | null;
+    submittedAt: string | null;
+    savedCount: number;
+    scorePct: number | null;
+    passed: boolean;
+    takenAt: string | null;
+  }[] = [];
+
+  if (config.examDate) {
+    const [staff, sessions, blocks] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          OR: [{ role: "PT" }, { role: "FM", examRequirement: { isNot: null } }],
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          branch: { select: { name: true } },
+        },
+        orderBy: [{ role: "asc" }, { name: "asc" }],
+      }),
+      prisma.examSession.findMany({ where: { examKey: config.examDate } }),
+      prisma.examBlock.findMany({
+        where: { examKey: config.examDate },
+        select: { userId: true },
+      }),
+    ]);
+
+    const sessionByUser = new Map(sessions.map((s) => [s.userId, s]));
+    const blockedIds = new Set(blocks.map((b) => b.userId));
+
+    accessRows = staff.map((u) => {
+      const s = sessionByUser.get(u.id);
+      const a = attemptByUser.get(u.id);
+      const deadline = s ? sessionDeadline(s, window.endAt) : null;
+      return {
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        branchName: u.branch?.name ?? null,
+        blocked: blockedIds.has(u.id),
+        startedAt: s ? s.startedAt.toISOString() : null,
+        endsAt: deadline ? deadline.toISOString() : null,
+        submittedAt: s?.submittedAt ? s.submittedAt.toISOString() : null,
+        savedCount: s ? Object.keys(parseAnswers(s.answers)).length : 0,
+        scorePct: a && a.total > 0 ? Math.round((a.score / a.total) * 100) : null,
+        passed: a ? a.passed : false,
+        takenAt: a ? a.createdAt.toISOString() : null,
+      };
+    });
+  }
+
   const serializedAttempts = attempts.map((a) => ({
     id: a.id,
     userId: a.userId,
@@ -195,6 +261,7 @@ export default async function ExamPage() {
       roster={roster}
       fms={fms}
       pendingGradeCount={pendingGradeCount}
+      accessRows={accessRows}
     />
   );
 }

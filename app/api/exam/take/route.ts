@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { signExamTicket } from "@/lib/exam-ticket";
-import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
+import { checkCanSitExam } from "@/lib/exam-required-fm";
 import {
   ALREADY_TAKEN_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
@@ -31,11 +31,11 @@ export async function GET(req: Request) {
     if (role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-  } else if (!(await canSitExam(userId, role))) {
-    return NextResponse.json(
-      { error: role === "FM" ? NOT_REQUIRED_MESSAGE : "Forbidden" },
-      { status: 403 }
-    );
+  } else {
+    const allowed = await checkCanSitExam(userId, role);
+    if (!allowed.ok) {
+      return NextResponse.json({ error: allowed.message }, { status: 403 });
+    }
   }
 
   // Bài của FM chỉ để ghi nhận trình độ — báo cho trang làm bài biết để nói rõ

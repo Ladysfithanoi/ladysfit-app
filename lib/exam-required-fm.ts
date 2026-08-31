@@ -18,13 +18,45 @@ export async function isRequiredExamFM(userId: string): Promise<boolean> {
   return !!row;
 }
 
-/** Người này có được vào làm bài thi thật không. */
-export async function canSitExam(userId: string, role: string): Promise<boolean> {
-  if (role === "PT") return true;
-  if (role === "FM") return isRequiredExamFM(userId);
-  return false;
-}
-
 /** Thông báo khi FM không nằm trong danh sách bắt buộc thi. */
 export const NOT_REQUIRED_MESSAGE =
   "Bạn không nằm trong danh sách bắt buộc thi của kỳ thi này.";
+
+/** Thông báo khi Admin đã khoá quyền vào thi của người này. */
+export const BLOCKED_MESSAGE =
+  "Quản lý đã khoá quyền vào thi của bạn cho kỳ thi này. Liên hệ quản lý nếu cần mở lại.";
+
+/**
+ * Admin có đang khoá quyền vào thi của người này không.
+ *
+ * Khoá gắn với TỪNG KỲ (examKey là ngày thi) nên sang kỳ mới là hết hiệu lực.
+ * Bảng bật/tắt nằm ở tab Lịch thi — xem app/api/exam/access.
+ */
+export async function isExamBlocked(userId: string): Promise<boolean> {
+  const config = await prisma.examConfig.findFirst({ select: { examDate: true } });
+  const examKey = config?.examDate ?? null;
+  if (!examKey) return false;
+  const row = await prisma.examBlock.findUnique({
+    where: { userId_examKey: { userId, examKey } },
+  });
+  return !!row;
+}
+
+export type SitCheck = { ok: true } | { ok: false; message: string };
+
+/**
+ * Người này có được vào làm bài thi thật không, và nếu không thì vì sao.
+ *
+ * Ba cửa, theo thứ tự: Admin có khoá tay không → vai trò có được thi không →
+ * (riêng FM) có nằm trong danh sách bắt buộc thi không.
+ */
+export async function checkCanSitExam(userId: string, role: string): Promise<SitCheck> {
+  if (await isExamBlocked(userId)) return { ok: false, message: BLOCKED_MESSAGE };
+  if (role === "PT") return { ok: true };
+  if (role === "FM") {
+    return (await isRequiredExamFM(userId))
+      ? { ok: true }
+      : { ok: false, message: NOT_REQUIRED_MESSAGE };
+  }
+  return { ok: false, message: "Forbidden" };
+}

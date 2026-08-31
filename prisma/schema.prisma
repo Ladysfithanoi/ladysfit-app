@@ -58,6 +58,7 @@ model User {
   workoutLogs           WorkoutLog[]
   examAttempts          ExamAttempt[]
   examSessions          ExamSession[]
+  examBlocks            ExamBlock[]
   examRequirement       ExamRequiredFM?      @relation("RequiredExamFM")
   upgradeNotifications  UpgradeNotification[]
   mealPlans             MealPlan[]
@@ -750,6 +751,25 @@ model ExamRequiredFM {
   user User @relation("RequiredExamFM", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("exam_required_fms")
+}
+
+// Khoá quyền vào thi của một người, cho ĐÚNG một kỳ thi.
+//
+// Có dòng ở đây = người đó không mở được đề, dù là HLV hay FM bắt buộc thi.
+// Admin bật/tắt ngay trong tab Lịch thi. Khoá theo từng kỳ (examKey là ngày
+// thi) nên đổi sang kỳ mới là mọi khoá cũ hết hiệu lực — không ai bị khoá
+// vĩnh viễn vì một lần Admin quên gỡ.
+model ExamBlock {
+  id        String   @id @default(cuid())
+  userId    String
+  examKey   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, examKey])
+  @@index([examKey])
+  @@map("exam_blocks")
 }
 
 model UpgradeNotification {

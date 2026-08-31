@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { gradeAndRecord } from "@/lib/exam-grading";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
-import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
+import { checkCanSitExam } from "@/lib/exam-required-fm";
 import {
   ALREADY_TAKEN_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
 
   const role = session.user.role;
   // HLV, và FM được Admin chỉ định bắt buộc thi — xem lib/exam-required-fm.ts.
-  if (!(await canSitExam(session.user.id, role))) {
-    return NextResponse.json(
-      { error: role === "FM" ? NOT_REQUIRED_MESSAGE : "Forbidden" },
-      { status: 403 }
-    );
+  // Người bị Admin khoá tay cũng chặn ở đây, không chỉ ở lúc mở đề: khoá giữa
+  // chừng thì bài đang làm dở cũng không nộp lên được.
+  const allowed = await checkCanSitExam(session.user.id, role);
+  if (!allowed.ok) {
+    return NextResponse.json({ error: allowed.message }, { status: 403 });
   }
   // Bài của FM chỉ ghi nhận điểm cho Admin xem: không thăng, không hạ, không
   // thông báo, và không phụ thuộc hệ thống phân cấp độ của HLV.

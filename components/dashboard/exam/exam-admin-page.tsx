@@ -25,6 +25,11 @@ import {
   Search,
   EyeOff,
   LifeBuoy,
+  Clock,
+  Unlock as UnlockIcon,
+  UserCog,
+  RotateCcw,
+  TimerReset,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -91,6 +96,26 @@ type FMRow = {
   passed: boolean;
   takenAt: string | null;
   violations: number;
+};
+
+/**
+ * Một người trong bảng "Quyền vào thi từng người" của kỳ đang đặt lịch.
+ * Gộp ba nguồn: khoá tay của Admin, lượt thi đang mở, và bài đã chấm.
+ */
+type AccessRow = {
+  userId: string;
+  name: string | null;
+  email: string;
+  role: string;
+  branchName: string | null;
+  blocked: boolean;
+  startedAt: string | null;
+  endsAt: string | null;
+  submittedAt: string | null;
+  savedCount: number;
+  scorePct: number | null;
+  passed: boolean;
+  takenAt: string | null;
 };
 
 type Attempt = {
@@ -163,6 +188,7 @@ export function ExamAdminPage({
   roster,
   fms,
   pendingGradeCount,
+  accessRows,
 }: {
   questions: Question[];
   config: Config;
@@ -172,6 +198,7 @@ export function ExamAdminPage({
   fms: FMRow[];
   /** Số lượt hết giờ chưa nộp nhưng còn bài đã tự lưu, chấm lại được. */
   pendingGradeCount: number;
+  accessRows: AccessRow[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("bank");
@@ -181,6 +208,12 @@ export function ExamAdminPage({
   // Thu lại bài của những người hết giờ mà không nộp được.
   const [gradingPending, setGradingPending] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
+
+  // ── Quyền vào thi từng người ─────────────────────────────────────────────
+  const [accessSearch, setAccessSearch] = useState("");
+  const [accessPage, setAccessPage] = useState(0);
+  const [accessBusy, setAccessBusy] = useState<string | null>(null);
+  const [accessMsg, setAccessMsg] = useState("");
 
   // Question form state
   const [showAdd, setShowAdd] = useState(false);
@@ -245,6 +278,22 @@ export function ExamAdminPage({
   const [fmSaving, setFmSaving] = useState(false);
   const [fmSaved, setFmSaved] = useState(false);
   const [fmError, setFmError] = useState("");
+
+  const accessQuery = accessSearch.trim().toLowerCase();
+  const visibleAccess = accessQuery
+    ? accessRows.filter(
+        (r) =>
+          (r.name ?? "").toLowerCase().includes(accessQuery) ||
+          r.email.toLowerCase().includes(accessQuery) ||
+          (r.branchName ?? "").toLowerCase().includes(accessQuery)
+      )
+    : accessRows;
+  const accessTotalPages = Math.max(1, Math.ceil(visibleAccess.length / PAGE_SIZE));
+  const accessSafePage = Math.min(accessPage, accessTotalPages - 1);
+  const pageAccess = visibleAccess.slice(
+    accessSafePage * PAGE_SIZE,
+    accessSafePage * PAGE_SIZE + PAGE_SIZE
+  );
 
   const fmQuery = fmSearch.trim().toLowerCase();
   const visibleFms = fmQuery
@@ -482,6 +531,36 @@ export function ExamAdminPage({
       router.refresh();
     } finally {
       setGradingPending(false);
+    }
+  }
+
+  /**
+   * Mở / khoá / gia hạn / cho thi lại cho một người.
+   *
+   * "Cho thi lại" xoá bài của kỳ này nên hỏi lại một câu trước khi làm — các
+   * thao tác còn lại đều đảo ngược được nên không cần hỏi.
+   */
+  async function handleAccess(row: AccessRow, action: "block" | "unblock" | "extend" | "reset") {
+    const who = row.name ?? row.email;
+    if (action === "reset") {
+      const warn = row.takenAt
+        ? `Cho ${who} thi lại?\n\nBài đã chấm của kỳ này (${row.scorePct}%) sẽ bị xoá và không lấy lại được.`
+        : `Mở lại lượt thi cho ${who}? Đề cũ sẽ bị bỏ, lần vào sau bốc đề mới.`;
+      if (!confirm(warn)) return;
+    }
+    setAccessMsg("");
+    setAccessBusy(row.userId + action);
+    try {
+      const res = await fetch("/api/exam/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: row.userId, action }),
+      });
+      const data = await res.json();
+      setAccessMsg(res.ok ? `${who}: ${data.message}` : data.error ?? "Không thực hiện được");
+      if (res.ok) router.refresh();
+    } finally {
+      setAccessBusy(null);
     }
   }
 
@@ -1102,6 +1181,197 @@ export function ExamAdminPage({
                         disabled={rosterPage >= rosterTotalPages - 1}
                         className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         aria-label="Trang sau"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Quyền vào thi từng người */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex flex-col gap-3 px-4 py-4 border-b border-gray-100 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-base font-extrabold text-gray-900">
+                  <UserCog className="w-4 h-4 text-[#f15b5c]" />
+                  Quyền vào thi từng người
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5 leading-snug">
+                  Khoá ai đó không cho vào thi, cấp thêm thời lượng cho người đang làm dở, hoặc
+                  cho thi lại từ đầu. Khoá chỉ áp dụng cho kỳ thi này.
+                </p>
+              </div>
+              <div className="relative sm:w-56 sm:shrink-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={accessSearch}
+                  onChange={(e) => {
+                    setAccessSearch(e.target.value);
+                    setAccessPage(0);
+                  }}
+                  placeholder="Tìm theo tên, email, chi nhánh"
+                  className="h-9 w-full rounded-xl border border-gray-200 bg-gray-50 pl-8 pr-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                />
+              </div>
+            </div>
+
+            {accessMsg && (
+              <p className="border-b border-gray-50 bg-gray-50/60 px-4 py-2.5 text-xs font-bold text-gray-600 sm:px-6">
+                {accessMsg}
+              </p>
+            )}
+
+            {!initialConfig.examDate ? (
+              <div className="py-14 flex flex-col items-center gap-2">
+                <CalendarClock className="w-8 h-8 text-gray-200" />
+                <p className="text-sm text-gray-300 font-semibold">Đặt ngày thi để quản lý quyền vào thi</p>
+              </div>
+            ) : pageAccess.length === 0 ? (
+              <div className="py-14 flex flex-col items-center gap-2">
+                <UserCog className="w-8 h-8 text-gray-200" />
+                <p className="text-sm text-gray-300 font-semibold">Không có ai khớp tìm kiếm</p>
+              </div>
+            ) : (
+              <>
+                <div className="divide-y divide-gray-50">
+                  {pageAccess.map((r) => {
+                    const expired = !!r.endsAt && new Date(r.endsAt).getTime() <= Date.now();
+                    const working = !!r.startedAt && !r.submittedAt && !expired;
+                    const stuck = !!r.startedAt && !r.submittedAt && expired;
+                    const busy = accessBusy?.startsWith(r.userId);
+
+                    return (
+                      <div key={r.userId} className="px-4 py-3.5 sm:px-6">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-800">
+                                {r.name ?? r.email}
+                              </p>
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">
+                                {ROLE_LABEL[r.role] ?? r.role}
+                              </span>
+                              {r.branchName && (
+                                <span className="text-[11px] font-semibold text-gray-400">
+                                  {r.branchName}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              {r.blocked && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600">
+                                  <Lock className="w-3 h-3" /> Đang khoá
+                                </span>
+                              )}
+                              {r.takenAt ? (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold",
+                                    r.passed
+                                      ? "bg-emerald-50 text-emerald-600"
+                                      : "bg-red-50 text-red-500"
+                                  )}
+                                >
+                                  {r.passed ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                  Đã nộp · {r.scorePct}% · {fmtDateTime(new Date(r.takenAt))}
+                                </span>
+                              ) : working ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-600">
+                                  <Clock className="w-3 h-3" />
+                                  Đang làm bài — hết giờ {fmtDateTime(new Date(r.endsAt!))}
+                                </span>
+                              ) : stuck ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                                  <AlertCircle className="w-3 h-3" />
+                                  Hết giờ, chưa nộp
+                                  {r.savedCount > 0 ? ` · đã lưu ${r.savedCount} câu` : ""}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-500">
+                                  Chưa vào thi
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                            <button
+                              onClick={() => handleAccess(r, r.blocked ? "unblock" : "block")}
+                              disabled={busy}
+                              title={
+                                r.blocked
+                                  ? "Cho phép người này vào thi trở lại"
+                                  : "Khoá, không cho người này vào thi kỳ này"
+                              }
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-50",
+                                r.blocked
+                                  ? "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                              )}
+                            >
+                              {r.blocked ? (
+                                <>
+                                  <UnlockIcon className="w-3 h-3" /> Mở khoá
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="w-3 h-3" /> Khoá
+                                </>
+                              )}
+                            </button>
+
+                            {(working || stuck) && (
+                              <button
+                                onClick={() => handleAccess(r, "extend")}
+                                disabled={busy}
+                                title="Cấp lại trọn thời lượng từ bây giờ, giữ nguyên đề cũ"
+                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
+                              >
+                                <TimerReset className="w-3 h-3" /> Gia hạn
+                              </button>
+                            )}
+
+                            {(r.takenAt || r.startedAt) && (
+                              <button
+                                onClick={() => handleAccess(r, "reset")}
+                                disabled={busy}
+                                title="Xoá bài của kỳ này để người này thi lại từ đầu"
+                                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-500 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Cho thi lại
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {accessTotalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-gray-50 px-5 py-3">
+                    <span className="text-xs font-semibold text-gray-400">
+                      Trang {accessSafePage + 1}/{accessTotalPages} · {visibleAccess.length} người
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setAccessPage((p) => Math.max(0, p - 1))}
+                        disabled={accessSafePage === 0}
+                        aria-label="Trang trước"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setAccessPage((p) => Math.min(accessTotalPages - 1, p + 1))}
+                        disabled={accessSafePage >= accessTotalPages - 1}
+                        aria-label="Trang sau"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
