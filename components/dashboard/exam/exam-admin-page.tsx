@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -150,6 +150,9 @@ type Tab = typeof TABS[number]["key"];
 
 const PAGE_SIZE = 10;
 
+// Nhịp tự lấy lại dữ liệu sống: kết quả thi và danh sách dự thi.
+const POLL_MS = 20000;
+
 // Hàng tab/nút trên màn hẹp: trượt ngang thay vì xuống dòng làm ô to, hàng lệch.
 const SLIDER =
   "w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full";
@@ -209,6 +212,60 @@ export function ExamAdminPage({
   // Thu lại bài của những người hết giờ mà không nộp được.
   const [gradingPending, setGradingPending] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
+
+  // ── Tự làm mới dữ liệu đang xem ──────────────────────────────────────────
+  // Trang dựng một lần trên server rồi đứng yên, nên bài người khác vừa nộp chỉ
+  // hiện ra sau khi F5. Hai tab có dữ liệu sống — "Kết quả thi" và "Lịch thi"
+  // (ai đang làm bài, đã lưu mấy câu) — tự lấy lại theo nhịp bên dưới.
+
+  // Bảng kết quả nhận prop mới sau mỗi router.refresh(), nhưng useState chỉ đọc
+  // giá trị khởi tạo nên phải gán tay. Thiếu đoạn này thì "Chấm bài đã lưu"
+  // chấm xong mà bảng vẫn y nguyên, nhìn tưởng chấm hỏng.
+  useEffect(() => {
+    setAttempts(initialAttempts);
+  }, [initialAttempts]);
+
+  // Đang xoá hoặc đang chấm thì ngưng lấy về: chớp mắt giữa chừng sẽ dựng lại
+  // đúng dòng vừa xoá.
+  const pausePolling = deletingAttemptId !== null || gradingPending;
+
+  useEffect(() => {
+    if (tab !== "results" && tab !== "schedule") return;
+    if (pausePolling) return;
+
+    let cancelled = false;
+
+    async function pull() {
+      // Tab trình duyệt đang ẩn thì khỏi hỏi server làm gì.
+      if (document.visibilityState !== "visible") return;
+
+      if (tab === "results") {
+        // Một query, nhẹ hơn hẳn việc dựng lại cả trang server.
+        try {
+          const res = await fetch("/api/exam/attempts", { cache: "no-store" });
+          if (!res.ok || cancelled) return;
+          setAttempts(await res.json());
+        } catch {
+          // Mạng chập chờn thì bỏ qua, nhịp sau lấy lại.
+        }
+      } else {
+        // Danh sách dự thi ghép từ nhiều bảng, không có API riêng nên phải nhờ
+        // server render lại. Ô đang gõ nằm trong useState nên không bị mất chữ.
+        router.refresh();
+      }
+    }
+
+    // Lấy ngay khi vừa mở tab, khỏi phải ngồi chờ hết một nhịp.
+    pull();
+    const timer = setInterval(pull, POLL_MS);
+    // Rời máy một lúc rồi quay lại là thấy số mới luôn.
+    document.addEventListener("visibilitychange", pull);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", pull);
+    };
+  }, [tab, pausePolling, router]);
 
   // ── Quyền vào thi từng người ─────────────────────────────────────────────
   const [accessSearch, setAccessSearch] = useState("");
