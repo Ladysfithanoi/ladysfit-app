@@ -31,6 +31,7 @@ export type DeadlineInput = {
   startedAt: Date;
   durationMinutes: number;
   penaltyMinutes: number;
+  lastViolationAt?: Date | null;
 };
 
 /**
@@ -40,7 +41,20 @@ export type DeadlineInput = {
 export function sessionDeadline(s: DeadlineInput, windowEndAt: Date | null): Date | null {
   if (s.durationMinutes <= 0) return null;
   const minutesLeft = s.durationMinutes - s.penaltyMinutes;
-  const raw = new Date(s.startedAt.getTime() + minutesLeft * 60_000);
+  let raw = new Date(s.startedAt.getTime() + minutesLeft * 60_000);
+
+  // Phạt rời trang có thể ăn sạch thời lượng — ba lần rời trang là mất đúng 90
+  // phút của một kỳ thi 90 phút. Khi đó mốc hết giờ tính ra rơi vào QUÁ KHỨ, có
+  // khi lùi cả nửa tiếng so với lúc bị phạt; bài tự nộp bắn lên ngay sau đó bị
+  // chính server đá ra vì "đã quá hạn nộp", và người thi mất trắng cả bài.
+  //
+  // Nên chặn ở đây: mốc hết giờ không bao giờ sớm hơn thời điểm hình phạt vừa
+  // giáng xuống. Hết sạch giờ thì bài kết thúc NGAY LÚC ĐÓ — đúng ý đồ phạt —
+  // nhưng cú tự nộp theo sau vẫn nằm trong hạn và bài vẫn được chấm.
+  if (s.lastViolationAt && raw.getTime() < s.lastViolationAt.getTime()) {
+    raw = s.lastViolationAt;
+  }
+
   if (windowEndAt && windowEndAt.getTime() < raw.getTime()) return windowEndAt;
   return raw;
 }

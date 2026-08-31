@@ -157,6 +157,15 @@ export function checkPick(
     return { ok: false, reason: "Gói này chỉ mua được 1 lần, đã có trong lộ trình" };
   }
 
+  // L1 và L2 là hai phiên bản dài ngắn của cùng một chặng giảm cân nhanh —
+  // khách đi một trong hai, không đi cả hai.
+  if (packageName === "L1" && opts.chosenAll.includes("L2")) {
+    return { ok: false, reason: "Lộ trình đã có L2 — chỉ chọn một trong hai gói L1 / L2" };
+  }
+  if (packageName === "L2" && opts.chosenAll.includes("L1")) {
+    return { ok: false, reason: "Lộ trình đã có L1 — chỉ chọn một trong hai gói L1 / L2" };
+  }
+
   // Loyalfit là gói tri ân — phải có hợp đồng trước đó mới được mua, nên không
   // bao giờ là gói mở đầu lộ trình.
   if (packageName === "Loyalfit" && opts.chosenBefore.length === 0) {

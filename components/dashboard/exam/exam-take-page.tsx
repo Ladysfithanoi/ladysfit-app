@@ -218,6 +218,9 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Cờ chống nộp hai lần: hết giờ nộp tự động trong lúc người thi cũng vừa bấm nộp.
   const submitLock = useRef(false);
+  // Đã thử tự nộp khi hết giờ chưa — đồng hồ chạy mỗi giây nên nếu không nhớ,
+  // một lần tự nộp hỏng sẽ thành bắn lại mỗi giây.
+  const autoSubmitTried = useRef(false);
 
   // Bảng theo dõi câu hỏi bấm vào là nhảy tới đúng thẻ câu đó.
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -278,8 +281,11 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
-        // Nộp hỏng thì mở khoá để còn thử lại; hết giờ thì thôi, khoá luôn.
-        if (!force) submitLock.current = false;
+        // Nộp hỏng thì LUÔN mở khoá, kể cả lần tự nộp lúc hết giờ. Trước đây
+        // khoá luôn: mạng chập đúng giây tự nộp là nút Nộp bài chết hẳn, người
+        // thi ngồi nhìn bài mình mà không gửi đi được. Đồng hồ không bắn lại
+        // nữa vì đã có autoSubmitTried, nên mở khoá ở đây là an toàn.
+        submitLock.current = false;
       } else {
         const data = await res.json();
         setCorrectById(data.correctById ?? {});
@@ -313,8 +319,10 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       const left = Math.max(0, endsAt! - Date.now());
       setRemainingMs(left);
       if (left === 0) {
-        // Hết giờ là nộp, không hỏi han gì thêm — câu chưa làm cũng nộp.
-        if (!submitLock.current) {
+        // Hết giờ là nộp, không hỏi han gì thêm — câu chưa làm cũng nộp. Chỉ
+        // thử đúng một lần; hỏng thì người thi bấm Nộp bài lại bằng tay.
+        if (!submitLock.current && !autoSubmitTried.current) {
+          autoSubmitTried.current = true;
           setAutoSubmitted(true);
           handleSubmit(true);
         }
