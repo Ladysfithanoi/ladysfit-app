@@ -15,6 +15,7 @@ import {
   X,
   AlertTriangle,
   EyeOff,
+  AlarmClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -47,6 +48,17 @@ const OPTIONS = ["A", "B", "C", "D"] as const;
  * lại bằng khoảng tương đương (VIOLATION_DEBOUNCE_MS trong lib/exam-session).
  */
 const VIOLATION_COOLDOWN_MS = 6_000;
+
+/**
+ * Nhắc giờ: bắt đầu từ mốc 10 phút, sau đó mỗi phút nhắc lại một lần cho tới
+ * lúc hết giờ. Lần đầu là hộp thoại phải bấm xác nhận — đó là lời báo trước
+ * quan trọng nhất. Những lần sau chỉ là dải nhắc tự tắt: đang trong 10 phút
+ * cuối mà cứ mỗi phút lại chặn màn hình một lần thì hại người thi hơn là giúp.
+ */
+const REMIND_FROM_MINUTES = 10;
+
+/** Dải nhắc giờ tự tắt sau bấy nhiêu mili giây. */
+const REMINDER_TOAST_MS = 6_000;
 
 /** Mili giây → "MM:SS" (hoặc "H:MM:SS" khi thời lượng dài hơn một tiếng). */
 function fmtClock(ms: number): string {
@@ -198,6 +210,12 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const [examToken, setExamToken] = useState<string | null>(null);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
+  // Nhắc giờ. Lần nhắc đầu tiên hiện hộp thoại, các lần sau hiện dải tự tắt.
+  const [timeWarning, setTimeWarning] = useState<number | null>(null);
+  const [timeToast, setTimeToast] = useState<number | null>(null);
+  // Các mốc phút đã nhắc rồi — mỗi mốc chỉ nhắc đúng một lần.
+  const firedMarks = useRef<Set<number>>(new Set());
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Cờ chống nộp hai lần: hết giờ nộp tự động trong lúc người thi cũng vừa bấm nộp.
   const submitLock = useRef(false);
 
@@ -280,6 +298,13 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
     }
   }
 
+  /** Dải nhắc giờ — hiện rồi tự tắt, lần nhắc mới đè lên lần cũ. */
+  function popTimeToast(minutes: number) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setTimeToast(minutes);
+    toastTimer.current = setTimeout(() => setTimeToast(null), REMINDER_TOAST_MS);
+  }
+
   // Đồng hồ đếm ngược. Đếm theo mốc tuyệt đối chứ không trừ dần, để tab bị ẩn
   // rồi mở lại (trình duyệt bóp nhịp setInterval) vẫn ra đúng thời gian còn lại.
   useEffect(() => {
@@ -287,9 +312,31 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
     function tick() {
       const left = Math.max(0, endsAt! - Date.now());
       setRemainingMs(left);
-      if (left === 0 && !submitLock.current) {
-        setAutoSubmitted(true);
-        handleSubmit(true);
+      if (left === 0) {
+        // Hết giờ là nộp, không hỏi han gì thêm — câu chưa làm cũng nộp.
+        if (!submitLock.current) {
+          setAutoSubmitted(true);
+          handleSubmit(true);
+        }
+        return;
+      }
+
+      // Nhắc giờ theo từng mốc phút. Math.ceil nên "còn 10 phút" ứng với quãng
+      // (9:00, 10:00] — vừa chạm 10:00 là nhắc, và chỉ nhắc một lần cho mốc đó.
+      const minutesLeft = Math.ceil(left / 60_000);
+      if (
+        minutesLeft <= REMIND_FROM_MINUTES &&
+        minutesLeft >= 1 &&
+        !firedMarks.current.has(minutesLeft)
+      ) {
+        const isFirst = firedMarks.current.size === 0;
+        // Bị trừ giờ vì rời trang có thể nhảy qua vài mốc cùng lúc — đánh dấu
+        // luôn các mốc đã vượt, không dội một loạt nhắc dồn vào mặt người thi.
+        for (let m = minutesLeft; m <= REMIND_FROM_MINUTES; m++) {
+          firedMarks.current.add(m);
+        }
+        if (isFirst) setTimeWarning(minutesLeft);
+        else popTimeToast(minutesLeft);
       }
     }
     tick();
@@ -297,6 +344,13 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endsAt, result, questions, answers, examToken]);
+
+  // Dọn hẹn giờ của dải nhắc khi rời trang.
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   // ── Bắt quả tang rời khỏi trang thi ─────────────────────────────────────
   // Hai nguồn tín hiệu, vì mỗi cái bắt thiếu một kiểu:
@@ -717,6 +771,63 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
             </span>
           )}
         </button>
+      )}
+
+      {/* ── Nhắc giờ: dải tự tắt ở mỗi mốc phút ── */}
+      {timeToast !== null && !result && (
+        <div className="pointer-events-none fixed left-1/2 top-4 z-[65] w-[min(92vw,26rem)] -translate-x-1/2">
+          <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 shadow-lg">
+            <AlarmClock className="h-5 w-5 shrink-0 animate-pulse text-red-500" />
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-red-700">
+                Còn {timeToast} phút làm bài
+              </p>
+              <p className="text-xs font-semibold text-gray-600">
+                {answeredCount < questions.length
+                  ? `Còn ${questions.length - answeredCount} câu chưa làm — hết giờ hệ thống tự nộp.`
+                  : "Đã làm hết các câu, bấm Nộp bài khi sẵn sàng."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Nhắc giờ: hộp thoại báo trước, hiện một lần ở mốc đầu tiên ── */}
+      {timeWarning !== null && !result && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="bg-amber-50 px-6 py-7 text-center">
+              <AlarmClock className="mx-auto mb-3 h-12 w-12 text-amber-500" />
+              <p className="text-lg font-extrabold text-amber-700">
+                Còn {timeWarning} phút làm bài
+              </p>
+              <p className="mt-2 text-sm font-semibold text-gray-600">
+                Hết giờ hệ thống sẽ <span className="font-extrabold">tự nộp bài</span>, kể cả
+                khi bạn còn câu chưa làm.
+              </p>
+              {answeredCount < questions.length && (
+                <p className="mt-2 text-sm font-extrabold text-red-600">
+                  Bạn còn {questions.length - answeredCount} câu chưa làm.
+                </p>
+              )}
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-xs font-semibold text-gray-500 leading-snug">
+                Từ giờ tới lúc hết, mỗi phút hệ thống sẽ nhắc bạn một lần.
+              </p>
+              <button
+                onClick={() => setTimeWarning(null)}
+                className="mt-4 h-11 w-full rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                Tôi đã rõ, làm tiếp
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Vừa bị bắt rời trang ── */}
