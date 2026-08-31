@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, Plus, Clock, ArrowLeft, Lock, Trash2, Check } from "lucide-react";
+import { X, Plus, Clock, ArrowLeft, Lock, Trash2, Check, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice } from "@/lib/packages";
+import { PRICE_TYPE_LABEL, priceRoadmap, quoteTotals } from "@/lib/roadmap-pricing";
 import {
   ROADMAP_PACKAGES,
   ROADMAP_PHASES,
@@ -30,6 +31,10 @@ import {
  * tư vấn viên giải thích được với khách thay vì thấy gói tự nhiên biến mất.
  *
  * Thời lượng cộng dồn hiện ngay cạnh tên mỗi bậc; tổng ba bậc nằm trên tiêu đề.
+ *
+ * Màn dựng lộ trình cố tình KHÔNG hiện giá: lúc đang xếp bậc thì thứ cần nhìn
+ * là chuyên môn và thời lượng, chứ chưa phải tiền. Tiền nằm sau nút Báo giá ở
+ * cuối modal, mở ra khi lộ trình đã có gói.
  */
 
 /** Một gói đang nằm trên lộ trình, kèm bậc mà nó được xếp vào. */
@@ -88,9 +93,6 @@ function PickedCard({
           <p className="text-sm font-extrabold text-gray-900">{def.name}</p>
           <p className="text-[11px] font-semibold text-gray-400 mt-0.5">
             {def.sessions} buổi · {def.durationDays} ngày
-          </p>
-          <p className="text-[11px] font-bold text-gray-600 mt-0.5">
-            {def.price > 0 ? formatPrice(def.price) : "Miễn phí"}
           </p>
         </div>
         {onRemove && (
@@ -297,20 +299,6 @@ function PackagePicker({
 
                   <p
                     className={cn(
-                      "mt-1 text-xs font-bold",
-                      blocked ? "text-gray-400" : "text-gray-700"
-                    )}
-                  >
-                    {def.price > 0 ? formatPrice(def.price) : "Miễn phí"}
-                    {def.discountedPrice ? (
-                      <span className="ml-1.5 font-semibold text-[#f15b5c]">
-                        (trợ giá {formatPrice(def.discountedPrice)})
-                      </span>
-                    ) : null}
-                  </p>
-
-                  <p
-                    className={cn(
                       "mt-1 text-xs font-semibold leading-snug",
                       blocked ? "text-gray-400" : "text-green-700"
                     )}
@@ -335,6 +323,120 @@ function PackagePicker({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Báo giá ──────────────────────────────────────────────────────────────────
+
+/**
+ * Tổng chi phí của lộ trình đang dựng.
+ *
+ * Giá phụ thuộc VỊ TRÍ của gói trong lộ trình (gói đầu được trợ giá, từ gói thứ
+ * hai trở đi giảm 10% tái ký) nên phải tính trên cả chuỗi chứ không cộng giá
+ * từng gói rời. Công thức nằm ở lib/roadmap-pricing, dùng chung với bảng gói ở
+ * bước Tư vấn lộ trình.
+ */
+function QuotePanel({
+  packageNames,
+  onBack,
+}: {
+  packageNames: string[];
+  onBack: () => void;
+}) {
+  const lines = priceRoadmap(packageNames);
+  const totals = quoteTotals(lines);
+
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col rounded-2xl bg-white">
+      <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4 sm:px-6">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Quay lại bậc thang"
+          className="mt-0.5 shrink-0 rounded-xl p-1.5 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-base font-extrabold text-gray-900">
+            <Receipt className="h-4 w-4 text-[#f15b5c]" />
+            Báo giá lộ trình
+          </h3>
+          <p className="mt-0.5 text-xs font-semibold text-gray-400">
+            {lines.length} gói đã ghép trên bậc thang
+          </p>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4 sm:px-6">
+        {lines.map((line, i) => {
+          const def = PACKAGES[line.packageName];
+          const discounted = line.effectivePrice < line.originalPrice;
+          return (
+            <div
+              key={`${line.packageName}-${i}`}
+              className="flex items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-3.5"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-gray-900">{line.packageName}</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-gray-400">
+                  {def ? `${def.sessions} buổi · ${def.durationDays} ngày` : "—"}
+                </p>
+                <span
+                  className={cn(
+                    "mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold",
+                    line.type === "subsidized"
+                      ? "bg-orange-100 text-orange-600"
+                      : line.type === "renewal"
+                        ? "bg-blue-50 text-blue-600"
+                        : "bg-gray-100 text-gray-500"
+                  )}
+                >
+                  {PRICE_TYPE_LABEL[line.type]}
+                </span>
+              </div>
+              <div className="shrink-0 text-right">
+                {discounted && (
+                  <p className="text-[11px] font-semibold text-gray-400 line-through">
+                    {formatPrice(line.originalPrice)}
+                  </p>
+                )}
+                <p
+                  className={cn(
+                    "text-sm font-extrabold",
+                    discounted ? "text-[#f15b5c]" : "text-gray-800"
+                  )}
+                >
+                  {line.effectivePrice > 0 ? formatPrice(line.effectivePrice) : "Miễn phí"}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="rounded-2xl border-2 border-[#f15b5c]/25 bg-[#fff5f5] p-4">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-500">Tổng chi phí lộ trình</p>
+              {totals.saved > 0 && (
+                <p className="mt-0.5 text-[11px] font-semibold text-gray-400">
+                  Giá gốc {formatPrice(totals.original)} — đã giảm{" "}
+                  <span className="font-bold text-[#f15b5c]">{formatPrice(totals.saved)}</span>
+                </p>
+              )}
+            </div>
+            <p className="shrink-0 text-2xl font-extrabold text-[#f15b5c]">
+              {formatPrice(totals.effective)}
+            </p>
+          </div>
+        </div>
+
+        <p className="pt-1 text-[11px] leading-relaxed text-gray-400">
+          Giá trợ giá chỉ áp dụng cho gói Giai đoạn 1 (L1 / L2) khi đứng đầu lộ trình. Từ gói
+          thứ hai trở đi khách được giảm 10% giá tái ký, riêng Loyalfit luôn tính nguyên giá.
+        </p>
       </div>
     </div>
   );
@@ -369,6 +471,7 @@ export function RoadmapBuilderModal({
     picked.length > 0 ? groupByPhase(picked) : EMPTY_PICKS
   );
   const [pickerPhase, setPickerPhase] = useState<PhaseNum | null>(null);
+  const [showQuote, setShowQuote] = useState(false);
 
   const flat = flatten(picks);
   const flatNames = flat.map((x) => x.packageName);
@@ -460,11 +563,35 @@ export function RoadmapBuilderModal({
           </div>
 
           {/* Footer */}
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 px-5 py-3.5 sm:px-6">
-            <span className="text-xs font-semibold text-gray-400">
-              {flat.length > 0 ? `${flat.length} gói trong lộ trình` : "Chưa ghép gói nào"}
-            </span>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-5 py-3.5 sm:px-6">
+            {/*
+              Nút Báo giá xám khi bậc thang còn trống — chưa có gói thì chẳng có
+              gì để báo. Ghép gói vào là nút sáng lên màu thương hiệu.
+            */}
+            <button
+              type="button"
+              onClick={() => setShowQuote(true)}
+              disabled={flat.length === 0}
+              title={
+                flat.length === 0
+                  ? "Ghép ít nhất một gói vào bậc thang để xem báo giá"
+                  : "Xem tổng chi phí của lộ trình này"
+              }
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all",
+                flat.length === 0
+                  ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                  : "border-[#f15b5c] bg-[#f15b5c] text-white hover:opacity-90"
+              )}
+            >
+              <Receipt className="h-4 w-4" />
+              Báo giá
+            </button>
+
             <div className="flex items-center gap-2">
+              <span className="hidden text-xs font-semibold text-gray-400 sm:inline">
+                {flat.length > 0 ? `${flat.length} gói` : "Chưa ghép gói nào"}
+              </span>
               <button
                 onClick={onClose}
                 className="rounded-xl px-4 py-2.5 text-sm font-bold text-gray-500 transition-colors hover:bg-gray-50"
@@ -499,6 +626,10 @@ export function RoadmapBuilderModal({
               onPick={(key) => addTo(activePhase.num, key)}
               onBack={() => setPickerPhase(null)}
             />
+          )}
+
+          {showQuote && flat.length > 0 && (
+            <QuotePanel packageNames={flatNames} onBack={() => setShowQuote(false)} />
           )}
         </div>
       </div>

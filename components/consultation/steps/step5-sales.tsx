@@ -12,6 +12,7 @@ import {
   phaseOf,
   type PhaseNum,
 } from "@/lib/roadmap-phases";
+import { priceRoadmap, type PriceLine } from "@/lib/roadmap-pricing";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
@@ -35,11 +36,7 @@ type SelectedPkg = {
   roadmapPhase?: number | null;
 };
 
-type PricingInfo = {
-  originalPrice: number;
-  effectivePrice: number;
-  type: "subsidized" | "full" | "renewal";
-};
+type PricingInfo = PriceLine;
 
 type RoadmapOption = {
   num: 1 | 2 | 3;
@@ -48,29 +45,6 @@ type RoadmapOption = {
   totalDays: number;
   packages: SelectedPkg[];
 };
-
-// ─── Pricing ──────────────────────────────────────────────────────────────────
-// Loyalfit: no subsidy or renewal discount — always full price
-
-function computePricing(pkgs: SelectedPkg[]): PricingInfo[] {
-  return pkgs.map((pkg, index) => {
-    const def = PACKAGES[pkg.packageName];
-    if (!def) return { originalPrice: 0, effectivePrice: 0, type: "full" };
-
-    if (pkg.packageName === "Loyalfit") {
-      return { originalPrice: def.price, effectivePrice: def.price, type: "full" };
-    }
-
-    if (index === 0) {
-      if (pkg.packageName === "L1" || pkg.packageName === "L2") {
-        return { originalPrice: def.price, effectivePrice: def.discountedPrice ?? def.price, type: "subsidized" };
-      }
-      return { originalPrice: def.price, effectivePrice: def.price, type: "full" };
-    }
-
-    return { originalPrice: def.price, effectivePrice: Math.round(def.price * 0.9), type: "renewal" };
-  });
-}
 
 // ─── Duration estimator ───────────────────────────────────────────────────────
 // Estimates total days to reach targetWeight using the system's calorie-deficit rates:
@@ -405,7 +379,12 @@ export function Step5Sales({
   }
 
   const phaseRows    = useMemo(() => buildPhaseTable(info, packages.filter((p) => p.isConfirmed)), [packages, info]);
-  const allPricing   = useMemo(() => computePricing(packages), [packages]);
+  // Giá tính ở lib/roadmap-pricing — dùng chung với nút Báo giá của bậc thang
+  // để hai chỗ không bao giờ báo hai con số khác nhau cho cùng một lộ trình.
+  const allPricing   = useMemo(
+    () => priceRoadmap(packages.map((p) => p.packageName)),
+    [packages]
+  );
 
   const weightToLose   = (Number(info.currentWeight) || 0) - (Number(info.targetWeight) || 0);
   const initialWeight  = Number(info.currentWeight) || 0;
