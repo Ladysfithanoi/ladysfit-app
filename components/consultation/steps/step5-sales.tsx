@@ -6,7 +6,12 @@ import Link from "next/link";
 import { Check, Package, Clock, ChevronRight, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
-import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
+import {
+  L1_MIN_MARGIN,
+  L2_MIN_MARGIN,
+  phaseOf,
+  type PhaseNum,
+} from "@/lib/roadmap-phases";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
@@ -130,12 +135,15 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
   const height       = Number(info.height) || 0;
   const targetWeight = Number(info.targetWeight) || 0;
 
-  // Stage 1: L1 or L2 based on weight-height delta
+  // Stage 1: L1 or L2 based on weight-height delta.
+  // Ngưỡng lấy từ lib/roadmap-phases để khớp đúng điều kiện in trên gói và bộ
+  // lọc của bậc thang — 6 kg cho L2, 3 kg cho L1. Đừng nhầm với mốc 7 kg ở
+  // trang tổng quan: đó là điều kiện TRANSFORM, chuyện khác hẳn.
   const phase1Key: string | null = (() => {
     if (height > 0 && weight > 0) {
       const diff = weight - height + 100;
-      if (diff >= 7) return "L2";
-      if (diff >= 3) return "L1";
+      if (diff >= L2_MIN_MARGIN) return "L2";
+      if (diff >= L1_MIN_MARGIN) return "L1";
     }
     return null;
   })();
@@ -444,11 +452,11 @@ export function Step5Sales({
               <p className="text-sm font-semibold text-blue-800">
                 {initialWeight} − {infoHeight} + 100 = <span className="font-extrabold">{weightDiff.toFixed(1)} kg</span>
               </p>
-              {weightDiff >= 7 ? (
+              {weightDiff >= L2_MIN_MARGIN ? (
                 <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
                   <Check className="w-3 h-3" /> Đủ điều kiện L2 ✓
                 </span>
-              ) : weightDiff >= 3 ? (
+              ) : weightDiff >= L1_MIN_MARGIN ? (
                 <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
                   <Check className="w-3 h-3" /> Đủ điều kiện L1 ✓
                 </span>

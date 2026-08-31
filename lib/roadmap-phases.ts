@@ -102,11 +102,14 @@ export function phaseOf(packageName: string): PhaseNum | null {
   return phase?.num ?? null;
 }
 
-// ── Điều kiện cân nặng của Giai đoạn 1 ───────────────────────────────────────
+// ── Điều kiện cân nặng để vào L1 / L2 ────────────────────────────────────────
 // "Cân nặng thực > chiều cao tối thiểu N kg", tức weight − (height − 100) ≥ N.
 // Ngưỡng lấy theo điều kiện ghi trên gói (lib/packages.ts) và trong danh sách
-// lộ trình mà khách được xem. Lưu ý: bộ dựng lộ trình tự động ở step5-sales
-// đang dùng ngưỡng 7 kg cho L2 — ở đây theo đúng con số công bố với khách.
+// lộ trình mà khách được xem. Đây cũng là ngưỡng bộ dựng ba lộ trình tự động ở
+// step5-sales dùng — một nguồn duy nhất, đừng chép số ra chỗ khác.
+//
+// Mốc 7 kg ở trang tổng quan là chuyện KHÁC: đó là điều kiện transform (khách
+// đủ mỡ thừa để giảm được 7 kg), không liên quan tới việc chọn gói.
 
 export const L1_MIN_MARGIN = 3;
 export const L2_MIN_MARGIN = 6;
