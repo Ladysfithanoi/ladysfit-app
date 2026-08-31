@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
+import { sessionDeadline } from "@/lib/exam-session";
+import { parseAnswers } from "@/lib/exam-grading";
 import { DEFAULT_RANK_WEIGHTS } from "@/lib/ranking-config";
 import { ExamAdminPage } from "@/components/dashboard/exam/exam-admin-page";
 
@@ -51,6 +53,29 @@ export default async function ExamPage() {
     examEndTime: config.examEndTime,
   };
   const window = getExamWindow(schedule);
+
+  // Lượt thi hết giờ mà không ai nộp, nhưng phần đã làm vẫn được tự lưu lại —
+  // Admin thu về được bằng nút "Chấm bài đã lưu" ở tab Lịch thi.
+  let pendingGradeCount = 0;
+  if (config.examDate) {
+    const pending = await prisma.examSession.findMany({
+      where: { examKey: config.examDate, submittedAt: null, answers: { not: null } },
+      select: {
+        answers: true,
+        startedAt: true,
+        durationMinutes: true,
+        penaltyMinutes: true,
+        lastViolationAt: true,
+      },
+    });
+    const now = Date.now();
+    pendingGradeCount = pending.filter((s) => {
+      if (Object.keys(parseAnswers(s.answers)).length === 0) return false;
+      const deadline = sessionDeadline(s, window.endAt);
+      // Chưa đặt thời lượng thì lượt chỉ hết hạn khi phòng thi đóng cửa.
+      return deadline ? deadline.getTime() <= now : !window.open;
+    }).length;
+  }
 
   // Danh sách dự thi của kỳ thi đang đặt lịch: PT nào không thi tính 0 điểm.
   let roster: {
@@ -169,6 +194,7 @@ export default async function ExamPage() {
       windowState={window.state}
       roster={roster}
       fms={fms}
+      pendingGradeCount={pendingGradeCount}
     />
   );
 }

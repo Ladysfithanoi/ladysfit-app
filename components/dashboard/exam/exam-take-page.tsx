@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle,
@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   EyeOff,
   AlarmClock,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -59,6 +61,15 @@ const REMIND_FROM_MINUTES = 10;
 
 /** Dải nhắc giờ tự tắt sau bấy nhiêu mili giây. */
 const REMINDER_TOAST_MS = 6_000;
+
+/**
+ * Gom bao nhiêu mili giây rồi mới tự lưu một lần.
+ *
+ * Chọn ngắn (2 giây) vì cái cần cứu là bài của người thi: bấm vài câu liên tiếp
+ * thì chỉ tốn một lượt ghi, mà mất điện đột ngột cũng chỉ mất đúng vài giây làm
+ * bài cuối cùng.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 2_000;
 
 /** Mili giây → "MM:SS" (hoặc "H:MM:SS" khi thời lượng dài hơn một tiếng). */
 function fmtClock(ms: number): string {
@@ -191,6 +202,8 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const [penaltyNotice, setPenaltyNotice] = useState<{ minutes: number; times: number } | null>(null);
   // Mở lại đề đang làm dở: đề cũ, đồng hồ cũ, không phải bài mới.
   const [resumed, setResumed] = useState(false);
+  // Tự lưu: "saved" là đã ghi xong, "saving" đang ghi, "error" ghi hỏng.
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [result, setResult] = useState<ExamResult | null>(null);
@@ -226,6 +239,9 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Đang gửi báo cáo rời trang — chặn đếm trùng một lần alt-tab.
   const reportingRef = useRef(false);
+  // Tự lưu đáp án: hẹn giờ gom, và bản đáp án mới nhất để lúc rời trang gửi ngay.
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answersRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     async function loadExam() {
@@ -246,6 +262,11 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
         setViolations(data.violations ?? 0);
         setPenaltyMinutes(data.penaltyMinutes ?? 0);
         setResumed(!!data.resumed);
+        // Bài đang làm dở đã tự lưu ở server — dựng lại đúng các câu đã chọn.
+        if (data.savedAnswers && typeof data.savedAnswers === "object") {
+          setAnswers(data.savedAnswers);
+          answersRef.current = data.savedAnswers;
+        }
         if (data.endsAt) {
           const deadline = new Date(data.endsAt).getTime();
           setEndsAt(deadline);
@@ -303,6 +324,82 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       setSubmitting(false);
     }
   }
+
+  // ── Tự lưu bài đang làm ──────────────────────────────────────────────────
+  // Đáp án nằm trong bộ nhớ trình duyệt cho tới lúc bấm nộp, nên hết giờ nộp
+  // không kịp / mất mạng / sập trình duyệt là mất trắng cả bài. Cứ vài giây ghi
+  // một lần lên server để còn chấm lại được — xem app/api/exam/autosave.
+  //
+  // Thi thử không lưu: bài của Admin vốn không ghi vào đâu cả.
+  const saveAnswers = useCallback(
+    async (payload: Record<string, string>, viaBeacon = false) => {
+      if (mock) return;
+      const body = JSON.stringify({ answers: payload });
+      try {
+        if (viaBeacon) {
+          // Rời trang: gửi kiểu "bắn rồi quên" để yêu cầu vẫn đi dù tab đóng ngay.
+          await fetch("/api/exam/autosave", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            keepalive: true,
+          });
+          return;
+        }
+        setSaveState("saving");
+        const res = await fetch("/api/exam/autosave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        setSaveState(res.ok ? "saved" : "error");
+      } catch {
+        // Mạng chập thì thôi, lần chọn đáp án sau sẽ lưu lại cả bài.
+        if (!viaBeacon) setSaveState("error");
+      }
+    },
+    [mock]
+  );
+
+  /** Chọn một đáp án: cập nhật giao diện ngay, hẹn giờ ghi xuống server. */
+  function pickAnswer(questionId: string, option: string) {
+    setAnswers((prev) => {
+      const next = { ...prev, [questionId]: option };
+      answersRef.current = next;
+      return next;
+    });
+    if (mock) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      saveAnswers(answersRef.current);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  // Rời trang thì ghi nốt phần chưa kịp lưu — đây chính là lúc dễ mất bài nhất.
+  useEffect(() => {
+    if (mock || result || questions.length === 0) return;
+    function flush() {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      if (Object.keys(answersRef.current).length === 0) return;
+      saveAnswers(answersRef.current, true);
+    }
+    function onHide() {
+      if (document.hidden) flush();
+    }
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [mock, result, questions.length, saveAnswers]);
+
+  // Dọn hẹn giờ tự lưu khi rời trang.
+  useEffect(() => {
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+  }, []);
 
   /** Dải nhắc giờ — hiện rồi tự tắt, lần nhắc mới đè lên lần cũ. */
   function popTimeToast(minutes: number) {
@@ -486,6 +583,30 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
           <div className="shrink-0 text-right">
             <p className="text-sm font-bold text-gray-700">{answeredCount}/{questions.length}</p>
             <p className="text-xs text-gray-400 whitespace-nowrap">đã trả lời</p>
+            {!mock && saveState !== "idle" && (
+              <p
+                className={cn(
+                  "mt-0.5 flex items-center justify-end gap-1 text-[11px] font-bold whitespace-nowrap",
+                  saveState === "error" ? "text-amber-600" : "text-gray-400"
+                )}
+                title={
+                  saveState === "error"
+                    ? "Chưa ghi được lên máy chủ — chọn thêm đáp án sẽ tự thử lại"
+                    : "Bài của bạn được lưu tự động trên máy chủ"
+                }
+              >
+                {saveState === "error" ? (
+                  <>
+                    <CloudOff className="h-3 w-3" /> Chưa lưu được
+                  </>
+                ) : (
+                  <>
+                    <Cloud className="h-3 w-3" />
+                    {saveState === "saving" ? "Đang lưu..." : "Đã lưu"}
+                  </>
+                )}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -679,7 +800,7 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
                     <button
                       key={opt}
                       disabled={!!result}
-                      onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: opt }))}
+                      onClick={() => pickAnswer(q.id, opt)}
                       className={cn(
                         "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-left transition-all",
                         selected

@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Search,
   EyeOff,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -161,6 +162,7 @@ export function ExamAdminPage({
   windowState,
   roster,
   fms,
+  pendingGradeCount,
 }: {
   questions: Question[];
   config: Config;
@@ -168,12 +170,17 @@ export function ExamAdminPage({
   windowState: ExamWindowState;
   roster: RosterRow[];
   fms: FMRow[];
+  /** Số lượt hết giờ chưa nộp nhưng còn bài đã tự lưu, chấm lại được. */
+  pendingGradeCount: number;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("bank");
   const [questions, setQuestions] = useState(initialQuestions);
   const [attempts, setAttempts] = useState(initialAttempts);
   const [deletingAttemptId, setDeletingAttemptId] = useState<string | null>(null);
+  // Thu lại bài của những người hết giờ mà không nộp được.
+  const [gradingPending, setGradingPending] = useState(false);
+  const [gradeMsg, setGradeMsg] = useState("");
 
   // Question form state
   const [showAdd, setShowAdd] = useState(false);
@@ -449,6 +456,32 @@ export function ExamAdminPage({
       }
     } finally {
       setDeletingAttemptId(null);
+    }
+  }
+
+  /**
+   * Chấm những lượt hết giờ mà không ai nộp, dựa trên bài đã tự lưu trong lúc
+   * họ làm. Người còn đang ngồi thi không bị đụng tới.
+   */
+  async function handleGradePending() {
+    setGradeMsg("");
+    setGradingPending(true);
+    try {
+      const res = await fetch("/api/exam/grade-pending", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setGradeMsg(data.error ?? "Không chấm được");
+        return;
+      }
+      setGradeMsg(
+        data.graded > 0
+          ? `Đã chấm ${data.graded} bài từ phần đã lưu` +
+              (data.failed > 0 ? `, ${data.failed} bài không chấm được` : "")
+          : "Không có bài nào để chấm"
+      );
+      router.refresh();
+    } finally {
+      setGradingPending(false);
     }
   }
 
@@ -880,6 +913,37 @@ export function ExamAdminPage({
               </div>
             </div>
           </div>
+
+          {/* Bài hết giờ chưa nộp — còn cứu được từ phần đã tự lưu */}
+          {pendingGradeCount > 0 && (
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 px-4 py-4 sm:px-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-extrabold text-amber-800">
+                      {pendingGradeCount} người hết giờ mà bài chưa nộp được
+                    </p>
+                    <p className="mt-0.5 text-xs font-semibold text-amber-700 leading-snug">
+                      Mất mạng, sập trình duyệt hay đóng nhầm tab thì bài không nộp lên được,
+                      nhưng phần họ đã làm vẫn được tự lưu lại. Bấm để chấm những bài đó — người
+                      còn đang ngồi thi không bị đụng tới.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleGradePending}
+                  disabled={gradingPending}
+                  className="shrink-0 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                >
+                  {gradingPending ? "Đang chấm..." : "Chấm bài đã lưu"}
+                </button>
+              </div>
+              {gradeMsg && (
+                <p className="mt-2 text-xs font-bold text-amber-800">{gradeMsg}</p>
+              )}
+            </div>
+          )}
 
           {/* Danh sách dự thi — ai không thi tính 0 điểm */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

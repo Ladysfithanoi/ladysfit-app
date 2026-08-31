@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { tryPromotePt } from "@/lib/pt-promotion";
+import { gradeAndRecord } from "@/lib/exam-grading";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
 import { canSitExam, NOT_REQUIRED_MESSAGE } from "@/lib/exam-required-fm";
 import {
@@ -132,61 +132,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fetch the actual questions to grade
-  const questionIds = Object.keys(answers);
-  const questions = await prisma.examQuestion.findMany({
-    where: { id: { in: questionIds } },
+  // Chấm và ghi kết quả — dùng chung với đường chấm lại từ bài đã tự lưu, xem
+  // lib/exam-grading.ts.
+  const graded = await gradeAndRecord({
+    userId: session.user.id,
+    userName: session.user.name ?? session.user.email ?? "PT",
+    answers,
+    passingScore,
+    violations: examSession?.violations ?? 0,
+    noPenalty,
   });
 
-  const total = questions.length;
-  if (total === 0) {
-    return NextResponse.json({ error: "Không tìm thấy câu hỏi" }, { status: 400 });
+  if (!graded.ok) {
+    // Chấm hỏng thì trả lượt về chưa nộp, không thì người thi mất bài mà cũng
+    // không vào lại được.
+    if (examSession) {
+      await prisma.examSession.update({
+        where: { id: examSession.id },
+        data: { submittedAt: null },
+      });
+    }
+    return NextResponse.json({ error: graded.error }, { status: 400 });
   }
-
-  const correctCount = questions.filter((q) => answers[q.id] === q.correct).length;
-  const scorePct = Math.round((correctCount / total) * 100);
-  const passed = scorePct >= passingScore;
-
-  const attempt = await prisma.examAttempt.create({
-    data: {
-      userId: session.user.id,
-      score: correctCount,
-      total,
-      passed,
-      answers: JSON.stringify(answers),
-      // Số lần rời khỏi trang thi — giữ lại trong bài để Admin xem về sau.
-      violations: examSession?.violations ?? 0,
-    },
-  });
 
   if (examSession) {
     await prisma.examSession.update({
       where: { id: examSession.id },
-      data: { attemptId: attempt.id },
+      data: { attemptId: graded.attemptId },
     });
   }
 
-  const userName = session.user.name ?? session.user.email ?? "PT";
-
-  // FM thì dừng ở đây: điểm đã lưu cho Admin xem, không thăng, không hạ, không
-  // thông báo — đúng nghĩa "thi để biết trình độ, trượt cũng không bị gì".
-  let promoted = false;
-  if (!noPenalty) {
-    if (passed) {
-      // Đậu lý thuyết CHỈ là một trong các điều kiện — chỉ thăng hạng nếu đủ cả
-      // (thực hành đạt + doanh số + transform). Ngược lại vẫn ghi nhận đậu để chờ.
-      promoted = await tryPromotePt(session.user.id);
-      if (!promoted) {
-        await prisma.upgradeNotification.create({
-          data: { userId: session.user.id, userName, passed: true },
-        });
-      }
-    } else {
-      await prisma.upgradeNotification.create({
-        data: { userId: session.user.id, userName, passed: false },
-      });
-    }
-  }
-
-  return NextResponse.json({ attempt, scorePct, passed, promoted, noPenalty, correctCount, total });
+  return NextResponse.json({
+    scorePct: graded.scorePct,
+    passed: graded.passed,
+    promoted: graded.promoted,
+    noPenalty,
+    correctCount: graded.correctCount,
+    total: graded.total,
+  });
 }

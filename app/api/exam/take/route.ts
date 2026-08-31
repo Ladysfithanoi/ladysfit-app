@@ -12,6 +12,7 @@ import {
   parseQuestionIds,
   sessionDeadline,
 } from "@/lib/exam-session";
+import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -162,6 +163,25 @@ export async function GET(req: Request) {
   if (examSession) {
     endsAt = sessionDeadline(examSession, window.endAt);
     if (endsAt && endsAt.getTime() <= Date.now()) {
+      // Hết giờ mà bài chưa nộp được (mất mạng, sập trình duyệt, hết pin...).
+      // Phần đã tự lưu vẫn còn ở server nên chấm luôn tại đây thay vì để người
+      // ta mất trắng — xem lib/exam-grading.ts.
+      const saved = parseAnswers(examSession.answers);
+      if (Object.keys(saved).length > 0) {
+        const graded = await gradePendingSession(examSession.id, passingScore);
+        if (graded.ok) {
+          return NextResponse.json(
+            {
+              error:
+                `Đã hết thời lượng làm bài. Hệ thống đã chấm bài từ phần bạn đã làm: ` +
+                `đúng ${graded.correctCount}/${graded.total} câu (${graded.scorePct}%) — ` +
+                `${graded.passed ? "ĐẠT" : "CHƯA ĐẠT"}.`,
+              alreadyTaken: true,
+            },
+            { status: 403 }
+          );
+        }
+      }
       return NextResponse.json({ error: SESSION_EXPIRED_MESSAGE }, { status: 403 });
     }
   } else if (durationMinutes > 0) {
@@ -184,6 +204,8 @@ export async function GET(req: Request) {
     penaltyMinutes: examSession?.penaltyMinutes ?? 0,
     // Đang làm dở: đề và đồng hồ giữ nguyên như lần mở trước.
     resumed,
+    // Đáp án đã tự lưu — tải lại trang thì các câu đã làm hiện lại đúng như cũ.
+    savedAnswers: examSession ? parseAnswers(examSession.answers) : {},
     // Vé có chữ ký — máy người thi giữ rồi nộp kèm bài để server kiểm lại hạn.
     // Bài thi thật đã có lượt thi ở server nên vé chỉ còn dùng cho thi thử,
     // và cho những bài mở dở từ trước khi có bảng lượt thi.

@@ -715,6 +715,10 @@ model ExamSession {
   examKey         String
   /// JSON mảng id câu hỏi đã bốc, giữ đúng thứ tự hiển thị.
   questionIds     String    @db.Text
+  /// Đáp án đang làm dở, tự lưu trong lúc thi: JSON { idCâuHỏi: "A"|"B"|"C"|"D" }.
+  /// Nhờ nó mà mất mạng, sập trình duyệt, hết pin hay hết giờ không nộp kịp thì
+  /// bài vẫn chấm lại được — xem app/api/exam/autosave và lib/exam-grading.
+  answers         String?   @db.Text
   /// Thời lượng (phút) chốt lúc mở đề. 0 = không giới hạn.
   durationMinutes Int       @default(0)
   startedAt       DateTime  @default(now())
