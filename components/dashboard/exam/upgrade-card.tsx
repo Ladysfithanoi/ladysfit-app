@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { GraduationCap, CalendarClock, Lock, CheckCircle2, EyeOff } from "lucide-react";
 import { fmtExamDate, type ExamWindowState } from "@/lib/exam-schedule";
+import { ExamHistoryLink } from "./exam-history-modal";
 
 type ExamStatus = {
   role: string;
@@ -151,6 +152,13 @@ export function UpgradeCard() {
             <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
               <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
               <p className="text-xs font-semibold text-gray-500">{exam.message}</p>
+            </div>
+          )}
+
+          {/* Lịch sử thi của chính mình — chỉ hiện khi đã từng làm bài */}
+          {status.lastAttempt && (
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <ExamHistoryLink />
             </div>
           )}
         </div>
