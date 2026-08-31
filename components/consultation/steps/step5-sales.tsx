@@ -6,12 +6,13 @@ import Link from "next/link";
 import { Check, Package, Clock, ChevronRight, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
+import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
 import { BodyFatCard } from "./body-fat-card";
 import { TransformGallery } from "./transform-gallery";
-import { RoadmapBuilderModal } from "./roadmap-builder-modal";
+import { RoadmapBuilderModal, type RoadmapPick } from "./roadmap-builder-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,8 @@ type SelectedPkg = {
   order: number;
   isConfirmed: boolean;
   isBuffer?: boolean;
+  /** Bậc trên bậc thang 3 giai đoạn — xem lib/roadmap-phases.ts. */
+  roadmapPhase?: number | null;
 };
 
 type PricingInfo = {
@@ -99,7 +102,12 @@ function estimateDaysToGoal(
 // ─── Roadmap builder ──────────────────────────────────────────────────────────
 // Order is always enforced: Stage 1 → Stage 2 → Stage 3 (L5/Loyalfit always last)
 
-function makePkg(key: string, order: number, isBuffer = false): SelectedPkg {
+function makePkg(
+  key: string,
+  order: number,
+  isBuffer = false,
+  roadmapPhase?: PhaseNum | null
+): SelectedPkg {
   const def = PACKAGES[key];
   return {
     packageName: key,
@@ -111,6 +119,9 @@ function makePkg(key: string, order: number, isBuffer = false): SelectedPkg {
     order,
     isConfirmed: true,
     isBuffer,
+    // Ba lộ trình dựng sẵn không hỏi bậc, nên xếp theo giai đoạn thương mại của
+    // gói; lộ trình tự vẽ thì truyền thẳng bậc người dùng đã chọn.
+    roadmapPhase: roadmapPhase ?? phaseOf(key),
   };
 }
 
@@ -375,8 +386,8 @@ export function Step5Sales({
    * đoạn 1 → 3, đánh lại số order và coi như đã chốt. Bỏ đánh dấu option vì
    * lộ trình này không còn là một trong 3 mẫu dựng tự động nữa.
    */
-  function applyCustomRoadmap(keys: string[]) {
-    setPackages(keys.map((key, i) => makePkg(key, i + 1)));
+  function applyCustomRoadmap(picks: RoadmapPick[]) {
+    setPackages(picks.map((pick, i) => makePkg(pick.packageName, i + 1, false, pick.phase)));
     setSelectedOptionNum(null);
     setShowRoadmapBuilder(false);
   }
@@ -736,7 +747,10 @@ export function Step5Sales({
       {showRoadmapBuilder && (
         <RoadmapBuilderModal
           info={info}
-          packageNames={packages.map((p) => p.packageName)}
+          picked={packages.map((p) => ({
+            packageName: p.packageName,
+            phase: p.roadmapPhase,
+          }))}
           isReadOnly={isReadOnly}
           onClose={() => setShowRoadmapBuilder(false)}
           onApply={applyCustomRoadmap}

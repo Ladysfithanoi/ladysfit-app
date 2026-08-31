@@ -314,6 +314,10 @@ model ConsultationPackage {
   discountedPrice Float?
   order          Int
   isConfirmed    Boolean @default(false)
+  /// Bậc của gói trên bậc thang 3 giai đoạn (1/2/3) — xem lib/roadmap-phases.ts.
+  /// Gói nào ghép vào bậc nào cũng được nên không suy ngược ra từ tên gói được;
+  /// null = lộ trình lưu từ trước khi có bậc thang, lúc đó suy tạm theo stage.
+  roadmapPhase   Int?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 

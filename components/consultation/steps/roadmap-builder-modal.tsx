@@ -5,6 +5,7 @@ import { X, Plus, Clock, ArrowLeft, Lock, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice } from "@/lib/packages";
 import {
+  ROADMAP_PACKAGES,
   ROADMAP_PHASES,
   checkPick,
   fmtDuration,
@@ -22,12 +23,17 @@ import {
  * bên trái là nền tảng, leo dần sang phải tới bậc duy trì. Tư vấn viên ghép gói
  * vào từng bậc bằng dấu cộng mờ, mỗi bậc bao nhiêu gói cũng được.
  *
- * Danh sách gói hiện ra đã lọc sẵn theo bậc và theo tình trạng khách — gói
- * không đủ điều kiện vẫn hiện nhưng khoá lại kèm lý do, để tư vấn viên giải
- * thích được với khách thay vì thấy gói tự nhiên biến mất.
+ * Bậc thang là mô hình huấn luyện chứ không phải giai đoạn thương mại của gói,
+ * nên bậc nào cũng chọn được cả 7 gói (L0 → Loyalfit). Chỉ điều kiện thật của
+ * gói mới khoá: Loyalfit không được mở đầu lộ trình, L1/L2 cần khách đủ cân,
+ * gói chỉ mua 1 lần thì không ghép hai lần. Gói bị khoá vẫn hiện kèm lý do, để
+ * tư vấn viên giải thích được với khách thay vì thấy gói tự nhiên biến mất.
  *
  * Thời lượng cộng dồn hiện ngay cạnh tên mỗi bậc; tổng ba bậc nằm trên tiêu đề.
  */
+
+/** Một gói đang nằm trên lộ trình, kèm bậc mà nó được xếp vào. */
+export type RoadmapPick = { packageName: string; phase: PhaseNum };
 
 type PhasePicks = Record<PhaseNum, string[]>;
 
@@ -39,19 +45,28 @@ const EMPTY_PICKS: PhasePicks = { 1: [], 2: [], 3: [] };
  */
 const RISER_CLASS = ["sm:pt-[88px]", "sm:pt-[44px]", "sm:pt-0"];
 
-/** Xếp các gói đang có vào đúng bậc của nó. */
-function groupByPhase(packageNames: string[]): PhasePicks {
+/**
+ * Xếp lộ trình đang có lên bậc thang.
+ *
+ * Ưu tiên bậc đã lưu; gói nào chưa có bậc (lộ trình lưu từ trước khi có bậc
+ * thang) thì xếp tạm theo giai đoạn thương mại của gói.
+ */
+function groupByPhase(picked: { packageName: string; phase?: number | null }[]): PhasePicks {
   const picks: PhasePicks = { 1: [], 2: [], 3: [] };
-  for (const name of packageNames) {
-    const num = phaseOf(name);
-    if (num) picks[num].push(name);
+  for (const item of picked) {
+    const saved = item.phase;
+    const num =
+      saved === 1 || saved === 2 || saved === 3 ? (saved as PhaseNum) : phaseOf(item.packageName);
+    if (num) picks[num].push(item.packageName);
   }
   return picks;
 }
 
-/** Toàn bộ lộ trình duỗi thẳng theo thứ tự bậc 1 → 3. */
-function flatten(picks: PhasePicks): string[] {
-  return [...picks[1], ...picks[2], ...picks[3]];
+/** Toàn bộ lộ trình duỗi thẳng theo thứ tự bậc 1 → 3, kèm bậc của từng gói. */
+function flatten(picks: PhasePicks): RoadmapPick[] {
+  return ROADMAP_PHASES.flatMap((phase) =>
+    picks[phase.num].map((packageName) => ({ packageName, phase: phase.num }))
+  );
 }
 
 // ─── Thẻ gói đã ghép ──────────────────────────────────────────────────────────
@@ -217,30 +232,30 @@ function PackagePicker({
             Giai đoạn {phase.num} · {phase.name}
           </h3>
           <p className="mt-0.5 text-xs font-semibold text-gray-400">
-            Chọn gói để ghép vào bậc này — ghép được nhiều gói
+            Gói nào cũng ghép vào bậc này được, ghép bao nhiêu gói cũng được
           </p>
         </div>
       </div>
 
       <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4 sm:px-6">
-        {margin !== null && phase.num === 1 && (
+        {margin !== null && (
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-2.5">
             <p className="text-xs font-semibold text-blue-800">
               Khách dư <span className="font-extrabold">{margin.toFixed(1)} kg</span> so với chiều
-              cao ({profile.weight} − {profile.height} + 100) — điều kiện vào gói Giai đoạn 1.
+              cao ({profile.weight} − {profile.height} + 100) — đây là điều kiện vào gói L1 / L2.
             </p>
           </div>
         )}
-        {margin === null && phase.num === 1 && (
+        {margin === null && (
           <div className="rounded-xl border border-amber-100 bg-amber-50 px-3.5 py-2.5">
             <p className="text-xs font-semibold text-amber-700">
-              Chưa có cân nặng / chiều cao của khách nên chưa lọc được điều kiện L1, L2. Kiểm tra
+              Chưa có cân nặng / chiều cao của khách nên chưa kiểm được điều kiện L1, L2. Kiểm tra
               lại điều kiện từng gói trước khi chốt.
             </p>
           </div>
         )}
 
-        {phase.packages.map((key) => {
+        {ROADMAP_PACKAGES.map((key) => {
           const def = PACKAGES[key];
           if (!def) return null;
           const check = checkPick(key, { profile, chosenBefore, chosenAll });
@@ -329,18 +344,18 @@ function PackagePicker({
 
 export function RoadmapBuilderModal({
   info,
-  packageNames,
+  picked,
   isReadOnly,
   onClose,
   onApply,
 }: {
   info: Record<string, unknown>;
   /** Lộ trình đang có — dùng làm điểm bắt đầu để sửa tiếp. */
-  packageNames: string[];
+  picked: { packageName: string; phase?: number | null }[];
   isReadOnly: boolean;
   onClose: () => void;
-  /** Trả về danh sách gói theo thứ tự bậc 1 → 3. */
-  onApply: (packageNames: string[]) => void;
+  /** Trả về danh sách gói kèm bậc, đã xếp theo thứ tự bậc 1 → 3. */
+  onApply: (picks: RoadmapPick[]) => void;
 }) {
   const profile: RoadmapProfile = useMemo(
     () => ({
@@ -351,12 +366,13 @@ export function RoadmapBuilderModal({
   );
 
   const [picks, setPicks] = useState<PhasePicks>(() =>
-    packageNames.length > 0 ? groupByPhase(packageNames) : EMPTY_PICKS
+    picked.length > 0 ? groupByPhase(picked) : EMPTY_PICKS
   );
   const [pickerPhase, setPickerPhase] = useState<PhaseNum | null>(null);
 
   const flat = flatten(picks);
-  const totalDays = sumDays(flat);
+  const flatNames = flat.map((x) => x.packageName);
+  const totalDays = sumDays(flatNames);
   const totalLabel = fmtDuration(totalDays);
 
   function addTo(phaseNum: PhaseNum, packageName: string) {
@@ -479,7 +495,7 @@ export function RoadmapBuilderModal({
               phase={activePhase}
               profile={profile}
               chosenBefore={chosenBefore}
-              chosenAll={flat}
+              chosenAll={flatNames}
               onPick={(key) => addTo(activePhase.num, key)}
               onBack={() => setPickerPhase(null)}
             />

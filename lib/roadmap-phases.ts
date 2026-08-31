@@ -4,14 +4,16 @@ import { PACKAGES } from "@/lib/packages";
  * ── Ba giai đoạn của lộ trình tập ────────────────────────────────────────────
  *
  * Bậc thang lấy ý từ mô hình OPT của NASM: xây nền trước, phát triển sau, rồi
- * mới tới giữ kết quả. Ba bậc ứng đúng ba `stage` của gói tập trong
- * lib/packages.ts — chỉ đổi tên cho dễ hình dung khi ngồi tư vấn với khách:
+ * mới tới giữ kết quả.
  *
- *   stage 1 → Thiết lập nền tảng
- *   stage 2 → Phát triển toàn diện
- *   stage 3 → Duy trì sức khoẻ
+ * Ba bậc này là MÔ HÌNH HUẤN LUYỆN, không phải ba `stage` thương mại của gói
+ * tập trong lib/packages.ts. Đừng buộc hai thứ vào nhau: gói tập chỉ là thời
+ * lượng và số buổi, gói nào lắp vào bậc nào cũng hợp lệ. Cái duy nhất chặn là
+ * điều kiện thật của từng gói — xem `checkPick`.
  *
- * Mỗi bậc ghép được bao nhiêu gói cũng được; luật chặn nằm ở `checkPick`.
+ * Vì thế vị trí bậc của một gói KHÔNG suy ra được từ tên gói; nó được lưu ở
+ * cột consultation_packages.roadmapPhase. `phaseOf` bên dưới chỉ là đường lùi
+ * cho những lộ trình lưu từ trước khi có bậc thang.
  */
 
 export type PhaseNum = 1 | 2 | 3;
@@ -21,8 +23,6 @@ export type RoadmapPhase = {
   stage: "1" | "2" | "3";
   name: string;
   tagline: string;
-  /** Gói được phép ghép vào bậc này, theo đúng thứ tự hiện trong danh sách chọn. */
-  packages: string[];
   theme: {
     /** Nền của bậc thang. */
     surface: string;
@@ -38,17 +38,21 @@ export type RoadmapPhase = {
 };
 
 /**
- * Danh mục gói của mỗi bậc bám theo danh sách khách hàng nhìn thấy trong
- * "Danh sách lộ trình Ladysfit" (L0 → Loyalfit). Gói tài trợ (Cư dân) và hợp
- * đồng KOC không nằm ở đây vì đó không phải gói bán.
+ * Gói ghép được vào bậc thang — cùng một danh sách cho cả ba bậc, đúng thứ tự
+ * khách hàng thấy trong "Danh sách lộ trình Ladysfit".
+ *
+ * Gói "Cư dân" và hợp đồng "KOC" cố tình không có ở đây: đó là chương trình
+ * riêng (tài trợ / hợp tác, giá 0đ, không tính doanh số), không phải gói bán
+ * để xếp vào lộ trình tư vấn.
  */
+export const ROADMAP_PACKAGES = ["L0", "L1", "L2", "L3", "L4", "L5", "Loyalfit"];
+
 export const ROADMAP_PHASES: RoadmapPhase[] = [
   {
     num: 1,
     stage: "1",
     name: "Thiết lập nền tảng",
     tagline: "Làm quen chuyển động, giảm mỡ nhanh",
-    packages: ["L0", "L1", "L2"],
     theme: {
       surface: "bg-rose-50",
       tread: "bg-rose-200",
@@ -62,7 +66,6 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
     stage: "2",
     name: "Phát triển toàn diện",
     tagline: "Tạo hình, hoàn thiện vóc dáng",
-    packages: ["L3", "L4"],
     theme: {
       surface: "bg-blue-50",
       tread: "bg-blue-200",
@@ -76,7 +79,6 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
     stage: "3",
     name: "Duy trì sức khoẻ",
     tagline: "Giữ kết quả, duy trì thói quen",
-    packages: ["L5", "Loyalfit"],
     theme: {
       surface: "bg-emerald-50",
       tread: "bg-emerald-200",
@@ -87,6 +89,13 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
   },
 ];
 
+/**
+ * Bậc "tự nhiên" của một gói, suy từ giai đoạn thương mại của nó.
+ *
+ * CHỈ dùng làm đường lùi: xếp tạm những gói được lưu trước khi có cột
+ * roadmapPhase, và chọn bậc mặc định cho ba lộ trình dựng sẵn. Không dùng để
+ * chặn gói — mọi gói đều ghép được vào mọi bậc.
+ */
 export function phaseOf(packageName: string): PhaseNum | null {
   const stage = PACKAGES[packageName]?.stage;
   const phase = ROADMAP_PHASES.find((p) => p.stage === stage);

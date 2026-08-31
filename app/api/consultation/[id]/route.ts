@@ -219,11 +219,32 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   // Replace packages (step 5)
+  //
+  // Chép từng cột một chứ không rải nguyên object gửi lên: phía client mang
+  // theo vài trường chỉ sống trong giao diện (isBuffer — gói L4 dự phòng) và cả
+  // id của bản ghi cũ. Prisma gặp trường lạ là ném "Unknown argument", tức là
+  // cả bước 5 không lưu được — nên phải lọc ở đây.
   if (packages) {
     await prisma.consultationPackage.deleteMany({ where: { consultationId: params.id } });
     if (packages.length > 0) {
       await prisma.consultationPackage.createMany({
-        data: packages.map((p: Record<string, unknown>) => ({ ...p, consultationId: params.id })),
+        data: packages.map((p: Record<string, unknown>) => {
+          const phase = Number(p.roadmapPhase);
+          return {
+            consultationId: params.id,
+            packageName: String(p.packageName ?? ""),
+            packageStage: String(p.packageStage ?? ""),
+            sessions: Number(p.sessions) || 0,
+            durationDays: Number(p.durationDays) || 0,
+            price: Number(p.price) || 0,
+            discountedPrice: p.discountedPrice == null ? null : Number(p.discountedPrice),
+            order: Number(p.order) || 0,
+            isConfirmed: Boolean(p.isConfirmed),
+            // Bậc trên bậc thang 3 giai đoạn; giá trị lạ thì để trống, lúc mở
+            // lại sẽ xếp tạm theo giai đoạn thương mại của gói.
+            roadmapPhase: phase === 1 || phase === 2 || phase === 3 ? phase : null,
+          };
+        }),
       });
     }
   }
