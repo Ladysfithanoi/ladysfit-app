@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { Download, X, CheckCircle, FileSpreadsheet, Upload, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NoticeDialog, type NoticeSpec } from "./confirm-dialog";
 
 type Step = "idle" | "loading" | "preview" | "importing" | "done";
 type RowStatus = "valid" | "error" | "duplicate";
@@ -33,6 +34,8 @@ export function ExamImportModal({
   onImported: () => void;
 }) {
   const [step, setStep] = useState<Step>("idle");
+  // Hộp thoại báo lỗi theo nhận diện thương hiệu — thay alert() của trình duyệt.
+  const [notice, setNotice] = useState<NoticeSpec | null>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -75,7 +78,12 @@ export function ExamImportModal({
         console.log("Parsed questions:", parsed);
 
         if (parsed.length === 0) {
-          alert("Không tìm thấy câu hỏi nào trong file.");
+          setNotice({
+            tone: "danger",
+            title: "File không có câu hỏi nào",
+            message:
+              "Kiểm tra lại file: dòng đầu là tiêu đề cột, câu hỏi bắt đầu từ dòng thứ hai.",
+          });
           return;
         }
 
@@ -116,7 +124,11 @@ export function ExamImportModal({
 
         setStep("preview");
       } catch {
-        alert("Không thể đọc file. Vui lòng dùng file .xlsx hoặc .xls.");
+        setNotice({
+          tone: "danger",
+          title: "Không đọc được file",
+          message: "Vui lòng dùng file Excel định dạng .xlsx hoặc .xls.",
+        });
         setStep("idle");
       }
     };
@@ -157,7 +169,11 @@ export function ExamImportModal({
       setStep("done");
       onImported();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Lỗi khi nhập");
+      setNotice({
+        tone: "danger",
+        title: "Nhập câu hỏi không thành công",
+        message: err instanceof Error ? err.message : "Có lỗi xảy ra, vui lòng thử lại.",
+      });
       setStep("preview");
     }
   }
@@ -169,6 +185,7 @@ export function ExamImportModal({
   const dupCount = rows.filter((r) => r.status === "duplicate").length;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={close} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[820px] mx-4 flex flex-col max-h-[88vh]">
@@ -395,5 +412,8 @@ export function ExamImportModal({
         </div>
       </div>
     </div>
+
+    {notice && <NoticeDialog spec={notice} onClose={() => setNotice(null)} />}
+    </>
   );
 }

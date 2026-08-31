@@ -37,6 +37,7 @@ import { fmtExamDate, todayVN, type ExamWindowState } from "@/lib/exam-schedule"
 import { ExamImportModal } from "./exam-import-modal";
 import { QuestionMedia, QuestionMediaFields } from "./question-media";
 import { QuestionPreview } from "./question-preview";
+import { ConfirmDialog, type ConfirmSpec } from "./confirm-dialog";
 
 type Question = {
   id: string;
@@ -213,7 +214,10 @@ export function ExamAdminPage({
   const [accessSearch, setAccessSearch] = useState("");
   const [accessPage, setAccessPage] = useState(0);
   const [accessBusy, setAccessBusy] = useState<string | null>(null);
-  const [accessMsg, setAccessMsg] = useState("");
+  const [accessMsg, setAccessMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // Hộp thoại hỏi lại theo nhận diện thương hiệu — thay confirm() của trình duyệt.
+  const [confirmSpec, setConfirmSpec] = useState<ConfirmSpec | null>(null);
 
   // Question form state
   const [showAdd, setShowAdd] = useState(false);
@@ -484,18 +488,19 @@ export function ExamAdminPage({
    * Bài đã kéo theo thăng cấp thì xoá bài KHÔNG hạ cấp lại — phải sửa tay ở
    * trang Cấp độ.
    */
-  async function handleDeleteAttempt(a: Attempt) {
+  function handleDeleteAttempt(a: Attempt) {
     const who = a.user.name ?? a.user.email;
-    if (
-      !confirm(
-        `Xoá bài thi của ${who} (${a.score}/${a.total})?
+    setConfirmSpec({
+      tone: "danger",
+      title: "Xoá bài thi này?",
+      message: `Bài của ${who} (${a.score}/${a.total}) và thông báo thăng cấp đi kèm sẽ bị xoá. Người này được vào thi lại nếu kỳ thi còn mở.`,
+      detail: "Không hoàn tác được.",
+      confirmLabel: "Xoá bài thi",
+      onConfirm: () => runDeleteAttempt(a),
+    });
+  }
 
-` +
-          "Bài thi và thông báo thăng cấp đi kèm sẽ bị xoá, và người này được vào thi lại " +
-          "nếu kỳ thi còn mở. Không hoàn tác được."
-      )
-    )
-      return;
+  async function runDeleteAttempt(a: Attempt) {
     setDeletingAttemptId(a.id);
     try {
       const res = await fetch(`/api/exam/attempts/${a.id}`, { method: "DELETE" });
@@ -540,15 +545,29 @@ export function ExamAdminPage({
    * "Cho thi lại" xoá bài của kỳ này nên hỏi lại một câu trước khi làm — các
    * thao tác còn lại đều đảo ngược được nên không cần hỏi.
    */
-  async function handleAccess(row: AccessRow, action: "block" | "unblock" | "extend" | "reset") {
+  function handleAccess(row: AccessRow, action: "block" | "unblock" | "extend" | "reset") {
     const who = row.name ?? row.email;
     if (action === "reset") {
-      const warn = row.takenAt
-        ? `Cho ${who} thi lại?\n\nBài đã chấm của kỳ này (${row.scorePct}%) sẽ bị xoá và không lấy lại được.`
-        : `Mở lại lượt thi cho ${who}? Đề cũ sẽ bị bỏ, lần vào sau bốc đề mới.`;
-      if (!confirm(warn)) return;
+      setConfirmSpec({
+        tone: "danger",
+        title: "Cho thi lại từ đầu?",
+        message: row.takenAt
+          ? `${who} sẽ thi lại kỳ này với một đề mới.`
+          : `${who} sẽ bốc đề mới ở lần vào sau — đề đang mở dở bị bỏ.`,
+        detail: row.takenAt
+          ? `Bài đã chấm của kỳ này (${row.scorePct}%) sẽ bị xoá vĩnh viễn.`
+          : "Không hoàn tác được.",
+        confirmLabel: "Cho thi lại",
+        onConfirm: () => runAccess(row, action),
+      });
+      return;
     }
-    setAccessMsg("");
+    runAccess(row, action);
+  }
+
+  async function runAccess(row: AccessRow, action: "block" | "unblock" | "extend" | "reset") {
+    const who = row.name ?? row.email;
+    setAccessMsg(null);
     setAccessBusy(row.userId + action);
     try {
       const res = await fetch("/api/exam/access", {
@@ -557,7 +576,12 @@ export function ExamAdminPage({
         body: JSON.stringify({ userId: row.userId, action }),
       });
       const data = await res.json();
-      setAccessMsg(res.ok ? `${who}: ${data.message}` : data.error ?? "Không thực hiện được");
+      setAccessMsg({
+        ok: res.ok,
+        text: res.ok
+          ? `${who}: ${data.message}`
+          : data.error ?? "Không thực hiện được",
+      });
       if (res.ok) router.refresh();
     } finally {
       setAccessBusy(null);
@@ -1019,7 +1043,10 @@ export function ExamAdminPage({
                 </button>
               </div>
               {gradeMsg && (
-                <p className="mt-2 text-xs font-bold text-amber-800">{gradeMsg}</p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                  <Check className="h-3.5 w-3.5 shrink-0" />
+                  {gradeMsg}
+                </p>
               )}
             </div>
           )}
@@ -1219,9 +1246,35 @@ export function ExamAdminPage({
             </div>
 
             {accessMsg && (
-              <p className="border-b border-gray-50 bg-gray-50/60 px-4 py-2.5 text-xs font-bold text-gray-600 sm:px-6">
-                {accessMsg}
-              </p>
+              <div
+                className={cn(
+                  "flex items-start gap-2 border-b px-4 py-2.5 sm:px-6",
+                  accessMsg.ok
+                    ? "border-emerald-100 bg-emerald-50"
+                    : "border-red-100 bg-red-50"
+                )}
+              >
+                {accessMsg.ok ? (
+                  <Check className="mt-px h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                ) : (
+                  <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0 text-red-500" />
+                )}
+                <p
+                  className={cn(
+                    "flex-1 text-xs font-bold leading-snug",
+                    accessMsg.ok ? "text-emerald-700" : "text-red-600"
+                  )}
+                >
+                  {accessMsg.text}
+                </p>
+                <button
+                  onClick={() => setAccessMsg(null)}
+                  aria-label="Đóng thông báo"
+                  className="shrink-0 rounded p-0.5 text-gray-400 transition-colors hover:text-gray-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
 
             {!initialConfig.examDate ? (
@@ -1662,6 +1715,10 @@ export function ExamAdminPage({
             </div>
           </div>
         </div>
+      )}
+
+      {confirmSpec && (
+        <ConfirmDialog spec={confirmSpec} onClose={() => setConfirmSpec(null)} />
       )}
 
       <ExamImportModal
