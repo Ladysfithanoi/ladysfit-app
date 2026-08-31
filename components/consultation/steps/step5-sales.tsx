@@ -12,13 +12,15 @@ import {
   phaseOf,
   type PhaseNum,
 } from "@/lib/roadmap-phases";
-import { priceRoadmap, type PriceLine } from "@/lib/roadmap-pricing";
+import { priceRoadmap } from "@/lib/roadmap-pricing";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
 import { BodyFatCard } from "./body-fat-card";
 import { TransformGallery } from "./transform-gallery";
 import { RoadmapBuilderModal, type RoadmapPick } from "./roadmap-builder-modal";
+import { RoadmapOptionsModal } from "./roadmap-options-modal";
+import { phase1KeyFor } from "@/lib/roadmap-variants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,8 +37,6 @@ type SelectedPkg = {
   /** Bậc trên bậc thang 3 giai đoạn — xem lib/roadmap-phases.ts. */
   roadmapPhase?: number | null;
 };
-
-type PricingInfo = PriceLine;
 
 type RoadmapOption = {
   num: 1 | 2 | 3;
@@ -109,18 +109,9 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
   const height       = Number(info.height) || 0;
   const targetWeight = Number(info.targetWeight) || 0;
 
-  // Stage 1: L1 or L2 based on weight-height delta.
-  // Ngưỡng lấy từ lib/roadmap-phases để khớp đúng điều kiện in trên gói và bộ
-  // lọc của bậc thang — 6 kg cho L2, 3 kg cho L1. Đừng nhầm với mốc 7 kg ở
-  // trang tổng quan: đó là điều kiện TRANSFORM, chuyện khác hẳn.
-  const phase1Key: string | null = (() => {
-    if (height > 0 && weight > 0) {
-      const diff = weight - height + 100;
-      if (diff >= L2_MIN_MARGIN) return "L2";
-      if (diff >= L1_MIN_MARGIN) return "L1";
-    }
-    return null;
-  })();
+  // Gói Giai đoạn 1 do cân nặng so với chiều cao quyết định — xem
+  // lib/roadmap-variants, dùng chung ngưỡng với bộ lọc của bậc thang.
+  const phase1Key: string | null = phase1KeyFor(weight, height);
 
   // Stage 3: choose based on estimated journey duration (calorie-deficit science).
   // Journey >= 365 days → L5 (comprehensive 6-month maintenance for long haul).
@@ -218,10 +209,16 @@ const OPT_THEME: Record<number, { active: string; badge: string; ring: string }>
 
 // ─── PackageCard ──────────────────────────────────────────────────────────────
 
+/**
+ * Thẻ một gói trong lộ trình đã chốt.
+ *
+ * Cố tình KHÔNG hiện giá từng gói: giá phụ thuộc vị trí gói trong lộ trình
+ * (gói đầu được trợ giá, từ gói thứ hai giảm 10% tái ký) nên đọc rời từng con
+ * số dễ hiểu nhầm. Tiền gom về một chỗ ở phần "Tổng đầu tư" bên dưới.
+ */
 function PackageCard({
   pkg,
   def,
-  pricing,
   confirmed,
   onToggle,
   onViewDetail,
@@ -229,7 +226,6 @@ function PackageCard({
 }: {
   pkg: SelectedPkg;
   def: PackageDef;
-  pricing: PricingInfo;
   confirmed: boolean;
   onToggle: () => void;
   onViewDetail: () => void;
@@ -258,26 +254,6 @@ function PackageCard({
               {def.connectSessions ? ` + ${def.connectSessions} buổi Connect` : ""}
             </span>
             <span>Hạn <span className="font-bold text-gray-700">{def.durationDays}</span> ngày</span>
-          </div>
-
-          <div className="mb-2">
-            {pricing.type === "subsidized" && (
-              <div className="flex items-center flex-wrap gap-2">
-                <span className="text-xs text-gray-400 line-through">{formatPrice(pricing.originalPrice)}</span>
-                <span className="text-sm font-extrabold text-[#f15b5c]">{formatPrice(pricing.effectivePrice)}</span>
-                <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Giá trợ giá</span>
-              </div>
-            )}
-            {pricing.type === "full" && (
-              <span className="text-sm font-extrabold text-gray-800">{formatPrice(pricing.effectivePrice)}</span>
-            )}
-            {pricing.type === "renewal" && (
-              <div className="flex items-center flex-wrap gap-2">
-                <span className="text-xs text-gray-400 line-through">{formatPrice(pricing.originalPrice)}</span>
-                <span className="text-sm font-extrabold text-[#f15b5c]">{formatPrice(pricing.effectivePrice)} (-10%)</span>
-                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Giá tái ký</span>
-              </div>
-            )}
           </div>
 
           {!pkg.isBuffer && <p className="text-xs text-green-700 font-semibold">{def.commitment}</p>}
@@ -357,10 +333,19 @@ export function Step5Sales({
   const [showCatalog, setShowCatalog]   = useState(false);
   // Bậc thang 3 giai đoạn — tự ghép gói thay vì lấy nguyên một trong 3 option.
   const [showRoadmapBuilder, setShowRoadmapBuilder] = useState(false);
+  // Bấm một OPTION thì mở tiếp hộp chọn cách ghép gói trong khoảng thời gian đó.
+  const [variantOption, setVariantOption] = useState<RoadmapOption | null>(null);
 
-  function selectOption(opt: RoadmapOption) {
+  /**
+   * Chốt lộ trình từ hộp chọn cách ghép gói.
+   *
+   * Option quyết định TỔNG THỜI GIAN, còn chuỗi gói cụ thể là do khách chọn
+   * trong hộp đó — xem roadmap-options-modal.
+   */
+  function selectVariant(opt: RoadmapOption, packageNames: string[]) {
     setSelectedOptionNum(opt.num);
-    setPackages(opt.packages);
+    setPackages(packageNames.map((key, i) => makePkg(key, i + 1)));
+    setVariantOption(null);
   }
 
   /**
@@ -391,6 +376,9 @@ export function Step5Sales({
   const transformTarget = initialWeight - 7;
   const infoHeight     = Number(info.height) || 0;
   const weightDiff     = infoHeight > 0 && initialWeight > 0 ? initialWeight - infoHeight + 100 : null;
+  // Gói Giai đoạn 1 của khách này — hộp chọn cách ghép gói giữ nguyên gói đó
+  // ở mọi phương án, vì nó do thể trạng quyết định chứ không phải do khách chọn.
+  const phase1Key = phase1KeyFor(initialWeight, infoHeight);
 
   const confirmedPkgs    = packages.filter((p) => p.isConfirmed);
   const loyalfitOnly     = confirmedPkgs.length > 0 && confirmedPkgs.every((p) => p.packageName === "Loyalfit");
@@ -464,7 +452,7 @@ export function Step5Sales({
               <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#f15b5c] transition-colors" />
             </button>
             <p className="text-xs text-gray-400 mb-4">
-              Ấn chọn một trong 3 lộ trình để xem danh sách gói tập tương ứng —{" "}
+              Ấn một trong 3 lộ trình để chọn cách ghép gói cho khoảng thời gian đó —{" "}
               <button
                 type="button"
                 onClick={() => setShowCatalog(true)}
@@ -484,7 +472,7 @@ export function Step5Sales({
                 return (
                   <button
                     key={opt.num}
-                    onClick={() => selectOption(opt)}
+                    onClick={() => setVariantOption(opt)}
                     className={cn(
                       "text-left rounded-2xl border-2 p-4 transition-all hover:shadow-md",
                       isSelected
@@ -536,15 +524,13 @@ export function Step5Sales({
             <>
               <div className="space-y-3">
                 {packages.map((pkg, i) => {
-                  const def     = PACKAGES[pkg.packageName];
-                  const pricing = allPricing[i];
-                  if (!def || !pricing) return null;
+                  const def = PACKAGES[pkg.packageName];
+                  if (!def) return null;
                   return (
                     <PackageCard
                       key={`${pkg.packageName}-${i}`}
                       pkg={pkg}
                       def={def}
-                      pricing={pricing}
                       confirmed={pkg.isConfirmed}
                       onToggle={() => toggleConfirm(i)}
                       onViewDetail={() => setDetailPkg(pkg.packageName)}
@@ -730,6 +716,21 @@ export function Step5Sales({
       )}
 
       {showCatalog && <PackagesCatalogModal onClose={() => setShowCatalog(false)} />}
+
+      {variantOption && (
+        <RoadmapOptionsModal
+          option={{
+            num: variantOption.num,
+            label: variantOption.label,
+            sublabel: variantOption.sublabel,
+            totalDays: variantOption.totalDays,
+            packageNames: variantOption.packages.map((p) => p.packageName),
+          }}
+          phase1Key={phase1Key}
+          onPick={(names) => selectVariant(variantOption, names)}
+          onClose={() => setVariantOption(null)}
+        />
+      )}
 
       {showRoadmapBuilder && (
         <RoadmapBuilderModal
