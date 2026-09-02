@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
+import { PtRankingSection } from "./pt-ranking-section";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { fmtDate } from "@/lib/format-date";
 
@@ -203,6 +204,9 @@ export function OverviewTab({
           </div>
         </div>
       </div>
+
+      {/* Bảng xếp hạng PT */}
+      <PtRankingSection />
 
       {/* Latest measurement card */}
       {latestMeasurement && (
