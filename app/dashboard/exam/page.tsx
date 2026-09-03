@@ -13,11 +13,18 @@ export default async function ExamPage() {
   if (!session) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  const [questions, configRaw, attempts, fmUsers, requiredFMs] = await Promise.all([
-    prisma.examQuestion.findMany({ orderBy: { order: "asc" } }),
+  const [questionRows, configRaw, attempts, fmUsers, requiredFMs, levels] = await Promise.all([
+    // Mỗi câu kèm các cấp đang dùng nó — tab Ngân hàng đề lọc và gắn cấp tại chỗ.
+    prisma.examQuestion.findMany({
+      orderBy: { order: "asc" },
+      include: { levels: { select: { levelId: true } } },
+    }),
     prisma.examConfig.findFirst(),
     prisma.examAttempt.findMany({
-      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+        level: { select: { id: true, name: true, color: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     // Danh sách FM để Admin tick ai phải thi — xem lib/exam-required-fm.ts.
@@ -27,7 +34,32 @@ export default async function ExamPage() {
       orderBy: { name: "asc" },
     }),
     prisma.examRequiredFM.findMany({ select: { userId: true } }),
+    // Cấp độ đang bật, kèm số câu đề của từng cấp đang có.
+    prisma.pTLevel.findMany({
+      where: { isActive: true },
+      orderBy: { order: "asc" },
+      select: {
+        id: true, name: true, color: true, order: true,
+        examNumQuestions: true, examPassingScore: true,
+        _count: { select: { examQuestions: true } },
+      },
+    }),
   ]);
+
+  const questions = questionRows.map(({ levels: qLevels, ...q }) => ({
+    ...q,
+    levelIds: qLevels.map((l) => l.levelId),
+  }));
+
+  const levelOptions = levels.map((l) => ({
+    id: l.id,
+    name: l.name,
+    color: l.color,
+    order: l.order,
+    numQuestions: l.examNumQuestions,
+    passingScore: l.examPassingScore,
+    questionCount: l._count.examQuestions,
+  }));
 
   const config = configRaw ?? {
     id: "",
@@ -43,6 +75,7 @@ export default async function ExamPage() {
     rankWeightExam: DEFAULT_RANK_WEIGHTS.exam,
     rankWeightRevenue: DEFAULT_RANK_WEIGHTS.revenue,
     rankWeightTransform: DEFAULT_RANK_WEIGHTS.transform,
+    fmLevelId: null as string | null,
     updatedAt: new Date(),
   };
 
@@ -237,6 +270,8 @@ export default async function ExamPage() {
     createdAt: a.createdAt.toISOString(),
     violations: a.violations,
     user: a.user,
+    // Bài này là đề của cấp nào. Bài cũ trước khi phân cấp thì để trống.
+    level: a.level,
   }));
 
   return (
@@ -255,7 +290,9 @@ export default async function ExamPage() {
         rankWeightExam: config.rankWeightExam,
         rankWeightRevenue: config.rankWeightRevenue,
         rankWeightTransform: config.rankWeightTransform,
+        fmLevelId: config.fmLevelId,
       }}
+      levels={levelOptions}
       attempts={serializedAttempts}
       windowState={window.state}
       roster={roster}

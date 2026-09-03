@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { tryPromotePt } from "@/lib/pt-promotion";
+import { examSettingsForLevel } from "@/lib/exam-level";
 
 /**
  * ── Chấm bài và ghi kết quả ──────────────────────────────────────────────────
@@ -57,6 +58,8 @@ export async function gradeAndRecord(opts: {
   passingScore: number;
   violations: number;
   noPenalty: boolean;
+  /** Bài này là đề của cấp nào — quyết định điều kiện lý thuyết khi xét thăng cấp. */
+  levelId: string | null;
 }): Promise<GradeOutcome> {
   const questionIds = Object.keys(opts.answers);
   const questions = questionIds.length
@@ -80,6 +83,7 @@ export async function gradeAndRecord(opts: {
       passed,
       answers: JSON.stringify(opts.answers),
       violations: opts.violations,
+      levelId: opts.levelId,
     },
   });
 
@@ -121,7 +125,8 @@ export async function gradeAndRecord(opts: {
  */
 export async function gradePendingSession(
   sessionId: string,
-  passingScore: number
+  /** Điểm đạt chung, chỉ dùng khi cấp của lượt thi không đặt riêng. */
+  fallbackPassingScore: number
 ): Promise<GradeOutcome> {
   const examSession = await prisma.examSession.findUnique({
     where: { id: sessionId },
@@ -142,13 +147,21 @@ export async function gradePendingSession(
   });
   if (claimed.count === 0) return { ok: false, error: "Lượt thi này đã nộp bài rồi" };
 
+  // Điểm đạt lấy theo cấp đã chốt lúc mở đề, không phải cấp hiện tại của người
+  // thi: bài chấm muộn mà lúc đó họ vừa được thăng cấp thì vẫn phải chấm bằng
+  // thước của đề họ đã làm.
+  const settings = await examSettingsForLevel(examSession.levelId, {
+    passingScore: fallbackPassingScore,
+  });
+
   const result = await gradeAndRecord({
     userId: examSession.userId,
     userName: examSession.user.name ?? examSession.user.email ?? "PT",
     answers,
-    passingScore,
+    passingScore: settings.passingScore,
     violations: examSession.violations,
     noPenalty: examSession.user.role === "FM",
+    levelId: examSession.levelId,
   });
 
   if (result.ok) {

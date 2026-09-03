@@ -25,6 +25,9 @@ type ExamStatus = {
   } | null;
   passingScore: number;
   numQuestions: number;
+  // Ten cap cua DE se lam, va ly do chua thi duoc (chua xep cap / cap chua co de).
+  examLevelName: string | null;
+  examUnavailableReason: string | null;
   enableLevelSystem: boolean;
   // Mỗi người chỉ thi một lần một kỳ — thi rồi thì không còn nút vào thi.
   alreadyTaken: boolean;
@@ -95,6 +98,15 @@ export function UpgradeCard() {
             Vượt qua bài kiểm tra để thăng lên cấp độ cao hơn
           </p>
           <div className="mt-2.5 flex items-center gap-3 flex-wrap">
+            {/* Mỗi cấp một đề riêng — nói rõ mình sẽ làm đề nào */}
+            {status.examLevelName && (
+              <>
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  Đề <span className="font-bold text-gray-700">{status.examLevelName}</span>
+                </span>
+                <span className="text-gray-200">·</span>
+              </>
+            )}
             <span className="flex items-center gap-1 text-xs text-gray-500">
               <span className="font-bold text-gray-700">{status.numQuestions}</span> câu hỏi
             </span>
@@ -138,6 +150,13 @@ export function UpgradeCard() {
                 Bạn đã hoàn thành bài thi của kỳ này. Mỗi người chỉ thi một lần duy nhất nên
                 không vào thi lại được nữa.
               </p>
+            </div>
+          ) : status.examUnavailableReason ? (
+            // Chưa xếp cấp, hoặc cấp chưa được soạn đề — nói ngay thay vì để
+            // người ta bấm vào rồi mới nhận lỗi ở trang làm bài.
+            <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100">
+              <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-amber-700">{status.examUnavailableReason}</p>
             </div>
           ) : exam.open ? (
             <Link

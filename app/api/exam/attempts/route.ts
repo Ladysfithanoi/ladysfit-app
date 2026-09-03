@@ -11,6 +11,7 @@ import {
   sessionDeadline,
 } from "@/lib/exam-session";
 import { TICKET_GRACE_MS, verifyExamTicket } from "@/lib/exam-ticket";
+import { resolveExamLevel } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -19,7 +20,11 @@ export async function GET() {
   }
 
   const attempts = await prisma.examAttempt.findMany({
-    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    include: {
+      user: { select: { id: true, name: true, email: true, role: true } },
+      // Đề của cấp nào — cùng một người có thể có bài của nhiều cấp khác nhau.
+      level: { select: { id: true, name: true, color: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -56,7 +61,13 @@ export async function POST(req: NextRequest) {
     prisma.examConfig.findFirst(),
     prisma.systemConfig.findUnique({ where: { id: "main" } }),
   ]);
-  const passingScore = config?.passingScore ?? 80;
+
+  // Chấm theo thước của ĐỀ người này làm, không phải điểm đạt chung.
+  const resolved = await resolveExamLevel({ userId: session.user.id, role, config });
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: 403 });
+  }
+  const { levelId, passingScore } = resolved.settings;
 
   if (!noPenalty && sysConfig?.enableLevelSystem === false) {
     return NextResponse.json({ error: "Hệ thống phân cấp độ đang tắt" }, { status: 403 });
@@ -141,6 +152,9 @@ export async function POST(req: NextRequest) {
     passingScore,
     violations: examSession?.violations ?? 0,
     noPenalty,
+    // Lượt thi đã chốt cấp từ lúc mở đề; bài mở dở từ trước khi có bảng lượt
+    // thi thì lấy cấp giải ra được của chính người nộp.
+    levelId: examSession?.levelId ?? levelId,
   });
 
   if (!graded.ok) {

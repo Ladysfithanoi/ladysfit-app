@@ -27,6 +27,9 @@ type PTLevel = {
   monthlyTarget: number;
   promoteMinAvgRevenue: number;
   promoteMinTransform: number;
+  // De ly thuyet rieng cua cap: null = dung so chung o trang Bai thi.
+  examNumQuestions: number | null;
+  examPassingScore: number | null;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -86,6 +89,9 @@ export function PTLevelsTab() {
     monthlyTarget: 38,
     promoteMinAvgRevenue: 30.4,
     promoteMinTransform: 1,
+    // Chuoi rong = de trong o nhap = dung so chung.
+    examNumQuestions: "",
+    examPassingScore: "",
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -167,7 +173,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -180,6 +186,8 @@ export function PTLevelsTab() {
       monthlyTarget: level.monthlyTarget,
       promoteMinAvgRevenue: level.promoteMinAvgRevenue,
       promoteMinTransform: level.promoteMinTransform,
+      examNumQuestions: level.examNumQuestions == null ? "" : String(level.examNumQuestions),
+      examPassingScore: level.examPassingScore == null ? "" : String(level.examPassingScore),
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -203,6 +211,8 @@ export function PTLevelsTab() {
             monthlyTarget: form.monthlyTarget,
             promoteMinAvgRevenue: form.promoteMinAvgRevenue,
             promoteMinTransform: form.promoteMinTransform,
+            examNumQuestions: form.examNumQuestions === "" ? null : Number(form.examNumQuestions),
+            examPassingScore: form.examPassingScore === "" ? null : Number(form.examPassingScore),
             isDefault: form.isDefault,
           }),
         });
@@ -571,6 +581,43 @@ export function PTLevelsTab() {
                 </div>
                 <p className="text-[11px] text-gray-400">
                   PT ở cấp này phải đạt các mốc trên (kèm đậu lý thuyết & thực hành) mới được thăng. VD: Thử việc 15tr / 0, Cấp 1–3 là 30,4tr / 1. Cấp cao nhất bỏ trống.
+                </p>
+              </div>
+
+              {/* Đề lý thuyết riêng của cấp — mỗi cấp một ngân hàng đề riêng, nên
+                  độ dài và ngưỡng đạt cũng nên riêng. Bỏ trống = dùng số chung. */}
+              <div className="space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50">
+                <p className="text-xs font-bold text-gray-600">Đề lý thuyết của cấp này</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-500">Số câu mỗi bài</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      placeholder="Dùng số chung"
+                      value={form.examNumQuestions}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setForm((f) => ({ ...f, examNumQuestions: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-500">Điểm đạt (%)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      placeholder="Dùng số chung"
+                      value={form.examPassingScore}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setForm((f) => ({ ...f, examPassingScore: e.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Bỏ trống = dùng số chung ở trang Bài thi. Câu hỏi của từng cấp soạn tại trang Bài thi → Ngân hàng câu hỏi.
                 </p>
               </div>
 

@@ -647,7 +647,31 @@ model ExamQuestion {
   imageUrl  String?  @db.Text
   videoUrl  String?  @db.Text
 
+  levels ExamQuestionLevel[]
+
   @@map("exam_questions")
+}
+
+// Câu hỏi này nằm trong đề của những CẤP nào.
+//
+// "Đề Cấp N" = bộ câu hỏi mà người ĐANG Ở Cấp N phải làm để được xét lên cấp
+// kế tiếp — cùng cách hiểu với promoteMinAvgRevenue/promoteMinTransform của
+// PTLevel, đều là điều kiện để RỜI cấp đó.
+//
+// Nhiều-nhiều chứ không phải một khoá ngoại, vì một câu hoàn toàn có thể dùng
+// chung cho vài cấp: 150 câu gốc của phòng tập đang phục vụ cả "Thử việc" lẫn
+// "Cấp 1". Gắn thêm/bớt cấp không phải chép lại câu hỏi.
+model ExamQuestionLevel {
+  id         String @id @default(cuid())
+  questionId String
+  levelId    String
+
+  question ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  level    PTLevel      @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, levelId])
+  @@index([levelId])
+  @@map("exam_question_levels")
 }
 
 model ExamConfig {
@@ -674,7 +698,12 @@ model ExamConfig {
   rankWeightExam      Int   @default(30)
   rankWeightRevenue   Int   @default(40)
   rankWeightTransform Int   @default(30)
+  // FM bắt buộc thi làm đề của cấp nào. FM không có cấp độ PT nên không tự suy
+  // ra được — Admin chọn trong tab Lịch thi. Bỏ trống = FM chưa vào thi được.
+  fmLevelId        String?
   updatedAt        DateTime @updatedAt
+
+  fmLevel PTLevel? @relation("ExamConfigFMLevel", fields: [fmLevelId], references: [id], onDelete: SetNull)
 
   @@map("exam_config")
 }
@@ -690,9 +719,15 @@ model ExamAttempt {
   // Số lần thí sinh rời khỏi trang thi trong lượt này — chép lại từ ExamSession
   // lúc nộp bài để Admin còn xem được sau khi kỳ thi đã đóng.
   violations Int      @default(0)
+  // Bài này là ĐỀ CỦA CẤP NÀO. Thiếu trường này thì không phân biệt được người
+  // đang ở Cấp 2 đã thi đề Cấp 2 hay mới chỉ đậu đề Cấp 1 từ đợt thăng cấp
+  // trước — xem lib/pt-promotion.ts, điều kiện lý thuyết soát theo đúng cấp.
+  levelId    String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level PTLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
 
+  @@index([userId, levelId])
   @@map("exam_attempts")
 }
 
@@ -731,8 +766,12 @@ model ExamSession {
   /// Có giá trị = đã nộp bài, không vào thi lại được nữa.
   submittedAt     DateTime?
   attemptId       String?
+  /// Đề của cấp nào — chốt lúc mở đề. Bài hết giờ được chấm lại sau đó phải
+  /// dùng đúng điểm đạt của cấp này, dù lúc ấy người thi đã đổi cấp.
+  levelId         String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level PTLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
 
   @@unique([userId, examKey])
   @@index([examKey])
@@ -1539,10 +1578,19 @@ model PTLevel {
   // - promoteMinTransform: số khách đạt transform tối thiểu. VD Thử việc 0, Cấp 1-3 = 1
   promoteMinAvgRevenue Float              @default(0)
   promoteMinTransform  Int                @default(0)
+  // Đề lý thuyết riêng của cấp này: số câu bốc ra và điểm đạt (%). Bỏ trống =
+  // dùng số chung trong ExamConfig. Có riêng vì đề của cấp cao khó hơn hẳn thì
+  // không có lý gì phải chung một ngưỡng đạt với đề Thử việc.
+  examNumQuestions     Int?
+  examPassingScore     Int?
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]
   users              User[]               @relation("UserPTLevel")
+  examQuestions      ExamQuestionLevel[]
+  examAttempts       ExamAttempt[]
+  examSessions       ExamSession[]
+  examConfigsForFM   ExamConfig[]         @relation("ExamConfigFMLevel")
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 

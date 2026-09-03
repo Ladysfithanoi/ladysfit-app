@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { verifyExamTicket } from "@/lib/exam-ticket";
+import { examSettingsForLevel } from "@/lib/exam-level";
 
 /**
  * Chấm bài THI THỬ của Admin.
@@ -22,16 +23,21 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { answers, examToken } = body as {
+  const { answers, examToken, levelId } = body as {
     answers?: Record<string, string>;
     examToken?: string;
+    levelId?: string | null;
   };
   if (!answers || typeof answers !== "object") {
     return NextResponse.json({ error: "Thiếu câu trả lời" }, { status: 400 });
   }
 
   const config = await prisma.examConfig.findFirst();
-  const passingScore = config?.passingScore ?? 80;
+  // Chấm bằng đúng điểm đạt của cấp đang soi đề — thi thử mà chấm bằng thước
+  // khác thì kiểm đề xong vẫn không biết đề mình đặt có vừa không.
+  const { passingScore } = await examSettingsForLevel(levelId ?? null, {
+    passingScore: config?.passingScore,
+  });
 
   // Thi thử cũng canh giờ như thi thật — có canh đúng thì mới biết thời lượng
   // đặt bao nhiêu là vừa cho đề của mình.

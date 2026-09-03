@@ -44,6 +44,7 @@ const ptSelect = {
   branch: { select: { id: true, name: true } },
   ptLevel: {
     select: {
+      id: true,
       name: true,
       color: true,
       order: true,

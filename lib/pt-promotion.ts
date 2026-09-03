@@ -3,7 +3,7 @@ import { countTransformsByPt } from "@/lib/transform-credit";
 
 // ── Bộ máy xét thăng hạng PT ─────────────────────────────────────────────────
 // Một PT ở cấp hiện tại được thăng lên cấp kế tiếp khi đủ CẢ 4 điều kiện:
-//   1. Đậu bài kiểm tra lý thuyết (lần thi gần nhất passed)
+//   1. Đậu bài kiểm tra lý thuyết ĐỀ CỦA CẤP HIỆN TẠI (lần thi gần nhất passed)
 //   2. Đạt bài kiểm tra thực hành (lần chấm gần nhất passed, còn hạn theo retestIntervalDays)
 //   3. TB doanh số/tháng ≥ promoteMinAvgRevenue của cấp hiện tại
 //   4. Số khách transform ≥ promoteMinTransform của cấp hiện tại — chỉ đếm
@@ -75,6 +75,7 @@ export async function computePtStats(
 type UserForEval = {
   id: string;
   ptLevel: {
+    id: string;
     order: number;
     retestIntervalDays: number;
     promoteMinAvgRevenue: number;
@@ -100,12 +101,19 @@ export async function evaluatePt(
   const minTransform = user.ptLevel?.promoteMinTransform ?? 0;
   const retestDays = user.ptLevel?.retestIntervalDays ?? 30;
 
-  // Điều kiện 1: lý thuyết — lần thi gần nhất đậu
-  const lastExam = await prisma.examAttempt.findFirst({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: { passed: true },
-  });
+  // Điều kiện 1: lý thuyết — lần thi gần nhất ĐỀ CỦA CHÍNH CẤP NÀY phải đậu.
+  //
+  // Soát theo cấp chứ không phải "lượt thi gần nhất bất kể đề gì": người đang ở
+  // Cấp 2 vẫn giữ lượt thi Cấp 1 đã đậu từ đợt thăng cấp trước, lấy lượt đó ra
+  // dùng thì họ lên Cấp 3 mà chưa từng làm bài Cấp 3. Chưa xếp cấp thì chưa có
+  // đề nào để đậu — coi như chưa thi.
+  const lastExam = user.ptLevel
+    ? await prisma.examAttempt.findFirst({
+        where: { userId: user.id, levelId: user.ptLevel.id },
+        orderBy: { createdAt: "desc" },
+        select: { passed: true },
+      })
+    : null;
   const examOk = lastExam?.passed === true;
 
   // Điều kiện 2: thực hành — lần chấm gần nhất đậu và còn hạn
@@ -128,7 +136,7 @@ export async function evaluatePt(
       key: "exam",
       label: "Lý thuyết",
       ok: examOk,
-      detail: examOk ? "Đã đậu" : lastExam ? "Lần gần nhất chưa đạt" : "Chưa thi",
+      detail: examOk ? "Đã đậu" : lastExam ? "Lần gần nhất chưa đạt" : "Chưa thi đề của cấp này",
     },
     {
       key: "practical",
@@ -190,7 +198,7 @@ export async function evaluatePtById(ptId: string, year = new Date().getFullYear
       id: true,
       role: true,
       ptLevel: {
-        select: { order: true, retestIntervalDays: true, promoteMinAvgRevenue: true, promoteMinTransform: true },
+        select: { id: true, order: true, retestIntervalDays: true, promoteMinAvgRevenue: true, promoteMinTransform: true },
       },
     },
   });
@@ -231,7 +239,7 @@ export async function runAutoPromotion(): Promise<{ promoted: { ptId: string; to
         name: true,
         email: true,
         ptLevel: {
-          select: { order: true, retestIntervalDays: true, promoteMinAvgRevenue: true, promoteMinTransform: true },
+          select: { id: true, order: true, retestIntervalDays: true, promoteMinAvgRevenue: true, promoteMinTransform: true },
         },
       },
     }),

@@ -181,13 +181,22 @@ function QuestionTracker({
  * nhưng chấm qua /api/exam/mock-grade nên không ghi vào lịch sử thi và không
  * đụng tới cấp độ PT — và chấm xong thì soi lại được từng câu kèm đáp án đúng.
  */
-export function ExamTakePage({ mock = false }: { mock?: boolean }) {
+export function ExamTakePage({
+  mock = false,
+  mockLevelId,
+}: {
+  mock?: boolean;
+  /** Thi thử đề của cấp nào — Admin chọn ở tab Ngân hàng câu hỏi. */
+  mockLevelId?: string;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [passingScore, setPassingScore] = useState(80);
   const [scheduleNote, setScheduleNote] = useState("");
+  // Đề của cấp nào — hiện ngay trên đầu bài để người thi biết mình đang làm gì.
+  const [levelName, setLevelName] = useState<string | null>(null);
   // FM bắt buộc thi: điểm chỉ để Admin nắm trình độ, trượt không bị phạt gì.
   // Nói rõ ngay trên đề để người thi không tưởng mình đang bị đem ra đánh giá.
   const [noPenalty, setNoPenalty] = useState(false);
@@ -246,7 +255,10 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
   useEffect(() => {
     async function loadExam() {
       try {
-        const res = await fetch(`/api/exam/take${mock ? "?mock=1" : ""}`);
+        const mockQuery = mock
+          ? `?mock=1&levelId=${encodeURIComponent(mockLevelId ?? "")}`
+          : "";
+        const res = await fetch(`/api/exam/take${mockQuery}`);
         if (!res.ok) {
           const data = await res.json();
           setError(data.error ?? "Không thể tải đề thi");
@@ -256,6 +268,7 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
         setQuestions(data.questions);
         setPassingScore(data.passingScore);
         setScheduleNote(data.scheduleNote ?? "");
+        setLevelName(data.levelName ?? null);
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
         setFocusPenaltyMinutes(data.focusPenaltyMinutes ?? 0);
@@ -279,7 +292,7 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       }
     }
     loadExam();
-  }, [mock]);
+  }, [mock, mockLevelId]);
 
   async function handleSubmit(force = false) {
     if (submitLock.current) return;
@@ -297,7 +310,8 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
       const res = await fetch(mock ? "/api/exam/mock-grade" : "/api/exam/attempts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: payload, examToken }),
+        // Thi thu cham bang diem dat cua dung cap dang soi de.
+        body: JSON.stringify({ answers: payload, examToken, levelId: mock ? mockLevelId ?? null : undefined }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -576,7 +590,8 @@ export function ExamTakePage({ mock = false }: { mock?: boolean }) {
                 : "Bài kiểm tra thăng cấp"}
           </h1>
           <p className="text-xs text-gray-400 mt-0.5 font-medium sm:text-sm">
-            Điểm đạt: {passingScore}% — {questions.length} câu hỏi
+            {/* Mỗi cấp một đề riêng nên phải nói rõ đây là đề nào */}
+            {levelName ? `Đề ${levelName} — ` : ""}Điểm đạt: {passingScore}% — {questions.length} câu hỏi
           </p>
         </div>
         {!result && (

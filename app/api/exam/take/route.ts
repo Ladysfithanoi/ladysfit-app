@@ -13,6 +13,7 @@ import {
   sessionDeadline,
 } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
+import { resolveExamLevel, questionsForLevel, emptyBankMessage } from "@/lib/exam-level";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -21,7 +22,8 @@ export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const mock = new URL(req.url).searchParams.get("mock") === "1";
+  const url = new URL(req.url);
+  const mock = url.searchParams.get("mock") === "1";
   const role = session.user.role;
   const userId = session.user.id;
 
@@ -43,8 +45,29 @@ export async function GET(req: Request) {
   const noPenalty = !mock && role === "FM";
 
   const config = await prisma.examConfig.findFirst();
-  const numQuestions = config?.numQuestions ?? 10;
-  const passingScore = config?.passingScore ?? 80;
+
+  // Mỗi cấp một đề riêng: HLV làm đề của cấp mình đang đứng, FM làm đề Admin
+  // chỉ định, Admin thi thử thì soi đúng cấp đang chọn ở tab Ngân hàng đề.
+  const mockLevelId = mock ? url.searchParams.get("levelId") : null;
+  if (mock && !mockLevelId) {
+    // Admin không có cấp độ PT nên không tự suy ra được đề nào — phải nói rõ
+    // thay vì báo "bạn chưa được xếp cấp độ", câu đó chẳng liên quan gì tới họ.
+    return NextResponse.json(
+      { error: "Chọn cấp độ ở tab Ngân hàng câu hỏi rồi mới thi thử được." },
+      { status: 400 }
+    );
+  }
+  const resolved = await resolveExamLevel({
+    userId,
+    role,
+    config,
+    overrideLevelId: mockLevelId,
+  });
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: 403 });
+  }
+  const { levelId, levelName, numQuestions, passingScore } = resolved.settings;
+
   const shuffleQuestions = config?.shuffleQuestions ?? true;
   const durationMinutes = Math.max(0, config?.durationMinutes ?? 0);
   const focusPenaltyMinutes = Math.max(0, config?.focusPenaltyMinutes ?? 0);
@@ -81,10 +104,11 @@ export async function GET(req: Request) {
     }
   }
 
-  const allQuestions = await prisma.examQuestion.findMany({ orderBy: { order: "asc" } });
+  // Chỉ bốc trong đề của đúng cấp này — câu của cấp khác không lọt vào được.
+  const allQuestions = levelId ? await questionsForLevel(levelId) : [];
 
   if (allQuestions.length === 0) {
-    return NextResponse.json({ error: "Chưa có câu hỏi trong ngân hàng" }, { status: 400 });
+    return NextResponse.json({ error: emptyBankMessage(levelName) }, { status: 400 });
   }
 
   function drawFresh() {
@@ -117,6 +141,7 @@ export async function GET(req: Request) {
           examKey,
           questionIds: JSON.stringify(picked.map((q) => q.id)),
           durationMinutes,
+          levelId,
         },
       });
     } catch {
@@ -192,6 +217,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     questions,
     passingScore,
+    // Đề của cấp nào — trang làm bài hiện lên để thí sinh biết mình đang thi gì.
+    levelName,
     closesAt: mock ? null : window.endAt?.toISOString() ?? null,
     scheduleNote: mock ? null : window.message,
     durationMinutes,

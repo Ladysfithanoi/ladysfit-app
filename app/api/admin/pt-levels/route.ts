@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeExamNumQuestions, normalizeExamPassingScore } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -26,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -44,6 +45,8 @@ export async function POST(req: Request) {
     monthlyTarget?: number;
     promoteMinAvgRevenue?: number;
     promoteMinTransform?: number;
+    examNumQuestions?: number | null;
+    examPassingScore?: number | null;
     isDefault?: boolean;
     phaseIds?: string[];
   };
@@ -68,6 +71,9 @@ export async function POST(req: Request) {
       monthlyTarget: body.monthlyTarget != null && body.monthlyTarget > 0 ? Math.round(body.monthlyTarget) : 38,
       promoteMinAvgRevenue: body.promoteMinAvgRevenue != null && body.promoteMinAvgRevenue >= 0 ? body.promoteMinAvgRevenue : 0,
       promoteMinTransform: body.promoteMinTransform != null && body.promoteMinTransform >= 0 ? Math.round(body.promoteMinTransform) : 0,
+      // Đề riêng của cấp: bỏ trống = dùng số chung trong cấu hình bài thi.
+      examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions),
+      examPassingScore: normalizeExamPassingScore(body.examPassingScore),
       isDefault: body.isDefault ?? false,
       phaseAccess: body.phaseIds?.length
         ? { create: body.phaseIds.map((phaseId) => ({ phaseId, hasAccess: true })) }

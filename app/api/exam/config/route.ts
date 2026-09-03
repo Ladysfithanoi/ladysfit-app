@@ -39,9 +39,28 @@ export async function PUT(req: NextRequest) {
     rankWeightExam,
     rankWeightRevenue,
     rankWeightTransform,
+    fmLevelId,
   } = body;
 
   const config = await getOrCreateConfig();
+
+  // ── Đề dành cho FM bắt buộc thi ───────────────────────────────────────────
+  // FM không có cấp độ PT nên phải chỉ định tay. Bỏ trống = FM chưa vào thi được.
+  let nextFmLevelId = config.fmLevelId;
+  if (fmLevelId !== undefined) {
+    if (!fmLevelId) {
+      nextFmLevelId = null;
+    } else {
+      const level = await prisma.pTLevel.findFirst({
+        where: { id: String(fmLevelId), isActive: true },
+        select: { id: true },
+      });
+      if (!level) {
+        return NextResponse.json({ error: "Cấp độ chọn cho FM không hợp lệ" }, { status: 400 });
+      }
+      nextFmLevelId = level.id;
+    }
+  }
 
   // ── Trọng số xếp hạng ─────────────────────────────────────────────────────
   const weights = {
@@ -142,6 +161,7 @@ export async function PUT(req: NextRequest) {
       rankWeightExam: weights.exam,
       rankWeightRevenue: weights.revenue,
       rankWeightTransform: weights.transform,
+      fmLevelId: nextFmLevelId,
     },
   });
 

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeMediaUrl, isSafeMediaUrl } from "@/lib/exam-media";
+import { validLevelIds, NO_LEVEL_SELECTED } from "@/lib/exam-level";
 
 type QuestionInput = {
   question: string;
@@ -29,9 +30,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { questions } = (await req.json()) as { questions: QuestionInput[] };
+    const body = (await req.json()) as { questions: QuestionInput[]; levelIds?: unknown };
+    const { questions } = body;
     if (!Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json({ error: "Không có câu hỏi nào" }, { status: 400 });
+    }
+
+    // Cấp độ chọn ở hộp thoại nhập, không nằm trong file Excel: gõ tay tên cấp
+    // vào từng dòng thì sai chính tả một lần là cả trăm câu rơi ra ngoài đề.
+    const levelIds = await validLevelIds(body.levelIds);
+    if (levelIds.length === 0) {
+      return NextResponse.json({ error: NO_LEVEL_SELECTED }, { status: 400 });
     }
 
     const existing = await prisma.examQuestion.findMany({ select: { question: true } });
@@ -42,9 +51,11 @@ export async function POST(req: Request) {
     );
     const skipped = questions.length - toCreate.length;
 
-    if (toCreate.length > 0) {
-      await prisma.examQuestion.createMany({
-        data: toCreate.map((q) => ({
+    // createMany không tạo được bản ghi con, mà câu hỏi không gắn cấp thì không
+    // bao giờ được bốc ra thi — nên tạo từng câu kèm luôn danh sách cấp.
+    for (const q of toCreate) {
+      await prisma.examQuestion.create({
+        data: {
           question: q.question.trim(),
           optionA: q.optionA.trim(),
           optionB: q.optionB.trim(),
@@ -53,7 +64,8 @@ export async function POST(req: Request) {
           correct: q.correctAnswer,
           imageUrl: mediaFromRow(q.imageUrl),
           videoUrl: mediaFromRow(q.videoUrl),
-        })),
+          levels: { create: levelIds.map((levelId) => ({ levelId })) },
+        },
       });
     }
 

@@ -51,6 +51,20 @@ type Question = {
   createdAt: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  /** Câu này nằm trong đề của những cấp nào. */
+  levelIds: string[];
+};
+
+/** Cấp độ PT kèm cấu hình đề riêng và số câu đang có. */
+type LevelOption = {
+  id: string;
+  name: string;
+  color: string;
+  order: number;
+  /** Riêng của cấp; null = dùng số chung ở tab Cấu hình. */
+  numQuestions: number | null;
+  passingScore: number | null;
+  questionCount: number;
 };
 
 type Config = {
@@ -66,6 +80,8 @@ type Config = {
   rankWeightExam: number;
   rankWeightRevenue: number;
   rankWeightTransform: number;
+  /** FM bắt buộc thi làm đề của cấp nào (FM không có cấp độ PT). */
+  fmLevelId: string | null;
 };
 
 type RosterRow = {
@@ -129,6 +145,8 @@ type Attempt = {
   /** Số lần rời khỏi trang thi trong lúc làm bài. */
   violations: number;
   user: { id: string; name: string | null; email: string; role: string };
+  /** Đề của cấp nào — bài cũ từ trước khi phân cấp thì để trống. */
+  level: { id: string; name: string; color: string } | null;
 };
 
 const CORRECT_OPTIONS = ["A", "B", "C", "D"];
@@ -182,11 +200,15 @@ const emptyForm = {
   // Ảnh / video minh hoạ — để trống là câu hỏi chỉ có chữ.
   imageUrl: "",
   videoUrl: "",
+  // Đề của những cấp nào. Rỗng thì không cho lưu — câu không thuộc cấp nào sẽ
+  // không bao giờ được bốc ra thi.
+  levelIds: [] as string[],
 };
 
 export function ExamAdminPage({
   questions: initialQuestions,
   config: initialConfig,
+  levels,
   attempts: initialAttempts,
   windowState,
   roster,
@@ -196,6 +218,8 @@ export function ExamAdminPage({
 }: {
   questions: Question[];
   config: Config;
+  /** Cấp độ đang bật — mỗi cấp một đề riêng. */
+  levels: LevelOption[];
   attempts: Attempt[];
   windowState: ExamWindowState;
   roster: RosterRow[];
@@ -291,13 +315,22 @@ export function ExamAdminPage({
   const [configSaved, setConfigSaved] = useState(false);
   const [configError, setConfigError] = useState("");
 
+  // ── Ngân hàng câu hỏi lọc theo cấp ────────────────────────────────────────
+  // null = xem cả ngân hàng. Chọn một cấp thì danh sách chỉ còn đề của cấp đó,
+  // và câu thêm mới cũng mặc định gắn luôn vào cấp đang xem.
+  const [bankLevelId, setBankLevelId] = useState<string | null>(null);
+  const visibleQuestions = bankLevelId
+    ? questions.filter((q) => q.levelIds.includes(bankLevelId))
+    : questions;
+  const levelById = new Map(levels.map((l) => [l.id, l]));
+
   // Ngân hàng câu hỏi — phân trang. Trang được kẹp lại thay vì reset về 0 để
   // xoá câu cuối cùng của trang cuối không văng người dùng về đầu danh sách.
   const [questionPage, setQuestionPage] = useState(0);
-  const questionTotalPages = Math.max(1, Math.ceil(questions.length / PAGE_SIZE));
+  const questionTotalPages = Math.max(1, Math.ceil(visibleQuestions.length / PAGE_SIZE));
   const questionSafePage = Math.min(questionPage, questionTotalPages - 1);
   const questionStart = questionSafePage * PAGE_SIZE;
-  const pageQuestions = questions.slice(questionStart, questionStart + PAGE_SIZE);
+  const pageQuestions = visibleQuestions.slice(questionStart, questionStart + PAGE_SIZE);
 
   // Danh sách dự thi — phân trang
   const [rosterPage, setRosterPage] = useState(0);
@@ -366,10 +399,12 @@ export function ExamAdminPage({
       )
     : fms;
 
-  // So với lúc mở trang — chưa đổi gì thì không cần bấm Lưu.
+  // So với lúc mở trang — chưa đổi gì thì không cần bấm Lưu. Đổi đề dành cho FM
+  // cũng tính là có thay đổi vì nút này lưu luôn cả hai.
   const fmDirty =
     fmRequired.size !== fms.filter((f) => f.required).length ||
-    fms.some((f) => f.required !== fmRequired.has(f.userId));
+    fms.some((f) => f.required !== fmRequired.has(f.userId)) ||
+    configForm.fmLevelId !== initialConfig.fmLevelId;
 
   function toggleFm(userId: string) {
     setFmSaved(false);
@@ -393,6 +428,18 @@ export function ExamAdminPage({
       const data = await res.json();
       if (!res.ok) {
         setFmError(data.error ?? "Không lưu được danh sách FM bắt buộc thi");
+        return;
+      }
+      // Đề dành cho FM lưu cùng nút này — nó nằm ngay trong thẻ FM bắt buộc thi,
+      // bắt người dùng sang tab khác bấm nút thứ hai thì rất dễ quên.
+      const cfgRes = await fetch("/api/exam/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fmLevelId: configForm.fmLevelId }),
+      });
+      if (!cfgRes.ok) {
+        const cfg = await cfgRes.json();
+        setFmError(cfg.error ?? "Không lưu được đề dành cho FM");
         return;
       }
       setFmSaved(true);
@@ -664,6 +711,7 @@ export function ExamAdminPage({
       correct: q.correct,
       imageUrl: q.imageUrl ?? "",
       videoUrl: q.videoUrl ?? "",
+      levelIds: q.levelIds,
     });
   }
 
@@ -708,15 +756,25 @@ export function ExamAdminPage({
           <div className="flex flex-col gap-3 px-4 py-4 border-b border-gray-100 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
             <div className="min-w-0">
               <p className="text-base font-extrabold text-gray-900">Ngân hàng câu hỏi</p>
-              <p className="text-xs text-gray-400 mt-0.5">{questions.length} câu hỏi</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {bankLevelId
+                  ? `${visibleQuestions.length} câu trong đề "${levelById.get(bankLevelId)?.name ?? ""}" · ${questions.length} câu toàn ngân hàng`
+                  : `${questions.length} câu hỏi`}
+              </p>
             </div>
             {/* Ba nút hành động: màn hẹp trượt ngang, chữ không xuống dòng */}
             <div className={cn(SLIDER, "sm:w-auto sm:overflow-visible")}>
               <div className="flex w-max items-center gap-2 sm:w-auto">
                 <button
-                  onClick={() => router.push("/dashboard/exam/thi-thu")}
-                  disabled={questions.length === 0}
-                  title={questions.length === 0 ? "Chưa có câu hỏi nào để thi thử" : "Tự làm thử đề — không lưu kết quả"}
+                  onClick={() =>
+                    router.push(
+                      // Thi thử đúng đề của cấp đang xem; chưa lọc cấp thì lấy
+                      // cấp đầu tiên có câu hỏi, không thì chẳng bốc được gì.
+                      `/dashboard/exam/thi-thu?levelId=${bankLevelId ?? levels.find((l) => l.questionCount > 0)?.id ?? ""}`
+                    )
+                  }
+                  disabled={visibleQuestions.length === 0}
+                  title={visibleQuestions.length === 0 ? "Đề này chưa có câu hỏi nào để thi thử" : "Tự làm thử đề — không lưu kết quả"}
                   className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 px-3.5 py-2 text-[13px] font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:text-gray-600 sm:px-4 sm:text-sm"
                 >
                   <FlaskConical className="w-4 h-4 shrink-0" />
@@ -730,7 +788,11 @@ export function ExamAdminPage({
                   Nhập từ Excel
                 </button>
                 <button
-                  onClick={() => { setShowAdd(true); setForm(emptyForm); }}
+                  onClick={() => {
+                    setShowAdd(true);
+                    // Đang lọc theo cấp nào thì câu mới gắn sẵn vào cấp đó.
+                    setForm({ ...emptyForm, levelIds: bankLevelId ? [bankLevelId] : [] });
+                  }}
                   className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
                   style={{ backgroundColor: "#f15b5c" }}
                 >
@@ -741,6 +803,41 @@ export function ExamAdminPage({
             </div>
           </div>
 
+          {/* Lọc theo cấp — mỗi cấp một đề riêng, số trong ngoặc là số câu đang có */}
+          <div className={cn(SLIDER, "border-b border-gray-100 px-4 py-3 sm:px-6")}>
+            <div className="flex w-max items-center gap-2">
+              <button
+                onClick={() => { setBankLevelId(null); setQuestionPage(0); }}
+                className={cn(
+                  "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                  bankLevelId === null
+                    ? "bg-[#f15b5c] text-white"
+                    : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                )}
+              >
+                Tất cả ({questions.length})
+              </button>
+              {levels.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => { setBankLevelId(l.id); setQuestionPage(0); }}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                    bankLevelId === l.id
+                      ? "text-white"
+                      : l.questionCount === 0
+                        ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                        : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                  )}
+                  style={bankLevelId === l.id ? { backgroundColor: l.color } : undefined}
+                  title={l.questionCount === 0 ? `Đề "${l.name}" chưa có câu hỏi — người ở cấp này chưa thi được` : undefined}
+                >
+                  {l.name} ({l.questionCount})
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Add form */}
           {showAdd && (
             <div className="px-4 py-4 bg-gray-50 border-b border-gray-100 sm:px-6">
@@ -748,6 +845,7 @@ export function ExamAdminPage({
               <QuestionForm
                 form={form}
                 onChange={setForm}
+                levels={levels}
                 onSave={handleAddQuestion}
                 onCancel={() => setShowAdd(false)}
                 saving={saving}
@@ -756,10 +854,19 @@ export function ExamAdminPage({
             </div>
           )}
 
-          {questions.length === 0 ? (
+          {visibleQuestions.length === 0 ? (
             <div className="py-16 flex flex-col items-center gap-2">
               <FileText className="w-8 h-8 text-gray-200" />
-              <p className="text-sm text-gray-300 font-semibold">Chưa có câu hỏi nào</p>
+              <p className="text-sm text-gray-300 font-semibold">
+                {bankLevelId
+                  ? `Đề "${levelById.get(bankLevelId)?.name ?? ""}" chưa có câu hỏi nào`
+                  : "Chưa có câu hỏi nào"}
+              </p>
+              {bankLevelId && (
+                <p className="text-xs text-gray-300">
+                  Người đang ở cấp này chưa vào thi được cho tới khi đề có câu hỏi.
+                </p>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
@@ -774,6 +881,7 @@ export function ExamAdminPage({
                       <QuestionForm
                         form={editForm}
                         onChange={setEditForm}
+                        levels={levels}
                         onSave={() => handleUpdateQuestion(q.id)}
                         onCancel={() => setEditId(null)}
                         saving={saving}
@@ -789,6 +897,28 @@ export function ExamAdminPage({
                             {q.question}
                           </p>
                           <QuestionMedia imageUrl={q.imageUrl} videoUrl={q.videoUrl} compact />
+                          {/* Câu này đang nằm trong đề của những cấp nào */}
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {q.levelIds.length === 0 ? (
+                              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-600">
+                                Chưa gắn cấp — không ra đề được
+                              </span>
+                            ) : (
+                              q.levelIds.map((id) => {
+                                const l = levelById.get(id);
+                                if (!l) return null;
+                                return (
+                                  <span
+                                    key={id}
+                                    className="rounded px-1.5 py-0.5 text-[10px] font-bold text-white"
+                                    style={{ backgroundColor: l.color }}
+                                  >
+                                    {l.name}
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
                         <div className="flex gap-1.5 shrink-0">
                           <button
@@ -1498,7 +1628,7 @@ export function ExamAdminPage({
               <div className="min-w-0">
                 <p className="text-base font-extrabold text-gray-900">FM bắt buộc thi</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Tick tên FM phải làm bài kỳ này. Họ thi cùng đề, cùng khung giờ với HLV.
+                  Tick tên FM phải làm bài kỳ này. Họ thi cùng khung giờ với HLV.
                 </p>
               </div>
               <span className="shrink-0 self-start rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-600 whitespace-nowrap">
@@ -1512,6 +1642,31 @@ export function ExamAdminPage({
                 Bài thi của FM chỉ để bạn nắm chuyên môn: điểm lưu lại cho bạn xem, nhưng thi
                 trượt KHÔNG bị phạt — không hạ cấp, không thông báo, không tính vào xếp hạng.
                 Bỏ tick là kỳ sau họ không phải thi nữa.
+              </p>
+            </div>
+
+            {/* Đề dành cho FM — mỗi cấp một đề riêng mà FM không có cấp độ PT,
+                nên phải chỉ định tay. Bỏ trống thì FM không vào thi được. */}
+            <div className="px-4 py-3.5 border-b border-gray-100 sm:px-6">
+              <label className="block text-xs font-bold text-gray-500 mb-2">
+                FM làm đề của cấp nào
+              </label>
+              <select
+                value={configForm.fmLevelId ?? ""}
+                onChange={(e) =>
+                  setConfigForm({ ...configForm, fmLevelId: e.target.value || null })
+                }
+                className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 sm:max-w-xs"
+              >
+                <option value="">— Chưa chọn (FM không vào thi được) —</option>
+                {levels.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({l.questionCount} câu)
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-gray-400">
+                Lưu cùng nút “Lưu danh sách FM” bên dưới.
               </p>
             </div>
 
@@ -1782,6 +1937,7 @@ export function ExamAdminPage({
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImported={reloadQuestions}
+        levels={levels}
       />
 
       {/* ─── Results Tab ─── */}
@@ -1802,7 +1958,7 @@ export function ExamAdminPage({
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-50 bg-gray-50/50">
-                    {["PT", "Cấp độ", "Điểm", "Kết quả", "Rời trang", "Thời gian", ""].map((h, i) => (
+                    {["PT", "Vai trò", "Đề", "Điểm", "Kết quả", "Rời trang", "Thời gian", ""].map((h, i) => (
                       <th
                         key={h || "actions"}
                         className={cn(
@@ -1829,6 +1985,19 @@ export function ExamAdminPage({
                           <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                             {ROLE_LABEL[a.user.role] ?? a.user.role}
                           </span>
+                        </td>
+                        {/* Đề của cấp nào. Bài từ trước khi phân cấp không có. */}
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                          {a.level ? (
+                            <span
+                              className="text-xs font-bold text-white px-2 py-1 rounded-full"
+                              style={{ backgroundColor: a.level.color }}
+                            >
+                              {a.level.name}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-gray-300">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <span className="text-sm font-bold text-gray-800">
@@ -1919,6 +2088,7 @@ export function ExamAdminPage({
 function QuestionForm({
   form,
   onChange,
+  levels,
   onSave,
   onCancel,
   saving,
@@ -1926,6 +2096,8 @@ function QuestionForm({
 }: {
   form: typeof emptyForm;
   onChange: (f: typeof emptyForm) => void;
+  /** Cấp độ đang bật — câu hỏi phải thuộc ít nhất một cấp mới lưu được. */
+  levels: LevelOption[];
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
@@ -1983,11 +2155,47 @@ function QuestionForm({
           ))}
         </div>
       </div>
+      {/* Câu này nằm trong đề của cấp nào — không chọn cấp thì câu không bao giờ
+          được bốc ra thi, nên nút Lưu bị khoá cho tới khi tick ít nhất một cấp. */}
+      <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+        <p className="text-xs font-bold text-gray-500 mb-2">Thuộc đề của cấp *</p>
+        <div className="flex flex-wrap gap-2">
+          {levels.map((l) => {
+            const checked = form.levelIds.includes(l.id);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() =>
+                  onChange({
+                    ...form,
+                    levelIds: checked
+                      ? form.levelIds.filter((id) => id !== l.id)
+                      : [...form.levelIds, l.id],
+                  })
+                }
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                  checked ? "text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                )}
+                style={checked ? { backgroundColor: l.color } : undefined}
+              >
+                {l.name}
+              </button>
+            );
+          })}
+        </div>
+        {form.levelIds.length === 0 && (
+          <p className="mt-2 text-xs font-semibold text-amber-600">
+            Chọn ít nhất một cấp — câu không thuộc cấp nào sẽ không bao giờ được ra đề.
+          </p>
+        )}
+      </div>
       {showPreview && <QuestionPreview data={form} index={previewIndex} />}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           onClick={onSave}
-          disabled={saving || !form.question.trim() || !form.optionA || !form.optionB || !form.optionC || !form.optionD}
+          disabled={saving || form.levelIds.length === 0 || !form.question.trim() || !form.optionA || !form.optionB || !form.optionC || !form.optionD}
           className="whitespace-nowrap px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#f15b5c" }}
         >

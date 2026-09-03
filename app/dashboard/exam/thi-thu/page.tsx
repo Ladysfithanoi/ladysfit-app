@@ -5,10 +5,15 @@ import { ExamTakePage } from "@/components/dashboard/exam/exam-take-page";
 
 // Thi thử — chỉ Admin, để tự kiểm đề mình vừa soạn: câu chữ có rõ không, ảnh
 // /video có hiện đúng không, chấm điểm có chuẩn không. Bài không được lưu.
-export default async function MockExamPage() {
+export default async function MockExamPage({
+  searchParams,
+}: {
+  searchParams: { levelId?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  return <ExamTakePage mock />;
+  // Mỗi cấp một đề riêng — thi thử phải nói rõ soi đề của cấp nào.
+  return <ExamTakePage mock mockLevelId={searchParams.levelId} />;
 }

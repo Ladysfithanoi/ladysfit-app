@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeExamNumQuestions, normalizeExamPassingScore } from "@/lib/exam-level";
 
 export async function PUT(
   req: Request,
@@ -19,6 +20,8 @@ export async function PUT(
     monthlyTarget?: number;
     promoteMinAvgRevenue?: number;
     promoteMinTransform?: number;
+    examNumQuestions?: number | null;
+    examPassingScore?: number | null;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -36,6 +39,9 @@ export async function PUT(
       ...(body.monthlyTarget !== undefined && body.monthlyTarget > 0 && { monthlyTarget: Math.round(body.monthlyTarget) }),
       ...(body.promoteMinAvgRevenue !== undefined && body.promoteMinAvgRevenue >= 0 && { promoteMinAvgRevenue: body.promoteMinAvgRevenue }),
       ...(body.promoteMinTransform !== undefined && body.promoteMinTransform >= 0 && { promoteMinTransform: Math.round(body.promoteMinTransform) }),
+      // Đề riêng của cấp: gửi lên null/rỗng = quay về dùng số chung.
+      ...(body.examNumQuestions !== undefined && { examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions) }),
+      ...(body.examPassingScore !== undefined && { examPassingScore: normalizeExamPassingScore(body.examPassingScore) }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

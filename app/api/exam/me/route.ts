@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { isRequiredExamFM } from "@/lib/exam-required-fm";
 import { hasTakenExam } from "@/lib/exam-session";
+import { resolveExamLevel, emptyBankMessage } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -17,10 +18,16 @@ export async function GET() {
       where: { id: userId },
       select: { role: true, ptLevel: { select: { id: true, name: true, color: true, retestIntervalDays: true, order: true } } },
     }),
-    prisma.examAttempt.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-    }),
+    // Lần thi gần nhất ĐỀ CỦA CẤP HIỆN TẠI — bài của cấp cũ không còn nói lên
+    // điều gì về việc họ có qua được cửa hiện tại hay không.
+    prisma.user.findUnique({ where: { id: userId }, select: { ptLevelId: true } }).then(u =>
+      u?.ptLevelId
+        ? prisma.examAttempt.findFirst({
+            where: { userId, levelId: u.ptLevelId },
+            orderBy: { createdAt: "desc" },
+          })
+        : null
+    ),
     prisma.examConfig.findFirst(),
     prisma.systemConfig.findUnique({ where: { id: "main" } }),
     prisma.pTLevel.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true, name: true, color: true, order: true } }),
@@ -29,8 +36,21 @@ export async function GET() {
     session.user.role === "FM" ? isRequiredExamFM(userId) : Promise.resolve(false),
   ]);
 
-  const passingScore = config?.passingScore ?? 80;
-  const numQuestions = config?.numQuestions ?? 10;
+  // Số câu / điểm đạt hiện lên thẻ mời thi phải là của ĐỀ người này sẽ làm:
+  // HLV theo cấp của mình, FM theo đề Admin chỉ định ở tab Lịch thi.
+  const examLevel = await resolveExamLevel({ userId, role: user?.role ?? "PT", config });
+  const passingScore = examLevel.ok ? examLevel.settings.passingScore : config?.passingScore ?? 80;
+  const numQuestions = examLevel.ok ? examLevel.settings.numQuestions : config?.numQuestions ?? 10;
+  const examLevelName = examLevel.ok ? examLevel.settings.levelName : null;
+  // Cấp chưa được soạn đề thì nói thẳng, đừng để người ta bấm vào rồi mới báo lỗi.
+  const bankCount = examLevel.ok && examLevel.settings.levelId
+    ? await prisma.examQuestionLevel.count({ where: { levelId: examLevel.settings.levelId } })
+    : 0;
+  const examUnavailableReason = !examLevel.ok
+    ? examLevel.message
+    : bankCount === 0
+      ? emptyBankMessage(examLevelName)
+      : null;
   const enableLevelSystem = sysConfig?.enableLevelSystem ?? true;
 
   const retestIntervalDays = user?.ptLevel?.retestIntervalDays ?? 30;
@@ -76,6 +96,9 @@ export async function GET() {
       : null,
     passingScore,
     numQuestions,
+    // Tên cấp của ĐỀ sẽ làm, và lý do chưa thi được (chưa xếp cấp / cấp chưa có đề).
+    examLevelName,
+    examUnavailableReason,
     enableLevelSystem,
     // Đã thi kỳ này rồi, không vào thi lại được nữa.
     alreadyTaken,

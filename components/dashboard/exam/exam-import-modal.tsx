@@ -28,11 +28,17 @@ export function ExamImportModal({
   open,
   onClose,
   onImported,
+  levels,
 }: {
   open: boolean;
   onClose: () => void;
   onImported: () => void;
+  /** Cấp độ đang bật — câu nhập vào phải thuộc đề của ít nhất một cấp. */
+  levels: { id: string; name: string; color: string; questionCount: number }[];
 }) {
+  // Cấp độ chọn ở đây chứ không nằm trong file Excel: gõ tay tên cấp vào từng
+  // dòng thì sai chính tả một lần là cả trăm câu rơi ra ngoài đề.
+  const [levelIds, setLevelIds] = useState<string[]>([]);
   const [step, setStep] = useState<Step>("idle");
   // Hộp thoại báo lỗi theo nhận diện thương hiệu — thay alert() của trình duyệt.
   const [notice, setNotice] = useState<NoticeSpec | null>(null);
@@ -161,6 +167,7 @@ export function ExamImportModal({
             imageUrl,
             videoUrl,
           })),
+          levelIds,
         }),
       });
       const data = await res.json();
@@ -278,6 +285,39 @@ export function ExamImportModal({
                 </button>
               </div>
 
+              {/* Nhập vào đề của cấp nào — bắt buộc, vì câu không thuộc cấp nào
+                  sẽ không bao giờ được bốc ra thi. */}
+              <div className="rounded-xl border border-gray-200 px-3 py-2.5 mb-3">
+                <p className="text-xs font-bold text-gray-500 mb-2">Nhập vào đề của cấp *</p>
+                <div className="flex flex-wrap gap-2">
+                  {levels.map((l) => {
+                    const checked = levelIds.includes(l.id);
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() =>
+                          setLevelIds((prev) =>
+                            checked ? prev.filter((id) => id !== l.id) : [...prev, l.id]
+                          )
+                        }
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                          checked ? "text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                        }`}
+                        style={checked ? { backgroundColor: l.color } : undefined}
+                      >
+                        {l.name} ({l.questionCount})
+                      </button>
+                    );
+                  })}
+                </div>
+                {levelIds.length === 0 && (
+                  <p className="mt-2 text-xs font-semibold text-amber-600">
+                    Chọn ít nhất một cấp thì mới nhập được.
+                  </p>
+                )}
+              </div>
+
               <div className="border border-gray-100 rounded-xl overflow-hidden">
                 <div className="overflow-auto max-h-[380px]">
                   <table className="w-full text-xs">
@@ -390,7 +430,7 @@ export function ExamImportModal({
               </Button>
               <Button
                 onClick={handleImport}
-                disabled={validCount === 0}
+                disabled={validCount === 0 || levelIds.length === 0}
                 className="h-10 rounded-xl text-white font-semibold gap-2 disabled:opacity-40"
                 style={{ backgroundColor: "#f15b5c" }}
               >
