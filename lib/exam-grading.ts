@@ -72,16 +72,47 @@ export async function gradeAndRecord(opts: {
   }
 
   const correctCount = questions.filter((q) => opts.answers[q.id] === q.correct).length;
-  const scorePct = Math.round((correctCount / total) * 100);
+
+  return recordAttempt({
+    ...opts,
+    score: correctCount,
+    total,
+    answersJson: JSON.stringify(opts.answers),
+  });
+}
+
+/**
+ * Ghi một lượt thi đã có điểm, rồi xử lý hệ quả thăng cấp.
+ *
+ * Tách riêng vì có HAI dạng đề cho ra điểm theo hai cách hoàn toàn khác nhau —
+ * trắc nghiệm phẳng đếm câu đúng, đề thử thách cộng điểm từng vòng (lib/
+ * exam-trial.ts) — nhưng từ lúc có điểm trở đi thì mọi thứ phải giống hệt nhau:
+ * cùng một bảng ExamAttempt, cùng một cửa xét thăng cấp, cùng một thông báo.
+ * Có hai đường ghi điểm là sớm muộn hai đường cho ra hai kết quả khác nhau.
+ */
+export async function recordAttempt(opts: {
+  userId: string;
+  userName: string;
+  score: number;
+  total: number;
+  passingScore: number;
+  violations: number;
+  noPenalty: boolean;
+  levelId: string | null;
+  /** Bài làm lưu lại nguyên văn để soi lại sau. */
+  answersJson: string;
+}): Promise<GradeOutcome> {
+  const { score, total } = opts;
+  const scorePct = total > 0 ? Math.round((score / total) * 100) : 0;
   const passed = scorePct >= opts.passingScore;
 
   const attempt = await prisma.examAttempt.create({
     data: {
       userId: opts.userId,
-      score: correctCount,
+      score,
       total,
       passed,
-      answers: JSON.stringify(opts.answers),
+      answers: opts.answersJson,
       violations: opts.violations,
       levelId: opts.levelId,
     },
@@ -108,7 +139,7 @@ export async function gradeAndRecord(opts: {
   return {
     ok: true,
     attemptId: attempt.id,
-    correctCount,
+    correctCount: score,
     total,
     scorePct,
     passed,

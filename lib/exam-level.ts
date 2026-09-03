@@ -22,6 +22,8 @@ export type ExamLevelSettings = {
   levelName: string | null;
   numQuestions: number;
   passingScore: number;
+  /** FLAT = trắc nghiệm phẳng, TRIAL = nhiều vòng chơi (xem lib/exam-trial.ts). */
+  format: "FLAT" | "TRIAL";
 };
 
 /** Số chung dùng khi cấp không đặt riêng, và khi chưa có ExamConfig nào. */
@@ -39,6 +41,13 @@ export function emptyBankMessage(levelName: string | null): string {
   return levelName
     ? `Đề của cấp "${levelName}" chưa có câu hỏi nào. Liên hệ quản lý để soạn đề cho cấp này.`
     : "Chưa có câu hỏi trong ngân hàng đề.";
+}
+
+/** Đề nhiều vòng mà chưa ai soạn vòng nào. */
+export function emptyTrialMessage(levelName: string | null): string {
+  return levelName
+    ? `Đề thử thách của cấp "${levelName}" chưa có vòng nào. Liên hệ quản lý để soạn đề cho cấp này.`
+    : "Đề thử thách chưa có vòng nào.";
 }
 
 type ConfigLike = {
@@ -84,7 +93,7 @@ export async function resolveExamLevel(opts: {
 
   const level = await prisma.pTLevel.findUnique({
     where: { id: levelId },
-    select: { id: true, name: true, examNumQuestions: true, examPassingScore: true },
+    select: { id: true, name: true, examNumQuestions: true, examPassingScore: true, examFormat: true },
   });
   if (!level) return { ok: false, message: NO_LEVEL_MESSAGE };
 
@@ -95,6 +104,7 @@ export async function resolveExamLevel(opts: {
       levelName: level.name,
       numQuestions: level.examNumQuestions ?? fallbackNum,
       passingScore: level.examPassingScore ?? fallbackPass,
+      format: level.examFormat,
     },
   };
 }
@@ -111,17 +121,18 @@ export async function examSettingsForLevel(
   const numQuestions = fallback.numQuestions ?? DEFAULT_NUM_QUESTIONS;
   const passingScore = fallback.passingScore ?? DEFAULT_PASSING_SCORE;
   if (!levelId) {
-    return { levelId: null, levelName: null, numQuestions, passingScore };
+    return { levelId: null, levelName: null, numQuestions, passingScore, format: "FLAT" };
   }
   const level = await prisma.pTLevel.findUnique({
     where: { id: levelId },
-    select: { id: true, name: true, examNumQuestions: true, examPassingScore: true },
+    select: { id: true, name: true, examNumQuestions: true, examPassingScore: true, examFormat: true },
   });
   return {
     levelId,
     levelName: level?.name ?? null,
     numQuestions: level?.examNumQuestions ?? numQuestions,
     passingScore: level?.examPassingScore ?? passingScore,
+    format: level?.examFormat ?? "FLAT",
   };
 }
 

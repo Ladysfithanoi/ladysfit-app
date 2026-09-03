@@ -30,6 +30,8 @@ type PTLevel = {
   // De ly thuyet rieng cua cap: null = dung so chung o trang Bai thi.
   examNumQuestions: number | null;
   examPassingScore: number | null;
+  // FLAT = trắc nghiệm phẳng; TRIAL = đề thử thách nhiều vòng (7 đại tội).
+  examFormat: "FLAT" | "TRIAL";
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -92,6 +94,7 @@ export function PTLevelsTab() {
     // Chuoi rong = de trong o nhap = dung so chung.
     examNumQuestions: "",
     examPassingScore: "",
+    examFormat: "FLAT" as "FLAT" | "TRIAL",
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -173,7 +176,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -188,6 +191,7 @@ export function PTLevelsTab() {
       promoteMinTransform: level.promoteMinTransform,
       examNumQuestions: level.examNumQuestions == null ? "" : String(level.examNumQuestions),
       examPassingScore: level.examPassingScore == null ? "" : String(level.examPassingScore),
+      examFormat: level.examFormat,
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -213,6 +217,7 @@ export function PTLevelsTab() {
             promoteMinTransform: form.promoteMinTransform,
             examNumQuestions: form.examNumQuestions === "" ? null : Number(form.examNumQuestions),
             examPassingScore: form.examPassingScore === "" ? null : Number(form.examPassingScore),
+            examFormat: form.examFormat,
             isDefault: form.isDefault,
           }),
         });
@@ -588,6 +593,21 @@ export function PTLevelsTab() {
                   độ dài và ngưỡng đạt cũng nên riêng. Bỏ trống = dùng số chung. */}
               <div className="space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50">
                 <p className="text-xs font-bold text-gray-600">Đề lý thuyết của cấp này</p>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-gray-500">Dạng đề</label>
+                  <select
+                    value={form.examFormat}
+                    onChange={(e) => setForm((f) => ({ ...f, examFormat: e.target.value as "FLAT" | "TRIAL" }))}
+                    className={inputCls}
+                  >
+                    <option value="FLAT">Trắc nghiệm phẳng (A/B/C/D)</option>
+                    <option value="TRIAL">Thử thách nhiều vòng (7 đại tội)</option>
+                  </select>
+                  <p className="text-[11px] text-gray-400">
+                    Chọn “Thử thách nhiều vòng” rồi soạn vòng ở trang Bài thi → Đề thử thách.
+                    Đổi dạng đề là đổi hẳn trang làm bài của người ở cấp này.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-gray-500">Số câu mỗi bài</label>

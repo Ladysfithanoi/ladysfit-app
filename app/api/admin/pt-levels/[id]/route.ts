@@ -22,6 +22,7 @@ export async function PUT(
     promoteMinTransform?: number;
     examNumQuestions?: number | null;
     examPassingScore?: number | null;
+    examFormat?: "FLAT" | "TRIAL";
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -42,6 +43,7 @@ export async function PUT(
       // Đề riêng của cấp: gửi lên null/rỗng = quay về dùng số chung.
       ...(body.examNumQuestions !== undefined && { examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions) }),
       ...(body.examPassingScore !== undefined && { examPassingScore: normalizeExamPassingScore(body.examPassingScore) }),
+      ...((body.examFormat === "FLAT" || body.examFormat === "TRIAL") && { examFormat: body.examFormat }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

@@ -13,7 +13,9 @@ import {
   sessionDeadline,
 } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
-import { resolveExamLevel, questionsForLevel, emptyBankMessage } from "@/lib/exam-level";
+import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
+import { loadTrialForCandidate, gradeTrialAttempt } from "@/lib/exam-trial-server";
+import { parseTrialState } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -66,7 +68,7 @@ export async function GET(req: Request) {
   if (!resolved.ok) {
     return NextResponse.json({ error: resolved.message }, { status: 403 });
   }
-  const { levelId, levelName, numQuestions, passingScore } = resolved.settings;
+  const { levelId, levelName, numQuestions, passingScore, format } = resolved.settings;
 
   const shuffleQuestions = config?.shuffleQuestions ?? true;
   const durationMinutes = Math.max(0, config?.durationMinutes ?? 0);
@@ -102,6 +104,106 @@ export async function GET(req: Request) {
     if (!examSession && (await hasTakenExam(userId, examKey, window))) {
       return NextResponse.json({ error: ALREADY_TAKEN_MESSAGE, alreadyTaken: true }, { status: 403 });
     }
+  }
+
+  // ── Đề nhiều vòng (7 đại tội) ─────────────────────────────────────────────
+  // Cấp đặt dạng TRIAL thì không bốc câu trắc nghiệm nữa mà trả cả bộ vòng thi.
+  // Trang làm bài nhìn cờ `format` để dựng đúng giao diện.
+  if (format === "TRIAL" && levelId) {
+    const rounds = await loadTrialForCandidate(levelId);
+    if (rounds.length === 0) {
+      return NextResponse.json({ error: emptyTrialMessage(levelName) }, { status: 400 });
+    }
+
+    // Lượt thi vẫn phải có: nó là chỗ giữ khoá "mỗi người một lần", mốc bắt đầu
+    // và phạt rời trang. Đề nhiều vòng không bốc câu nên questionIds để rỗng.
+    if (!mock && examKey && !examSession) {
+      try {
+        examSession = await prisma.examSession.create({
+          data: { userId, examKey, questionIds: "[]", durationMinutes, levelId },
+        });
+      } catch {
+        // Hai tab mở đề cùng lúc — tab chậm chân dùng lại lượt của tab kia.
+        examSession = await prisma.examSession.findUnique({
+          where: { userId_examKey: { userId, examKey } },
+        });
+        if (examSession?.submittedAt) {
+          return NextResponse.json({ error: ALREADY_TAKEN_MESSAGE, alreadyTaken: true }, { status: 403 });
+        }
+      }
+    }
+
+    let trialEndsAt: Date | null = null;
+    if (examSession) {
+      trialEndsAt = sessionDeadline(examSession, window.endAt);
+      if (trialEndsAt && trialEndsAt.getTime() <= Date.now()) {
+        // Hết giờ mà chưa nộp được — chấm từ phần đã tự lưu thay vì để mất trắng,
+        // đúng như đề trắc nghiệm vẫn làm.
+        const saved = parseTrialState(examSession.trialState);
+        if (Object.keys(saved).length > 0) {
+          const claimed = await prisma.examSession.updateMany({
+            where: { id: examSession.id, submittedAt: null },
+            data: { submittedAt: new Date() },
+          });
+          if (claimed.count > 0) {
+            const graded = await gradeTrialAttempt({
+              userId,
+              userName: session.user.name ?? session.user.email ?? "PT",
+              levelId,
+              passingScore,
+              violations: examSession.violations,
+              noPenalty,
+              state: examSession.trialState,
+            });
+            if (graded.ok) {
+              await prisma.examSession.update({
+                where: { id: examSession.id },
+                data: { attemptId: graded.attemptId },
+              });
+              return NextResponse.json(
+                {
+                  error:
+                    `Đã hết thời lượng làm bài. Hệ thống đã chấm bài từ phần bạn đã làm: ` +
+                    `${graded.result.score}/${graded.result.total} điểm (${graded.result.scorePct}%) — ` +
+                    `${graded.result.passed ? "ĐẠT" : "CHƯA ĐẠT"}.`,
+                  alreadyTaken: true,
+                },
+                { status: 403 }
+              );
+            }
+            await prisma.examSession.update({
+              where: { id: examSession.id },
+              data: { submittedAt: null },
+            });
+          }
+        }
+        return NextResponse.json({ error: SESSION_EXPIRED_MESSAGE }, { status: 403 });
+      }
+    } else if (durationMinutes > 0) {
+      trialEndsAt = new Date(Date.now() + durationMinutes * 60_000);
+      if (!mock && window.endAt && window.endAt < trialEndsAt) trialEndsAt = window.endAt;
+    }
+
+    return NextResponse.json({
+      format,
+      levelName,
+      rounds,
+      passingScore,
+      questions: [],
+      closesAt: mock ? null : window.endAt?.toISOString() ?? null,
+      scheduleNote: mock ? null : window.message,
+      durationMinutes,
+      noPenalty,
+      endsAt: trialEndsAt?.toISOString() ?? null,
+      focusPenaltyMinutes: mock ? 0 : focusPenaltyMinutes,
+      violations: examSession?.violations ?? 0,
+      penaltyMinutes: examSession?.penaltyMinutes ?? 0,
+      resumed: !!examSession?.trialState,
+      // Bài dở của đề nhiều vòng nằm ở trialState, không phải answers.
+      savedTrialState: parseTrialState(examSession?.trialState),
+      savedAnswers: {},
+      examToken: null,
+    });
   }
 
   // Chỉ bốc trong đề của đúng cấp này — câu của cấp khác không lọt vào được.
@@ -215,6 +317,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({
+    format,
     questions,
     passingScore,
     // Đề của cấp nào — trang làm bài hiện lên để thí sinh biết mình đang thi gì.

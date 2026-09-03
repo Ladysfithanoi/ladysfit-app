@@ -40,7 +40,7 @@ export default async function ExamPage() {
       orderBy: { order: "asc" },
       select: {
         id: true, name: true, color: true, order: true,
-        examNumQuestions: true, examPassingScore: true,
+        examNumQuestions: true, examPassingScore: true, examFormat: true,
         _count: { select: { examQuestions: true } },
       },
     }),
@@ -59,6 +59,7 @@ export default async function ExamPage() {
     numQuestions: l.examNumQuestions,
     passingScore: l.examPassingScore,
     questionCount: l._count.examQuestions,
+    format: l.examFormat,
   }));
 
   const config = configRaw ?? {

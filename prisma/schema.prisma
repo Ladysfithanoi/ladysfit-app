@@ -652,6 +652,135 @@ model ExamQuestion {
   @@map("exam_questions")
 }
 
+// ── Đề thử thách 7 đại tội (Cấp 2 lên Cấp 3) ─────────────────────────────────
+//
+// Đề của cấp thấp là trắc nghiệm phẳng: bốc N câu A/B/C/D, đúng bao nhiêu tính
+// bấy nhiêu. Lên tới cửa Cấp 3 thì thứ cần đo không còn là trí nhớ mà là phán
+// đoán, nên đề đổi hẳn dạng: một lượt thi gồm nhiều VÒNG, mỗi vòng một lối chơi
+// riêng gắn với một đại tội — và lối chơi chính là bài kiểm tra.
+//
+//   Phàm ăn (MEAL) — dựng khay ăn cho một hồ sơ khách sao cho chạm đúng chỉ tiêu
+//   Sa ngã  (SORT) — phân loại tình huống khách vào đúng vùng ranh giới nghề
+//
+// Cả hai đều máy chấm được — bắt buộc, vì đây là cổng thăng cấp chứ không phải
+// trò chơi. Điểm cuối cùng vẫn ghi vào ExamAttempt như đề phẳng để bộ máy xét
+// thăng cấp không phải biết đề dạng nào (xem lib/exam-trial.ts, exam-grading.ts).
+enum ExamFormat {
+  /// Trắc nghiệm phẳng — dạng cũ, dùng cho các cấp thấp.
+  FLAT
+  /// Nhiều vòng, mỗi vòng một lối chơi.
+  TRIAL
+}
+
+enum ExamRoundType {
+  /// Phàm ăn — dựng khay ăn đúng chỉ tiêu calo/đạm/béo/đường.
+  MEAL
+  /// Sa ngã — quẹt thẻ tình huống vào đúng vùng ranh giới.
+  SORT
+}
+
+/// Ba vùng ranh giới của vòng Sa ngã, xếp theo mức độ cứng rắn tăng dần —
+/// thứ tự này có ý nghĩa chấm điểm: lệch 1 bậc còn nửa điểm, lệch 2 bậc mất hết.
+enum ExamSortZone {
+  ACCEPT
+  CAUTION
+  REFUSE
+}
+
+model ExamRound {
+  id          String        @id @default(cuid())
+  levelId     String
+  type        ExamRoundType
+  /// Tên vòng hiện cho thí sinh, vd "Phàm ăn".
+  name        String
+  /// Luật chơi / lời dẫn hiện đầu vòng.
+  intro       String?       @db.Text
+  order       Int           @default(0)
+  /// Điểm tối đa của vòng, chia đều cho các thẻ / hồ sơ trong vòng.
+  maxPoints   Int           @default(100)
+  /// Đạt vòng khi được ít nhất bấy nhiêu % điểm của vòng.
+  passPercent Int           @default(60)
+  /// Trượt vòng bị trừ thẳng bấy nhiêu điểm vào tổng — trượt một vòng không
+  /// đánh rớt cả kỳ, nhưng phải trả giá.
+  failPenalty Int           @default(20)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+
+  level      PTLevel           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  mealBriefs ExamMealBrief[]
+  sortCards  ExamSortCard[]
+  results    ExamRoundResult[]
+
+  @@index([levelId, order])
+  @@map("exam_rounds")
+}
+
+/// Một hồ sơ khách của vòng Phàm ăn: thí sinh phải dựng khay ăn chạm đúng chỉ
+/// tiêu. Chỉ tiêu nào bỏ trống thì vòng không chấm chỉ tiêu đó.
+model ExamMealBrief {
+  id            String  @id @default(cuid())
+  roundId       String
+  order         Int     @default(0)
+  /// Mô tả khách: tuổi, cân nặng, mục tiêu, thói quen…
+  clientProfile String  @db.Text
+  targetCalories Int?
+  targetProtein  Int?
+  targetFat      Int?
+  targetCarbs    Int?
+  /// Sai số cho phép quanh mỗi chỉ tiêu (%).
+  tolerancePercent Int  @default(10)
+  /// Món khách KHÔNG được ăn (dị ứng, bệnh lý) — JSON mảng tên món. Dùng phải
+  /// một món trong đây là hỏng cả hồ sơ, không có điểm an ủi: dị ứng không
+  /// phải chuyện thương lượng.
+  bannedFoods   String? @db.Text
+  /// Giảng giải hiện sau khi chấm.
+  explanation   String? @db.Text
+
+  round ExamRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, order])
+  @@map("exam_meal_briefs")
+}
+
+/// Một thẻ tình huống của vòng Sa ngã.
+model ExamSortCard {
+  id          String       @id @default(cuid())
+  roundId     String
+  order       Int          @default(0)
+  text        String       @db.Text
+  correctZone ExamSortZone
+  explanation String?      @db.Text
+
+  round ExamRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, order])
+  @@map("exam_sort_cards")
+}
+
+/// Kết quả từng vòng của một lượt thi — để Admin soi được người này mạnh yếu
+/// vòng nào, chứ nhìn mỗi tổng điểm thì không biết họ hỏng ở đâu.
+model ExamRoundResult {
+  id        String @id @default(cuid())
+  attemptId String
+  roundId   String
+  /// Điểm đạt được và điểm tối đa của vòng (chép lại, vì vòng có thể bị sửa sau).
+  points    Int
+  maxPoints Int
+  passed    Boolean
+  /// Điểm bị trừ vì trượt vòng này (0 nếu đạt).
+  penalty   Int    @default(0)
+  /// Bài làm chi tiết của vòng — JSON, dạng tuỳ theo loại vòng.
+  detail    String @db.Text
+  /// Nghiêng về trụ nào trong vòng này: SEVERITY | MERCY | BALANCE.
+  pillar    String?
+
+  attempt ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  round   ExamRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, roundId])
+  @@map("exam_round_results")
+}
+
 // Câu hỏi này nằm trong đề của những CẤP nào.
 //
 // "Đề Cấp N" = bộ câu hỏi mà người ĐANG Ở Cấp N phải làm để được xét lên cấp
@@ -724,8 +853,9 @@ model ExamAttempt {
   // trước — xem lib/pt-promotion.ts, điều kiện lý thuyết soát theo đúng cấp.
   levelId    String?
 
-  user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  level PTLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level        PTLevel?          @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  roundResults ExamRoundResult[]
 
   @@index([userId, levelId])
   @@map("exam_attempts")
@@ -769,6 +899,9 @@ model ExamSession {
   /// Đề của cấp nào — chốt lúc mở đề. Bài hết giờ được chấm lại sau đó phải
   /// dùng đúng điểm đạt của cấp này, dù lúc ấy người thi đã đổi cấp.
   levelId         String?
+  /// Bài làm dở của đề nhiều vòng (JSON). Tách khỏi answers vì answers là bản
+  /// đồ phẳng { idCâuHỏi: "A" } của đề trắc nghiệm, không chứa nổi bài của vòng chơi.
+  trialState      String?   @db.Text
 
   user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   level PTLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
@@ -1583,11 +1716,15 @@ model PTLevel {
   // không có lý gì phải chung một ngưỡng đạt với đề Thử việc.
   examNumQuestions     Int?
   examPassingScore     Int?
+  // Đề của cấp này thuộc dạng nào: trắc nghiệm phẳng, hay nhiều vòng chơi.
+  // Đổi dạng là đổi hẳn trang làm bài — xem enum ExamFormat.
+  examFormat           ExamFormat         @default(FLAT)
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]
   users              User[]               @relation("UserPTLevel")
   examQuestions      ExamQuestionLevel[]
+  examRounds         ExamRound[]
   examAttempts       ExamAttempt[]
   examSessions       ExamSession[]
   examConfigsForFM   ExamConfig[]         @relation("ExamConfigFMLevel")

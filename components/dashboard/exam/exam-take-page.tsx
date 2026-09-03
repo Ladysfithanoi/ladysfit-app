@@ -22,6 +22,9 @@ import {
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
+import { MealRound, type MealBriefView } from "./trial-meal-round";
+import { SortRound, type SortCardView } from "./trial-sort-round";
+import type { MealEntry, SortZone } from "@/lib/exam-trial";
 
 type Question = {
   id: string;
@@ -43,6 +46,32 @@ type ExamResult = {
 };
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
+
+/** Một vòng của đề thử thách (7 đại tội) — đã bỏ đáp án trước khi gửi xuống. */
+type TrialRound = {
+  id: string;
+  type: "MEAL" | "SORT";
+  name: string;
+  intro: string | null;
+  maxPoints: number;
+  passPercent: number;
+  failPenalty: number;
+  briefs: MealBriefView[];
+  cards: SortCardView[];
+};
+
+/** Bài làm cả lượt: { roundId: { briefId: MealEntry[] } | { cardId: SortZone } }. */
+type TrialState = Record<string, Record<string, MealEntry[] | SortZone>>;
+
+type TrialSubmitResult = {
+  scorePct: number;
+  score: number;
+  total: number;
+  penalty: number;
+  passed: boolean;
+  promoted: boolean;
+  rounds: { roundId: string; points: number; maxPoints: number; passed: boolean; penalty: number }[];
+};
 
 /**
  * Sau khi báo một lần rời trang thì nghỉ bấy nhiêu mili giây mới báo tiếp.
@@ -70,6 +99,10 @@ const REMINDER_TOAST_MS = 6_000;
  * bài cuối cùng.
  */
 const AUTOSAVE_DEBOUNCE_MS = 2_000;
+
+/** Thanh chuyển vòng: màn hẹp trượt ngang thay vì xuống dòng. */
+const SLIDER_ROUNDS =
+  "w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full";
 
 /** Mili giây → "MM:SS" (hoặc "H:MM:SS" khi thời lượng dài hơn một tiếng). */
 function fmtClock(ms: number): string {
@@ -201,6 +234,15 @@ export function ExamTakePage({
   // Nói rõ ngay trên đề để người thi không tưởng mình đang bị đem ra đánh giá.
   const [noPenalty, setNoPenalty] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  // ── Đề thử thách nhiều vòng ──────────────────────────────────────────────
+  // Cấp nào đặt dạng TRIAL thì server trả rounds thay vì questions; cả trang
+  // dùng chung khung này (đồng hồ, tự lưu, phạt rời trang), chỉ đổi phần thân.
+  const [rounds, setRounds] = useState<TrialRound[]>([]);
+  const [trialState, setTrialState] = useState<TrialState>({});
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
+  const trialRef = useRef<TrialState>({});
+  const isTrial = rounds.length > 0;
   // ── Chống ra ngoài đọc tài liệu ──────────────────────────────────────────
   // Số phút bị trừ mỗi lần rời khỏi trang thi (0 = kỳ thi này không phạt), số
   // lần đã rời và tổng số phút đã mất. Server giữ con số thật; ở đây chỉ hiển thị.
@@ -269,6 +311,12 @@ export function ExamTakePage({
         setPassingScore(data.passingScore);
         setScheduleNote(data.scheduleNote ?? "");
         setLevelName(data.levelName ?? null);
+        if (Array.isArray(data.rounds) && data.rounds.length > 0) {
+          setRounds(data.rounds);
+          const saved = (data.savedTrialState ?? {}) as TrialState;
+          setTrialState(saved);
+          trialRef.current = saved;
+        }
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
         setFocusPenaltyMinutes(data.focusPenaltyMinutes ?? 0);
@@ -294,8 +342,55 @@ export function ExamTakePage({
     loadExam();
   }, [mock, mockLevelId]);
 
+  /**
+   * Nộp bài đề thử thách. Thi thử của Admin không ghi gì nên chỉ báo ngay là
+   * đã xem xong đề; bài thật đi qua /api/exam/trial-submit, nơi server nạp lại
+   * đề và tự chấm — client không gửi điểm lên bao giờ.
+   */
+  async function handleSubmitTrial(force = false) {
+    if (!force && !trialComplete) return;
+    submitLock.current = true;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      if (mock) {
+        setSubmitError("Thi thử đề nhiều vòng chỉ để xem trước giao diện — bài không được chấm.");
+        submitLock.current = false;
+        return;
+      }
+      const res = await fetch("/api/exam/trial-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trialState: trialRef.current }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
+        submitLock.current = false;
+        return;
+      }
+      const data = (await res.json()) as TrialSubmitResult;
+      setTrialResult(data);
+      setResult({
+        scorePct: data.scorePct,
+        correctCount: data.score,
+        total: data.total,
+        passed: data.passed,
+        promoted: !!data.promoted,
+      });
+      setShowResultModal(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      setSubmitError("Có lỗi xảy ra khi nộp bài.");
+      submitLock.current = false;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSubmit(force = false) {
     if (submitLock.current) return;
+    if (isTrial) return handleSubmitTrial(force);
     if (!force && Object.keys(answers).length < questions.length) return;
     submitLock.current = true;
     setSubmitting(true);
@@ -375,6 +470,52 @@ export function ExamTakePage({
     [mock]
   );
 
+  /**
+   * Ghi bài dở của đề thử thách. Cùng đường tự lưu với đề trắc nghiệm, chỉ khác
+   * hình dạng gói tin — xem app/api/exam/autosave.
+   */
+  const saveTrial = useCallback(
+    async (payload: TrialState, viaBeacon = false) => {
+      if (mock) return;
+      const body = JSON.stringify({ trialState: payload });
+      try {
+        if (viaBeacon) {
+          await fetch("/api/exam/autosave", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            keepalive: true,
+          });
+          return;
+        }
+        setSaveState("saving");
+        const res = await fetch("/api/exam/autosave", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        setSaveState(res.ok ? "saved" : "error");
+      } catch {
+        if (!viaBeacon) setSaveState("error");
+      }
+    },
+    [mock]
+  );
+
+  /** Sửa bài làm một vòng: cập nhật ngay, hẹn giờ ghi xuống server. */
+  function updateTrial(roundId: string, key: string, value: MealEntry[] | SortZone) {
+    setTrialState((prev) => {
+      const next = { ...prev, [roundId]: { ...(prev[roundId] ?? {}), [key]: value } };
+      trialRef.current = next;
+      return next;
+    });
+    if (mock) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      saveTrial(trialRef.current);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
   /** Chọn một đáp án: cập nhật giao diện ngay, hẹn giờ ghi xuống server. */
   function pickAnswer(questionId: string, option: string) {
     setAnswers((prev) => {
@@ -391,9 +532,15 @@ export function ExamTakePage({
 
   // Rời trang thì ghi nốt phần chưa kịp lưu — đây chính là lúc dễ mất bài nhất.
   useEffect(() => {
-    if (mock || result || questions.length === 0) return;
+    if (mock || result || (questions.length === 0 && !isTrial)) return;
     function flush() {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+      // Đề nhiều vòng lưu ở trialState, đề trắc nghiệm lưu ở answers.
+      if (isTrial) {
+        if (Object.keys(trialRef.current).length === 0) return;
+        saveTrial(trialRef.current, true);
+        return;
+      }
       if (Object.keys(answersRef.current).length === 0) return;
       saveAnswers(answersRef.current, true);
     }
@@ -406,7 +553,7 @@ export function ExamTakePage({
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", flush);
     };
-  }, [mock, result, questions.length, saveAnswers]);
+  }, [mock, result, questions.length, saveAnswers, saveTrial, isTrial]);
 
   // Dọn hẹn giờ tự lưu khi rời trang.
   useEffect(() => {
@@ -481,7 +628,7 @@ export function ExamTakePage({
   // Trừ giờ là việc của server (app/api/exam/violation); ở đây chỉ báo về rồi
   // nhận lại mốc hết giờ mới, nên tắt JS hay sửa giờ máy cũng không gỡ được.
   useEffect(() => {
-    if (mock || result || questions.length === 0 || focusPenaltyMinutes <= 0) return;
+    if (mock || result || (questions.length === 0 && !isTrial) || focusPenaltyMinutes <= 0) return;
 
     async function report() {
       if (reportingRef.current || submitLock.current) return;
@@ -522,27 +669,46 @@ export function ExamTakePage({
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
     };
-  }, [mock, result, questions.length, focusPenaltyMinutes]);
+  }, [mock, result, questions.length, focusPenaltyMinutes, isTrial]);
 
   // Đóng tab / F5 giữa chừng thì hỏi lại một câu. Tải lại không bốc được đề mới
   // và cũng không được cấp thêm giờ, nhưng người thi không biết điều đó nên cứ
   // nhắc — đỡ một phen hoảng.
   useEffect(() => {
-    if (mock || result || questions.length === 0) return;
+    if (mock || result || (questions.length === 0 && !isTrial)) return;
     function onBeforeUnload(e: BeforeUnloadEvent) {
       e.preventDefault();
       e.returnValue = "";
     }
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [mock, result, questions.length]);
+  }, [mock, result, questions.length, isTrial]);
 
   function goToQuestion(id: string) {
     cardRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   const answeredCount = Object.keys(answers).length;
-  const allAnswered = answeredCount === questions.length;
+
+  // ── Tiến độ đề thử thách ──────────────────────────────────────────────────
+  // Vòng Phàm ăn coi là xong khi khay có ít nhất một món; vòng Sa ngã khi mọi
+  // thẻ đã được xếp. Chưa xong hết thì nút Nộp bài chưa mở — nhưng hết giờ vẫn
+  // tự nộp như thường, phần bỏ trống tính 0 điểm.
+  const roundDone = (r: TrialRound) => {
+    const st = trialState[r.id] ?? {};
+    if (r.type === "MEAL") {
+      return r.briefs.every((b) => {
+        const v = st[b.id];
+        return Array.isArray(v) && v.length > 0;
+      });
+    }
+    return r.cards.every((c) => typeof st[c.id] === "string");
+  };
+  const trialDoneCount = rounds.filter(roundDone).length;
+  const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
+  const currentRound: TrialRound | null = rounds[roundIdx] ?? null;
+  // Đề nhiều vòng dùng tiến độ vòng thay cho số câu đã trả lời.
+  const allAnswered = isTrial ? trialComplete : answeredCount === questions.length;
   const exitPath = mock ? "/dashboard/exam" : "/dashboard";
   // Chỉ bài thi thử mới có đáp án đúng để soi lại; bài thi thật không bao giờ
   // trả về đáp án nên cũng không có gì để xem lại.
@@ -591,7 +757,8 @@ export function ExamTakePage({
           </h1>
           <p className="text-xs text-gray-400 mt-0.5 font-medium sm:text-sm">
             {/* Mỗi cấp một đề riêng nên phải nói rõ đây là đề nào */}
-            {levelName ? `Đề ${levelName} — ` : ""}Điểm đạt: {passingScore}% — {questions.length} câu hỏi
+            {levelName ? `Đề ${levelName} — ` : ""}Điểm đạt: {passingScore}% —{" "}
+            {isTrial ? `${rounds.length} vòng thử thách` : `${questions.length} câu hỏi`}
           </p>
         </div>
         {!result && (
@@ -735,15 +902,134 @@ export function ExamTakePage({
           <div
             className="h-full rounded-full transition-all duration-300"
             style={{
-              width: questions.length > 0 ? `${(answeredCount / questions.length) * 100}%` : "0%",
+              width: isTrial
+                ? `${rounds.length > 0 ? (trialDoneCount / rounds.length) * 100 : 0}%`
+                : questions.length > 0
+                  ? `${(answeredCount / questions.length) * 100}%`
+                  : "0%",
               backgroundColor: "#f15b5c",
             }}
           />
         </div>
       )}
 
-      {/* ── Danh sách câu hỏi: đang làm bài, hoặc soi lại sau khi nộp ── */}
-      {reviewing && canReview ? (
+      {/* ── Đề thử thách: từng vòng một, chuyển vòng bằng thanh trên đầu ── */}
+      {isTrial ? (
+        <div className="space-y-4">
+          <div className={cn(SLIDER_ROUNDS)}>
+            <div className="flex w-max items-center gap-2">
+              {rounds.map((r, i) => {
+                const done = roundDone(r);
+                const active = i === roundIdx;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRoundIdx(i)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-colors",
+                      active
+                        ? "bg-[#f15b5c] text-white"
+                        : done
+                          ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                    )}
+                  >
+                    <span className={cn("text-[10px] font-extrabold", active ? "text-white/70" : "text-gray-300")}>
+                      {i + 1}
+                    </span>
+                    {r.name}
+                    {done && !active && <CheckCircle className="h-3.5 w-3.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {currentRound && (
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <p className="text-base font-extrabold text-gray-900">{currentRound.name}</p>
+                <p className="mt-0.5 text-xs font-semibold text-gray-400">
+                  {currentRound.maxPoints} điểm · đạt vòng từ {currentRound.passPercent}% ·
+                  trượt bị trừ {currentRound.failPenalty} điểm
+                </p>
+                {currentRound.intro && (
+                  <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-600">
+                    {currentRound.intro}
+                  </p>
+                )}
+              </div>
+
+              {currentRound.type === "MEAL" ? (
+                <div className="space-y-6">
+                  {currentRound.briefs.map((brief, i) => (
+                    <div key={brief.id}>
+                      {currentRound.briefs.length > 1 && (
+                        <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-[#f15b5c]">
+                          Hồ sơ {i + 1}/{currentRound.briefs.length}
+                        </p>
+                      )}
+                      <MealRound
+                        brief={brief}
+                        entries={(trialState[currentRound.id]?.[brief.id] as MealEntry[]) ?? []}
+                        disabled={!!result}
+                        onChange={(next) => updateTrial(currentRound.id, brief.id, next)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <SortRound
+                  cards={currentRound.cards}
+                  answers={
+                    Object.fromEntries(
+                      Object.entries(trialState[currentRound.id] ?? {}).filter(
+                        ([, v]) => typeof v === "string"
+                      )
+                    ) as Record<string, SortZone>
+                  }
+                  disabled={!!result}
+                  onChange={(cardId, zone) => updateTrial(currentRound.id, cardId, zone)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Bảng điểm từng vòng sau khi nộp — hỏng ở vòng nào thấy ngay vòng đó */}
+          {trialResult && (
+            <div className="overflow-hidden rounded-2xl border border-gray-100">
+              {trialResult.rounds.map((rr) => {
+                const r = rounds.find((x) => x.id === rr.roundId);
+                return (
+                  <div
+                    key={rr.roundId}
+                    className="flex items-center justify-between gap-3 border-b border-gray-50 px-4 py-3 last:border-0"
+                  >
+                    <span className="min-w-0 truncate text-sm font-bold text-gray-700">
+                      {r?.name ?? "Vòng"}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="text-sm font-extrabold tabular-nums text-gray-800">
+                        {rr.points}/{rr.maxPoints}
+                      </span>
+                      {rr.passed ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-600">
+                          Đạt
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-500">
+                          Trượt −{rr.penalty}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : reviewing && canReview ? (
         <div className="space-y-3">
           <p className="text-sm font-extrabold text-gray-900">Xem lại bài làm ({questions.length} câu)</p>
           {questions.map((q, idx) => {
@@ -879,7 +1165,9 @@ export function ExamTakePage({
       </div>
 
       {/* ── Cột phải: bảng theo dõi, chỉ có ở màn hình rộng ── */}
-      {!result && (
+      {/* Đề nhiều vòng không dùng bảng này: thanh chuyển vòng ở đầu trang đã làm
+          đúng việc đó, mà bảng lại đếm theo câu hỏi nên sẽ hiện 0/0. */}
+      {!result && !isTrial && (
         <aside className="hidden lg:block lg:w-60 lg:shrink-0 lg:sticky lg:top-20">
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <QuestionTracker
@@ -894,7 +1182,7 @@ export function ExamTakePage({
       </div>
 
       {/* ── Màn hình hẹp: nút nổi góc phải, bấm mở bảng theo dõi ── */}
-      {!result && (
+      {!result && !isTrial && (
         <button
           type="button"
           onClick={() => setTrackerOpen(true)}
@@ -927,9 +1215,13 @@ export function ExamTakePage({
                 Còn {timeToast} phút làm bài
               </p>
               <p className="text-xs font-semibold text-gray-600">
-                {answeredCount < questions.length
-                  ? `Còn ${questions.length - answeredCount} câu chưa làm — hết giờ hệ thống tự nộp.`
-                  : "Đã làm hết các câu, bấm Nộp bài khi sẵn sàng."}
+                {!allAnswered
+                  ? isTrial
+                    ? `Còn ${rounds.length - trialDoneCount} vòng chưa xong — hết giờ hệ thống tự nộp.`
+                    : `Còn ${questions.length - answeredCount} câu chưa làm — hết giờ hệ thống tự nộp.`
+                  : isTrial
+                    ? "Đã xong hết các vòng, bấm Nộp bài khi sẵn sàng."
+                    : "Đã làm hết các câu, bấm Nộp bài khi sẵn sàng."}
               </p>
             </div>
           </div>
@@ -952,9 +1244,11 @@ export function ExamTakePage({
                 Hết giờ hệ thống sẽ <span className="font-extrabold">tự nộp bài</span>, kể cả
                 khi bạn còn câu chưa làm.
               </p>
-              {answeredCount < questions.length && (
+              {!allAnswered && (
                 <p className="mt-2 text-sm font-extrabold text-red-600">
-                  Bạn còn {questions.length - answeredCount} câu chưa làm.
+                  {isTrial
+                    ? `Bạn còn ${rounds.length - trialDoneCount} vòng chưa xong.`
+                    : `Bạn còn ${questions.length - answeredCount} câu chưa làm.`}
                 </p>
               )}
             </div>
@@ -1018,7 +1312,7 @@ export function ExamTakePage({
         </div>
       )}
 
-      {trackerOpen && !result && (
+      {trackerOpen && !result && !isTrial && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center lg:hidden"
           style={{ backgroundColor: "rgba(0,0,0,0.45)" }}

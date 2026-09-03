@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
     promoteMinTransform?: number;
     examNumQuestions?: number | null;
     examPassingScore?: number | null;
+    examFormat?: "FLAT" | "TRIAL";
     isDefault?: boolean;
     phaseIds?: string[];
   };
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
       // Đề riêng của cấp: bỏ trống = dùng số chung trong cấu hình bài thi.
       examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions),
       examPassingScore: normalizeExamPassingScore(body.examPassingScore),
+      examFormat: body.examFormat === "TRIAL" ? "TRIAL" : "FLAT",
       isDefault: body.isDefault ?? false,
       phaseAccess: body.phaseIds?.length
         ? { create: body.phaseIds.map((phaseId) => ({ phaseId, hasAccess: true })) }

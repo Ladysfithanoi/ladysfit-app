@@ -30,6 +30,7 @@ import {
   UserCog,
   RotateCcw,
   TimerReset,
+  Swords,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtDateTime } from "@/lib/format-date";
@@ -38,6 +39,7 @@ import { ExamImportModal } from "./exam-import-modal";
 import { QuestionMedia, QuestionMediaFields } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { ConfirmDialog, type ConfirmSpec } from "./confirm-dialog";
+import { TrialRoundsTab } from "./trial-rounds-tab";
 
 type Question = {
   id: string;
@@ -65,6 +67,8 @@ type LevelOption = {
   numQuestions: number | null;
   passingScore: number | null;
   questionCount: number;
+  /** FLAT = trắc nghiệm phẳng, TRIAL = nhiều vòng chơi. */
+  format: "FLAT" | "TRIAL";
 };
 
 type Config = {
@@ -159,6 +163,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const TABS = [
   { key: "bank", label: "Ngân hàng câu hỏi", icon: FileText },
+  { key: "trial", label: "Đề thử thách", icon: Swords },
   { key: "schedule", label: "Lịch thi", icon: CalendarClock },
   { key: "config", label: "Cấu hình", icon: Settings },
   { key: "results", label: "Kết quả thi", icon: ClipboardList },
@@ -1939,6 +1944,9 @@ export function ExamAdminPage({
         onImported={reloadQuestions}
         levels={levels}
       />
+
+      {/* ─── Trial Tab ─── */}
+      {tab === "trial" && <TrialRoundsTab levels={levels} />}
 
       {/* ─── Results Tab ─── */}
       {tab === "results" && (

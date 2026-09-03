@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const raw = (body as { answers?: unknown }).answers;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  // Đề thử thách gửi bài dở dạng khác hẳn (khay ăn, thẻ đã phân) nên đi đường
+  // riêng, lưu vào trialState — xem lib/exam-trial.ts.
+  const trial = (body as { trialState?: unknown }).trialState;
+  const isTrial = !!trial && typeof trial === "object" && !Array.isArray(trial);
+
+  if (!isTrial && (!raw || typeof raw !== "object" || Array.isArray(raw))) {
     return NextResponse.json({ saved: false });
   }
 
@@ -39,6 +44,19 @@ export async function POST(req: NextRequest) {
   // Chưa mở đề, hoặc đã nộp bài rồi thì không ghi đè lên gì cả.
   if (!examSession || examSession.submittedAt) {
     return NextResponse.json({ saved: false });
+  }
+
+  if (isTrial) {
+    // Không lọc theo đề ở đây: bài làm dở chưa phải bài chấm, và lúc chấm thì
+    // server nạp lại đề từ cơ sở dữ liệu chứ không tin phần này (exam-trial-server).
+    // Chặn theo kích thước để một gói tin hỏng không phình bảng.
+    const json = JSON.stringify(trial);
+    if (json.length > 200_000) return NextResponse.json({ saved: false });
+    await prisma.examSession.update({
+      where: { id: examSession.id },
+      data: { trialState: json },
+    });
+    return NextResponse.json({ saved: true });
   }
 
   // Chỉ nhận đáp án của đúng những câu trong đề đã bốc, và chỉ nhận A/B/C/D.
