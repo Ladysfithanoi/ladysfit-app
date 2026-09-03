@@ -344,7 +344,7 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead theo doanh thu</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Doanh thu tính theo tất cả lead trong tháng (khớp Tổng doanh thu ở Setup); số HĐ là lead đã chốt (PIF / Đặt cọc / Thanh toán nốt)
+            Doanh thu tính theo tất cả lead trong tháng (khớp Tổng doanh thu ở Setup); số HĐ chỉ tính lead Đã thanh toán
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">

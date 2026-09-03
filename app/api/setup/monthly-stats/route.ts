@@ -60,10 +60,10 @@ export async function GET(req: Request) {
     },
   });
 
-  // A registered customer = bought a contract (deposit / paid-in-full / paid-remaining).
-  // No signDate gate, so "đã chốt" counts every registered lead.
-  const isWon = (l: (typeof allLeads)[number]) =>
-    l.status === "PIF" || l.status === "DE" || l.status === "PB";
+  // "Đã chốt" = hợp đồng ĐÃ THANH TOÁN, đồng bộ với ô "KH đăng ký" ở tab Lead.
+  // Đặt cọc chưa tính vì cọc còn có thể huỷ; Thanh toán nốt cũng không tính vì đó
+  // là đợt tiền của hợp đồng đã được đếm ở tháng ký. Không chặn theo signDate.
+  const isWon = (l: (typeof allLeads)[number]) => l.status === "PIF";
 
   const leads = allLeads.filter(isWon);
 
