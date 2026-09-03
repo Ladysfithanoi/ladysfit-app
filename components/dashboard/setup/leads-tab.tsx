@@ -34,7 +34,15 @@ type Props = {
 };
 
 const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
+// Đã chốt hợp đồng — dùng cho nút đồng bộ lead sang hồ sơ khách hàng.
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
+
+/**
+ * "KH đăng ký" chỉ đếm hợp đồng ĐÃ THANH TOÁN. Đặt cọc / Thanh toán nốt chưa
+ * được tính: cọc còn có thể huỷ, còn trả nốt là đợt tiền của hợp đồng đã đếm
+ * ở tháng ký — đếm cả hai sẽ thổi phồng số khách.
+ */
+const isRegisteredCustomer = (l: SalesLead) => l.status === "PIF";
 
 // ── Package multi-select helpers ──────────────────────────────────────────────
 // parsePackageList / serializePackageList nằm ở lib/lead-pricing.ts vì API cũng dùng.
@@ -450,7 +458,7 @@ export function LeadsTab({
   const branchTotal = {
     revenue:           visibleLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0),
     fitpartnerRevenue: visibleLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0),
-    registered:        visibleLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length,
+    registered:        visibleLeads.filter(isRegisteredCustomer).length,
     takecare:          visibleLeads.filter(l => l.status === "TAKECARE").length,
     total:             visibleLeads.length,
   };
@@ -593,7 +601,7 @@ export function LeadsTab({
             const displayName  = isHouse ? "Nhân sự đã nghỉ / Phòng tập" : (pt!.name ?? pt!.email);
             const collapsed    = collapsedPTs.has(ptId);
             const ptRevenue    = ptLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
-            const ptRegistered = ptLeads.filter(l => REGISTERED_STATUSES.includes(l.status)).length;
+            const ptRegistered = ptLeads.filter(isRegisteredCustomer).length;
             // Nhãn theo vai trò THỰC của người phụ trách (không phụ thuộc người đang xem).
             const isFMGroup    = pt?.role === "FM";
             const roleLabel    = pt?.role === "FM" ? "FM" : pt?.role === "ADMIN" ? "Admin" : "PT";
