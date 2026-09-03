@@ -6,6 +6,10 @@ import { captureTrash } from "@/lib/trash";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { syncLeadToClient } from "@/lib/sync-lead-to-client";
+import { validateLeadFinance, type LeadFinanceStatus } from "@/lib/lead-pricing";
+
+/** Các trường quyết định luật tiền — chỉ khi body đụng tới chúng mới kiểm tra lại. */
+const FINANCE_FIELDS = ["status", "source", "packageRegistered", "actualRevenue", "remainingPayment"];
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -41,6 +45,36 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // Partial update: fall back to existing lead values for any field not present in the
   // request body. This prevents partial callers (e.g. the care-notes popup, which only
   // sends { notes }) from inadvertently nullifying revenue and other financial fields.
+  const num = (v: unknown) => (v != null && v !== "" ? parseFloat(String(v)) : null);
+  const nextStatus    = ("status" in body && body.status ? body.status : lead.status) as LeadFinanceStatus;
+  const nextSource    = "source" in body ? (body.source ? String(body.source) : null) : lead.source;
+  const nextPackage   = "packageRegistered" in body ? (body.packageRegistered ? String(body.packageRegistered) : null) : lead.packageRegistered;
+  const nextRevenue   = "actualRevenue" in body ? num(body.actualRevenue) : lead.actualRevenue;
+  const nextRemaining = "remainingPayment" in body ? num(body.remainingPayment) : lead.remainingPayment;
+
+  // Chỉ soát luật tiền khi request thực sự đụng tới chúng — popup ghi chú chăm sóc
+  // chỉ gửi { notes } nên không bị chặn bởi dữ liệu tiền cũ chưa chuẩn.
+  const touchesFinance = FINANCE_FIELDS.some(f => f in body);
+  if (touchesFinance) {
+    const moneyError = validateLeadFinance({
+      status: nextStatus,
+      source: nextSource,
+      packageRegistered: nextPackage,
+      actualRevenue: nextRevenue,
+      remainingPayment: nextRemaining,
+    });
+    if (moneyError) return NextResponse.json({ error: moneyError }, { status: 400 });
+  }
+
+  // Ngày ký chạy theo ô Doanh thu: có tiền thì giữ/ghi ngày ký, hết tiền thì xoá luôn.
+  // Request không đụng tới tiền (popup ghi chú) thì giữ nguyên ngày ký sẵn có.
+  const requestedSignDate = "signDate" in body
+    ? (body.signDate ? new Date(String(body.signDate)) : null)
+    : lead.signDate;
+  const nextSignDate = (touchesFinance || "signDate" in body)
+    ? (nextRevenue ? (requestedSignDate ?? new Date()) : null)
+    : lead.signDate;
+
   const updated = await prisma.salesLead.update({
     where: { id: params.id },
     data: {
@@ -48,16 +82,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       customerName: "customerName" in body ? String(body.customerName ?? "") : lead.customerName,
       yearOfBirth: "yearOfBirth" in body ? (body.yearOfBirth ? parseInt(String(body.yearOfBirth)) : null) : lead.yearOfBirth,
       phone: "phone" in body ? (body.phone ? String(body.phone) : null) : lead.phone,
-      source: "source" in body ? (body.source ? String(body.source) : null) : lead.source,
+      source: nextSource,
       referralSource: "referralSource" in body ? (body.referralSource ? String(body.referralSource) : null) : lead.referralSource,
       notes: "notes" in body ? (body.notes ? String(body.notes) : null) : lead.notes,
       forecast: "forecast" in body ? (body.forecast ? String(body.forecast) : null) : lead.forecast,
-      status: "status" in body && body.status ? body.status as "TAKECARE" | "FAIL" | "DE" | "PIF" | "PB" : lead.status,
-      packageRegistered: "packageRegistered" in body ? (body.packageRegistered ? String(body.packageRegistered) : null) : lead.packageRegistered,
-      actualRevenue: "actualRevenue" in body ? (body.actualRevenue != null ? parseFloat(String(body.actualRevenue)) : null) : lead.actualRevenue,
-      remainingPayment: "remainingPayment" in body ? (body.remainingPayment != null ? parseFloat(String(body.remainingPayment)) : null) : lead.remainingPayment,
+      status: nextStatus,
+      packageRegistered: nextPackage,
+      actualRevenue: nextRevenue,
+      remainingPayment: nextRemaining,
       fitpartnerRevenue: "fitpartnerRevenue" in body ? (body.fitpartnerRevenue != null ? parseFloat(String(body.fitpartnerRevenue)) : null) : lead.fitpartnerRevenue,
-      signDate: "signDate" in body ? (body.signDate ? new Date(String(body.signDate)) : null) : lead.signDate,
+      signDate: nextSignDate,
       remark: "remark" in body ? (body.remark ? String(body.remark) : null) : lead.remark,
     },
     include: {

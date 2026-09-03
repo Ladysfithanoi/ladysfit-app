@@ -24,4 +24,7 @@ export const LEAD_SOURCES = [
   "Walk-in",
   "Thương hiệu cá nhân",
   "Renew",
+  // Khách vừa tập xong gói trải nghiệm L0 → gói ngay kế tiếp được cấn trừ 2 triệu
+  // đã đóng, và KHÔNG tính trợ giá tái ký. Luật giá ở lib/lead-pricing.ts.
+  "Hậu L0",
 ];

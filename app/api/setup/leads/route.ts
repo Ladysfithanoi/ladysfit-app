@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
+import { validateLeadFinance, type LeadFinanceStatus } from "@/lib/lead-pricing";
 
 const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"];
 
@@ -75,6 +76,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "PT chỉ có thể thêm lead cho bản thân" }, { status: 403 });
   }
 
+  // Doanh thu / Còn thiếu phải khớp bảng giá theo Tình trạng + Phân nguồn.
+  const revenueNum   = actualRevenue != null && actualRevenue !== "" ? parseFloat(String(actualRevenue)) : null;
+  const remainingNum = remainingPayment != null && remainingPayment !== "" ? parseFloat(String(remainingPayment)) : null;
+  const moneyError = validateLeadFinance({
+    status: (status || "TAKECARE") as LeadFinanceStatus,
+    source: source || null,
+    packageRegistered: packageRegistered || null,
+    actualRevenue: revenueNum,
+    remainingPayment: remainingNum,
+  });
+  if (moneyError) return NextResponse.json({ error: moneyError }, { status: 400 });
+
+  // Ngày ký chạy theo ô Doanh thu: có tiền thì có ngày ký, chưa có tiền thì bỏ trống.
+  const resolvedSignDate = revenueNum ? (signDate ? new Date(signDate) : new Date()) : null;
+
   const lead = await prisma.salesLead.create({
     data: {
       branchId, assignedPTId, createdById: session.user.id,
@@ -84,10 +100,10 @@ export async function POST(req: Request) {
       notes: notes || null,
       forecast: forecast || null, status: status || "TAKECARE",
       packageRegistered: packageRegistered || null,
-      actualRevenue: actualRevenue ? parseFloat(actualRevenue) : null,
-      remainingPayment: remainingPayment ? parseFloat(remainingPayment) : null,
+      actualRevenue: revenueNum,
+      remainingPayment: remainingNum,
       fitpartnerRevenue: fitpartnerRevenue ? parseFloat(fitpartnerRevenue) : null,
-      signDate: signDate ? new Date(signDate) : null,
+      signDate: resolvedSignDate,
       remark: remark || null, month: parseInt(month), year: parseInt(year),
     },
     include: {

@@ -10,6 +10,10 @@ import { AlertDialog } from "@/components/ui/alert-dialog";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { LeadsImportModal } from "./leads-import-modal";
 import { fmtDate } from "@/lib/format-date";
+import {
+  parsePackageList, serializePackageList, computeExpectedRevenue, describeExpected,
+  validateLeadFinance, fieldLocks, POST_L0_SOURCE,
+} from "@/lib/lead-pricing";
 
 type Props = {
   branchId: string;
@@ -33,16 +37,8 @@ const STATUS_OPTIONS: LeadStatus[] = ["TAKECARE", "FAIL", "DE", "PIF", "PB"];
 const REGISTERED_STATUSES: LeadStatus[] = ["DE", "PIF", "PB"];
 
 // ── Package multi-select helpers ──────────────────────────────────────────────
+// parsePackageList / serializePackageList nằm ở lib/lead-pricing.ts vì API cũng dùng.
 const PACKAGE_OPTIONS = ["L0", "L1", "L2", "L3", "L4", "L5", "Loyalfit"] as const;
-
-function parsePackageList(pkg: string | null | undefined): string[] {
-  if (!pkg?.trim()) return [];
-  return pkg.split(/[,+/]/).map(s => s.trim()).filter(Boolean);
-}
-
-function serializePackageList(pkgs: string[]): string {
-  return pkgs.join("+");
-}
 
 // ── Note helpers ──────────────────────────────────────────────────────────────
 
@@ -156,7 +152,17 @@ export function LeadsTab({
 
   function openEdit(lead: SalesLead) {
     setEditing(lead);
-    setForm({ ...lead, signDateStr: lead.signDate ? lead.signDate.split("T")[0] : "" });
+    // Lead cũ (import tay / trước khi có luật giá) có thể đang giữ tiền ở ô mà tình
+    // trạng hiện tại không cho phép. Ô đó bị khoá nên phải dọn sẵn ngay lúc mở form,
+    // nếu không người dùng sẽ kẹt: nút Cập nhật bị chặn mà không sửa được ô nào.
+    const locks = fieldLocks(lead.status);
+    const revenue = locks.revenue ? null : lead.actualRevenue;
+    setForm({
+      ...lead,
+      actualRevenue: revenue,
+      remainingPayment: locks.remaining ? null : lead.remainingPayment,
+      signDateStr: revenue && lead.signDate ? lead.signDate.split("T")[0] : "",
+    });
     setError("");
     setFormOpen(true);
   }
@@ -173,6 +179,15 @@ export function LeadsTab({
       setError("Gói L1 và L2 không được phép đăng ký cùng lúc");
       return;
     }
+    // Doanh thu / Còn thiếu phải khớp bảng giá theo Tình trạng + Phân nguồn.
+    const moneyError = validateLeadFinance({
+      status: (form.status ?? "TAKECARE") as LeadStatus,
+      source: form.source,
+      packageRegistered: form.packageRegistered,
+      actualRevenue: form.actualRevenue,
+      remainingPayment: form.remainingPayment,
+    });
+    if (moneyError) { setError(moneyError); return; }
     setSaving(true);
     setError("");
     const body = {
@@ -456,6 +471,57 @@ export function LeadsTab({
 
   // Count unique PTs for bulk confirm message
   const reminderPTCount = new Set(reminderLeads.map(l => l.assignedPTId)).size;
+
+  // ── Luật tiền của form Thêm / Sửa Lead (lib/lead-pricing.ts) ────────────────
+  const formStatus   = (form.status ?? "TAKECARE") as LeadStatus;
+  const formPkgs     = parsePackageList(form.packageRegistered);
+  const formLocks    = fieldLocks(formStatus);
+  const isPostL0     = form.source === POST_L0_SOURCE;
+  const expected     = computeExpectedRevenue(formPkgs, form.source);
+  const financeError = validateLeadFinance({
+    status: formStatus,
+    source: form.source,
+    packageRegistered: form.packageRegistered,
+    actualRevenue: form.actualRevenue,
+    remainingPayment: form.remainingPayment,
+  });
+
+  /** Đổi Tình trạng → dọn sạch những ô vừa bị khoá (kèm Ngày ký nếu hết doanh thu). */
+  function changeStatus(status: LeadStatus) {
+    const locks = fieldLocks(status);
+    setForm(f => {
+      const next = { ...f, status };
+      if (locks.revenue)   { next.actualRevenue = undefined; next.signDateStr = ""; }
+      if (locks.remaining) next.remainingPayment = undefined;
+      return next;
+    });
+  }
+
+  /**
+   * Ngày ký chạy theo ô Doanh thu: điền tiền vào ngày nào thì ký ngày đó.
+   * Sửa lại số tiền sau này KHÔNG dời ngày ký đã có — chỉ xoá trắng tiền mới xoá ngày.
+   */
+  function changeRevenue(raw: string) {
+    const value = raw ? parseFloat(raw) : undefined;
+    setForm(f => ({
+      ...f,
+      actualRevenue: value,
+      signDateStr: value ? (f.signDateStr || todayISO()) : "",
+    }));
+  }
+
+  /** Hậu L0 chỉ áp cho đúng 1 gói ngay sau L0 → cắt bớt lựa chọn thừa khi đổi nguồn. */
+  function changeSource(source: string) {
+    setForm(f => {
+      const pkgs = parsePackageList(f.packageRegistered);
+      const trimmed = source === POST_L0_SOURCE && pkgs.length > 1 ? pkgs.slice(0, 1) : pkgs;
+      return {
+        ...f,
+        source,
+        packageRegistered: serializePackageList(trimmed) || null,
+      };
+    });
+  }
 
   return (
     <div>
@@ -1050,7 +1116,7 @@ export function LeadsTab({
               <FormRow label="Phân nguồn *">
                 <select
                   value={form.source ?? ""}
-                  onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
+                  onChange={e => changeSource(e.target.value)}
                   className={cn(inputCls, !form.source && "border-amber-300 focus:ring-amber-300/30")}
                 >
                   <option value="">— Chọn nguồn —</option>
@@ -1087,7 +1153,7 @@ export function LeadsTab({
               <FormRow label="Tình trạng *">
                 <select
                   value={form.status ?? "TAKECARE"}
-                  onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
+                  onChange={e => changeStatus(e.target.value as LeadStatus)}
                   className={inputCls}
                 >
                   {STATUS_OPTIONS.map(s => (
@@ -1097,32 +1163,51 @@ export function LeadsTab({
               </FormRow>
               <FormRow label="Gói tập đăng ký">
                 <PackageMultiSelect
-                  value={parsePackageList(form.packageRegistered)}
+                  value={formPkgs}
+                  singleOnly={isPostL0}
                   onChange={pkgs => setForm(f => ({ ...f, packageRegistered: serializePackageList(pkgs) || null }))}
                 />
               </FormRow>
+              {expected && (
+                <div className="-mt-1 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+                  <p className="text-xs text-gray-500">
+                    Giá hợp đồng theo nguồn <span className="font-semibold text-gray-700">{form.source}</span>
+                  </p>
+                  <p className="text-sm font-bold text-gray-800 mt-0.5">
+                    {describeExpected(expected)} ={" "}
+                    <span style={{ color: "#f15b5c" }}>{expected.total} triệu</span>
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <FormRow label="Doanh thu (triệu)">
                   <input
                     type="number" step="0.1"
                     value={form.actualRevenue ?? ""}
+                    disabled={formLocks.revenue}
                     onFocus={(e) => e.target.select()}
-                    onChange={e => setForm(f => ({ ...f, actualRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                    className={inputCls}
-                    placeholder="10.5"
+                    onChange={e => changeRevenue(e.target.value)}
+                    className={cn(inputCls, formLocks.revenue && lockedCls)}
+                    placeholder={formLocks.revenue ? "—" : "10.5"}
+                    title={formLocks.revenue ? "Chưa đăng ký thì chưa có doanh thu" : undefined}
                   />
                 </FormRow>
                 <FormRow label="Còn thiếu (triệu)">
                   <input
                     type="number" step="0.1"
                     value={form.remainingPayment ?? ""}
+                    disabled={formLocks.remaining}
                     onFocus={(e) => e.target.select()}
                     onChange={e => setForm(f => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
-                    className={inputCls}
-                    placeholder="2.0"
+                    className={cn(inputCls, formLocks.remaining && lockedCls)}
+                    placeholder={formLocks.remaining ? "—" : "2.0"}
+                    title={formLocks.remaining ? "Chỉ tình trạng Đặt cọc mới có khoản còn thiếu" : undefined}
                   />
                 </FormRow>
               </div>
+              {financeError && (
+                <p className="-mt-1 text-xs font-semibold text-amber-600">{financeError}</p>
+              )}
               {isFitpartner && (
                 <FormRow label="Doanh thu Fitpartner (triệu)">
                   <input
@@ -1135,11 +1220,14 @@ export function LeadsTab({
                   />
                 </FormRow>
               )}
-              <FormRow label="Ngày ký">
-                <DateMaskInput
-                  value={(form as { signDateStr?: string }).signDateStr ?? ""}
-                  onChange={v => setForm(f => ({ ...f, signDateStr: v }))}
-                  className={inputCls}
+              {/* Ngày ký tự động = ngày điền Doanh thu, không cho sửa tay. */}
+              <FormRow label="Ngày ký (tự động)">
+                <input
+                  readOnly
+                  value={form.signDateStr ? fmtDate(form.signDateStr) : ""}
+                  className={cn(inputCls, lockedCls)}
+                  placeholder="Điền Doanh thu để tự ghi nhận ngày ký"
+                  title="Ngày ký được ghi tự động theo ngày điền Doanh thu"
                 />
               </FormRow>
               <FormRow label="Ghi chú">
@@ -1155,10 +1243,14 @@ export function LeadsTab({
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
               <button
                 onClick={handleSave}
-                disabled={saving || !form.source || (form.source === "Referral" && !form.referralSource?.trim())}
+                disabled={saving || !form.source || (form.source === "Referral" && !form.referralSource?.trim()) || !!financeError}
                 className="flex-1 h-11 rounded-xl text-white font-bold text-sm disabled:opacity-50"
                 style={{ backgroundColor: "#f15b5c" }}
-                title={!form.source ? "Vui lòng chọn Phân nguồn trước" : (form.source === "Referral" && !form.referralSource?.trim()) ? "Vui lòng điền nguồn Referral đến từ đâu" : undefined}
+                title={
+                  !form.source ? "Vui lòng chọn Phân nguồn trước"
+                  : (form.source === "Referral" && !form.referralSource?.trim()) ? "Vui lòng điền nguồn Referral đến từ đâu"
+                  : financeError ?? undefined
+                }
               >
                 {saving ? "Đang lưu..." : editing ? "Cập nhật" : "Thêm mới"}
               </button>
@@ -1311,6 +1403,8 @@ function CareNotesPopup({
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 const inputCls = "w-full h-11 rounded-xl border border-gray-200 px-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+/** Ô bị khoá theo luật tiền / ngày ký tự động — vẫn đọc được nhưng không gõ được. */
+const lockedCls = "bg-gray-100 text-gray-400 cursor-not-allowed";
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -1326,9 +1420,12 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
 function PackageMultiSelect({
   value,
   onChange,
+  singleOnly = false,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  /** Nguồn Hậu L0 chỉ áp cho đúng 1 gói ngay sau L0 → chọn gói mới thay gói cũ. */
+  singleOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hasL1 = value.includes("L1");
@@ -1338,6 +1435,9 @@ function PackageMultiSelect({
   function toggle(pkg: string) {
     if (value.includes(pkg)) {
       onChange(value.filter(p => p !== pkg));
+    } else if (singleOnly) {
+      onChange([pkg]);
+      setOpen(false);
     } else {
       onChange([...value, pkg]);
     }
@@ -1365,9 +1465,15 @@ function PackageMultiSelect({
           {/* Backdrop to close dropdown */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-white rounded-xl border border-gray-200 shadow-lg p-2 space-y-0.5">
+            {singleOnly && (
+              <p className="px-3 py-1.5 text-[11px] font-semibold text-gray-400">
+                Hậu L0 — chỉ chọn 1 gói ngay sau L0
+              </p>
+            )}
             {PACKAGE_OPTIONS.map(pkg => {
               const isSelected = value.includes(pkg);
-              const isDisabled = (pkg === "L2" && hasL1) || (pkg === "L1" && hasL2);
+              // Hậu L0 chọn 1 gói nên chọn gói mới sẽ thay gói cũ, không cần chặn L1/L2.
+              const isDisabled = !singleOnly && ((pkg === "L2" && hasL1) || (pkg === "L1" && hasL2));
               return (
                 <label
                   key={pkg}
