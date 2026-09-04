@@ -282,7 +282,7 @@ export function ExamTakePage({
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
   // Chưa khai tội thì chưa được xem đề — server chưa gửi vòng nào xuống.
   const [needsDeclaration, setNeedsDeclaration] = useState(false);
-  const [sinOptions, setSinOptions] = useState<{ sin: Sin; roundName: string }[]>([]);
+  const [sinOptions, setSinOptions] = useState<{ sin: Sin; roundName: string | null; available: boolean }[]>([]);
   const [declaredSin, setDeclaredSin] = useState<Sin | null>(null);
   // Đổi số này để bắt tải lại đề sau khi khai xong.
   const [reloadKey, setReloadKey] = useState(0);

@@ -15,7 +15,7 @@ import {
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
 import { loadTrialForCandidate, gradeTrialAttempt } from "@/lib/exam-trial-server";
-import { parseTrialState, type Sin } from "@/lib/exam-trial";
+import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -152,7 +152,12 @@ export async function GET(req: Request) {
         format,
         levelName,
         needsDeclaration: true,
-        sinOptions: sinRows.map((r) => ({ sin: r.sin, roundName: r.name })),
+        // Trả ĐỦ 7 tội để màn khai bày ra 7 ô tròn. Tội chưa có vòng nào thì
+        // khoá lại kèm lý do — bày 7 ô rồi để bấm vào ô trống là lừa người thi.
+        sinOptions: SINS.map((sn) => {
+          const round = sinRows.find((r) => r.sin === sn);
+          return { sin: sn, roundName: round?.name ?? null, available: !!round };
+        }),
         rounds: [],
         questions: [],
         passingScore,
