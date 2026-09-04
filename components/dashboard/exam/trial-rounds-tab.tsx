@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, Swords, ChevronDown, ChevronUp, Save, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2, Swords, ChevronDown, ChevronUp, Save, Check, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SORT_ZONES, SORT_ZONE_LABEL, SINS, SIN_LABEL, SIN_DOMAIN, ROUND_TYPE_LABEL,
@@ -128,6 +129,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   const [levelId, setLevelId] = useState<string>(
     levels.find((l) => l.format === "TRIAL")?.id ?? levels[0]?.id ?? ""
   );
+  const router = useRouter();
   const selected = levels.find((l) => l.id === levelId) ?? null;
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(false);
@@ -214,6 +216,9 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
     }
   }
 
+  // Chỉ vòng đang bật mới ra đề, nên nút Thi thử cũng phải theo đúng con số đó.
+  const activeRounds = rounds.filter((r) => r.isActive).length;
+
   async function removeRound(id: string) {
     const res = await fetch(`/api/exam/rounds/${id}`, { method: "DELETE" });
     if (res.ok) setRounds((prev) => prev.filter((r) => r.id !== id));
@@ -231,10 +236,29 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-        <p className="text-base font-extrabold text-gray-900">Đề thử thách</p>
-        <p className="mt-0.5 text-xs text-gray-400">
-          Mỗi vòng một lối chơi. Trượt một vòng không đánh rớt cả kỳ nhưng bị trừ thẳng điểm phạt vào tổng.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-base font-extrabold text-gray-900">Đề thử thách</p>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Mỗi vòng một lối chơi. Trượt một vòng không đánh rớt cả kỳ nhưng bị trừ thẳng điểm phạt vào tổng.
+            </p>
+          </div>
+          {/* Tự làm thử đề của cấp đang chọn — chấm bằng đúng luật của bài thật
+              nhưng không ghi vào đâu, và chấm xong soi lại được đáp án từng phần. */}
+          <button
+            onClick={() => router.push(`/dashboard/exam/thi-thu?levelId=${levelId}`)}
+            disabled={activeRounds === 0}
+            title={
+              activeRounds === 0
+                ? "Cấp này chưa có vòng nào đang dùng để thi thử"
+                : "Tự làm thử đề — không lưu kết quả, chấm xong xem được đáp án"
+            }
+            className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 px-4 text-sm font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-gray-600"
+          >
+            <FlaskConical className="h-4 w-4 shrink-0" />
+            Thi thử đề này
+          </button>
+        </div>
 
         <div className={cn(SLIDER, "mt-3")}>
           <div className="flex w-max items-center gap-2">

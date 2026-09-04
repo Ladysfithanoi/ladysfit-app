@@ -24,7 +24,7 @@ import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
-import { SIN_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
+import { SIN_LABEL, SORT_ZONE_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
 
 type Question = {
   id: string;
@@ -65,6 +65,33 @@ type TrialRound = {
 /** Bài làm cả lượt: { roundId: { briefId: MealEntry[] } | { cardId: SortZone } }. */
 type TrialState = Record<string, Record<string, MealEntry[] | SortZone>>;
 
+/** Bài soi lại sau khi THI THỬ — kèm đáp án đúng, bài thi thật không có. */
+type TrialReviewRound = {
+  id: string;
+  name: string;
+  type: "MEAL" | "SORT";
+  points: number;
+  maxPoints: number;
+  passed: boolean;
+  briefs: {
+    id: string;
+    clientProfile: string;
+    ratio: number;
+    totals: { calories: number; protein: number; fat: number; carbs: number };
+    metrics: { metric: string; target: number; actual: number; min: number; max: number; ok: boolean }[];
+    usedBanned: string[];
+    explanation: string | null;
+  }[];
+  cards: {
+    id: string;
+    text: string;
+    answer: SortZone | null;
+    correct: SortZone;
+    ratio: number;
+    explanation: string | null;
+  }[];
+};
+
 type TrialSubmitResult = {
   scorePct: number;
   score: number;
@@ -73,6 +100,8 @@ type TrialSubmitResult = {
   passed: boolean;
   promoted: boolean;
   rounds: { roundId: string; points: number; maxPoints: number; passed: boolean; penalty: number }[];
+  /** Chỉ có ở thi thử. */
+  review?: TrialReviewRound[];
 };
 
 /**
@@ -350,21 +379,24 @@ export function ExamTakePage({
    * đề và tự chấm — client không gửi điểm lên bao giờ.
    */
   async function handleSubmitTrial(force = false) {
-    if (!force && !trialComplete) return;
+    if (!force && !mock && !trialComplete) return;
     submitLock.current = true;
     setSubmitting(true);
     setSubmitError("");
     try {
-      if (mock) {
-        setSubmitError("Thi thử đề nhiều vòng chỉ để xem trước giao diện — bài không được chấm.");
-        submitLock.current = false;
-        return;
-      }
-      const res = await fetch("/api/exam/trial-submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trialState: trialRef.current }),
-      });
+      // Thi thử chấm bằng ĐÚNG bộ luật của bài thật (xem lib/exam-trial-server
+      // computeTrial) nhưng không ghi gì, và trả về cả đáp án để soi lại đề.
+      const res = await fetch(
+        mock ? "/api/exam/trial-mock-grade" : "/api/exam/trial-submit",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            trialState: trialRef.current,
+            ...(mock ? { levelId: mockLevelId } : {}),
+          }),
+        }
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setSubmitError(err.error ?? "Không nộp được bài. Vui lòng thử lại.");
@@ -710,7 +742,9 @@ export function ExamTakePage({
   const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
   const currentRound: TrialRound | null = rounds[roundIdx] ?? null;
   // Đề nhiều vòng dùng tiến độ vòng thay cho số câu đã trả lời.
-  const allAnswered = isTrial ? trialComplete : answeredCount === questions.length;
+  // Thi thử được nộp non: Admin thường chỉ muốn soi một vòng, bắt làm đủ cả đề
+  // mỗi lần kiểm một câu chữ thì chẳng ai kiểm nữa.
+  const allAnswered = mock ? true : isTrial ? trialComplete : answeredCount === questions.length;
   const exitPath = mock ? "/dashboard/exam" : "/dashboard";
   // Chỉ bài thi thử mới có đáp án đúng để soi lại; bài thi thật không bao giờ
   // trả về đáp án nên cũng không có gì để xem lại.
@@ -1008,6 +1042,88 @@ export function ExamTakePage({
                   onChange={(cardId, zone) => updateTrial(currentRound.id, cardId, zone)}
                 />
               )}
+            </div>
+          )}
+
+          {/* Soi lại đề — CHỈ có ở thi thử. Người soạn đề cần thấy đáp án đúng
+              và lời giải mới biết đề mình ra có chuẩn không. */}
+          {trialResult?.review && (
+            <div className="space-y-3">
+              <p className="text-sm font-extrabold text-gray-900">Soi lại đề</p>
+              {trialResult.review.map((rv) => (
+                <div key={rv.id} className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+                  <div className="flex items-center justify-between gap-3 border-b border-gray-50 px-4 py-3">
+                    <span className="min-w-0 truncate text-sm font-extrabold text-gray-800">{rv.name}</span>
+                    <span className="shrink-0 text-sm font-extrabold tabular-nums text-gray-700">
+                      {rv.points}/{rv.maxPoints}
+                    </span>
+                  </div>
+
+                  {/* Vòng dựng khay ăn: từng chỉ tiêu đạt hay trượt */}
+                  {rv.briefs.map((b, i) => (
+                    <div key={b.id} className="border-b border-gray-50 px-4 py-3 last:border-0">
+                      <p className="text-xs font-extrabold text-[#f15b5c]">Hồ sơ {i + 1}</p>
+                      {b.usedBanned.length > 0 && (
+                        <p className="mt-1 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600">
+                          Dùng món cấm ({b.usedBanned.join(", ")}) — mất trắng hồ sơ này
+                        </p>
+                      )}
+                      <div className={cn(SLIDER_ROUNDS, "mt-1.5")}>
+                        <div className="flex w-max gap-2">
+                          {b.metrics.map((m) => (
+                            <span
+                              key={m.metric}
+                              className={cn(
+                                "shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-bold",
+                                m.ok ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
+                              )}
+                            >
+                              {m.metric}: {m.actual} · cần {m.min}–{m.max} {m.ok ? "✓" : "✗"}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {b.explanation && (
+                        <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-gray-500">
+                          {b.explanation}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Vòng phân loại: bạn chọn gì, đúng là gì */}
+                  {rv.cards.map((c, i) => (
+                    <div key={c.id} className="border-b border-gray-50 px-4 py-3 last:border-0">
+                      <p className="text-sm font-medium leading-relaxed text-gray-800">
+                        <span className="mr-1.5 font-bold text-gray-300">{i + 1}.</span>
+                        {c.text}
+                      </p>
+                      <div className={cn(SLIDER_ROUNDS, "mt-2")}>
+                        <div className="flex w-max items-center gap-2">
+                          <span
+                            className={cn(
+                              "shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-bold",
+                              c.ratio === 1
+                                ? "bg-emerald-50 text-emerald-600"
+                                : c.ratio > 0
+                                  ? "bg-amber-50 text-amber-600"
+                                  : "bg-red-50 text-red-500"
+                            )}
+                          >
+                            Bạn chọn: {c.answer ? SORT_ZONE_LABEL[c.answer] : "bỏ trống"}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600">
+                            Đúng: {SORT_ZONE_LABEL[c.correct]}
+                          </span>
+                        </div>
+                      </div>
+                      {c.explanation && (
+                        <p className="mt-2 text-xs leading-relaxed text-gray-500">{c.explanation}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
 

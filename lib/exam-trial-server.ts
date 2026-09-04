@@ -78,20 +78,61 @@ export type TrialGradeOutcome =
  * bài làm (khay ăn, thẻ đã phân), còn chỉ tiêu và đáp án đúng luôn lấy từ cơ sở
  * dữ liệu. Sửa gói tin gửi lên không tự nâng điểm được.
  */
-export async function gradeTrialAttempt(opts: {
-  userId: string;
-  userName: string;
-  levelId: string;
-  passingScore: number;
-  violations: number;
-  noPenalty: boolean;
-  /** Bài làm: { roundId: { briefId: MealEntry[] | cardId: SortZone } } */
-  state: unknown;
-}): Promise<TrialGradeOutcome> {
-  const state = parseTrialState(typeof opts.state === "string" ? opts.state : JSON.stringify(opts.state));
+/** Bài soi lại của một vòng — chỉ dùng cho THI THỬ, không bao giờ gửi cho thí sinh thật. */
+export type TrialReviewRound = {
+  id: string;
+  name: string;
+  sin: string | null;
+  type: "MEAL" | "SORT";
+  points: number;
+  maxPoints: number;
+  passed: boolean;
+  penalty: number;
+  briefs: {
+    id: string;
+    clientProfile: string;
+    ratio: number;
+    totals: { calories: number; protein: number; fat: number; carbs: number };
+    metrics: { metric: string; target: number; actual: number; min: number; max: number; ok: boolean }[];
+    usedBanned: string[];
+    explanation: string | null;
+  }[];
+  cards: {
+    id: string;
+    text: string;
+    answer: SortZone | null;
+    correct: SortZone;
+    ratio: number;
+    explanation: string | null;
+  }[];
+};
+
+type ComputedTrial = {
+  roundScores: RoundScore[];
+  details: { roundId: string; detail: string; pillar: Pillar }[];
+  result: TrialScore;
+  review: TrialReviewRound[];
+};
+
+/**
+ * TÍNH ĐIỂM một bài làm, không ghi gì cả.
+ *
+ * Tách khỏi phần ghi kết quả để thi thật và thi thử dùng CHUNG đúng một bộ luật.
+ * Có hai đường tính điểm là sớm muộn hai đường ra hai kết quả khác nhau, và lúc
+ * đó Admin kiểm đề bằng thi thử sẽ không còn kiểm được gì.
+ *
+ * Đề luôn nạp lại TỪ SERVER: client chỉ gửi bài làm, chỉ tiêu và đáp án đúng
+ * lấy từ cơ sở dữ liệu, nên sửa gói tin gửi lên không tự nâng điểm được.
+ */
+export async function computeTrial(
+  levelId: string,
+  rawState: unknown,
+  passingScore: number
+): Promise<{ ok: false; error: string } | ({ ok: true; state: TrialStateShape } & ComputedTrial)> {
+  const state = parseTrialState(typeof rawState === "string" ? rawState : JSON.stringify(rawState));
 
   const rounds = await prisma.examRound.findMany({
-    where: { levelId: opts.levelId, isActive: true },
+    where: { levelId, isActive: true },
     orderBy: { order: "asc" },
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
@@ -102,6 +143,7 @@ export async function gradeTrialAttempt(opts: {
 
   const roundScores: RoundScore[] = [];
   const details: { roundId: string; detail: string; pillar: Pillar }[] = [];
+  const review: TrialReviewRound[] = [];
 
   for (const round of rounds) {
     if (round.type === "MEAL") {
@@ -126,20 +168,89 @@ export async function gradeTrialAttempt(opts: {
       const pillar: Pillar =
         lean.SEVERITY === lean.MERCY ? "BALANCE" : lean.SEVERITY > lean.MERCY ? "SEVERITY" : "MERCY";
 
-      roundScores.push(scoreRound(round, results.map((r) => r.ratio), pillar));
+      const rs = scoreRound(round, results.map((r) => r.ratio), pillar);
+      roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
+      review.push({
+        ...roundHead(round, rs),
+        briefs: results.map((r, i) => ({
+          id: r.briefId,
+          clientProfile: round.mealBriefs[i].clientProfile,
+          ratio: r.ratio,
+          totals: r.totals,
+          metrics: r.metrics.map((m) => ({
+            metric: m.metric, target: m.target, actual: m.actual, min: m.min, max: m.max, ok: m.ok,
+          })),
+          usedBanned: r.usedBanned,
+          explanation: round.mealBriefs[i].explanation,
+        })),
+        cards: [],
+      });
     } else {
       const results = round.sortCards.map((c) => {
         const answer: SortZone | null = readSortAnswer(state, round.id, c.id);
         return gradeSortCard({ id: c.id, correctZone: c.correctZone }, answer);
       });
       const pillar = sortPillar(results);
-      roundScores.push(scoreRound(round, results.map((r) => r.ratio), pillar));
+      const rs = scoreRound(round, results.map((r) => r.ratio), pillar);
+      roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
+      review.push({
+        ...roundHead(round, rs),
+        briefs: [],
+        cards: results.map((r, i) => ({
+          id: r.cardId,
+          text: round.sortCards[i].text,
+          answer: r.answer,
+          correct: r.correct,
+          ratio: r.ratio,
+          explanation: round.sortCards[i].explanation,
+        })),
+      });
     }
   }
 
-  const result = scoreTrial(roundScores, opts.passingScore);
+  return {
+    ok: true,
+    state,
+    roundScores,
+    details,
+    review,
+    result: scoreTrial(roundScores, passingScore),
+  };
+}
+
+type TrialStateShape = ReturnType<typeof parseTrialState>;
+
+function roundHead(
+  round: { id: string; name: string; sin: string | null; type: "MEAL" | "SORT" },
+  rs: RoundScore
+) {
+  return {
+    id: round.id,
+    name: round.name,
+    sin: round.sin,
+    type: round.type,
+    points: rs.points,
+    maxPoints: rs.maxPoints,
+    passed: rs.passed,
+    penalty: rs.penalty,
+  };
+}
+
+export async function gradeTrialAttempt(opts: {
+  userId: string;
+  userName: string;
+  levelId: string;
+  passingScore: number;
+  violations: number;
+  noPenalty: boolean;
+  /** Bài làm: { roundId: { briefId: MealEntry[] | cardId: SortZone } } */
+  state: unknown;
+}): Promise<TrialGradeOutcome> {
+  const computed = await computeTrial(opts.levelId, opts.state, opts.passingScore);
+  if (!computed.ok) return computed;
+  const { state, roundScores, details, result } = computed;
 
   const recorded = await recordAttempt({
     userId: opts.userId,
