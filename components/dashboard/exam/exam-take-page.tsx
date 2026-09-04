@@ -954,10 +954,12 @@ export function ExamTakePage({
             <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <p className="text-base font-extrabold text-gray-900">{currentRound.name}</p>
-                <p className="mt-0.5 text-xs font-semibold text-gray-400">
-                  {currentRound.maxPoints} điểm · đạt vòng từ {currentRound.passPercent}% ·
-                  trượt bị trừ {currentRound.failPenalty} điểm
-                </p>
+                {/* Một dòng, không xuống dòng — màn hẹp trượt ngang */}
+                <div className={SLIDER_ROUNDS}>
+                  <p className="mt-0.5 w-max whitespace-nowrap text-xs font-semibold text-gray-400">
+                    {currentRound.maxPoints} điểm · đạt vòng từ {currentRound.passPercent}% · trượt bị trừ {currentRound.failPenalty} điểm
+                  </p>
+                </div>
                 {currentRound.intro && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-600">
                     {currentRound.intro}

@@ -25,11 +25,12 @@ export type MealBriefView = {
   bannedFoods: string[];
 };
 
+// Nhãn ngắn, một dòng — trên điện thoại bốn ô này nằm 2x2, nhãn dài là vỡ chữ.
 const METRIC_LABEL = {
-  calories: "Calo (kcal)",
+  calories: "Calo",
   protein: "Đạm (g)",
   fat: "Béo (g)",
-  carbs: "Đường bột (g)",
+  carbs: "Bột đường (g)",
 } as const;
 
 export function MealRound({
@@ -100,12 +101,12 @@ export function MealRound({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {targets.map(([metric, target]) => (
           <div key={metric} className="rounded-xl border border-gray-100 bg-white p-3">
-            <p className="text-[11px] font-bold text-gray-400">{METRIC_LABEL[metric]}</p>
+            <p className="truncate text-[11px] font-bold text-gray-400">{METRIC_LABEL[metric]}</p>
             <p className="mt-0.5 text-lg font-extrabold tabular-nums text-gray-800">
               {totals[metric]}
             </p>
-            <p className="text-[11px] font-semibold text-gray-400">
-              cần {target} ± {brief.tolerancePercent}%
+            <p className="whitespace-nowrap text-[11px] font-semibold text-gray-400">
+              cần {target} ± {brief.tolerancePercent}%
             </p>
           </div>
         ))}

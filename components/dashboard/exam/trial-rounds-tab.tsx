@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, Swords, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { Plus, Trash2, Swords, ChevronDown, ChevronUp, Save, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SORT_ZONES, SORT_ZONE_LABEL, type SortZone } from "@/lib/exam-trial";
 
@@ -50,8 +50,16 @@ type LevelOption = { id: string; name: string; color: string; format: "FLAT" | "
 
 const inputCls =
   "w-full h-10 rounded-xl border border-gray-200 px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
-const areaCls =
-  "w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-none";
+/** Ô văn bản dài (luật chơi, hồ sơ khách): giãn dòng cho dễ đọc, cho kéo cao. */
+const proseCls =
+  "w-full rounded-xl border border-gray-200 px-3.5 py-3 text-sm leading-relaxed bg-white focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-y";
+
+/**
+ * Hàng nút trên màn hẹp: TRƯỢT NGANG thay vì xuống dòng.
+ * Xuống dòng làm nhãn vỡ đôi giữa chữ và hàng so le, rất khó đọc trên điện thoại.
+ */
+const SLIDER =
+  "w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full";
 
 const emptyBrief: MealBrief = {
   clientProfile: "",
@@ -93,6 +101,11 @@ function normalizeRounds(raw: unknown): Round[] {
   });
 }
 
+/** "3 hồ sơ" / "13 thẻ" — nói rõ vừa lưu được cái gì, không chỉ nói "đã lưu". */
+function countOf(r: Round): string {
+  return r.type === "MEAL" ? `${r.mealBriefs.length} hồ sơ` : `${r.sortCards.length} thẻ`;
+}
+
 function safeParseList(raw: string): string[] {
   try {
     const v = JSON.parse(raw);
@@ -114,7 +127,10 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
+  // Báo kết quả lưu GẮN VỚI TỪNG VÒNG. Trước đây chỉ có một dòng ở đầu tab:
+  // đang cuộn xuống trong vòng đã mở mà bấm Lưu thì dòng đó nằm ngoài màn hình,
+  // nhìn y như bấm xong không có gì xảy ra.
+  const [msg, setMsg] = useState<{ roundId: string; text: string; ok: boolean } | null>(null);
   const [newType, setNewType] = useState<"MEAL" | "SORT">("MEAL");
   const [newName, setNewName] = useState("");
 
@@ -154,7 +170,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
 
   async function saveRound(r: Round) {
     setSavingId(r.id);
-    setMsg("");
+    setMsg(null);
     try {
       const res = await fetch(`/api/exam/rounds/${r.id}`, {
         method: "PUT",
@@ -172,13 +188,13 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setMsg(err.error ?? "Không lưu được vòng");
+        setMsg({ roundId: r.id, text: err.error ?? "Không lưu được vòng", ok: false });
         return;
       }
       const saved = normalizeRounds([await res.json()])[0];
       setRounds((prev) => prev.map((x) => (x.id === saved.id ? saved : x)));
-      setMsg(`Đã lưu vòng "${saved.name}"`);
-      setTimeout(() => setMsg(""), 2500);
+      setMsg({ roundId: r.id, text: `Đã lưu ${countOf(saved)}`, ok: true });
+      setTimeout(() => setMsg((m) => (m?.roundId === r.id ? null : m)), 4000);
     } finally {
       setSavingId(null);
     }
@@ -206,21 +222,23 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
           Mỗi vòng một lối chơi. Trượt một vòng không đánh rớt cả kỳ nhưng bị trừ thẳng điểm phạt vào tổng.
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className={cn(SLIDER, "mt-3")}>
+          <div className="flex w-max items-center gap-2">
           {levels.map((l) => (
             <button
               key={l.id}
               onClick={() => setLevelId(l.id)}
               className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
                 levelId === l.id ? "text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
               )}
               style={levelId === l.id ? { backgroundColor: l.color } : undefined}
             >
               {l.name}
-              {l.format === "TRIAL" && <span className="ml-1.5 opacity-70">·  thử thách</span>}
+              {l.format === "TRIAL" && <span className="ml-1.5 opacity-70">· thử thách</span>}
             </button>
           ))}
+          </div>
         </div>
 
         {selected && selected.format !== "TRIAL" && (
@@ -259,8 +277,6 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
         </button>
       </div>
 
-      {msg && <p className="text-sm font-bold text-emerald-600">{msg}</p>}
-
       {loading ? (
         <p className="py-8 text-center text-sm text-gray-300">Đang tải…</p>
       ) : rounds.length === 0 ? (
@@ -276,12 +292,13 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-extrabold text-gray-900">{r.name}</p>
-                <p className="text-[11px] font-semibold text-gray-400">
-                  {r.type === "MEAL" ? "Phàm ăn" : "Sa ngã"} ·{" "}
-                  {r.type === "MEAL" ? `${r.mealBriefs.length} hồ sơ` : `${r.sortCards.length} thẻ`} ·{" "}
-                  {r.maxPoints} điểm · đạt {r.passPercent}% · trượt −{r.failPenalty}
-                  {!r.isActive && " · đang tắt"}
-                </p>
+                {/* Một dòng duy nhất, không xuống dòng — màn hẹp thì trượt ngang */}
+                <div className={SLIDER}>
+                  <p className="w-max whitespace-nowrap text-[11px] font-semibold text-gray-400">
+                    {r.type === "MEAL" ? "Phàm ăn" : "Sa ngã"} · {countOf(r)} · {r.maxPoints} điểm · đạt {r.passPercent}% · trượt −{r.failPenalty}
+                    {!r.isActive && " · đang tắt"}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setOpenId(openId === r.id ? null : r.id)}
@@ -317,17 +334,21 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
                   </Field>
                 </div>
 
-                <Field label="Luật chơi / lời dẫn đầu vòng">
+                <Field
+                  label="Luật chơi / lời dẫn đầu vòng"
+                  hint="Thí sinh đọc đoạn này trước khi vào vòng. Xuống dòng giữ nguyên như bạn gõ; kéo góc dưới bên phải để nới ô."
+                >
                   <textarea
-                    rows={3}
+                    rows={8}
                     value={r.intro ?? ""}
                     onChange={(e) => patch(r.id, { intro: e.target.value })}
-                    className={areaCls}
+                    className={proseCls}
                     placeholder="Giải thích cho thí sinh vòng này yêu cầu gì…"
                   />
                 </Field>
 
-                <div className="grid grid-cols-3 gap-3">
+                {/* Màn hẹp xếp dọc: ba ô này nhãn dài, ép vào 1/3 màn là vỡ chữ */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Điểm tối đa">
                     <input
                       type="number" min={1} max={1000}
@@ -369,15 +390,29 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
                   />
                 )}
 
-                <button
-                  onClick={() => saveRound(r)}
-                  disabled={savingId === r.id}
-                  className="flex h-10 items-center gap-1.5 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-50"
-                  style={{ backgroundColor: "#f15b5c" }}
-                >
-                  <Save className="h-4 w-4" />
-                  {savingId === r.id ? "Đang lưu…" : "Lưu vòng này"}
-                </button>
+                {/* Nút lưu và lời báo đi liền nhau — báo ở nơi mắt đang nhìn */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => saveRound(r)}
+                    disabled={savingId === r.id}
+                    className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-5 text-sm font-bold text-white disabled:opacity-50"
+                    style={{ backgroundColor: "#f15b5c" }}
+                  >
+                    <Save className="h-4 w-4" />
+                    {savingId === r.id ? "Đang lưu…" : "Lưu vòng này"}
+                  </button>
+                  {msg?.roundId === r.id && (
+                    <span
+                      className={cn(
+                        "flex items-center gap-1.5 text-sm font-bold",
+                        msg.ok ? "text-emerald-600" : "text-red-500"
+                      )}
+                    >
+                      {msg.ok && <Check className="h-4 w-4 shrink-0" />}
+                      {msg.text}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -387,11 +422,20 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-bold text-gray-500">{label}</label>
+      <label className="block whitespace-nowrap text-[11px] font-bold text-gray-500">{label}</label>
       {children}
+      {hint && <p className="text-[11px] leading-snug text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -426,26 +470,26 @@ function MealBriefEditor({
             </button>
           </div>
           <textarea
-            rows={3}
+            rows={5}
             value={b.clientProfile}
             onChange={(e) => patch(i, { clientProfile: e.target.value })}
-            className={areaCls}
+            className={proseCls}
             placeholder="Nữ 32 tuổi, 68kg, cao 158cm, mục tiêu giảm 5kg trong 2 tháng, ăn trưa ở văn phòng…"
           />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Field label="Calo (kcal)">
+            <Field label="Calo">
               <input type="number" min={0} value={b.targetCalories ?? ""} placeholder="—"
                 onChange={(e) => patch(i, { targetCalories: num(e.target.value) })} className={inputCls} />
             </Field>
-            <Field label="Đạm (g)">
+            <Field label="Đạm g">
               <input type="number" min={0} value={b.targetProtein ?? ""} placeholder="—"
                 onChange={(e) => patch(i, { targetProtein: num(e.target.value) })} className={inputCls} />
             </Field>
-            <Field label="Béo (g)">
+            <Field label="Béo g">
               <input type="number" min={0} value={b.targetFat ?? ""} placeholder="—"
                 onChange={(e) => patch(i, { targetFat: num(e.target.value) })} className={inputCls} />
             </Field>
-            <Field label="Đường bột (g)">
+            <Field label="Bột đường g">
               <input type="number" min={0} value={b.targetCarbs ?? ""} placeholder="—"
                 onChange={(e) => patch(i, { targetCarbs: num(e.target.value) })} className={inputCls} />
             </Field>
@@ -454,11 +498,11 @@ function MealBriefEditor({
             Chỉ tiêu bỏ trống thì vòng không chấm chỉ tiêu đó.
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Field label="Sai số cho phép (%)">
+            <Field label="Sai số cho phép %">
               <input type="number" min={1} max={100} value={b.tolerancePercent}
                 onChange={(e) => patch(i, { tolerancePercent: parseInt(e.target.value) || 10 })} className={inputCls} />
             </Field>
-            <Field label="Món cấm (dị ứng, bệnh lý) — cách nhau bằng dấu phẩy">
+            <Field label="Món cấm — cách nhau bằng dấu phẩy">
               <input
                 value={b.bannedFoods.join(", ")}
                 onChange={(e) =>
@@ -514,26 +558,28 @@ function SortCardEditor({
             </button>
           </div>
           <textarea
-            rows={2}
+            rows={3}
             value={c.text}
             onChange={(e) => patch(i, { text: e.target.value })}
-            className={areaCls}
+            className={proseCls}
             placeholder="Khách nhắn tin lúc 11h đêm hỏi chuyện ngoài tập luyện…"
           />
-          <div className="flex flex-wrap gap-2">
-            {SORT_ZONES.map((z) => (
-              <button
-                key={z}
-                type="button"
-                onClick={() => patch(i, { correctZone: z })}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
-                  c.correctZone === z ? "bg-[#f15b5c] text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                )}
-              >
-                {SORT_ZONE_LABEL[z]}
-              </button>
-            ))}
+          <div className={SLIDER}>
+            <div className="flex w-max gap-2">
+              {SORT_ZONES.map((z) => (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => patch(i, { correctZone: z })}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+                    c.correctZone === z ? "bg-[#f15b5c] text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                  )}
+                >
+                  {SORT_ZONE_LABEL[z]}
+                </button>
+              ))}
+            </div>
           </div>
           <input
             value={c.explanation ?? ""}
