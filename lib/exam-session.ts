@@ -60,7 +60,8 @@ export function sessionDeadline(s: DeadlineInput, windowEndAt: Date | null): Dat
 }
 
 /** Đề đã bốc của lượt thi, đọc ra từ JSON — hỏng thì coi như chưa bốc. */
-export function parseQuestionIds(raw: string): string[] {
+export function parseQuestionIds(raw: string | null | undefined): string[] {
+  if (!raw) return [];
   try {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];

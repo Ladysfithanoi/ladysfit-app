@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
     // Chỉ chấm ĐÚNG những vòng đã bốc cho lượt này. Chấm cả bảy vòng của đề thì
     // những vòng người ta chưa từng nhìn thấy đều thành 0 điểm.
     roundIds: parseQuestionIds(examSession.questionIds),
+    itemIds: parseQuestionIds(examSession.trialItemIds),
   });
 
   if (!graded.ok) {

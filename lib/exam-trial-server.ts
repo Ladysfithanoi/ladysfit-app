@@ -6,6 +6,7 @@ import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer,
   applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT, honorAfter,
+  TRIAL_CARDS_PER_ROUND, TRIAL_BRIEFS_PER_ROUND, TRIAL_CARD_MIX, SORT_ZONES,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
 
@@ -26,9 +27,15 @@ export function parseBannedFoods(raw: string | null): string[] {
   }
 }
 
-/** Đề thử thách của một cấp, đã bỏ đáp án — an toàn để gửi xuống trang làm bài. */
-export async function loadTrialForCandidate(levelId: string) {
-  const rounds = await prisma.examRound.findMany({
+/**
+ * Đề thử thách của một cấp, đã bỏ đáp án — an toàn để gửi xuống trang làm bài.
+ *
+ * Mỗi vòng chỉ gửi bộ thẻ / hồ sơ ĐÃ BỐC cho lượt này, không gửi cả ngân hàng:
+ * ngân hàng 50 thẻ mà gửi hết thì mở F12 là đọc được 37 thẻ chưa hỏi tới.
+ * pinnedItemIds có giá trị thì dùng lại đúng bộ cũ (F5 giữa chừng).
+ */
+export async function loadTrialForCandidate(levelId: string, pinnedItemIds: string[] | null = null) {
+  const raw = await prisma.examRound.findMany({
     where: { levelId, isActive: true },
     orderBy: { order: "asc" },
     include: {
@@ -36,6 +43,12 @@ export async function loadTrialForCandidate(levelId: string) {
       sortCards: { orderBy: { order: "asc" } },
     },
   });
+
+  const rounds = raw.map((r) => ({
+    ...r,
+    mealBriefs: pickMealBriefs(r.mealBriefs, pinnedItemIds),
+    sortCards: pickSortCards(r.sortCards, pinnedItemIds),
+  }));
 
   return rounds.map((r) => ({
     id: r.id,
@@ -142,11 +155,22 @@ export async function computeTrial(
    * Để trống thì chấm mọi vòng đang bật — lối cũ, giữ lại cho những lượt thi
    * mở trước khi có cơ chế bốc vòng.
    */
-  roundIds: string[] | null = null
+  roundIds: string[] | null = null,
+  /**
+   * Đúng những THẺ / HỒ SƠ đã phát cho lượt này (trialItemIds của ExamSession),
+   * theo đúng thứ tự đã trình bày.
+   *
+   * Thiếu nó thì chấm cả ngân hàng 50 thẻ: 37 thẻ chưa từng hỏi tới đều thành
+   * bỏ trống, tức 0 điểm. Thứ tự cũng phải giữ, vì thanh Thanh danh trừ theo
+   * từng thẻ nên thẻ nào làm cạn thanh là phụ thuộc thứ tự.
+   *
+   * Để trống thì lấy cả vòng — lối cũ, cho những lượt mở trước khi có ngân hàng.
+   */
+  itemIds: string[] | null = null
 ): Promise<{ ok: false; error: string } | ({ ok: true; state: TrialStateShape } & ComputedTrial)> {
   const state = parseTrialState(typeof rawState === "string" ? rawState : JSON.stringify(rawState));
 
-  const rounds = await prisma.examRound.findMany({
+  const raw = await prisma.examRound.findMany({
     where: {
       levelId,
       isActive: true,
@@ -158,6 +182,12 @@ export async function computeTrial(
       sortCards: { orderBy: { order: "asc" } },
     },
   });
+  const served = itemIds && itemIds.length > 0 ? itemIds : null;
+  const rounds = raw.map((r) => ({
+    ...r,
+    mealBriefs: served ? pickMealBriefs(r.mealBriefs, served, r.mealBriefs.length) : r.mealBriefs,
+    sortCards: served ? pickSortCards(r.sortCards, served, r.sortCards.length) : r.sortCards,
+  }));
   if (rounds.length === 0) return { ok: false, error: "Đề của cấp này chưa có vòng nào" };
 
   const roundScores: RoundScore[] = [];
@@ -277,13 +307,16 @@ export async function gradeTrialAttempt(opts: {
   declaredSin?: Sin | null;
   /** Vòng đã bốc cho lượt thi này — xem computeTrial. */
   roundIds?: string[] | null;
+  /** Thẻ / hồ sơ đã phát cho lượt thi này, đúng thứ tự — xem computeTrial. */
+  itemIds?: string[] | null;
 }): Promise<TrialGradeOutcome> {
   const computed = await computeTrial(
     opts.levelId,
     opts.state,
     opts.passingScore,
     opts.declaredSin ?? null,
-    opts.roundIds ?? null
+    opts.roundIds ?? null,
+    opts.itemIds ?? null
   );
   if (!computed.ok) return computed;
   const { state, roundScores, details, result } = computed;
@@ -369,6 +402,7 @@ export async function gradePendingTrialSession(
     state: examSession.trialState,
     declaredSin: examSession.declaredSin,
     roundIds: parseQuestionIds(examSession.questionIds),
+    itemIds: parseQuestionIds(examSession.trialItemIds),
   });
 
   if (!result.ok) {
@@ -439,6 +473,75 @@ export async function sortCardOutcomes(
   return out;
 }
 
+
+/**
+ * BỐC THẺ / HỒ SƠ CHO MỘT VÒNG — cùng nguyên tắc với pickTrialRounds.
+ *
+ * Ngân hàng của mỗi vòng lớn hơn nhiều số thẻ phát ra (khoảng 50 thẻ, phát 13).
+ * Bộ đã bốc CHỐT vào ExamSession.trialItemIds ngay lần mở đề đầu tiên, nên F5
+ * không bốc lại được và lúc chấm chấm đúng những thẻ đã cho người ta thấy.
+ *
+ * THỨ TỰ TRẢ VỀ CHÍNH LÀ THỨ TỰ TRÌNH BÀY, và nó phải xáo. Ngân hàng thường
+ * viết theo cụm — chấp nhận trước, từ chối sau — nên giữ nguyên thứ tự gốc là
+ * tự khai ra đáp án ngay từ cách sắp xếp. Thứ tự cũng quyết định thẻ nào làm
+ * cạn Thanh danh, nên nó phải được ghi lại y hệt để lúc chấm ra đúng một kết
+ * quả với lúc làm bài.
+ */
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Sắp lại theo đúng thứ tự đã chốt; id lạ trong danh sách chốt thì bỏ qua. */
+function byPinnedOrder<T extends { id: string }>(items: T[], pinned: string[]): T[] {
+  const rank = new Map(pinned.map((id, i) => [id, i]));
+  return items.filter((x) => rank.has(x.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+}
+
+/**
+ * Bốc thẻ theo TẦNG VÙNG (xem TRIAL_CARD_MIX), rồi xáo thứ tự trình bày.
+ *
+ * Vùng nào ngân hàng chưa đủ thì lấy hết vùng đó và bù bằng thẻ còn lại — đề
+ * đang soạn dở vẫn thi thử được, chỉ là bộ thẻ chưa cân.
+ */
+export function pickSortCards<T extends { id: string; correctZone: SortZone }>(
+  cards: T[],
+  pinned: string[] | null,
+  limit: number = TRIAL_CARDS_PER_ROUND
+): T[] {
+  if (pinned && pinned.length > 0) {
+    const kept = byPinnedOrder(cards, pinned);
+    if (kept.length > 0) return kept;
+  }
+
+  const taken: T[] = [];
+  const left: T[] = [];
+  for (const zone of SORT_ZONES) {
+    const pool = shuffled(cards.filter((c) => c.correctZone === zone));
+    const want = TRIAL_CARD_MIX[zone];
+    taken.push(...pool.slice(0, want));
+    left.push(...pool.slice(want));
+  }
+  if (taken.length < limit) taken.push(...shuffled(left).slice(0, limit - taken.length));
+  return shuffled(taken).slice(0, limit);
+}
+
+/** Hồ sơ khay ăn: bốc thẳng, không có vùng nào để chia tầng. */
+export function pickMealBriefs<T extends { id: string }>(
+  briefs: T[],
+  pinned: string[] | null,
+  limit: number = TRIAL_BRIEFS_PER_ROUND
+): T[] {
+  if (pinned && pinned.length > 0) {
+    const kept = byPinnedOrder(briefs, pinned);
+    if (kept.length > 0) return kept;
+  }
+  return shuffled(briefs).slice(0, limit);
+}
 
 /**
  * CHỌN CÁC VÒNG CHO MỘT LƯỢT THI — bốc đề, không phải xếp thứ tự.

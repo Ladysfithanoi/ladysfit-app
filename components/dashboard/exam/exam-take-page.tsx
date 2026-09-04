@@ -528,7 +528,15 @@ export function ExamTakePage({
             // Thi thử: báo luôn bộ vòng vừa được phát, để nơi chấm không
             // chấm sang những vòng khác của đề mà lượt này không bốc trúng.
             ...(mock
-              ? { levelId: mockLevelId, declaredSin: mockSin, roundIds: rounds.map((r) => r.id) }
+              ? {
+                  levelId: mockLevelId,
+                  declaredSin: mockSin,
+                  roundIds: rounds.map((r) => r.id),
+                  itemIds: rounds.flatMap((r) => [
+                    ...r.briefs.map((b) => b.id),
+                    ...r.cards.map((c) => c.id),
+                  ]),
+                }
               : {}),
           }),
         }

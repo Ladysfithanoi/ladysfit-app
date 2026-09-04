@@ -26,8 +26,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { levelId, trialState, declaredSin, roundIds } = body as {
-    levelId?: string; trialState?: unknown; declaredSin?: string | null; roundIds?: unknown;
+  const { levelId, trialState, declaredSin, roundIds, itemIds } = body as {
+    levelId?: string; trialState?: unknown; declaredSin?: string | null;
+    roundIds?: unknown; itemIds?: unknown;
   };
 
   if (!levelId) return NextResponse.json({ error: "Thiếu cấp độ của đề" }, { status: 400 });
@@ -55,7 +56,11 @@ export async function POST(req: NextRequest) {
     ? roundIds.filter((id): id is string => typeof id === "string")
     : [];
 
-  const computed = await computeTrial(levelId, trialState, settings.passingScore, sin, served);
+  const servedItems = Array.isArray(itemIds)
+    ? itemIds.filter((id): id is string => typeof id === "string")
+    : [];
+
+  const computed = await computeTrial(levelId, trialState, settings.passingScore, sin, served, servedItems);
   if (!computed.ok) return NextResponse.json({ error: computed.error }, { status: 400 });
 
   return NextResponse.json({

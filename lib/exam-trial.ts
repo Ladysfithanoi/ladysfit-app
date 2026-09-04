@@ -205,6 +205,33 @@ export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = Ob
  */
 export const TRIAL_ROUNDS_PER_ATTEMPT = 3;
 
+/**
+ * SỐ THẺ MỖI VÒNG PHÁT RA — và vì sao ngân hàng phải lớn hơn con số này.
+ *
+ * Mỗi đại tội có ngân hàng khoảng 50 thẻ, một lượt thi chỉ phát 13. Hai người
+ * ngồi cạnh nhau nhận hai bộ khác nhau, kỳ sau lại khác nữa, nên chép đề gần
+ * như vô dụng — cùng một lý do đã làm phần bốc đại tội ngẫu nhiên.
+ *
+ * Con số CỐ ĐỊNH cũng là điều kiện để thanh Thanh danh công bằng: thanh trừ
+ * theo từng thẻ, nên vòng 13 thẻ gắt hơn vòng 12 thẻ. Mọi vòng cùng phát 13 thì
+ * hết chuyện vòng này dễ hơn vòng kia chỉ vì người soạn viết ít thẻ hơn.
+ */
+export const TRIAL_CARDS_PER_ROUND = 13;
+
+/**
+ * Hình dạng bộ thẻ đã phát — bốc theo tầng, không bốc bừa 13 thẻ trong 50.
+ *
+ * Bốc bừa thì có lượt ra 9 thẻ "từ chối", có lượt ra 2 — hai bài thi khác hẳn
+ * độ khó mà cùng một cái thang điểm. Chia theo vùng thì lượt nào cũng cùng hình
+ * dạng, và vùng giữa vẫn chiếm phần lớn vì đó mới là chỗ phân loại được người.
+ *
+ * Tổng ba con số phải đúng bằng TRIAL_CARDS_PER_ROUND.
+ */
+export const TRIAL_CARD_MIX: Record<SortZone, number> = { ACCEPT: 3, CAUTION: 5, REFUSE: 5 };
+
+/** Số hồ sơ khách phát ra ở vòng khay ăn — cùng lý do như thẻ. */
+export const TRIAL_BRIEFS_PER_ROUND = 3;
+
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
 

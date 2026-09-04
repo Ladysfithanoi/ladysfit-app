@@ -128,14 +128,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Vòng này không thuộc lượt thi của bạn" }, { status: 403 });
   }
 
+  // Thẻ phải nằm trong bộ ĐÃ PHÁT cho lượt này. Ngân hàng mỗi vòng khoảng 50
+  // thẻ mà chỉ phát 13 — không kiểm thì gửi thẳng id của 37 thẻ còn lại vào đây
+  // là dò được đáp án cả ngân hàng mà không tốn một thẻ nào của mình.
+  const servedItems = parseQuestionIds(examSession.trialItemIds);
+  if (servedItems.length > 0 && !servedItems.includes(card.id)) {
+    return NextResponse.json({ error: "Thẻ này không thuộc lượt thi của bạn" }, { status: 403 });
+  }
+
   const state = parseTrialState(examSession.trialState);
   if (readSortAnswer(state, card.round.id, card.id)) {
     return NextResponse.json({ error: "Thẻ này đã trả lời rồi" }, { status: 409 });
   }
 
   // Chốt lại trạng thái vòng TRƯỚC khi nhận thẻ mới: cạn Thanh danh là vòng
-  // đóng, mọi thẻ sau đó không được tính nữa.
-  const before = card.round.sortCards.map((c) =>
+  // đóng, mọi thẻ sau đó không được tính nữa. Chỉ tính những thẻ đã phát.
+  const servedCards =
+    servedItems.length > 0
+      ? card.round.sortCards.filter((c) => servedItems.includes(c.id))
+      : card.round.sortCards;
+  const before = servedCards.map((c) =>
     gradeSortCard({ id: c.id, correctZone: c.correctZone }, readSortAnswer(state, card.round.id, c.id))
   );
   if (honorAfter(before) <= 0) {

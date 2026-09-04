@@ -969,6 +969,11 @@ model ExamSession {
   /// Bài làm dở của đề nhiều vòng (JSON). Tách khỏi answers vì answers là bản
   /// đồ phẳng { idCâuHỏi: "A" } của đề trắc nghiệm, không chứa nổi bài của vòng chơi.
   trialState      String?   @db.Text
+  /// Bộ THẺ / HỒ SƠ đã bốc cho lượt này (JSON mảng id). Mỗi vòng có ngân hàng
+  /// riêng — 50 thẻ, mỗi lượt phát 13 — nên phải ghi lại đã phát những thẻ nào:
+  /// F5 không được bốc lại, và lúc chấm phải chấm đúng bộ đã cho người ta thấy.
+  /// Rỗng = phát cả vòng (lối cũ, trước khi có ngân hàng thẻ).
+  trialItemIds    String?   @db.Text
   /// TỘI THÍ SINH TỰ KHAI trước khi được xem đề — vòng của tội đó khó hơn, điểm
   /// nhân đôi, và bắt buộc phải qua. Khai xong là chốt, không đổi lại được: cho
   /// đổi thì người ta xem đề rồi mới khai, mất sạch ý nghĩa của việc khai.

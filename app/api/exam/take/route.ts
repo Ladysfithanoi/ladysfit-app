@@ -110,7 +110,12 @@ export async function GET(req: Request) {
   // Cấp đặt dạng TRIAL thì không bốc câu trắc nghiệm nữa mà trả cả bộ vòng thi.
   // Trang làm bài nhìn cờ `format` để dựng đúng giao diện.
   if (format === "TRIAL" && levelId) {
-    const rounds = await loadTrialForCandidate(levelId);
+    // Đã có bộ thẻ chốt từ lần mở trước thì dùng lại đúng bộ đó; chưa có thì
+    // bốc mới (13 thẻ trong ngân hàng ~50 của mỗi vòng).
+    const rounds = await loadTrialForCandidate(
+      levelId,
+      parseQuestionIds(examSession?.trialItemIds)
+    );
     if (rounds.length === 0) {
       return NextResponse.json({ error: emptyTrialMessage(levelName) }, { status: 400 });
     }
@@ -180,9 +185,19 @@ export async function GET(req: Request) {
     // ghim đề đã bốc — chính là công dụng của questionIds.
     const orderedRounds = pickTrialRounds(rounds, declaredSin, examSession?.questionIds);
     if (!mock && examSession && parseQuestionIds(examSession.questionIds).length === 0) {
+      // Chốt CẢ HAI: bộ vòng, và bộ thẻ/hồ sơ của đúng những vòng đó theo đúng
+      // thứ tự đang trình bày. Thứ tự phải giữ vì thanh Thanh danh trừ theo
+      // từng thẻ — thẻ nào làm cạn thanh là phụ thuộc thứ tự.
+      const itemIds = orderedRounds.flatMap((r) => [
+        ...r.briefs.map((b) => b.id),
+        ...r.cards.map((c) => c.id),
+      ]);
       await prisma.examSession.update({
         where: { id: examSession.id },
-        data: { questionIds: JSON.stringify(orderedRounds.map((r) => r.id)) },
+        data: {
+          questionIds: JSON.stringify(orderedRounds.map((r) => r.id)),
+          trialItemIds: JSON.stringify(itemIds),
+        },
       });
     }
 
