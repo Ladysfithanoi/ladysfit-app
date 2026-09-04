@@ -141,7 +141,9 @@ export async function GET(req: Request) {
       ? (url.searchParams.get("declaredSin") as Sin | null)
       : examSession?.declaredSin ?? null;
 
-    if (!mock && !declaredSin) {
+    // Thi thử cũng đi qua đúng cửa này: Admin phải thấy được cái người thi thấy,
+    // nếu không thì kiểm đề xong vẫn không biết cửa vào trông ra sao.
+    if (!declaredSin) {
       // Chỉ cho khai những tội mà đề của cấp này thật sự có vòng.
       const sinRows = await prisma.examRound.findMany({
         where: { levelId, isActive: true, sin: { not: null } },

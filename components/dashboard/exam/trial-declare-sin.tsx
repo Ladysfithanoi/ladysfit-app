@@ -30,12 +30,15 @@ type SinOption = { sin: Sin; roundName: string | null; available: boolean };
 export function TrialDeclareSin({
   levelName,
   options,
+  mock = false,
   onDeclared,
 }: {
   levelName: string | null;
   /** Đủ 7 tội; `available` cho biết đề của cấp này đã có vòng cho tội đó chưa. */
   options: SinOption[];
-  onDeclared: () => void;
+  /** Thi thử của Admin — không có lượt thi để ghi, chỉ chốt ở bộ nhớ trang. */
+  mock?: boolean;
+  onDeclared: (sin: Sin) => void;
 }) {
   const [picked, setPicked] = useState<Sin | null>(null);
   const [saving, setSaving] = useState(false);
@@ -53,6 +56,13 @@ export function TrialDeclareSin({
     if (!picked) return;
     setSaving(true);
     setError("");
+    // Thi thử không ghi vào đâu cả — Admin kiểm đề bao nhiêu lần cũng được, và
+    // ghi vào lượt thi thì lần sau họ không khai lại được nữa.
+    if (mock) {
+      setDeclared(picked);
+      setSaving(false);
+      return;
+    }
     try {
       const res = await fetch("/api/exam/declare-sin", {
         method: "POST",
@@ -92,7 +102,7 @@ export function TrialDeclareSin({
         </p>
 
         <button
-          onClick={onDeclared}
+          onClick={() => onDeclared(declared)}
           className="mt-6 inline-flex h-12 items-center gap-2 rounded-xl px-7 text-sm font-extrabold text-white transition-opacity hover:opacity-90"
           style={{ backgroundColor: "#f15b5c" }}
         >
@@ -114,7 +124,8 @@ export function TrialDeclareSin({
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold text-gray-900 sm:text-2xl">Khai một đại tội</h1>
           <p className="mt-0.5 text-xs font-medium text-gray-400 sm:text-sm">
-            {levelName ? `Đề ${levelName} — ` : ""}chọn một lần, không đổi lại được
+            {levelName ? `Đề ${levelName} — ` : ""}
+          {mock ? "thi thử: chọn lại được bao nhiêu lần cũng được" : "chọn một lần, không đổi lại được"}
           </p>
         </div>
       </div>

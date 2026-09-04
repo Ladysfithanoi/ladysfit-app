@@ -297,6 +297,8 @@ export function ExamTakePage({
   const [needsDeclaration, setNeedsDeclaration] = useState(false);
   const [sinOptions, setSinOptions] = useState<{ sin: Sin; roundName: string | null; available: boolean }[]>([]);
   const [declaredSin, setDeclaredSin] = useState<Sin | null>(null);
+  // Thi thử không có lượt thi để ghi tội đã khai, nên giữ ở bộ nhớ trang.
+  const [mockSin, setMockSin] = useState<Sin | null>((mockDeclaredSin as Sin) ?? null);
   // Đổi số này để bắt tải lại đề sau khi khai xong.
   const [reloadKey, setReloadKey] = useState(0);
   const trialRef = useRef<TrialState>({});
@@ -357,7 +359,7 @@ export function ExamTakePage({
       try {
         const mockQuery = mock
           ? `?mock=1&levelId=${encodeURIComponent(mockLevelId ?? "")}` +
-            (mockDeclaredSin ? `&declaredSin=${encodeURIComponent(mockDeclaredSin)}` : "")
+            (mockSin ? `&declaredSin=${encodeURIComponent(mockSin)}` : "")
           : "";
         const res = await fetch(`/api/exam/take${mockQuery}`);
         if (!res.ok) {
@@ -403,7 +405,7 @@ export function ExamTakePage({
       }
     }
     loadExam();
-  }, [mock, mockLevelId, mockDeclaredSin, reloadKey]);
+  }, [mock, mockLevelId, mockSin, reloadKey]);
 
   /**
    * Nộp bài đề thử thách. Thi thử của Admin không ghi gì nên chỉ báo ngay là
@@ -425,7 +427,7 @@ export function ExamTakePage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             trialState: trialRef.current,
-            ...(mock ? { levelId: mockLevelId, declaredSin: mockDeclaredSin ?? null } : {}),
+            ...(mock ? { levelId: mockLevelId, declaredSin: mockSin } : {}),
           }),
         }
       );
@@ -796,9 +798,13 @@ export function ExamTakePage({
       <TrialDeclareSin
         levelName={levelName}
         options={sinOptions}
-        onDeclared={() => {
+        mock={mock}
+        onDeclared={(sin) => {
           setLoading(true);
-          setReloadKey((k) => k + 1);
+          // Thi thử: chốt ở bộ nhớ rồi tải lại đề. Bài thật đã ghi vào lượt thi
+          // ở /api/exam/declare-sin nên chỉ cần tải lại.
+          if (mock) setMockSin(sin);
+          else setReloadKey((k) => k + 1);
         }}
       />
     );
