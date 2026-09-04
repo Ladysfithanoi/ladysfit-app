@@ -1,23 +1,22 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { SIN_SEPHIRAH, SIN_LABEL, SUPERNAL_LABEL, type Sin } from "@/lib/exam-trial";
+import {
+  SEPHIROT, SEPHIRAH_BY_ID, sephirahFullName, SIN_DOMAIN, PILLAR_LABEL, type Pillar,
+} from "@/lib/exam-trial";
 
 /**
  * Cây Sự Sống (Kaballah) — bản đồ những đại tội một người đã đối mặt.
  *
- * KHÔNG phải thanh tiến độ. Mỗi đại tội có một sephirah riêng của nó (xem
- * SIN_SEPHIRAH trong lib/exam-trial.ts); làm xong vòng của tội nào thì đúng
- * sephirah đó sáng lên. Thí sinh không phải thi cả bảy tội — đề của cấp có bao
- * nhiêu vòng thì cây sáng bấy nhiêu chỗ.
+ * KHÔNG phải thanh tiến độ. Mọi dữ liệu về từng ô (tên, trụ, tội, vì sao ghép
+ * như vậy) nằm ở SEPHIROT trong lib/exam-trial.ts; file này chỉ lo toạ độ và
+ * cách vẽ. Muốn đổi cách ghép tội thì sửa ở đó, không sửa ở đây.
  *
- * Ba sephirot trên cùng gắn BA ĐIỀU KIỆN THĂNG CẤP CÒN LẠI (xem SUPERNAL_LABEL):
- * Chokmah là bài thực hành, Binah là doanh số & transform, Kether là thăng cấp
- * thật sự. Vực Thẳm ngăn giữa chúng với bảy tội — bài thi không vượt hộ ai qua
- * vạch đó.
- *
- * Ba trụ cũng không phải hoạ tiết: trái Nghiêm khắc, phải Khoan dung, giữa Cân
- * bằng — đúng trục mà bài thi đang đo qua hướng lệch của bài làm (PILLAR_LABEL).
+ * Hai thứ vẽ ra:
+ *   • <KabbalahTree>   — hình cây, nhãn ngắn cạnh mỗi ô.
+ *   • <KabbalahLegend> — bảng chú giải đủ 10 ô: tên, trụ, đo gì, vì sao, và
+ *                        trạng thái do nơi gọi truyền vào (đã qua / chưa có
+ *                        vòng trong đề / ngoài phạm vi bài thi…).
  */
 
 type Node = { id: number; x: number; y: number };
@@ -49,31 +48,18 @@ const PATHS: [number, number][] = [
   [9, 10],
 ];
 
-const SEPHIRAH_NAME: Record<number, string> = {
-  1: "Kether — Vương miện",
-  2: "Chokmah — Minh triết",
-  3: "Binah — Thấu hiểu",
-  4: "Chesed — Từ ái",
-  5: "Geburah — Nghiêm cẩn",
-  6: "Tiphareth — Vẻ đẹp",
-  7: "Netzach — Bền bỉ",
-  8: "Hod — Uy nghi",
-  9: "Yesod — Nền móng",
-  10: "Malkuth — Vương quốc",
-};
-
-/** Sephirah nào thuộc tội nào — tra ngược từ SIN_SEPHIRAH. */
-const SIN_OF = Object.fromEntries(
-  (Object.entries(SIN_SEPHIRAH) as [Sin, number][]).map(([sin, id]) => [id, sin])
-) as Record<number, Sin | undefined>;
+/** Vực Thẳm — lằn ngăn bảy đại tội (bài thi) với ba điều kiện thăng cấp còn lại. */
+const ABYSS_Y = 148;
 
 const BRAND = "#f15b5c";
+const DIM = "#c7cbd1";
 
 export function KabbalahTree({
   lit,
   current,
   target,
   caption,
+  detail = false,
   className,
 }: {
   /** Sephirot đã sáng — tội đã đối mặt xong. */
@@ -84,15 +70,33 @@ export function KabbalahTree({
   target?: number | null;
   /** Một câu nói rõ chặng này đổi được bằng gì. */
   caption?: string;
+  /** Hiện thêm tên ba trụ và số thứ tự trong từng ô — dùng ở chỗ có bảng chú giải. */
+  detail?: boolean;
   className?: string;
 }) {
   const litSet = new Set(lit);
   const byId = new Map(NODES.map((n) => [n.id, n]));
   const focusId = current ?? target ?? null;
+  // Chừa chỗ phía trên cho hàng tên ba trụ khi bật detail.
+  const viewBox = detail ? "0 -30 300 520" : "0 0 300 490";
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
-      <svg viewBox="0 0 300 490" className="h-auto w-full max-w-[290px]" role="img" aria-label="Cây Kaballah">
+      <svg viewBox={viewBox} className="h-auto w-full max-w-[290px]" role="img" aria-label="Cây Kaballah">
+        {detail && (
+          <g>
+            {[
+              { x: 70, label: PILLAR_LABEL.SEVERITY },
+              { x: 150, label: PILLAR_LABEL.BALANCE },
+              { x: 230, label: PILLAR_LABEL.MERCY },
+            ].map((p) => (
+              <text key={p.x} x={p.x} y={-14} textAnchor="middle" fontSize="9" fontWeight="800" fill="#b6bcc4">
+                {p.label.toUpperCase()}
+              </text>
+            ))}
+          </g>
+        )}
+
         {PATHS.map(([a, b]) => {
           const na = byId.get(a)!;
           const nb = byId.get(b)!;
@@ -108,19 +112,21 @@ export function KabbalahTree({
           );
         })}
 
-        {/* VỰC THẲM — lằn ngăn giữa bảy đại tội (bài thi) và ba điều kiện còn
-            lại của việc thăng cấp. Bài thi không vượt hộ ai qua vạch này. */}
-        <line x1={20} y1={148} x2={280} y2={148} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="5 5" />
-        <text x={286} y={144} textAnchor="end" fontSize="9" fontWeight="700" fill="#94a3b8">
+        {/* Bài thi không vượt hộ ai qua vạch này. */}
+        <line x1={20} y1={ABYSS_Y} x2={280} y2={ABYSS_Y} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="5 5" />
+        <text x={286} y={ABYSS_Y - 4} textAnchor="end" fontSize="9" fontWeight="700" fill="#94a3b8">
           Vực Thẳm
         </text>
 
         {NODES.map((n) => {
+          const info = SEPHIRAH_BY_ID[n.id];
           const isLit = litSet.has(n.id);
           const isFocus = n.id === focusId;
-          const sin = SIN_OF[n.id];
           const onLeft = n.x < 150;
           const onRight = n.x > 150;
+          // Kether ở cột giữa trên cùng để nhãn phía trên cho khỏi đè đường nối;
+          // các ô giữa còn lại để nhãn phía dưới như cũ.
+          const labelY = onLeft || onRight ? n.y + 4 : info.aboveAbyss ? n.y - 24 : n.y + 30;
           return (
             <g key={n.id}>
               {isFocus && (
@@ -135,31 +141,25 @@ export function KabbalahTree({
                 stroke={isLit || isFocus ? BRAND : "#d1d5db"}
                 strokeWidth={2}
               />
-              {/* Tên tội đặt cạnh sephirah của nó — cho thấy cây và bảy tội là một */}
-              {!sin && SUPERNAL_LABEL[n.id] && (
+              {/* Số trong ô để đối chiếu với bảng chú giải bên dưới. */}
+              {detail && (
                 <text
-                  x={onLeft ? n.x - 20 : onRight ? n.x + 20 : n.x}
-                  y={n.y + (onLeft || onRight ? 4 : -24)}
-                  textAnchor={onLeft ? "end" : onRight ? "start" : "middle"}
-                  fontSize="10.5"
-                  fontWeight="700"
-                  fill={isLit || isFocus ? BRAND : "#c7cbd1"}
+                  x={n.x} y={n.y + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="800"
+                  fill={isLit ? "#ffffff" : "#9ca3af"}
                 >
-                  {SUPERNAL_LABEL[n.id].need}
+                  {n.id}
                 </text>
               )}
-              {sin && (
-                <text
-                  x={onLeft ? n.x - 20 : onRight ? n.x + 20 : n.x}
-                  y={n.y + (onLeft || onRight ? 4 : 30)}
-                  textAnchor={onLeft ? "end" : onRight ? "start" : "middle"}
-                  fontSize="10.5"
-                  fontWeight="700"
-                  fill={isLit || isFocus ? BRAND : "#c7cbd1"}
-                >
-                  {SIN_LABEL[sin]}
-                </text>
-              )}
+              <text
+                x={onLeft ? n.x - 20 : onRight ? n.x + 20 : n.x}
+                y={labelY}
+                textAnchor={onLeft ? "end" : onRight ? "start" : "middle"}
+                fontSize="10.5"
+                fontWeight="700"
+                fill={isLit || isFocus ? BRAND : DIM}
+              >
+                {info.short}
+              </text>
             </g>
           );
         })}
@@ -167,10 +167,112 @@ export function KabbalahTree({
 
       {focusId && (
         <p className="mt-2 text-sm font-extrabold" style={{ color: BRAND }}>
-          {SEPHIRAH_NAME[focusId]}
+          {sephirahFullName(focusId)}
         </p>
       )}
       {caption && <p className="mt-1 max-w-xs text-xs font-semibold leading-snug text-gray-500">{caption}</p>}
+    </div>
+  );
+}
+
+// ── Bảng chú giải ────────────────────────────────────────────────────────────
+
+export type SephirahStatus = {
+  /** Một dòng nói ô này hiện ra sao — "Tham lam · 12 thẻ · đạt 65%". */
+  text: string;
+  /** ok: đã có/đã qua · warn: có nhưng chưa dùng được · off: chưa có gì. */
+  tone?: "ok" | "warn" | "off";
+};
+
+const TONE_CLS: Record<"ok" | "warn" | "off", string> = {
+  ok: "bg-emerald-50 text-emerald-700",
+  warn: "bg-amber-50 text-amber-700",
+  off: "bg-gray-100 text-gray-500",
+};
+
+const PILLAR_CLS: Record<Pillar, string> = {
+  SEVERITY: "bg-slate-100 text-slate-600",
+  BALANCE: "bg-violet-50 text-violet-600",
+  MERCY: "bg-sky-50 text-sky-700",
+};
+
+/**
+ * Đủ 10 ô, đọc từ dưới lên — đúng chiều người ta trèo cây: Malkuth (thân xác)
+ * lên tới Kether (thăng cấp). Trạng thái từng ô do nơi gọi truyền vào, vì cùng
+ * một cây mà Admin soi độ phủ của đề còn thí sinh soi kết quả của mình.
+ */
+export function KabbalahLegend({
+  lit,
+  status,
+  className,
+}: {
+  lit: number[];
+  status?: Record<number, SephirahStatus>;
+  className?: string;
+}) {
+  const litSet = new Set(lit);
+  const rows = [...SEPHIROT].sort((a, b) => b.id - a.id);
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      {rows.map((s) => {
+        const isLit = litSet.has(s.id);
+        const st = status?.[s.id];
+        const tone = st?.tone ?? "off";
+        return (
+          <div
+            key={s.id}
+            className={cn(
+              "rounded-xl border px-3 py-2.5",
+              isLit ? "border-[#f15b5c]/30 bg-[#f15b5c]/[0.04]" : "border-gray-100 bg-white",
+              s.aboveAbyss && "border-dashed"
+            )}
+          >
+            <div className="flex items-start gap-2.5">
+              <span
+                className={cn(
+                  "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold",
+                  isLit ? "text-white" : "border border-gray-200 bg-white text-gray-400"
+                )}
+                style={isLit ? { backgroundColor: BRAND } : undefined}
+              >
+                {s.id}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="text-sm font-extrabold text-gray-800">
+                    {s.name} <span className="font-bold text-gray-400">— {s.vi}</span>
+                  </p>
+                  <span className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-bold", PILLAR_CLS[s.pillar])}>
+                    {PILLAR_LABEL[s.pillar]}
+                  </span>
+                  {s.aboveAbyss && (
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                      trên Vực Thẳm
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-1 text-xs font-bold text-gray-600">
+                  {s.sin ? SIN_DOMAIN[s.sin] : s.need}
+                </p>
+                <p className="mt-0.5 text-xs leading-snug text-gray-400">{s.why}</p>
+
+                {st && (
+                  <span
+                    className={cn(
+                      "mt-1.5 inline-block rounded-md px-2 py-1 text-[11px] font-bold",
+                      TONE_CLS[tone]
+                    )}
+                  >
+                    {st.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

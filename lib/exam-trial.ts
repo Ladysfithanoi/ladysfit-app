@@ -53,55 +53,132 @@ export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT", string> = {
 };
 
 /**
- * MỖI ĐẠI TỘI MỘT SEPHIRAH — bảy tội ghép vào bảy sephirot dưới ("bảy ngày kiến
- * tạo"), ba sephirot trên cùng để dành cho chặng cuối.
+ * MƯỜI SEPHIROT — nguồn sự thật duy nhất về cây, dùng chung cho cả cây vẽ
+ * (components/dashboard/exam/kabbalah-tree.tsx), bảng chú giải, màn kết quả và
+ * trang soạn đề của Admin. Đổi cách ghép tội thì sửa đúng ở đây một chỗ.
  *
- * Ghép theo mặt TRÁI của từng sephirah — mỗi phẩm chất khi mất cân bằng thì đổ
- * về đúng cái tội của nó, nên vị trí trên cây không phải gán bừa:
+ * BẢY Ô DƯỚI VỰC THẲM = BẢY ĐẠI TỘI, ghép theo MẶT TRÁI của từng sephirah —
+ * mỗi phẩm chất khi mất cân bằng đổ về đúng cái tội của nó, nên vị trí trên cây
+ * không phải gán bừa. Thí sinh KHÔNG phải thi cả bảy: chỉ tội nào có vòng trong
+ * đề mới sáng, nên cây là bản đồ những gì người đó đã đối mặt, không phải một
+ * thanh tiến độ.
  *
- *   Malkuth   Vương quốc — thế giới vật chất, thân xác  → Phàm ăn   (dinh dưỡng)
- *   Yesod     Nền móng — cái làm nên thói quen bền bỉ   → Lười biếng (giữ khách)
- *   Hod       Uy nghi — vinh quang, chỗ sinh ra so bì   → Ghen tị   (sale)
- *   Netzach   Bền bỉ — khát khao, thôi thúc             → Dục vọng  (ranh giới nghề)
- *   Tiphareth Vẻ đẹp — hài hoà, và cũng là cái tôi      → Kiêu ngạo (kỹ thuật)
- *   Geburah   Nghiêm cẩn — sức mạnh, buông ra thành nộ  → Phẫn nộ   (xung đột)
- *   Chesed    Từ ái — rộng lượng, quá đà thành vơ vét   → Tham lam  (doanh số)
+ * BA Ô TRÊN VỰC THẲM = BA ĐIỀU KIỆN THĂNG CẤP CÒN LẠI. Đậu lý thuyết chưa đưa
+ * ai lên cấp: lib/pt-promotion.ts đòi đủ bốn điều kiện. Vực Thẳm chính là chỗ
+ * bài thi không vượt qua hộ được ai.
  *
- * Thí sinh KHÔNG phải thi cả bảy: chỉ những tội có vòng trong đề mới sáng lên,
- * nên cây là bản đồ những gì người đó đã đối mặt, không phải một thanh tiến độ.
+ * BA TRỤ đọc theo hướng lệch của bài làm (xem PILLAR_LABEL): trái Nghiêm khắc,
+ * phải Khoan dung, giữa Cân bằng.
  */
-export const SIN_SEPHIRAH: Record<Sin, number> = {
-  GLUTTONY: 10,
-  SLOTH: 9,
-  ENVY: 8,
-  LUST: 7,
-  PRIDE: 6,
-  WRATH: 5,
-  GREED: 4,
+export type SephirahInfo = {
+  id: number;
+  /** Tên Hebrew phiên âm — "Malkuth". */
+  name: string;
+  /** Nghĩa tiếng Việt — "Vương quốc". */
+  vi: string;
+  pillar: Pillar;
+  /** Đại tội của ô này; null với ba ô trên Vực Thẳm. */
+  sin: Sin | null;
+  /** Nhãn ngắn vẽ cạnh ô trên cây — phải ngắn, không thì tràn khỏi khung. */
+  short: string;
+  /** Điều kiện thăng cấp ô này gánh — chỉ ba ô trên Vực Thẳm. */
+  need?: string;
+  /** Vì sao ghép như vậy. Một câu, hiện ở bảng chú giải. */
+  why: string;
+  aboveAbyss: boolean;
 };
 
-/**
- * BA SEPHIROT TRÊN VỰC THẲM — ba điều kiện thăng cấp còn lại.
- *
- * Bảy sephirot dưới là bảy đại tội, tức phần LÝ THUYẾT. Nhưng đậu lý thuyết
- * chưa đưa ai lên cấp: lib/pt-promotion.ts đòi đủ BỐN điều kiện. Ba điều kiện
- * còn lại đặt đúng vào ba ô trên cùng, và Vực Thẳm ngăn giữa chúng với bảy tội
- * chính là chỗ mà bài thi không vượt qua hộ được ai.
- *
- *   Chokmah — Minh triết : cái biết THỂ HIỆN RA NGOÀI     → bài thực hành
- *   Binah   — Thấu hiểu  : cái biết ĐÃ THÀNH HÌNH ở khách → doanh số + transform
- *   Kether  — Vương miện : đủ cả bốn, thăng cấp thật sự
- */
+export const SEPHIROT: SephirahInfo[] = [
+  {
+    id: 1, name: "Kether", vi: "Vương miện", pillar: "BALANCE", sin: null,
+    short: "Thăng cấp", need: "Đủ cả bốn điều kiện — thăng cấp",
+    why: "Đỉnh cây, chỗ không ai trèo tới bằng riêng một bài thi. Sáng khi cả bốn điều kiện lên cấp cùng đạt.",
+    aboveAbyss: true,
+  },
+  {
+    id: 2, name: "Chokmah", vi: "Minh triết", pillar: "MERCY", sin: null,
+    short: "Thực hành", need: "Bài kiểm tra thực hành",
+    why: "Cái biết khi đã thể hiện ra ngoài — trên sàn tập, trước mặt người khác, không phải trên giấy.",
+    aboveAbyss: true,
+  },
+  {
+    id: 3, name: "Binah", vi: "Thấu hiểu", pillar: "SEVERITY", sin: null,
+    short: "Doanh số", need: "Doanh số & khách transform",
+    why: "Cái biết khi đã thành hình ở người khác: khách đổi được thân hình, và tiền về đúng chỉ tiêu.",
+    aboveAbyss: true,
+  },
+  {
+    id: 4, name: "Chesed", vi: "Từ ái", pillar: "MERCY", sin: "GREED",
+    short: SIN_LABEL.GREED,
+    why: "Rộng lượng khi quá đà thì thành vơ vét — bán thêm một gói nữa vì mình chứ không vì khách.",
+    aboveAbyss: false,
+  },
+  {
+    id: 5, name: "Geburah", vi: "Nghiêm cẩn", pillar: "SEVERITY", sin: "WRATH",
+    short: SIN_LABEL.WRATH,
+    why: "Sức mạnh và kỷ luật. Buông tay khỏi kỷ luật ấy một nhịp là thành cơn giận trước mặt khách.",
+    aboveAbyss: false,
+  },
+  {
+    id: 6, name: "Tiphareth", vi: "Vẻ đẹp", pillar: "BALANCE", sin: "PRIDE",
+    short: SIN_LABEL.PRIDE,
+    why: "Trung tâm hài hoà, và cũng là chỗ ngự của cái tôi: tự tin chuyên môn hoá thành không ai dạy được nữa.",
+    aboveAbyss: false,
+  },
+  {
+    id: 7, name: "Netzach", vi: "Bền bỉ", pillar: "MERCY", sin: "LUST",
+    short: SIN_LABEL.LUST,
+    why: "Khát khao và thôi thúc — thứ giữ người ta theo đuổi, và cũng là thứ đẩy người ta qua ranh giới nghề.",
+    aboveAbyss: false,
+  },
+  {
+    id: 8, name: "Hod", vi: "Uy nghi", pillar: "SEVERITY", sin: "ENVY",
+    short: SIN_LABEL.ENVY,
+    why: "Vinh quang và hình thức. Nhìn sang vinh quang của người bên cạnh chính là chỗ so bì sinh ra.",
+    aboveAbyss: false,
+  },
+  {
+    id: 9, name: "Yesod", vi: "Nền móng", pillar: "BALANCE", sin: "SLOTH",
+    short: SIN_LABEL.SLOTH,
+    why: "Nền của mọi thói quen. Móng lún thì khách bỏ tập — và trước đó là HLV thôi nhắn tin hỏi han.",
+    aboveAbyss: false,
+  },
+  {
+    id: 10, name: "Malkuth", vi: "Vương quốc", pillar: "BALANCE", sin: "GLUTTONY",
+    short: SIN_LABEL.GLUTTONY,
+    why: "Thế giới vật chất, thân xác, miếng ăn — chỗ mọi lý thuyết phải trở thành cụ thể.",
+    aboveAbyss: false,
+  },
+];
+
+export const SEPHIRAH_BY_ID: Record<number, SephirahInfo> = Object.fromEntries(
+  SEPHIROT.map((s) => [s.id, s])
+);
+
+/** Tên đầy đủ hiện dưới cây — "Malkuth — Vương quốc". */
+export function sephirahFullName(id: number): string {
+  const s = SEPHIRAH_BY_ID[id];
+  return s ? `${s.name} — ${s.vi}` : "";
+}
+
+/** Đại tội → sephirah của nó. Suy ra từ SEPHIROT, không khai báo lần hai. */
+export const SIN_SEPHIRAH = Object.fromEntries(
+  SEPHIROT.filter((s) => s.sin).map((s) => [s.sin as Sin, s.id])
+) as Record<Sin, number>;
+
+/** Sephirah → đại tội của nó (tra ngược). */
+export const SEPHIRAH_SIN: Record<number, Sin | null> = Object.fromEntries(
+  SEPHIROT.map((s) => [s.id, s.sin])
+);
+
+export const KETHER = 1;
 export const CHOKMAH = 2;
 export const BINAH = 3;
-export const KETHER = 1;
 
-/** Nhãn ba ô trên cùng, hiện kèm trạng thái ở màn kết quả. */
-export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = {
-  [CHOKMAH]: { name: "Chokmah — Minh triết", need: "Bài kiểm tra thực hành" },
-  [BINAH]: { name: "Binah — Thấu hiểu", need: "Doanh số & khách transform" },
-  [KETHER]: { name: "Kether — Vương miện", need: "Đủ cả bốn điều kiện — thăng cấp" },
-};
+/** Ba ô trên Vực Thẳm — điều kiện thăng cấp mà bài thi không tự mở được. */
+export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = Object.fromEntries(
+  SEPHIROT.filter((s) => s.aboveAbyss).map((s) => [s.id, { name: `${s.name} — ${s.vi}`, need: s.need! }])
+);
 
 // ── Tội tự khai ──────────────────────────────────────────────────────────────
 //

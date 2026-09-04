@@ -18,6 +18,8 @@ import {
   AlarmClock,
   Cloud,
   CloudOff,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -25,11 +27,11 @@ import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
 import {
-  SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH,
+  SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
   type MealEntry, type SortZone, type Sin,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
-import { KabbalahTree } from "./kabbalah-tree";
+import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
 
 type Question = {
   id: string;
@@ -91,6 +93,73 @@ function litSephirot(r: TrialSubmitResult, rounds: TrialRound[]): number[] {
   else if (!p && r.passed) out.push(KETHER); // thi thử: không có dữ liệu thăng cấp
   return out;
 }
+
+/**
+ * Trạng thái từng ô của cây cho bảng chú giải ở màn kết quả.
+ *
+ * Bảy ô dưới đọc từ chính lượt thi vừa rồi; ba ô trên đọc từ điều kiện thăng
+ * cấp (evaluatePtById ở API trial-submit). Thi thử không có dữ liệu thăng cấp
+ * nên ba ô trên nói thẳng là không tính ở đây, chứ không im lặng để người ta
+ * tưởng mình vừa trượt.
+ */
+function sephirahStatus(
+  r: TrialSubmitResult,
+  rounds: TrialRound[],
+): Record<number, SephirahStatus> {
+  const out: Record<number, SephirahStatus> = {};
+  const supernalKey: Record<number, string> = {
+    [CHOKMAH]: "practical",
+    [BINAH]: "revenue",
+    [KETHER]: "exam",
+  };
+
+  for (const s of SEPHIROT) {
+    if (!s.sin) {
+      const p = r.promotion;
+      if (!p) {
+        out[s.id] = { text: "Không tính ở bài thi thử", tone: "off" };
+        continue;
+      }
+      if (s.id === KETHER) {
+        const all = ["exam", "practical", "revenue", "transform"].every((k) => p[k]?.ok);
+        out[s.id] = all
+          ? { text: "Đủ cả bốn điều kiện — đã đủ để lên cấp", tone: "ok" }
+          : { text: "Chưa đủ bốn điều kiện thăng cấp", tone: "warn" };
+        continue;
+      }
+      if (s.id === BINAH) {
+        const ok = !!p.revenue?.ok && !!p.transform?.ok;
+        const detail = [p.revenue?.detail, p.transform?.detail].filter(Boolean).join(" · ");
+        out[s.id] = { text: detail || (ok ? "Đã đạt" : "Chưa đạt"), tone: ok ? "ok" : "warn" };
+        continue;
+      }
+      const cond = p[supernalKey[s.id]];
+      out[s.id] = {
+        text: cond?.detail || (cond?.ok ? "Đã đạt" : "Chưa đạt"),
+        tone: cond?.ok ? "ok" : "warn",
+      };
+      continue;
+    }
+
+    const round = rounds.find((x) => x.sin === s.sin);
+    if (!round) {
+      out[s.id] = { text: "Không có trong đề cấp này", tone: "off" };
+      continue;
+    }
+    const res = r.rounds.find((x) => x.roundId === round.id);
+    if (!res) {
+      out[s.id] = { text: `${round.name} · chưa chấm`, tone: "off" };
+      continue;
+    }
+    const declared = r.declaredSin === s.sin ? " · tội đã khai" : "";
+    out[s.id] = {
+      text: `${round.name} · ${res.points}/${res.maxPoints} điểm · ${res.passed ? "đạt" : "trượt"}${declared}`,
+      tone: res.passed ? "ok" : "warn",
+    };
+  }
+  return out;
+}
+
 
 /** Bài soi lại sau khi THI THỬ — kèm đáp án đúng, bài thi thật không có. */
 type TrialReviewRound = {
@@ -310,6 +379,9 @@ export function ExamTakePage({
   // Nhịp giữa hai vòng: hiện cây Kaballah với sephirah vừa thắp, rồi mới sang vòng kế.
   const [advanceFrom, setAdvanceFrom] = useState<TrialRound | null>(null);
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
+  // Chú giải cây ở màn kết quả: mặc định đóng, vì thứ người ta muốn thấy trước
+  // là điểm, không phải mười ô sephirot.
+  const [legendOpen, setLegendOpen] = useState(false);
   // Chưa khai tội thì chưa được xem đề — server chưa gửi vòng nào xuống.
   const [needsDeclaration, setNeedsDeclaration] = useState(false);
   const [sinOptions, setSinOptions] = useState<{ sin: Sin; roundName: string | null; available: boolean }[]>([]);
@@ -1305,7 +1377,26 @@ export function ExamTakePage({
                       ? "Đã qua lý thuyết. Ba ô trên Vực Thẳm là phần còn lại của con đường lên cấp."
                       : "Sephirot sáng là những tội bạn đã vượt qua."
                 }
+                detail
               />
+
+              {/* Cây nói được chỗ nào sáng, nhưng không nói vì sao. Bảng này
+                  mới trả lời: ô đó đo mảng năng lực gì, ghép vào tội nào, và
+                  lượt thi vừa rồi để lại kết quả ra sao. */}
+              <button
+                onClick={() => setLegendOpen((v) => !v)}
+                className="mx-auto mt-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              >
+                {legendOpen ? "Ẩn chú giải cây" : "Xem chú giải đủ 10 ô"}
+                {legendOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {legendOpen && (
+                <KabbalahLegend
+                  lit={litSephirot(trialResult, rounds)}
+                  status={sephirahStatus(trialResult, rounds)}
+                  className="mt-3"
+                />
+              )}
             </div>
           )}
 
