@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Swords, AlertTriangle, Lock, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  SIN_LABEL, SIN_DOMAIN, SINS,
+  SIN_LABEL, SIN_DOMAIN, SINS, SIN_SEPHIRAH,
   DECLARED_POINT_MULTIPLIER, DECLARED_PASS_BONUS,
   type Sin,
 } from "@/lib/exam-trial";
@@ -93,12 +93,16 @@ export function TrialDeclareSin({
         <p className="mt-1 text-sm font-medium text-gray-500">{SIN_DOMAIN[declared]}</p>
 
         <div className="my-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <KabbalahTree step={1} />
+          <KabbalahTree
+            lit={[]}
+            target={SIN_SEPHIRAH[declared]}
+            caption={`Đây là chỗ của ${SIN_LABEL[declared]} trên cây. Làm xong vòng này thì nó sáng lên.`}
+          />
         </div>
 
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-gray-500">
-          Bạn vừa rời Malkuth. Từ đây mỗi vòng vượt qua là một bậc trên trụ Cân bằng —
-          và vòng của tội bạn vừa khai là bậc bạn không được phép trượt.
+          Mỗi đại tội có một chỗ riêng trên cây. Bạn thi tội nào thì thắp sáng chỗ đó —
+          và tội bạn vừa khai là chỗ bạn không được phép trượt.
         </p>
 
         <button

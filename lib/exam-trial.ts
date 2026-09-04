@@ -52,6 +52,37 @@ export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT", string> = {
   SORT: "Phân loại tình huống vào 3 vùng",
 };
 
+/**
+ * MỖI ĐẠI TỘI MỘT SEPHIRAH — bảy tội ghép vào bảy sephirot dưới ("bảy ngày kiến
+ * tạo"), ba sephirot trên cùng để dành cho chặng cuối.
+ *
+ * Ghép theo mặt TRÁI của từng sephirah — mỗi phẩm chất khi mất cân bằng thì đổ
+ * về đúng cái tội của nó, nên vị trí trên cây không phải gán bừa:
+ *
+ *   Malkuth   Vương quốc — thế giới vật chất, thân xác  → Phàm ăn   (dinh dưỡng)
+ *   Yesod     Nền móng — cái làm nên thói quen bền bỉ   → Lười biếng (giữ khách)
+ *   Hod       Uy nghi — vinh quang, chỗ sinh ra so bì   → Ghen tị   (sale)
+ *   Netzach   Bền bỉ — khát khao, thôi thúc             → Dục vọng  (ranh giới nghề)
+ *   Tiphareth Vẻ đẹp — hài hoà, và cũng là cái tôi      → Kiêu ngạo (kỹ thuật)
+ *   Geburah   Nghiêm cẩn — sức mạnh, buông ra thành nộ  → Phẫn nộ   (xung đột)
+ *   Chesed    Từ ái — rộng lượng, quá đà thành vơ vét   → Tham lam  (doanh số)
+ *
+ * Thí sinh KHÔNG phải thi cả bảy: chỉ những tội có vòng trong đề mới sáng lên,
+ * nên cây là bản đồ những gì người đó đã đối mặt, không phải một thanh tiến độ.
+ */
+export const SIN_SEPHIRAH: Record<Sin, number> = {
+  GLUTTONY: 10,
+  SLOTH: 9,
+  ENVY: 8,
+  LUST: 7,
+  PRIDE: 6,
+  WRATH: 5,
+  GREED: 4,
+};
+
+/** Vương miện — chỉ sáng khi đạt cả kỳ thi. */
+export const KETHER = 1;
+
 // ── Tội tự khai ──────────────────────────────────────────────────────────────
 //
 // Thí sinh khai một tội TRƯỚC KHI được xem đề. Không phải chọn thế mạnh mà là

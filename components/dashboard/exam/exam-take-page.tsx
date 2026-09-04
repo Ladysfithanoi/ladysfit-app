@@ -18,14 +18,16 @@ import {
   AlarmClock,
   Cloud,
   CloudOff,
-  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
-import { SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
+import {
+  SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER,
+  type MealEntry, type SortZone, type Sin,
+} from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
 import { KabbalahTree } from "./kabbalah-tree";
 
@@ -69,15 +71,19 @@ type TrialRound = {
 type TrialState = Record<string, Record<string, MealEntry[] | SortZone>>;
 
 /**
- * Bậc trên cây từ kết quả một lượt thi.
- *
- * Cùng luật với journeyStep() ở lib/exam-trial.ts, chỉ khác là đọc từ gói tin
- * máy chủ trả về (chỗ này không có nguyên đối tượng TrialScore).
+ * Sephirot sáng lên sau một lượt thi: mỗi VÒNG ĐÃ ĐẠT thắp đúng sephirah của
+ * đại tội nó đo. Vòng trượt thì để tối — cây chỉ kể những gì thật sự vượt qua.
+ * Đạt cả kỳ thì Kether sáng thêm.
  */
-function journeyStepOf(r: TrialSubmitResult): number {
-  if (r.passed) return 3;                                  // Kether — đạt cả kỳ
-  if (r.declaredSin && !r.declaredFailed) return 2;        // Tiphareth — qua vòng đã khai
-  return 1;                                                 // Yesod — đã dám khai
+function litSephirot(r: TrialSubmitResult, rounds: TrialRound[]): number[] {
+  const out: number[] = [];
+  for (const rs of r.rounds) {
+    if (!rs.passed) continue;
+    const round = rounds.find((x) => x.id === rs.roundId);
+    if (round?.sin) out.push(SIN_SEPHIRAH[round.sin]);
+  }
+  if (r.passed) out.push(KETHER);
+  return out;
 }
 
 /** Bài soi lại sau khi THI THỬ — kèm đáp án đúng, bài thi thật không có. */
@@ -293,6 +299,8 @@ export function ExamTakePage({
   const [rounds, setRounds] = useState<TrialRound[]>([]);
   const [trialState, setTrialState] = useState<TrialState>({});
   const [roundIdx, setRoundIdx] = useState(0);
+  // Nhịp giữa hai vòng: hiện cây Kaballah với sephirah vừa thắp, rồi mới sang vòng kế.
+  const [advanceFrom, setAdvanceFrom] = useState<TrialRound | null>(null);
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
   // Chưa khai tội thì chưa được xem đề — server chưa gửi vòng nào xuống.
   const [needsDeclaration, setNeedsDeclaration] = useState(false);
@@ -805,6 +813,70 @@ export function ExamTakePage({
     );
   }
 
+  // ── Nhịp giữa hai vòng: cây Kaballah ──────────────────────────────────────
+  // Xong một vòng thì dừng lại một nhịp, thấy sephirah của tội vừa vượt qua
+  // sáng lên, rồi mới sang vòng kế. Không cho quay về vòng cũ — đúng như đã
+  // chốt: mỗi lần chỉ nhìn thấy một vòng.
+  if (advanceFrom) {
+    const doneIdx = rounds.findIndex((r) => r.id === advanceFrom.id);
+    const next = rounds[doneIdx + 1] ?? null;
+    const litNow = rounds
+      .slice(0, doneIdx + 1)
+      .map((r) => (r.sin ? SIN_SEPHIRAH[r.sin] : 0))
+      .filter(Boolean);
+    return (
+      <div className="mx-auto max-w-lg pb-16 text-center">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Đã xong vòng</p>
+        <h1 className="mt-1 text-2xl font-extrabold" style={{ color: "#f15b5c" }}>
+          {advanceFrom.name}
+        </h1>
+
+        <div className="my-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+          <KabbalahTree
+            lit={litNow}
+            current={advanceFrom.sin ? SIN_SEPHIRAH[advanceFrom.sin] : null}
+            caption={
+              advanceFrom.sin === declaredSin
+                ? "Bạn vừa đi qua chính tội mình khai. Điểm còn chờ chấm, nhưng chỗ này trên cây đã sáng."
+                : "Một chỗ nữa trên cây vừa sáng lên."
+            }
+          />
+        </div>
+
+        {next ? (
+          <>
+            <p className="mx-auto max-w-sm text-sm leading-relaxed text-gray-500">
+              Vòng tiếp theo: <span className="font-extrabold text-gray-700">{next.name}</span>
+            </p>
+            <button
+              onClick={() => {
+                setRoundIdx(doneIdx + 1);
+                setAdvanceFrom(null);
+              }}
+              className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl px-7 text-sm font-extrabold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              Vào vòng {next.name}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mx-auto max-w-sm text-sm leading-relaxed text-gray-500">
+              Bạn đã đi hết các vòng của đề này.
+            </p>
+            <button
+              onClick={() => setAdvanceFrom(null)}
+              className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl px-7 text-sm font-extrabold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              Xem lại rồi nộp bài
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
   // Khai tội xong mới được xem đề — server chưa gửi vòng nào xuống ở bước này.
   if (needsDeclaration) {
     return (
@@ -1031,49 +1103,16 @@ export function ExamTakePage({
         </div>
       )}
 
-      {/* ── Đề thử thách: từng vòng một, chuyển vòng bằng thanh trên đầu ── */}
+      {/* ── Đề thử thách: MỖI LẦN MỘT VÒNG ──────────────────────────────────
+          Không bày các vòng khác ra cạnh, kể cả dạng đã khoá. Thấy vòng sau
+          nằm chờ sẵn là người thi đã bắt đầu tính đường cho nó thay vì dồn
+          sức vào vòng đang làm. Xong một vòng thì đi qua màn cây Kaballah rồi
+          mới sang vòng kế. */}
       {isTrial ? (
         <div className="space-y-4">
-          <div className={cn(SLIDER_ROUNDS)}>
-            <div className="flex w-max items-center gap-2">
-              {rounds.map((r, i) => {
-                const done = roundDone(r);
-                const active = i === safeRoundIdx;
-                const locked = i >= unlockedCount;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => { if (!locked) setRoundIdx(i); }}
-                    title={locked ? "Xong vòng trước mới mở được vòng này" : undefined}
-                    className={cn(
-                      "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-colors",
-                      locked
-                        ? "cursor-not-allowed bg-gray-50 text-gray-300"
-                        : active
-                          ? "bg-[#f15b5c] text-white"
-                          : done
-                            ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                            : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                    )}
-                  >
-                    <span className={cn("text-[10px] font-extrabold", active ? "text-white/70" : "text-gray-300")}>
-                      {i + 1}
-                    </span>
-                    {r.name}
-                    {declaredSin && r.sin === declaredSin && (
-                      <span className={cn("text-[10px] font-extrabold", active ? "text-white" : "text-[#f15b5c]")}>
-                        ★ tội đã khai
-                      </span>
-                    )}
-                    {locked && <Lock className="h-3.5 w-3.5" />}
-                    {done && !active && <CheckCircle className="h-3.5 w-3.5" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+            Vòng {safeRoundIdx + 1}/{rounds.length}
+          </p>
 
           {currentRound && (
             <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -1141,11 +1180,11 @@ export function ExamTakePage({
             </div>
           )}
 
-          {/* Xong vòng này rồi thì mời sang vòng sau — tiến trình phải thấy được,
-              chứ không phải tự đoán qua thanh trên đầu. */}
+          {/* Xong vòng này thì đi qua màn cây Kaballah, rồi mới sang vòng sau.
+              Vòng cuối không có nút này — chỗ đó là nút Nộp bài. */}
           {currentRound && !result && nextLockedIdx !== -1 && (
             <button
-              onClick={() => setRoundIdx(nextLockedIdx)}
+              onClick={() => setAdvanceFrom(currentRound)}
               disabled={!roundDone(currentRound)}
               className={cn(
                 "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-extrabold transition-colors",
@@ -1248,7 +1287,17 @@ export function ExamTakePage({
               đạt cả kỳ (Kether). Xem journeyStep() trong lib/exam-trial.ts. */}
           {trialResult && (
             <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5">
-              <KabbalahTree step={journeyStepOf(trialResult)} />
+              <KabbalahTree
+                lit={litSephirot(trialResult, rounds)}
+                current={trialResult.passed ? KETHER : null}
+                caption={
+                  trialResult.passed
+                    ? "Vương miện sáng — bạn đạt cả kỳ thi."
+                    : trialResult.declaredFailed
+                      ? "Chỗ của tội bạn khai vẫn tối — đó là chỗ phải quay lại."
+                      : "Sephirot sáng là những tội bạn đã vượt qua."
+                }
+              />
             </div>
           )}
 
