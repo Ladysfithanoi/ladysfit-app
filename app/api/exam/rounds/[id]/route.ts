@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { SORT_ZONES, type SortZone } from "@/lib/exam-trial";
+import { SORT_ZONES, SINS, type SortZone, type Sin } from "@/lib/exam-trial";
 import { serializeRoundForAdmin } from "@/lib/exam-trial-server";
 
 /** Số nguyên trong khoảng, ngoài khoảng thì giữ giá trị cũ. */
@@ -90,6 +90,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       ...("passPercent" in b && { passPercent: clampInt(b.passPercent, 1, 100, round.passPercent) }),
       ...("failPenalty" in b && { failPenalty: clampInt(b.failPenalty, 0, 1000, round.failPenalty) }),
       ...(typeof b.isActive === "boolean" && { isActive: b.isActive }),
+      // Đại tội: danh sách đóng, gửi rỗng thì bỏ trống chứ không ghi bậy.
+      ...("sin" in b && {
+        sin:
+          typeof b.sin === "string" && (SINS as string[]).includes(b.sin)
+            ? (b.sin as Sin)
+            : null,
+      }),
     },
     include: {
       mealBriefs: { orderBy: { order: "asc" } },

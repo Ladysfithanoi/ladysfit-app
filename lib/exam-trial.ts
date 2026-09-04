@@ -12,6 +12,46 @@
 // tổng, nên trượt hai vòng thì gần như không gỡ lại được.
 import { FOODS } from "./foods-data";
 
+// ── Bảy đại tội ──────────────────────────────────────────────────────────────
+//
+// ĐẠI TỘI và LỐI CHƠI là hai thứ khác nhau. Đại tội là mảng năng lực được đo;
+// lối chơi là cách đo (dựng khay ăn, phân loại thẻ…). Một tội có thể đo bằng
+// lối chơi nào cũng được. Trộn hai thứ vào một danh sách là sinh ra chuyện
+// dropdown chọn lối chơi lại hiện tên tội, và "Sa ngã" — không hề nằm trong
+// bảy đại tội — lọt vào danh sách.
+
+export type Sin = "PRIDE" | "GREED" | "LUST" | "ENVY" | "GLUTTONY" | "WRATH" | "SLOTH";
+
+/** Đúng thứ tự kinh điển. Danh sách đóng — không thêm bớt. */
+export const SINS: Sin[] = ["PRIDE", "GREED", "LUST", "ENVY", "GLUTTONY", "WRATH", "SLOTH"];
+
+export const SIN_LABEL: Record<Sin, string> = {
+  PRIDE: "Kiêu ngạo",
+  GREED: "Tham lam",
+  LUST: "Dục vọng",
+  ENVY: "Ghen tị",
+  GLUTTONY: "Phàm ăn",
+  WRATH: "Phẫn nộ",
+  SLOTH: "Lười biếng",
+};
+
+/** Mảng năng lực mà mỗi tội đo — hiện kèm tên tội để người soạn đề khỏi đoán. */
+export const SIN_DOMAIN: Record<Sin, string> = {
+  PRIDE: "Chuyên môn kỹ thuật, form động tác",
+  GREED: "Doanh số & đạo đức bán gói",
+  LUST: "Ranh giới nghề nghiệp",
+  ENVY: "Sale",
+  GLUTTONY: "Dinh dưỡng",
+  WRATH: "Xử lý khiếu nại, xung đột",
+  SLOTH: "Giữ khách, chống bỏ tập",
+};
+
+/** Lối chơi — mô tả CƠ CHẾ, tuyệt đối không kèm tên tội nào. */
+export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT", string> = {
+  MEAL: "Dựng khay ăn theo chỉ tiêu",
+  SORT: "Phân loại tình huống vào 3 vùng",
+};
+
 export type SortZone = "ACCEPT" | "CAUTION" | "REFUSE";
 
 /** Ba vùng xếp theo mức cứng rắn tăng dần — khoảng cách giữa chúng là điểm trừ. */

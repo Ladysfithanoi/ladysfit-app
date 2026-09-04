@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serializeRoundForAdmin } from "@/lib/exam-trial-server";
+import { SINS, type Sin } from "@/lib/exam-trial";
 
 /**
  * Soạn đề thử thách nhiều vòng (7 đại tội). Chỉ Admin.
@@ -41,14 +42,19 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { levelId, type, name } = body as { levelId?: string; type?: string; name?: string };
+  const { levelId, type, name, sin } = body as {
+    levelId?: string; type?: string; name?: string; sin?: string;
+  };
 
   if (!levelId || !name?.trim()) {
     return NextResponse.json({ error: "Thiếu cấp độ hoặc tên vòng" }, { status: 400 });
   }
   if (type !== "MEAL" && type !== "SORT") {
-    return NextResponse.json({ error: "Loại vòng không hợp lệ" }, { status: 400 });
+    return NextResponse.json({ error: "Lối chơi không hợp lệ" }, { status: 400 });
   }
+  // Đại tội là danh sách đóng — gõ sai thì để trống còn hơn ghi bậy.
+  const sinValue: Sin | null =
+    typeof sin === "string" && (SINS as string[]).includes(sin) ? (sin as Sin) : null;
 
   const level = await prisma.pTLevel.findUnique({ where: { id: levelId }, select: { id: true } });
   if (!level) return NextResponse.json({ error: "Không tìm thấy cấp độ" }, { status: 404 });
@@ -59,6 +65,7 @@ export async function POST(req: NextRequest) {
     data: {
       levelId,
       type,
+      sin: sinValue,
       name: name.trim(),
       order: (max._max.order ?? -1) + 1,
     },

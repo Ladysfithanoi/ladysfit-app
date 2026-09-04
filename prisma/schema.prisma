@@ -672,14 +672,38 @@ enum ExamFormat {
   TRIAL
 }
 
+/// LỐI CHƠI của một vòng — cơ chế, KHÔNG phải tên đại tội.
+///
+/// Hai thứ này khác nhau và phải để riêng: một đại tội có thể dùng lối chơi
+/// nào cũng được, và cùng một lối chơi có thể phục vụ nhiều đại tội. Trộn làm
+/// một là dropdown chọn lối chơi lại đi hiện tên tội, đổi tên vòng thì nó
+/// không đổi theo — đúng một lần đã gây nhầm.
 enum ExamRoundType {
-  /// Phàm ăn — dựng khay ăn đúng chỉ tiêu calo/đạm/béo/đường.
+  /// Dựng khay ăn chạm đúng chỉ tiêu calo/đạm/béo/đường.
   MEAL
-  /// Sa ngã — quẹt thẻ tình huống vào đúng vùng ranh giới.
+  /// Xếp thẻ tình huống vào đúng một trong ba vùng.
   SORT
 }
 
-/// Ba vùng ranh giới của vòng Sa ngã, xếp theo mức độ cứng rắn tăng dần —
+/// Bảy đại tội — danh sách đóng, đúng bản kinh điển. Mỗi vòng gắn một tội.
+enum ExamSin {
+  /// Kiêu ngạo → chuyên môn kỹ thuật, form động tác
+  PRIDE
+  /// Tham lam → doanh số & đạo đức bán gói
+  GREED
+  /// Dục vọng → ranh giới nghề nghiệp
+  LUST
+  /// Ghen tị → sale
+  ENVY
+  /// Phàm ăn → dinh dưỡng
+  GLUTTONY
+  /// Phẫn nộ → xử lý khiếu nại, xung đột
+  WRATH
+  /// Lười biếng → giữ khách, chống bỏ tập
+  SLOTH
+}
+
+/// Ba vùng ranh giới của vòng phân loại tình huống, xếp theo mức cứng rắn tăng dần —
 /// thứ tự này có ý nghĩa chấm điểm: lệch 1 bậc còn nửa điểm, lệch 2 bậc mất hết.
 enum ExamSortZone {
   ACCEPT
@@ -690,8 +714,11 @@ enum ExamSortZone {
 model ExamRound {
   id          String        @id @default(cuid())
   levelId     String
+  /// Lối chơi (cơ chế). Xem enum ExamRoundType.
   type        ExamRoundType
-  /// Tên vòng hiện cho thí sinh, vd "Phàm ăn".
+  /// Đại tội của vòng. Tách hẳn khỏi lối chơi và khỏi tên hiển thị.
+  sin         ExamSin?
+  /// Tên vòng hiện cho thí sinh — sửa tự do, mặc định lấy theo tên đại tội.
   name        String
   /// Luật chơi / lời dẫn hiện đầu vòng.
   intro       String?       @db.Text

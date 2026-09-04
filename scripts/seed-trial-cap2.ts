@@ -3,14 +3,14 @@
  *
  *   npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/seed-trial-cap2.ts "Cấp 2"
  *
- * Chạy lại nhiều lần không nhân bản: vòng nhận diện theo TÊN trong cùng một cấp,
- * có rồi thì ghi đè nội dung. Sau khi nạp, Admin vào Bài thi → Đề thử thách để
+ * Chạy lại nhiều lần không nhân bản: vòng nhận diện theo ĐẠI TỘI trong cùng một
+ * cấp (tên vòng người dùng sửa được nên không dùng làm mốc), có rồi thì ghi đè. Sau khi nạp, Admin vào Bài thi → Đề thử thách để
  * duyệt và sửa; sửa ở đó là nguồn sự thật, script này chỉ để mồi lần đầu.
  *
  * Script KHÔNG đổi dạng đề của cấp. Đổi sang "Thử thách nhiều vòng" là việc có
  * chủ ý ở Cài đặt → Cấp độ, vì nó đổi hẳn trang làm bài của mọi người ở cấp đó.
  */
-import { PrismaClient, type ExamSortZone } from "@prisma/client";
+import { PrismaClient, type ExamSortZone, type ExamSin } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -183,7 +183,7 @@ async function main() {
   console.log(`Nạp đề thử thách cho cấp "${level.name}" (dạng đề hiện tại: ${level.examFormat})`);
 
   // ── Vòng Phàm ăn ──────────────────────────────────────────────────────────
-  const meal = await upsertRound(level.id, "Phàm ăn", "MEAL", {
+  const meal = await upsertRound(level.id, "Phàm ăn", "MEAL", "GLUTTONY", {
     intro: MEAL_INTRO,
     order: 0,
     maxPoints: 100,
@@ -208,7 +208,8 @@ async function main() {
   console.log(`  Phàm ăn: ${MEAL_BRIEFS.length} hồ sơ`);
 
   // ── Vòng Sa ngã ───────────────────────────────────────────────────────────
-  const sort = await upsertRound(level.id, "Sa ngã", "SORT", {
+  // "Sa ngã" không nằm trong thất đại tội — tên kinh điển là Dục vọng.
+  const sort = await upsertRound(level.id, "Dục vọng", "SORT", "LUST", {
     intro: SORT_INTRO,
     order: 1,
     maxPoints: 100,
@@ -225,7 +226,7 @@ async function main() {
       explanation: c.explanation,
     })),
   });
-  console.log(`  Sa ngã: ${SORT_CARDS.length} thẻ`);
+  console.log(`  Dục vọng: ${SORT_CARDS.length} thẻ`);
 
   console.log("\nXong. Vào Bài thi → Đề thử thách để duyệt và sửa.");
   console.log(
@@ -240,13 +241,22 @@ async function upsertRound(
   levelId: string,
   name: string,
   type: "MEAL" | "SORT",
+  sin: ExamSin,
   data: { intro: string; order: number; maxPoints: number; passPercent: number; failPenalty: number }
 ) {
-  const existing = await prisma.examRound.findFirst({ where: { levelId, name } });
+  // Nhận diện theo ĐẠI TỘI, không theo tên.
+  //
+  // Tên vòng là ô người dùng sửa tự do. Lần trước script này dò theo tên: Admin
+  // đổi tên một vòng, script không tìm thấy tên cũ nên tạo mới — đề tự nhân đôi
+  // thành hai vòng cùng nội dung. Đại tội là danh sách đóng, không ai gõ tay,
+  // nên nó mới là mốc nhận diện đúng.
+  const existing =
+    (await prisma.examRound.findFirst({ where: { levelId, sin } })) ??
+    (await prisma.examRound.findFirst({ where: { levelId, type, sin: null } }));
   if (existing) {
-    return prisma.examRound.update({ where: { id: existing.id }, data: { type, ...data } });
+    return prisma.examRound.update({ where: { id: existing.id }, data: { name, type, sin, ...data } });
   }
-  return prisma.examRound.create({ data: { levelId, name, type, ...data } });
+  return prisma.examRound.create({ data: { levelId, name, type, sin, ...data } });
 }
 
 main()

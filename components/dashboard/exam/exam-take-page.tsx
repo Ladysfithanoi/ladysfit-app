@@ -24,7 +24,7 @@ import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
-import type { MealEntry, SortZone } from "@/lib/exam-trial";
+import { SIN_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
 
 type Question = {
   id: string;
@@ -51,6 +51,8 @@ const OPTIONS = ["A", "B", "C", "D"] as const;
 type TrialRound = {
   id: string;
   type: "MEAL" | "SORT";
+  /** Đại tội của vòng — hiện kèm tên vòng cho thí sinh biết đang bị đo mảng nào. */
+  sin: Sin | null;
   name: string;
   intro: string | null;
   maxPoints: number;
@@ -953,7 +955,14 @@ export function ExamTakePage({
           {currentRound && (
             <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <p className="text-base font-extrabold text-gray-900">{currentRound.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-extrabold text-gray-900">{currentRound.name}</p>
+                  {currentRound.sin && currentRound.name !== SIN_LABEL[currentRound.sin] && (
+                    <span className="shrink-0 whitespace-nowrap rounded-full bg-[#f15b5c]/10 px-2 py-0.5 text-[11px] font-bold text-[#f15b5c]">
+                      {SIN_LABEL[currentRound.sin]}
+                    </span>
+                  )}
+                </div>
                 {/* Một dòng, không xuống dòng — màn hẹp trượt ngang */}
                 <div className={SLIDER_ROUNDS}>
                   <p className="mt-0.5 w-max whitespace-nowrap text-xs font-semibold text-gray-400">

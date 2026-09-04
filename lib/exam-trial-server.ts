@@ -38,6 +38,7 @@ export async function loadTrialForCandidate(levelId: string) {
   return rounds.map((r) => ({
     id: r.id,
     type: r.type,
+    sin: r.sin,
     name: r.name,
     intro: r.intro,
     maxPoints: r.maxPoints,

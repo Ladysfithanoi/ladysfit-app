@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, Swords, ChevronDown, ChevronUp, Save, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SORT_ZONES, SORT_ZONE_LABEL, type SortZone } from "@/lib/exam-trial";
+import {
+  SORT_ZONES, SORT_ZONE_LABEL, SINS, SIN_LABEL, SIN_DOMAIN, ROUND_TYPE_LABEL,
+  type SortZone, type Sin,
+} from "@/lib/exam-trial";
 
 /**
  * Soạn đề thử thách nhiều vòng — chỉ hiện với cấp đã đặt dạng đề TRIAL.
@@ -34,7 +37,10 @@ type SortCard = {
 
 type Round = {
   id: string;
+  /** Lối chơi — cơ chế, không phải tên tội. */
   type: "MEAL" | "SORT";
+  /** Đại tội của vòng, tách hẳn khỏi lối chơi và khỏi tên hiển thị. */
+  sin: Sin | null;
   name: string;
   intro: string | null;
   order: number;
@@ -132,6 +138,8 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   // nhìn y như bấm xong không có gì xảy ra.
   const [msg, setMsg] = useState<{ roundId: string; text: string; ok: boolean } | null>(null);
   const [newType, setNewType] = useState<"MEAL" | "SORT">("MEAL");
+  const [newSin, setNewSin] = useState<Sin>("GLUTTONY");
+  // Tên vòng mặc định lấy theo tên tội; sửa tay thì giữ nguyên phần đã sửa.
   const [newName, setNewName] = useState("");
 
   const load = useCallback(async () => {
@@ -154,11 +162,16 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   }
 
   async function addRound() {
-    if (!newName.trim() || !levelId) return;
+    if (!levelId) return;
     const res = await fetch("/api/exam/rounds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ levelId, type: newType, name: newName.trim() }),
+      body: JSON.stringify({
+        levelId,
+        type: newType,
+        sin: newSin,
+        name: (newName.trim() || SIN_LABEL[newSin]),
+      }),
     });
     if (res.ok) {
       const created = normalizeRounds([await res.json()])[0];
@@ -177,6 +190,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: r.name,
+          sin: r.sin,
           intro: r.intro,
           maxPoints: r.maxPoints,
           passPercent: r.passPercent,
@@ -252,23 +266,37 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
 
       {/* Thêm vòng mới */}
       <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+        {/* Đại tội và lối chơi là HAI ô riêng — trộn vào một là sinh ra chuyện
+            dropdown lối chơi lại hiện tên tội, đổi tên vòng thì nó không đổi. */}
+        <select
+          value={newSin}
+          onChange={(e) => setNewSin(e.target.value as Sin)}
+          className={cn(inputCls, "sm:w-52")}
+          title="Đại tội — mảng năng lực vòng này đo"
+        >
+          {SINS.map((sn) => (
+            <option key={sn} value={sn}>
+              {SIN_LABEL[sn]} — {SIN_DOMAIN[sn]}
+            </option>
+          ))}
+        </select>
         <select
           value={newType}
           onChange={(e) => setNewType(e.target.value as "MEAL" | "SORT")}
-          className={cn(inputCls, "sm:w-56")}
+          className={cn(inputCls, "sm:w-52")}
+          title="Lối chơi — cách đo"
         >
-          <option value="MEAL">Phàm ăn — dựng khay ăn</option>
-          <option value="SORT">Sa ngã — phân loại tình huống</option>
+          <option value="MEAL">{ROUND_TYPE_LABEL.MEAL}</option>
+          <option value="SORT">{ROUND_TYPE_LABEL.SORT}</option>
         </select>
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="Tên vòng, vd: Phàm ăn"
+          placeholder={`Tên vòng (để trống = "${SIN_LABEL[newSin]}")`}
           className={cn(inputCls, "flex-1")}
         />
         <button
           onClick={addRound}
-          disabled={!newName.trim()}
           className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40"
           style={{ backgroundColor: "#f15b5c" }}
         >
@@ -295,7 +323,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
                 {/* Một dòng duy nhất, không xuống dòng — màn hẹp thì trượt ngang */}
                 <div className={SLIDER}>
                   <p className="w-max whitespace-nowrap text-[11px] font-semibold text-gray-400">
-                    {r.type === "MEAL" ? "Phàm ăn" : "Sa ngã"} · {countOf(r)} · {r.maxPoints} điểm · đạt {r.passPercent}% · trượt −{r.failPenalty}
+                    {r.sin ? SIN_LABEL[r.sin] : "Chưa gắn tội"} · {ROUND_TYPE_LABEL[r.type]} · {countOf(r)} · {r.maxPoints} điểm · đạt {r.passPercent}% · trượt −{r.failPenalty}
                     {!r.isActive && " · đang tắt"}
                   </p>
                 </div>
@@ -319,8 +347,30 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
             {openId === r.id && (
               <div className="space-y-4 border-t border-gray-100 bg-gray-50/50 px-4 py-4 sm:px-5">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Tên vòng">
+                  <Field label="Tên vòng (hiện cho thí sinh)">
                     <input value={r.name} onChange={(e) => patch(r.id, { name: e.target.value })} className={inputCls} />
+                  </Field>
+                  <Field
+                    label="Đại tội"
+                    hint={r.sin ? SIN_DOMAIN[r.sin] : "Chưa gắn tội nào cho vòng này"}
+                  >
+                    <select
+                      value={r.sin ?? ""}
+                      onChange={(e) => patch(r.id, { sin: (e.target.value || null) as Sin | null })}
+                      className={inputCls}
+                    >
+                      <option value="">— Chưa gắn —</option>
+                      {SINS.map((sn) => (
+                        <option key={sn} value={sn}>{SIN_LABEL[sn]}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Lối chơi" hint="Cơ chế của vòng — chọn lúc tạo, không đổi được">
+                    <input
+                      value={ROUND_TYPE_LABEL[r.type]}
+                      readOnly
+                      className={cn(inputCls, "bg-gray-100 text-gray-400 cursor-not-allowed")}
+                    />
                   </Field>
                   <Field label="Trạng thái">
                     <select
