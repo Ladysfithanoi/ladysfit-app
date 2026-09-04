@@ -303,7 +303,7 @@ export const SORT_ZONE_LABEL: Record<SortZone, string> = {
 };
 
 /**
- * Ba trụ của cây Kaballah, đọc theo hướng lệch của bài làm.
+ * Ba trụ của cây Kabbalah, đọc theo hướng lệch của bài làm.
  *
  * KHÔNG phải "ở giữa luôn đúng": khách gian dối chế độ ăn thì Nghiêm khắc mới
  * đúng, khách vừa có chuyện gia đình thì Khoan dung mới đúng. Trụ ở đây chỉ ghi
@@ -620,7 +620,7 @@ export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialSco
   };
 }
 
-// ── Hành trình trên cây Kaballah ─────────────────────────────────────────────
+// ── Hành trình trên cây Kabbalah ─────────────────────────────────────────────
 //
 // Bốn bậc trên TRỤ GIỮA (trụ Cân bằng), và mỗi bậc phải ĐỔI được bằng một việc
 // thật, không phải bấm nút là lên:

@@ -379,7 +379,7 @@ export function ExamTakePage({
   const [rounds, setRounds] = useState<TrialRound[]>([]);
   const [trialState, setTrialState] = useState<TrialState>({});
   const [roundIdx, setRoundIdx] = useState(0);
-  // Nhịp giữa hai vòng: hiện cây Kaballah với sephirah vừa thắp, rồi mới sang vòng kế.
+  // Nhịp giữa hai vòng: hiện cây Kabbalah với sephirah vừa thắp, rồi mới sang vòng kế.
   const [advanceFrom, setAdvanceFrom] = useState<TrialRound | null>(null);
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
   // Mức lệch của từng thẻ đã bấm — nuôi thanh Thanh danh và mấy dòng báo kết
@@ -970,7 +970,7 @@ export function ExamTakePage({
     );
   }
 
-  // ── Nhịp giữa hai vòng: cây Kaballah ──────────────────────────────────────
+  // ── Nhịp giữa hai vòng: cây Kabbalah ──────────────────────────────────────
   // Xong một vòng thì dừng lại một nhịp, thấy sephirah của tội vừa vượt qua
   // sáng lên, rồi mới sang vòng kế. Không cho quay về vòng cũ — đúng như đã
   // chốt: mỗi lần chỉ nhìn thấy một vòng.
@@ -1263,7 +1263,7 @@ export function ExamTakePage({
       {/* ── Đề thử thách: MỖI LẦN MỘT VÒNG ──────────────────────────────────
           Không bày các vòng khác ra cạnh, kể cả dạng đã khoá. Thấy vòng sau
           nằm chờ sẵn là người thi đã bắt đầu tính đường cho nó thay vì dồn
-          sức vào vòng đang làm. Xong một vòng thì đi qua màn cây Kaballah rồi
+          sức vào vòng đang làm. Xong một vòng thì đi qua màn cây Kabbalah rồi
           mới sang vòng kế. */}
       {isTrial ? (
         <div className="space-y-4">
@@ -1340,7 +1340,7 @@ export function ExamTakePage({
             </div>
           )}
 
-          {/* Xong vòng này thì đi qua màn cây Kaballah, rồi mới sang vòng sau.
+          {/* Xong vòng này thì đi qua màn cây Kabbalah, rồi mới sang vòng sau.
               Vòng cuối không có nút này — chỗ đó là nút Nộp bài. */}
           {currentRound && !result && nextLockedIdx !== -1 && (
             <button

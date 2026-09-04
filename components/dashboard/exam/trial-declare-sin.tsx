@@ -14,7 +14,7 @@ import { KabbalahTree } from "./kabbalah-tree";
  * Cửa vào kỳ thi thử thách — ba nhịp:
  *
  *   1. Bảy ô tròn, chọn MỘT đại tội mình phải vượt qua.
- *   2. Cây Kaballah tiến thêm một bậc — nhịp nghỉ để người thi thấy mình vừa
+ *   2. Cây Kabbalah tiến thêm một bậc — nhịp nghỉ để người thi thấy mình vừa
  *      bước vào hành trình, không phải vừa bấm xong một cái nút.
  *   3. Mới vào đề.
  *
@@ -43,7 +43,7 @@ export function TrialDeclareSin({
   const [picked, setPicked] = useState<Sin | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  // Đã khai xong → chuyển sang nhịp cây Kaballah trước khi vào đề.
+  // Đã khai xong → chuyển sang nhịp cây Kabbalah trước khi vào đề.
   const [declared, setDeclared] = useState<Sin | null>(null);
 
   // Máy chủ trả đủ 7; phòng khi thiếu thì vẫn bày đủ 7 ô, ô thiếu coi như khoá.
@@ -82,7 +82,7 @@ export function TrialDeclareSin({
     }
   }
 
-  // ── Nhịp 2: cây Kaballah tiến một bậc ──────────────────────────────────────
+  // ── Nhịp 2: cây Kabbalah tiến một bậc ──────────────────────────────────────
   if (declared) {
     return (
       <div className="mx-auto max-w-lg pb-16 text-center">

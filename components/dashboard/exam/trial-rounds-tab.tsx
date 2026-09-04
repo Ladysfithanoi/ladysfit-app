@@ -164,7 +164,7 @@ function TreeMap({ rounds }: { rounds: Round[] }) {
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-      <p className="text-base font-extrabold text-gray-900">Bản đồ cây Kaballah</p>
+      <p className="text-base font-extrabold text-gray-900">Bản đồ cây Kabbalah</p>
       <p className="mt-0.5 text-xs text-gray-400">
         Bảy ô dưới Vực Thẳm là bảy đại tội của bài thi. Ba ô trên là ba điều kiện thăng cấp
         còn lại — bài thi không tự mở được chúng.
@@ -314,7 +314,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
               nhưng không ghi vào đâu, và chấm xong soi lại được đáp án từng phần. */}
           <button
             // Không truyền sẵn tội khai: thi thử đi qua đúng cửa của thí sinh —
-            // 7 ô tròn, rồi cây Kaballah, rồi mới vào đề.
+            // 7 ô tròn, rồi cây Kabbalah, rồi mới vào đề.
             onClick={() => router.push(`/dashboard/exam/thi-thu?levelId=${levelId}`)}
             disabled={activeRounds === 0}
             title={

@@ -6,7 +6,7 @@ import {
 } from "@/lib/exam-trial";
 
 /**
- * Cây Sự Sống (Kaballah) — bản đồ những đại tội một người đã đối mặt.
+ * Cây Sự Sống (Kabbalah) — bản đồ những đại tội một người đã đối mặt.
  *
  * KHÔNG phải thanh tiến độ. Mọi dữ liệu về từng ô (tên, trụ, tội, vì sao ghép
  * như vậy) nằm ở SEPHIROT trong lib/exam-trial.ts; file này chỉ lo toạ độ và
@@ -82,7 +82,7 @@ export function KabbalahTree({
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
-      <svg viewBox={viewBox} className="h-auto w-full max-w-[290px]" role="img" aria-label="Cây Kaballah">
+      <svg viewBox={viewBox} className="h-auto w-full max-w-[290px]" role="img" aria-label="Cây Kabbalah">
         {detail && (
           <g>
             {[
