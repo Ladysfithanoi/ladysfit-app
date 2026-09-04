@@ -14,6 +14,7 @@ import {
   parsePackageList, serializePackageList, computeExpectedRevenue, describeExpected,
   validateLeadFinance, fieldLocks, POST_L0_SOURCE,
 } from "@/lib/lead-pricing";
+import { TRIAL_PACKAGE } from "@/lib/packages";
 
 type Props = {
   branchId: string;
@@ -518,11 +519,17 @@ export function LeadsTab({
     }));
   }
 
-  /** Hậu L0 chỉ áp cho đúng 1 gói ngay sau L0 → cắt bớt lựa chọn thừa khi đổi nguồn. */
+  /**
+   * Nguồn Hậu L0 = "L0 nằm ở lead trước, lead này là gói ngay sau nó" → gói L0
+   * phải rời khỏi danh sách (2 triệu không trừ vào chính nó), và chỉ giữ 1 gói.
+   */
   function changeSource(source: string) {
     setForm(f => {
       const pkgs = parsePackageList(f.packageRegistered);
-      const trimmed = source === POST_L0_SOURCE && pkgs.length > 1 ? pkgs.slice(0, 1) : pkgs;
+      const trimmed =
+        source === POST_L0_SOURCE
+          ? pkgs.filter(p => p !== TRIAL_PACKAGE).slice(0, 1)
+          : pkgs;
       return {
         ...f,
         source,
@@ -1481,7 +1488,10 @@ function PackageMultiSelect({
             {PACKAGE_OPTIONS.map(pkg => {
               const isSelected = value.includes(pkg);
               // Hậu L0 chọn 1 gói nên chọn gói mới sẽ thay gói cũ, không cần chặn L1/L2.
-              const isDisabled = !singleOnly && ((pkg === "L2" && hasL1) || (pkg === "L1" && hasL2));
+              // Riêng L0 thì chặn: nguồn Hậu L0 nghĩa là L0 đã ở lead trước rồi.
+              const isDisabled = singleOnly
+                ? pkg === TRIAL_PACKAGE
+                : (pkg === "L2" && hasL1) || (pkg === "L1" && hasL2);
               return (
                 <label
                   key={pkg}
@@ -1507,7 +1517,9 @@ function PackageMultiSelect({
                     {pkg}
                   </span>
                   {isDisabled && (
-                    <span className="text-[10px] text-gray-400 ml-auto">Không thể chọn chung</span>
+                    <span className="text-[10px] text-gray-400 ml-auto">
+                      {singleOnly ? "Đã ở lead trước" : "Không thể chọn chung"}
+                    </span>
                   )}
                 </label>
               );

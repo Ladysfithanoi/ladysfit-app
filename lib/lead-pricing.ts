@@ -4,7 +4,7 @@
 // hiện gợi ý, chặn nút Cập nhật) và server (app/api/setup/leads) để hai bên không
 // bao giờ lệch luật. Mọi số tiền trong file này tính bằng TRIỆU đồng — đúng đơn vị
 // mà ô "Doanh thu (triệu)" / "Còn thiếu (triệu)" đang lưu vào DB.
-import { PACKAGES } from "./packages";
+import { PACKAGES, TRIAL_PACKAGE } from "./packages";
 
 /** Tái ký — L3/L4/L5 được trợ giá 10%. */
 export const RENEW_SOURCE = "Renew";
@@ -14,6 +14,36 @@ export const POST_L0_SOURCE = "Hậu L0";
 
 /** Số tiền L0 được cấn trừ vào gói ngay sau đó (triệu). */
 export const POST_L0_CREDIT = 2;
+
+/**
+ * TIỀN L0 LUÔN CẤN TRỪ VÀO GÓI SAU NÓ, KHÔNG BAO GIỜ TRỪ VÀO CHÍNH NÓ.
+ *
+ * Khách đóng 2 triệu tập thử 4 buổi. Khi khách ký gói thật, 2 triệu đó được
+ * cấn trừ — nên "gói ngay sau L0" mới là chỗ nhận khoản trừ.
+ *
+ * Có hai cách lead được ghi, và luật phải nhận ra cả hai:
+ *
+ *   1. GHI CHUNG MỘT LEAD — Gói tập đăng ký là "L0+L2". Khoản trừ tự áp, không
+ *      cần chọn nguồn gì đặc biệt: giá hợp đồng = 2 (L0) + 15 (L2) − 2 = 15.
+ *   2. GHI HAI LEAD — lead L0 đã chốt từ trước với nguồn marketing thật của nó
+ *      (Facebook Page, Referral…), lead sau chỉ có gói thật. Lúc này không nhìn
+ *      vào danh sách gói mà biết được, nên phải chọn nguồn "Hậu L0".
+ *
+ * Trường hợp lead CHỈ có mỗi L0 thì không trừ gì cả — chưa có gói nào ở sau để
+ * nhận khoản trừ. Trước đây chọn nguồn "Hậu L0" cho lead gói L0 sẽ ra giá hợp
+ * đồng 0 triệu, mà ô Doanh thu lại không nhận số 0, thành ra bí không lưu được.
+ */
+function postL0Credit(packages: string[], source: string | null | undefined): number {
+  const hasL0  = packages.includes(TRIAL_PACKAGE);
+  const others = packages.filter(p => p !== TRIAL_PACKAGE);
+
+  // Cách 1: L0 và gói thật nằm chung một lead.
+  if (hasL0 && others.length > 0) return POST_L0_CREDIT;
+  // Cách 2: L0 ở lead trước, lead này là gói ngay sau nó.
+  if (!hasL0 && source === POST_L0_SOURCE && others.length > 0) return POST_L0_CREDIT;
+  // Chỉ có mỗi L0 → chưa có gói nào để trừ vào.
+  return 0;
+}
 
 /** Chỉ 3 gói này được trợ giá tái ký. L0/L1/L2/Loyalfit giữ nguyên giá. */
 export const RENEW_DISCOUNT_PACKAGES = ["L3", "L4", "L5"];
@@ -58,7 +88,7 @@ export type PriceLine = {
 
 export type ExpectedRevenue = {
   lines: PriceLine[];
-  /** Tiền cấn trừ chung cho cả hợp đồng (triệu) — hiện chỉ có Hậu L0. */
+  /** Tiền cấn trừ chung cho cả hợp đồng (triệu) — hiện chỉ có khoản 2 triệu của L0. */
   credit: number;
   creditNote?: string;
   /** Số tiền đúng của hợp đồng (triệu). */
@@ -76,8 +106,7 @@ export function computeExpectedRevenue(
 ): ExpectedRevenue | null {
   if (packages.length === 0) return null;
 
-  const isRenew  = source === RENEW_SOURCE;
-  const isPostL0 = source === POST_L0_SOURCE;
+  const isRenew = source === RENEW_SOURCE;
 
   const lines: PriceLine[] = [];
   let totalVND = 0;
@@ -97,8 +126,7 @@ export function computeExpectedRevenue(
     });
   }
 
-  // Hậu L0 chỉ áp cho ĐÚNG 1 gói ngay sau L0 (luật kiểm ở validateLeadFinance).
-  const credit = isPostL0 ? POST_L0_CREDIT : 0;
+  const credit = postL0Credit(packages, source);
   const total  = Math.max(0, totalVND / 1_000_000 - credit);
 
   return {
@@ -172,8 +200,18 @@ export function validateLeadFinance(input: LeadFinanceInput): string | null {
   if (packages.length === 0) {
     return "Vui lòng chọn Gói tập đăng ký trước khi điền doanh thu";
   }
-  if (input.source === POST_L0_SOURCE && packages.length > 1) {
-    return `Nguồn "${POST_L0_SOURCE}" chỉ áp cho đúng 1 gói ngay sau L0 — gói tiếp theo hãy tạo lead riêng với nguồn ${RENEW_SOURCE}`;
+  // Khách vừa tập thử L0 thì không thể là khách tái ký — nếu không, một hợp
+  // đồng vừa được trợ giá 10% vừa được cấn trừ 2 triệu.
+  if (input.source === RENEW_SOURCE && packages.includes(TRIAL_PACKAGE)) {
+    return `Nguồn ${RENEW_SOURCE} là khách tái ký, không đi cùng gói ${TRIAL_PACKAGE} — hãy chọn nguồn marketing thật của khách`;
+  }
+  if (input.source === POST_L0_SOURCE) {
+    if (packages.includes(TRIAL_PACKAGE)) {
+      return `Lead này đang là gói ${TRIAL_PACKAGE} — ${POST_L0_CREDIT} triệu của ${TRIAL_PACKAGE} cấn trừ vào GÓI SAU nó, không trừ vào chính nó. Hãy chọn nguồn marketing thật của khách; khoản trừ sẽ áp ở lead gói tiếp theo.`;
+    }
+    if (packages.length > 1) {
+      return `Nguồn "${POST_L0_SOURCE}" chỉ áp cho đúng 1 gói ngay sau ${TRIAL_PACKAGE} — gói tiếp theo hãy tạo lead riêng với nguồn ${RENEW_SOURCE}`;
+    }
   }
 
   const expected = computeExpectedRevenue(packages, input.source);
