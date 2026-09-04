@@ -232,6 +232,27 @@ export const TRIAL_CARD_MIX: Record<SortZone, number> = { ACCEPT: 3, CAUTION: 5,
 /** Số hồ sơ khách phát ra ở vòng khay ăn — cùng lý do như thẻ. */
 export const TRIAL_BRIEFS_PER_ROUND = 3;
 
+export type MealKind = "CUT" | "BULK" | "SPECIAL";
+export const MEAL_KINDS: MealKind[] = ["CUT", "BULK", "SPECIAL"];
+
+/**
+ * Hình dạng bộ hồ sơ đã phát — mỗi lượt đúng một khách mỗi dạng.
+ *
+ * Bốc bừa 3 trong 50 thì khoảng một phần ba số lượt sẽ ra cả ba khách đều muốn
+ * giảm cân, và như thế là mất sạch cái bẫy vốn là linh hồn của vòng này: phản
+ * xạ cắt calo cho bất kỳ ai bước vào phòng tập. Lượt nào cũng phải có một khách
+ * cần TĂNG calo và một khách có ràng buộc bắt buộc.
+ *
+ * Tổng ba con số phải đúng bằng TRIAL_BRIEFS_PER_ROUND.
+ */
+export const TRIAL_BRIEF_MIX: Record<MealKind, number> = { CUT: 1, BULK: 1, SPECIAL: 1 };
+
+export const MEAL_KIND_LABEL: Record<MealKind, string> = {
+  CUT: "Giảm cân",
+  BULK: "Tăng cân / xây cơ",
+  SPECIAL: "Có ràng buộc bắt buộc",
+};
+
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
 

@@ -13,3 +13,23 @@ export type SortCardSeed = {
   /** Vì sao đáp án đúng là vùng đó. Hiện ở màn soi lại sau khi chấm. */
   explanation: string;
 };
+
+/**
+ * Một hồ sơ khách của vòng khay ăn.
+ *
+ * Chỉ tiêu nào để null thì vòng không chấm chỉ tiêu đó — phần lớn hồ sơ chỉ đặt
+ * calo và đạm, vì đó là hai con số quyết định của một chương trình giảm cân hay
+ * tăng cân, còn béo/đường thì đi theo.
+ */
+export type MealBriefSeed = {
+  /** CUT giảm cân · BULK cần tăng calo · SPECIAL có ràng buộc bắt buộc. */
+  kind: "CUT" | "BULK" | "SPECIAL";
+  clientProfile: string;
+  targetCalories: number;
+  targetProtein: number;
+  /** Sai số cho phép quanh mỗi chỉ tiêu (%). */
+  tolerancePercent: number;
+  /** Tên món khách KHÔNG được ăn — phải trùng đúng tên trong lib/foods-data.ts. */
+  bannedFoods: string[];
+  explanation: string;
+};

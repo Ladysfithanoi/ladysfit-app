@@ -7,6 +7,7 @@ import {
   parseTrialState, readMealEntries, readSortAnswer,
   applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT, honorAfter,
   TRIAL_CARDS_PER_ROUND, TRIAL_BRIEFS_PER_ROUND, TRIAL_CARD_MIX, SORT_ZONES,
+  TRIAL_BRIEF_MIX, MEAL_KINDS, type MealKind,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
 
@@ -530,8 +531,14 @@ export function pickSortCards<T extends { id: string; correctZone: SortZone }>(
   return shuffled(taken).slice(0, limit);
 }
 
-/** Hồ sơ khay ăn: bốc thẳng, không có vùng nào để chia tầng. */
-export function pickMealBriefs<T extends { id: string }>(
+/**
+ * Hồ sơ khay ăn: bốc theo NHÓM (xem TRIAL_BRIEF_MIX) — mỗi lượt đúng một khách
+ * giảm cân, một khách cần tăng calo, một khách có ràng buộc bắt buộc.
+ *
+ * Nhóm nào ngân hàng chưa có thì bù bằng hồ sơ còn lại, để đề đang soạn dở vẫn
+ * thi thử được. Hồ sơ chưa gắn nhóm coi như CUT — dữ liệu cũ không vì thế mà hỏng.
+ */
+export function pickMealBriefs<T extends { id: string; kind?: MealKind | null }>(
   briefs: T[],
   pinned: string[] | null,
   limit: number = TRIAL_BRIEFS_PER_ROUND
@@ -540,7 +547,17 @@ export function pickMealBriefs<T extends { id: string }>(
     const kept = byPinnedOrder(briefs, pinned);
     if (kept.length > 0) return kept;
   }
-  return shuffled(briefs).slice(0, limit);
+
+  const taken: T[] = [];
+  const left: T[] = [];
+  for (const kind of MEAL_KINDS) {
+    const pool = shuffled(briefs.filter((b) => (b.kind ?? "CUT") === kind));
+    const want = TRIAL_BRIEF_MIX[kind];
+    taken.push(...pool.slice(0, want));
+    left.push(...pool.slice(want));
+  }
+  if (taken.length < limit) taken.push(...shuffled(left).slice(0, limit - taken.length));
+  return shuffled(taken).slice(0, limit);
 }
 
 /**

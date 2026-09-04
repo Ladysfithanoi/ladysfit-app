@@ -781,10 +781,23 @@ model ExamRound {
 
 /// Một hồ sơ khách của vòng Phàm ăn: thí sinh phải dựng khay ăn chạm đúng chỉ
 /// tiêu. Chỉ tiêu nào bỏ trống thì vòng không chấm chỉ tiêu đó.
+/// Nhóm hồ sơ khay ăn — để mỗi lượt thi luôn bốc đủ ba dạng, không rơi vào
+/// cảnh cả ba khách đều muốn giảm cân. Xem TRIAL_BRIEF_MIX.
+enum ExamMealKind {
+  /// Khách giảm cân — dạng phổ biến nhất.
+  CUT
+  /// Khách cần TĂNG calo: gầy muốn lên cân, hoặc đang xây cơ.
+  BULK
+  /// Có ràng buộc bắt buộc: dị ứng, bệnh nền, thai kỳ, ăn chay.
+  SPECIAL
+}
+
 model ExamMealBrief {
   id            String  @id @default(cuid())
   roundId       String
   order         Int     @default(0)
+  /// Nhóm hồ sơ. Rỗng = coi như CUT.
+  kind          ExamMealKind?
   /// Mô tả khách: tuổi, cân nặng, mục tiêu, thói quen…
   clientProfile String  @db.Text
   targetCalories Int?

@@ -11,6 +11,7 @@
  * chủ ý ở Cài đặt → Cấp độ, vì nó đổi hẳn trang làm bài của mọi người ở cấp đó.
  */
 import { PrismaClient, type ExamSortZone, type ExamSin } from "@prisma/client";
+import * as GLUTTONY from "./trial-content/gluttony";
 import * as LUST from "./trial-content/lust";
 import * as GREED from "./trial-content/greed";
 import * as PRIDE from "./trial-content/pride";
@@ -19,69 +20,6 @@ import * as WRATH from "./trial-content/wrath";
 import * as SLOTH from "./trial-content/sloth";
 
 const prisma = new PrismaClient();
-
-// ── Vòng 1 · Phàm ăn ─────────────────────────────────────────────────────────
-// Ba hồ sơ cố ý xếp theo một cung bậc: hai hồ sơ đầu thử sự tiết chế, hồ sơ
-// cuối thử điều ngược lại. Tội "phàm ăn" của một HLV không chỉ là để khách ăn
-// quá tay, mà còn là phản xạ cắt calo của bất kỳ ai bước vào phòng tập.
-const MEAL_INTRO = `Mỗi hồ sơ là một khách thật với một mục tiêu thật.
-
-Dựng khay ăn MỘT NGÀY cho họ bằng cách tìm món và điền số gam. Bảng số phía trên
-cho biết khay của bạn đang có bao nhiêu calo và đạm; chỉ tiêu và sai số cho phép
-ghi ngay bên dưới mỗi con số.
-
-Hệ thống KHÔNG báo bạn đã đạt hay chưa — tự bạn phải tính. Món khách không được
-ăn mà lọt vào khay thì hồ sơ đó mất trắng, dù các con số có đẹp tới đâu.`;
-
-const MEAL_BRIEFS = [
-  {
-    clientProfile: `Chị Hương, 32 tuổi · 68kg · cao 158cm · nhân viên văn phòng, ngồi 9 tiếng/ngày.
-Đăng ký gói L1, mục tiêu giảm 5kg trong 2 tháng. Tập 6 buổi/tuần.
-Ăn trưa ở căng tin công ty, tối tự nấu. Không dị ứng gì.`,
-    targetCalories: 1500,
-    targetProtein: 110,
-    targetFat: null,
-    targetCarbs: null,
-    tolerancePercent: 10,
-    bannedFoods: [] as string[],
-    explanation: `Thâm hụt vừa phải và đạm cao là xương sống của giai đoạn giảm cân:
-cắt calo mà bỏ đạm thì khách sụt cân bằng cơ chứ không phải bằng mỡ, và cân sẽ
-dội lại ngay khi ngừng. Đạm 110g ≈ 1.6g cho mỗi kg cân nặng — mức tối thiểu để
-giữ cơ trong lúc thâm hụt. Muốn vừa đủ calo mà vẫn đủ đạm thì phải chọn nguồn
-đạm nạc (ức gà, cá, đậu phụ) chứ không thể lấy thịt mỡ cho nhanh.`,
-  },
-  {
-    clientProfile: `Cô Lan, 45 tuổi · 72kg · cao 155cm · nội trợ, huyết áp cao đang uống thuốc.
-DỊ ỨNG HẢI SẢN — từng phải đi cấp cứu vì ăn nhầm tôm.
-Đăng ký gói L2, mục tiêu giảm 7kg trong 3 tháng. Tập 5 buổi/tuần.`,
-    targetCalories: 1600,
-    targetProtein: 100,
-    targetFat: null,
-    targetCarbs: null,
-    tolerancePercent: 10,
-    bannedFoods: ["Tôm biển", "Tôm đồng", "Tôm khô", "Cua bể", "Cua đồng", "Mực tươi", "Mực khô"],
-    explanation: `Hồ sơ này không khó về con số — nó khó ở chỗ bạn có đọc kỹ hay không.
-Khách dị ứng hải sản tới mức từng phải cấp cứu. Một khay ăn đúng chằn chặn calo
-và đạm mà có tôm trong đó là một khay ăn có thể đưa khách vào bệnh viện, nên nó
-được 0 điểm chứ không phải "gần đúng". Dị ứng không phải chuyện thương lượng.`,
-  },
-  {
-    clientProfile: `Em Trang, 25 tuổi · 48kg · cao 162cm · sinh viên năm cuối, hay bỏ bữa sáng.
-KHÔNG muốn giảm cân — muốn TĂNG 3kg và có đường nét cơ. Tập 4 buổi/tuần.
-Than "tập mãi không lên được cân nào".`,
-    targetCalories: 2200,
-    targetProtein: 95,
-    targetFat: null,
-    targetCarbs: null,
-    tolerancePercent: 10,
-    bannedFoods: [] as string[],
-    explanation: `Đây là hồ sơ bẫy. Phần lớn khách tới phòng tập là để giảm, nên phản xạ
-của HLV là cắt calo cho mọi người — và đó chính là tội phàm ăn phiên bản ngược:
-ăn theo thói quen của chính mình chứ không theo nhu cầu của khách. Em này gầy,
-hay bỏ bữa, muốn tăng cân: khay ăn phải THẶNG DƯ calo mới có chỗ cho cơ mọc.
-Đạm 95g ≈ 2g/kg là đủ; nhồi thêm đạm mà thiếu calo thì vẫn không lên được cân.`,
-  },
-];
 
 /**
  * Mọi vòng phân loại thẻ của đề, xếp theo thứ tự vòng.
@@ -132,7 +70,7 @@ async function main() {
   // ── Vòng Phàm ăn ──────────────────────────────────────────────────────────
   if (wanted("GLUTTONY")) {
     const meal = await upsertRound(level.id, "Phàm ăn", "MEAL", "GLUTTONY", {
-      intro: MEAL_INTRO,
+      intro: GLUTTONY.INTRO,
       order: 0,
       maxPoints: 100,
       passPercent: 60,
@@ -140,20 +78,19 @@ async function main() {
     });
     await prisma.examMealBrief.deleteMany({ where: { roundId: meal.id } });
     await prisma.examMealBrief.createMany({
-      data: MEAL_BRIEFS.map((b, i) => ({
+      data: GLUTTONY.BRIEFS.map((b, i) => ({
         roundId: meal.id,
         order: i,
+        kind: b.kind,
         clientProfile: b.clientProfile,
         targetCalories: b.targetCalories,
         targetProtein: b.targetProtein,
-        targetFat: b.targetFat,
-        targetCarbs: b.targetCarbs,
         tolerancePercent: b.tolerancePercent,
         bannedFoods: b.bannedFoods.length ? JSON.stringify(b.bannedFoods) : null,
         explanation: b.explanation,
       })),
     });
-    console.log(`  Phàm ăn: ${MEAL_BRIEFS.length} hồ sơ`);
+    console.log(`  Phàm ăn: ${GLUTTONY.BRIEFS.length} hồ sơ`);
   }
 
   // ── Các vòng phân loại thẻ ────────────────────────────────────────────────
