@@ -13,7 +13,7 @@ import {
  */
 
 /** Món cấm lưu dạng JSON mảng — hỏng thì coi như không cấm gì, đừng làm sập bài thi. */
-function parseBannedFoods(raw: string | null): string[] {
+export function parseBannedFoods(raw: string | null): string[] {
   if (!raw?.trim()) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -166,4 +166,23 @@ export async function gradeTrialAttempt(opts: {
   });
 
   return { ok: true, attemptId: recorded.attemptId, result, promoted: recorded.promoted };
+}
+
+/**
+ * Vòng thi gửi cho màn SOẠN ĐỀ (kèm đáp án, khác loadTrialForCandidate).
+ *
+ * bannedFoods trong cơ sở dữ liệu là một chuỗi JSON, nhưng cả màn soạn đề lẫn
+ * đường ghi lại đều làm việc với MẢNG. Trả thẳng chuỗi ra ngoài là màn soạn đề
+ * gọi .join() trên một chuỗi rồi ném lỗi, sập cả trang — đúng một lần đã xảy ra.
+ */
+export function serializeRoundForAdmin<
+  T extends { mealBriefs: { bannedFoods: string | null }[] }
+>(round: T) {
+  return {
+    ...round,
+    mealBriefs: round.mealBriefs.map((b) => ({
+      ...b,
+      bannedFoods: parseBannedFoods(b.bannedFoods),
+    })),
+  };
 }

@@ -66,6 +66,42 @@ const emptyBrief: MealBrief = {
 
 const emptyCard: SortCard = { text: "", correctZone: "CAUTION", explanation: null };
 
+/**
+ * Chuẩn hoá dữ liệu vòng nhận từ máy chủ.
+ *
+ * bannedFoods phải LUÔN là mảng ở phía này. Đã có lần máy chủ trả nguyên chuỗi
+ * JSON, ô nhập gọi .join() lên một chuỗi và ném lỗi ngay lúc dựng khung, sập cả
+ * trang soạn đề. Máy chủ đã sửa; đây là lớp chặn thứ hai — một ô nhập không
+ * đáng để đánh sập cả trang.
+ */
+function normalizeRounds(raw: unknown): Round[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const r = item as Round;
+    return {
+      ...r,
+      mealBriefs: (Array.isArray(r.mealBriefs) ? r.mealBriefs : []).map((b) => ({
+        ...b,
+        bannedFoods: Array.isArray(b.bannedFoods)
+          ? b.bannedFoods
+          : typeof b.bannedFoods === "string"
+            ? safeParseList(b.bannedFoods)
+            : [],
+      })),
+      sortCards: Array.isArray(r.sortCards) ? r.sortCards : [],
+    };
+  });
+}
+
+function safeParseList(raw: string): string[] {
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   // Hiện MỌI cấp chứ không chỉ cấp đã bật dạng thử thách: phải soạn xong đề
   // rồi mới dám đổi dạng đề, chứ đổi trước thì người ở cấp đó mở đề ra là gặp
@@ -87,7 +123,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/exam/rounds?levelId=${levelId}`);
-      if (res.ok) setRounds(await res.json());
+      if (res.ok) setRounds(normalizeRounds(await res.json()));
     } finally {
       setLoading(false);
     }
@@ -109,7 +145,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
       body: JSON.stringify({ levelId, type: newType, name: newName.trim() }),
     });
     if (res.ok) {
-      const created = (await res.json()) as Round;
+      const created = normalizeRounds([await res.json()])[0];
       setRounds((prev) => [...prev, created]);
       setOpenId(created.id);
       setNewName("");
@@ -139,7 +175,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
         setMsg(err.error ?? "Không lưu được vòng");
         return;
       }
-      const saved = (await res.json()) as Round;
+      const saved = normalizeRounds([await res.json()])[0];
       setRounds((prev) => prev.map((x) => (x.id === saved.id ? saved : x)));
       setMsg(`Đã lưu vòng "${saved.name}"`);
       setTimeout(() => setMsg(""), 2500);

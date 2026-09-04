@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { isRequiredExamFM } from "@/lib/exam-required-fm";
 import { hasTakenExam } from "@/lib/exam-session";
-import { resolveExamLevel, emptyBankMessage } from "@/lib/exam-level";
+import { resolveExamLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -42,14 +42,24 @@ export async function GET() {
   const passingScore = examLevel.ok ? examLevel.settings.passingScore : config?.passingScore ?? 80;
   const numQuestions = examLevel.ok ? examLevel.settings.numQuestions : config?.numQuestions ?? 10;
   const examLevelName = examLevel.ok ? examLevel.settings.levelName : null;
-  // Cấp chưa được soạn đề thì nói thẳng, đừng để người ta bấm vào rồi mới báo lỗi.
+  const examFormat = examLevel.ok ? examLevel.settings.format : "FLAT";
+
+  // Cấp chưa được soạn đề thì nói thẳng, đừng để người ta bấm vào rồi mới báo
+  // lỗi. Đếm theo ĐÚNG dạng đề của cấp: đề nhiều vòng không có câu trắc nghiệm
+  // nào, đếm nhầm sang đó là báo "chưa có đề" cho một cấp đã có đề đầy đủ.
   const bankCount = examLevel.ok && examLevel.settings.levelId
-    ? await prisma.examQuestionLevel.count({ where: { levelId: examLevel.settings.levelId } })
+    ? examFormat === "TRIAL"
+      ? await prisma.examRound.count({
+          where: { levelId: examLevel.settings.levelId, isActive: true },
+        })
+      : await prisma.examQuestionLevel.count({ where: { levelId: examLevel.settings.levelId } })
     : 0;
   const examUnavailableReason = !examLevel.ok
     ? examLevel.message
     : bankCount === 0
-      ? emptyBankMessage(examLevelName)
+      ? examFormat === "TRIAL"
+        ? emptyTrialMessage(examLevelName)
+        : emptyBankMessage(examLevelName)
       : null;
   const enableLevelSystem = sysConfig?.enableLevelSystem ?? true;
 
@@ -96,8 +106,11 @@ export async function GET() {
       : null,
     passingScore,
     numQuestions,
-    // Tên cấp của ĐỀ sẽ làm, và lý do chưa thi được (chưa xếp cấp / cấp chưa có đề).
+    // Tên cấp của ĐỀ sẽ làm, dạng đề, số vòng (nếu là đề thử thách), và lý do
+    // chưa thi được (chưa xếp cấp / cấp chưa có đề).
     examLevelName,
+    examFormat,
+    examRoundCount: examFormat === "TRIAL" ? bankCount : 0,
     examUnavailableReason,
     enableLevelSystem,
     // Đã thi kỳ này rồi, không vào thi lại được nữa.

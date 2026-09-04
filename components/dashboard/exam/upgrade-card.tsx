@@ -27,6 +27,9 @@ type ExamStatus = {
   numQuestions: number;
   // Ten cap cua DE se lam, va ly do chua thi duoc (chua xep cap / cap chua co de).
   examLevelName: string | null;
+  // FLAT = trac nghiem phang; TRIAL = de thu thach nhieu vong.
+  examFormat: "FLAT" | "TRIAL";
+  examRoundCount: number;
   examUnavailableReason: string | null;
   enableLevelSystem: boolean;
   // Mỗi người chỉ thi một lần một kỳ — thi rồi thì không còn nút vào thi.
@@ -108,7 +111,15 @@ export function UpgradeCard() {
               </>
             )}
             <span className="flex items-center gap-1 text-xs text-gray-500">
-              <span className="font-bold text-gray-700">{status.numQuestions}</span> câu hỏi
+              {status.examFormat === "TRIAL" ? (
+                <>
+                  <span className="font-bold text-gray-700">{status.examRoundCount}</span> vòng thử thách
+                </>
+              ) : (
+                <>
+                  <span className="font-bold text-gray-700">{status.numQuestions}</span> câu hỏi
+                </>
+              )}
             </span>
             <span className="text-gray-200">·</span>
             <span className="flex items-center gap-1 text-xs text-gray-500">

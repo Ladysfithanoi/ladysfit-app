@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { serializeRoundForAdmin } from "@/lib/exam-trial-server";
 
 /**
  * Soạn đề thử thách nhiều vòng (7 đại tội). Chỉ Admin.
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(rounds);
+  // bannedFoods trong CSDL là chuỗi JSON; màn soạn đề làm việc với mảng.
+  return NextResponse.json(rounds.map(serializeRoundForAdmin));
 }
 
 export async function POST(req: NextRequest) {
@@ -63,5 +65,5 @@ export async function POST(req: NextRequest) {
     include: { mealBriefs: true, sortCards: true },
   });
 
-  return NextResponse.json(round, { status: 201 });
+  return NextResponse.json(serializeRoundForAdmin(round), { status: 201 });
 }

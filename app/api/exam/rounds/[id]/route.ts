@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SORT_ZONES, type SortZone } from "@/lib/exam-trial";
+import { serializeRoundForAdmin } from "@/lib/exam-trial-server";
 
 /** Số nguyên trong khoảng, ngoài khoảng thì giữ giá trị cũ. */
 function clampInt(raw: unknown, min: number, max: number, current: number): number {
@@ -96,7 +97,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json(serializeRoundForAdmin(updated));
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
