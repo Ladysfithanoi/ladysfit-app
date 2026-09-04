@@ -377,6 +377,31 @@ export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialSco
   };
 }
 
+// ── Hành trình trên cây Kaballah ─────────────────────────────────────────────
+//
+// Bốn bậc trên TRỤ GIỮA (trụ Cân bằng), và mỗi bậc phải ĐỔI được bằng một việc
+// thật, không phải bấm nút là lên:
+//
+//   0 · Malkuth   — Vương quốc  · chưa khai, còn đứng ở thế giới vật chất
+//   1 · Yesod     — Nền móng    · đã dám khai tội. Thừa nhận mình yếu ở đâu là
+//                                 nền móng; không có nó thì không xây được gì.
+//   2 · Tiphareth — Vẻ đẹp      · đã VƯỢT QUA chính vòng của tội mình khai.
+//                                 Nằm giữa cây, và cũng là trái tim của bài thi.
+//   3 · Kether    — Vương miện  · đạt cả kỳ.
+//
+// Cái cây kể đúng câu chuyện mà điểm số đang kể: trượt vòng đã khai thì tổng
+// điểm có đẹp tới đâu cũng dừng ở Yesod, y như luật chấm (scoreTrial). Không có
+// trạng thái nào mâu thuẫn — đạt cả kỳ thì chắc chắn đã qua vòng khai, vì
+// declaredFailed tự nó đánh rớt cả kỳ.
+
+/** Bậc cao nhất đạt được trên trụ giữa sau một lượt thi. */
+export function journeyStep(result: TrialScore): number {
+  if (result.passed) return 3;
+  const declaredRound = result.rounds.find((r) => r.declared);
+  if (declaredRound?.passed) return 2;
+  return 1;
+}
+
 // ── Đọc bài làm dở từ ExamSession.trialState ─────────────────────────────────
 
 /** { roundId: { briefId: MealEntry[] } | { cardId: SortZone } } */

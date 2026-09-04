@@ -26,6 +26,7 @@ import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
 import { SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
+import { KabbalahTree } from "./kabbalah-tree";
 
 type Question = {
   id: string;
@@ -65,6 +66,18 @@ type TrialRound = {
 
 /** Bài làm cả lượt: { roundId: { briefId: MealEntry[] } | { cardId: SortZone } }. */
 type TrialState = Record<string, Record<string, MealEntry[] | SortZone>>;
+
+/**
+ * Bậc trên cây từ kết quả một lượt thi.
+ *
+ * Cùng luật với journeyStep() ở lib/exam-trial.ts, chỉ khác là đọc từ gói tin
+ * máy chủ trả về (chỗ này không có nguyên đối tượng TrialScore).
+ */
+function journeyStepOf(r: TrialSubmitResult): number {
+  if (r.passed) return 3;                                  // Kether — đạt cả kỳ
+  if (r.declaredSin && !r.declaredFailed) return 2;        // Tiphareth — qua vòng đã khai
+  return 1;                                                 // Yesod — đã dám khai
+}
 
 /** Bài soi lại sau khi THI THỬ — kèm đáp án đúng, bài thi thật không có. */
 type TrialReviewRound = {
@@ -1181,6 +1194,15 @@ export function ExamTakePage({
                   ))}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Hành trình trên cây — bậc đạt được đổi bằng việc thật, không phải
+              trang trí: khai tội (Yesod) · vượt qua vòng đã khai (Tiphareth) ·
+              đạt cả kỳ (Kether). Xem journeyStep() trong lib/exam-trial.ts. */}
+          {trialResult && (
+            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-5">
+              <KabbalahTree step={journeyStepOf(trialResult)} />
             </div>
           )}
 

@@ -56,6 +56,14 @@ const STEP_LABEL = [
   "Kether — Vương miện",
 ];
 
+/** Mỗi bậc đổi được bằng một việc thật — xem journeyStep() trong lib/exam-trial.ts. */
+const STEP_MEANING = [
+  "Điểm khởi đầu",
+  "Đã dám khai tội của mình",
+  "Đã vượt qua chính tội mình khai",
+  "Đạt cả kỳ thi",
+];
+
 const BRAND = "#f15b5c";
 
 export function KabbalahTree({
@@ -126,6 +134,7 @@ export function KabbalahTree({
       <p className="mt-2 text-sm font-extrabold" style={{ color: BRAND }}>
         {STEP_LABEL[safeStep]}
       </p>
+      <p className="mt-0.5 text-xs font-semibold text-gray-500">{STEP_MEANING[safeStep]}</p>
       <p className="mt-0.5 text-xs font-semibold text-gray-400">
         Bậc {safeStep + 1}/{JOURNEY.length} trên trụ Cân bằng
       </p>
