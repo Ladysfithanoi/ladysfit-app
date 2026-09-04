@@ -14,6 +14,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Star, Pencil, Plus, Scale,
   Salad, User, Heart, BarChart2, Info,
   TrendingDown, TrendingUp, Package, Trash2, Dumbbell, Footprints, Timer, RefreshCw, Loader2,
+  Download,
 } from "lucide-react";
 import { WorkoutTab, type WorkoutProgram, type WorkoutLogRow } from "@/components/dashboard/workout-tab";
 import { NutritionTab } from "@/components/dashboard/nutrition-tab";
@@ -345,6 +346,8 @@ export function ClientDetailPage({
 }) {
   const router = useRouter();
   const [view, setView] = useState<"overview" | "detail" | "workout" | "nutrition">("overview");
+  // Đang tạo phiếu check-in cho lộ trình nào (khoá nút, tránh bấm hai lần).
+  const [sheetPkgId, setSheetPkgId] = useState<string | null>(null);
 
   // Giữ nguyên tab đang xem khi refresh: lưu tab vào hash URL (#workout…) và khôi
   // phục lúc tải trang. Khởi tạo vẫn là "overview" để khớp SSR (tránh lỗi hydrate),
@@ -450,6 +453,33 @@ export function ClientDetailPage({
   });
   const [createProgSaving, setCreateProgSaving] = useState(false);
   const [createProgError, setCreateProgError] = useState("");
+
+  /**
+   * Tải phiếu check-in buổi tập của một lộ trình (bản Excel của tờ phụ lục hợp
+   * đồng đang ký tay) — xem app/api/clients/[id]/checkin-sheet.
+   */
+  async function downloadCheckinSheet(enrollmentId: string, packageName: string) {
+    setSheetPkgId(enrollmentId);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/checkin-sheet?enrollmentId=${enrollmentId}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        alert(err.error ?? "Không tạo được phiếu check-in");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename\*=UTF-8''(.+)/);
+      a.href = url;
+      a.download = match ? decodeURIComponent(match[1]) : `Phieu-check-in-${packageName}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSheetPkgId(null);
+    }
+  }
 
   function openCreateProg() {
     if (createProgPhases.length === 0) {
@@ -1624,6 +1654,16 @@ export function ClientDetailPage({
                       {pkg.contractCode && (
                         <p className="text-xs text-gray-400 mt-1">HĐ: {pkg.contractCode}</p>
                       )}
+                      {/* Phiếu check-in buổi tập — bản Excel của tờ phụ lục hợp
+                          đồng đang ký tay, kèm ảnh check-out từng buổi. */}
+                      <button
+                        onClick={() => downloadCheckinSheet(pkg.id, pkg.packageName)}
+                        disabled={sheetPkgId === pkg.id}
+                        className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-50"
+                      >
+                        <Download className="h-3.5 w-3.5 shrink-0" />
+                        {sheetPkgId === pkg.id ? "Đang tạo..." : "Phiếu check-in (Excel)"}
+                      </button>
                     </div>
                   );
                 })}

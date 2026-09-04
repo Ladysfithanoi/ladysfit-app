@@ -26,6 +26,8 @@ export default async function StaffPage() {
         dateOfBirth: true,
         ptLevelId: true,
         ptLevel: { select: { id: true, name: true, color: true } },
+        jobPositionId: true,
+        jobPosition: { select: { id: true, name: true, color: true } },
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },

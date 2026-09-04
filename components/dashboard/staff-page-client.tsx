@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SlideOver } from "@/components/ui/slide-over";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
@@ -22,6 +22,9 @@ type StaffMember = {
   dateOfBirth: Date | null;
   ptLevelId: string | null;
   ptLevel: { id: string; name: string; color: string } | null;
+  /** Chức vụ — nhãn nghề nghiệp Admin tự quản, KHÔNG cấp quyền gì. */
+  jobPositionId: string | null;
+  jobPosition: { id: string; name: string; color: string } | null;
   branch: Branch | null;
   managedBranches: FMAssignment[];
   _count: { clients: number };
@@ -172,6 +175,10 @@ export function StaffPageClient({
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
   const [ptLevels, setPtLevels] = useState<PTLevel[]>([]);
   const [selectedPtLevelId, setSelectedPtLevelId] = useState<string>("");
+  // Chức vụ — danh sách Admin tự quản, nạp từ /api/admin/job-positions.
+  const [selectedJobPositionId, setSelectedJobPositionId] = useState<string>("");
+  const [jobPositions, setJobPositions] = useState<{ id: string; name: string; color: string; isActive: boolean; _count: { users: number } }[]>([]);
+  const [posOpen, setPosOpen] = useState(false);
   const [birthDateVal, setBirthDateVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -185,6 +192,20 @@ export function StaffPageClient({
         .catch(() => setPtLevels([]));
     }
   }, [open, selectedRole]);
+
+  /** Nạp danh sách chức vụ — cần cả lúc mở form gán người, lẫn lúc mở bảng quản lý. */
+  const loadPositions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/job-positions");
+      if (res.ok) setJobPositions(await res.json());
+    } catch {
+      setJobPositions([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open || posOpen) loadPositions();
+  }, [open, posOpen, loadPositions]);
 
   const canManage = isAdmin || isFM;
 
@@ -232,6 +253,7 @@ export function StaffPageClient({
     setSelectedRole(uiRole);
     setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
     setSelectedPtLevelId(s.ptLevelId ?? "");
+    setSelectedJobPositionId(s.jobPositionId ?? "");
     setBirthDateVal(isoToYMD(s.dateOfBirth));
     setShowPassword(false);
     setOpen(true);
@@ -315,6 +337,8 @@ export function StaffPageClient({
     } else {
       body.ptLevelId = null;
     }
+    // Chức vụ gửi cho MỌI vai trò — lao công, marketing… cũng cần nhãn nghề nghiệp.
+    body.jobPositionId = selectedJobPositionId || null;
 
     const pw = fd.get("password") as string;
     if (pw) body.password = pw;
@@ -377,16 +401,28 @@ export function StaffPageClient({
           <h1 className="text-xl font-extrabold text-gray-900">Quản lý Nhân sự</h1>
           <p className="text-sm text-gray-400 mt-0.5">{initialStaff.length} nhân viên</p>
         </div>
-        {canManage && (
-          <Button
-            onClick={openAdd}
-            className="gap-2 rounded-xl text-white font-semibold shadow-sm"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            <Plus className="w-4 h-4" />
-            Thêm nhân sự
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Chức vụ do Admin tự quản — không phải sửa code để thêm "Lao công". */}
+          {isAdmin && (
+            <button
+              onClick={() => setPosOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c]"
+            >
+              <Briefcase className="h-4 w-4" />
+              Chức vụ
+            </button>
+          )}
+          {canManage && (
+            <Button
+              onClick={openAdd}
+              className="gap-2 rounded-xl text-white font-semibold shadow-sm"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Plus className="w-4 h-4" />
+              Thêm nhân sự
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -438,14 +474,14 @@ export function StaffPageClient({
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {(canManage
-                  ? ["Họ tên", "Cơ sở", "Cấp độ", "Số KH", "Hành động"]
-                  : ["Họ tên", "Cơ sở", "Cấp độ", "Số KH"]
+                  ? ["Họ tên", "Cơ sở", "Chức vụ", "Cấp độ", "Số KH", "Hành động"]
+                  : ["Họ tên", "Cơ sở", "Chức vụ", "Cấp độ", "Số KH"]
                 ).map((h, i) => (
                   <th
                     key={h}
                     className={cn(
                       "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide",
-                      i < 3 ? "text-left" : i === 3 ? "text-center" : "text-right"
+                      i < 4 ? "text-left" : i === 4 ? "text-center" : "text-right"
                     )}
                   >
                     {h}
@@ -494,6 +530,19 @@ export function StaffPageClient({
                       </div>
                     ) : (
                       <span className="text-sm text-gray-600">{s.branch?.name ?? "—"}</span>
+                    )}
+                  </td>
+                  {/* Chức vụ — nhãn nghề nghiệp, tách hẳn khỏi quyền bên cột Cấp độ */}
+                  <td className="px-5 py-3.5">
+                    {s.jobPosition ? (
+                      <span
+                        className="px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap"
+                        style={{ backgroundColor: s.jobPosition.color + "22", color: s.jobPosition.color }}
+                      >
+                        {s.jobPosition.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5">
@@ -722,6 +771,17 @@ export function StaffPageClient({
         </div>
       )}
 
+      {/* Quản lý chức vụ — Admin tự thêm/sửa/tắt, không phải sửa code */}
+      <SlideOver open={posOpen} onClose={() => setPosOpen(false)} title="Chức vụ nhân sự">
+        <JobPositionManager
+          positions={jobPositions}
+          onChanged={() => {
+            loadPositions();
+            router.refresh();
+          }}
+        />
+      </SlideOver>
+
       {/* Slide-over form */}
       <SlideOver
         open={open}
@@ -810,6 +870,30 @@ export function StaffPageClient({
             </Field>
           )}
 
+          {/* Chức vụ — cho MỌI vai trò, kể cả người không phải HLV.
+              Đây là nhãn nghề nghiệp, không cấp quyền: quyền vẫn nằm ở ô Vai trò. */}
+          <Field label="Chức vụ">
+            <select
+              value={selectedJobPositionId}
+              onChange={(e) => setSelectedJobPositionId(e.target.value)}
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+            >
+              <option value="">— Chưa gán —</option>
+              {jobPositions
+                .filter((p) => p.isActive || p.id === selectedJobPositionId)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {!p.isActive ? " (đã tắt)" : ""}
+                  </option>
+                ))}
+            </select>
+            <p className="text-[11px] text-gray-400">
+              Chỉ là nhãn nghề nghiệp — không đổi quyền của người này. Thêm chức vụ mới ở nút
+              “Chức vụ” trên đầu trang.
+            </p>
+          </Field>
+
           {selectedRole === "FM" ? (
             <Field label="Cơ sở quản lý *">
               <BranchMultiSelect
@@ -874,5 +958,150 @@ export function StaffPageClient({
         </form>
       </SlideOver>
     </>
+  );
+}
+
+// ── Quản lý chức vụ ─────────────────────────────────────────────────────────
+//
+// Chức vụ là NHÃN NGHỀ NGHIỆP (lao công, marketing, lễ tân…), không phải quyền.
+// Quyền vẫn nằm ở ô "Vai trò" của từng nhân sự và cố định trong code — thêm một
+// chức vụ ở đây không cấp thêm quyền cho ai.
+type JobPositionRow = {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+  _count: { users: number };
+};
+
+function JobPositionManager({
+  positions,
+  onChanged,
+}: {
+  positions: JobPositionRow[];
+  onChanged: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function add() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/admin/job-positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setErr(d.error ?? "Không thêm được chức vụ");
+        return;
+      }
+      setName("");
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function patch(id: string, body: Record<string, unknown>) {
+    setErr("");
+    const res = await fetch(`/api/admin/job-positions/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setErr(d.error ?? "Không lưu được");
+      return;
+    }
+    onChanged();
+  }
+
+  async function remove(id: string) {
+    setErr("");
+    const res = await fetch(`/api/admin/job-positions/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setErr(d.error ?? "Không xoá được");
+      return;
+    }
+    onChanged();
+  }
+
+  return (
+    <div className="px-6 py-5 space-y-4">
+      <p className="rounded-xl bg-blue-50 px-3.5 py-3 text-xs font-semibold leading-relaxed text-blue-700">
+        Chức vụ là nhãn nghề nghiệp, hiện ở danh sách nhân sự và bảng lương. Nó{" "}
+        <span className="font-extrabold">không cấp quyền</span> — ai vào được màn nào vẫn do ô
+        “Vai trò” của từng người quyết định.
+      </p>
+
+      <div className="flex gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+          placeholder="Tên chức vụ mới, vd: Lao công"
+          className="h-11 flex-1 rounded-xl"
+        />
+        <Button
+          onClick={add}
+          disabled={busy || !name.trim()}
+          className="h-11 shrink-0 gap-1.5 rounded-xl px-4 font-semibold text-white"
+          style={{ backgroundColor: "#f15b5c" }}
+        >
+          <Plus className="h-4 w-4" />
+          Thêm
+        </Button>
+      </div>
+
+      {err && <p className="text-sm font-bold text-red-500">{err}</p>}
+
+      {positions.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-gray-200 py-10 text-center text-sm font-semibold text-gray-300">
+          Chưa có chức vụ nào
+        </p>
+      ) : (
+        <div className="divide-y divide-gray-50 overflow-hidden rounded-xl border border-gray-100">
+          {positions.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-3.5 py-3">
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap",
+                  !p.isActive && "opacity-40"
+                )}
+                style={{ backgroundColor: p.color + "22", color: p.color }}
+              >
+                {p.name}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-xs text-gray-400">
+                {p._count.users} nhân sự{!p.isActive ? " · đã tắt" : ""}
+              </span>
+              <button
+                onClick={() => patch(p.id, { isActive: !p.isActive })}
+                className="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-bold text-gray-500 transition-colors hover:bg-gray-100"
+                title={p.isActive ? "Tắt — không gán mới được nữa, người đang giữ vẫn giữ nhãn" : "Bật lại"}
+              >
+                {p.isActive ? "Tắt" : "Bật"}
+              </button>
+              <button
+                onClick={() => remove(p.id)}
+                disabled={p._count.users > 0}
+                title={p._count.users > 0 ? "Còn nhân sự đang giữ chức vụ này — hãy Tắt thay vì xoá" : "Xoá"}
+                className="shrink-0 rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-300"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

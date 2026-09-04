@@ -138,7 +138,7 @@ export async function GET(req: Request) {
 
   const records = await prisma.salaryRecord.findMany({
     where: { branchId: { in: branchFilter }, month, year, user: { deletedAt: null } },
-    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
     orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
   });
 
@@ -247,7 +247,7 @@ export async function GET(req: Request) {
         totalSalary,
         remainingPayment,
       },
-      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
     });
     return { ...refreshed, kocCommission, kolCommission };
   }));

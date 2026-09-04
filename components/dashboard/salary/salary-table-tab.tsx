@@ -13,7 +13,11 @@ import { SessionDetailTable } from "./session-detail-table";
 type SalaryRecord = {
   id: string;
   branchId: string;
-  user: { id: string; name: string | null; email: string; role: string };
+  user: {
+    id: string; name: string | null; email: string; role: string;
+    /** Chức vụ — nhãn nghề nghiệp, hiện dưới tên. Không đụng gì tới cách tính lương. */
+    jobPosition?: { name: string; color: string } | null;
+  };
   baseSalary: number;
   totalRevenue: number;
   commissionRate: number;
@@ -623,7 +627,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {ptRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">
+                            {r.user.name ?? r.user.email}
+                            {r.user.jobPosition && (
+                              <span
+                                className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                                style={{ backgroundColor: r.user.jobPosition.color + "22", color: r.user.jobPosition.color }}
+                              >
+                                {r.user.jobPosition.name}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary)}</td>
                           {workDaysCell(r)}
                           <td className="px-3 py-2.5 whitespace-nowrap">
@@ -716,7 +730,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {adminRecords.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">
+                            {r.user.name ?? r.user.email}
+                            {r.user.jobPosition && (
+                              <span
+                                className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                                style={{ backgroundColor: r.user.jobPosition.color + "22", color: r.user.jobPosition.color }}
+                              >
+                                {r.user.jobPosition.name}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Admin</span>
                           </td>
@@ -808,7 +832,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     {fmRecords.map(r => (
                     <React.Fragment key={r.id}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
-                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">{r.user.name ?? r.user.email}</td>
+                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">
+                            {r.user.name ?? r.user.email}
+                            {r.user.jobPosition && (
+                              <span
+                                className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                                style={{ backgroundColor: r.user.jobPosition.color + "22", color: r.user.jobPosition.color }}
+                              >
+                                {r.user.jobPosition.name}
+                              </span>
+                            )}
+                          </td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.baseSalary + r.fixedAllowances)}</td>
                         {workDaysCell(r)}
                         <td className="px-3 py-2.5 whitespace-nowrap">

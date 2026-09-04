@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { canReadSalary } from "@/lib/salary-access";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
@@ -52,21 +53,28 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (session.user.role !== "FM") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const role = session.user.role;
+    if (!canReadSalary(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { branchId, month, year } = await req.json() as { branchId: string; month: number; year: number };
-    const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
-    if (!managedBranchIds.includes(branchId)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // COO đối soát toàn hệ thống nên không giới hạn cơ sở; FM chỉ cơ sở mình phụ trách.
+    if (role === "FM") {
+      const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
+      if (!managedBranchIds.includes(branchId)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     // ── Fetch data ─────────────────────────────────────────────────────────
 
-    const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-    const branchName = branch?.name ?? branchId;
+    // COO chọn "Tất cả cơ sở" thì branchId rỗng — xuất cả hệ thống thay vì
+    // truy vấn một cơ sở tên rỗng rồi báo "không có dữ liệu".
+    const allBranches = !branchId;
+    const branch = allBranches ? null : await prisma.branch.findUnique({ where: { id: branchId } });
+    const branchName = allBranches ? "Tất cả cơ sở" : branch?.name ?? branchId;
 
     const records = await prisma.salaryRecord.findMany({
-      where: { branchId, month, year, user: { deletedAt: null } },
+      where: { ...(allBranches ? {} : { branchId }), month, year, user: { deletedAt: null } },
       include: { user: { select: { id: true, name: true, email: true, role: true } } },
       orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
     });

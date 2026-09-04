@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessSessionDetail } from "@/lib/salary-access";
 
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
@@ -19,7 +20,7 @@ export async function PUT(req: Request) {
   };
 
   const role = session.user.role;
-  if (role !== "FM" && role !== "ADMIN" && session.user.id !== body.ptId) {
+  if (!canAccessSessionDetail(role, session.user.id, body.ptId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

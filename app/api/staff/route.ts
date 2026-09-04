@@ -49,6 +49,8 @@ export async function GET(req: Request) {
       branchId: true,
       ptLevelId: true,
       ptLevel: { select: { id: true, name: true, color: true } },
+      jobPositionId: true,
+      jobPosition: { select: { id: true, name: true, color: true } },
       branch: { select: { id: true, name: true } },
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds, ptLevelId, dateOfBirth } = body;
+  const { name, email, password, branchId, role, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId } = body;
 
   if (!name || !email || !password || !role) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -115,6 +117,7 @@ export async function POST(req: Request) {
         role,
         deletedAt: null,
         ptLevelId: ptLevelId || null,
+        jobPositionId: jobPositionId || null,
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) ? { dateOfBirth: parsedDOB } : {}),
       },
       create: {
@@ -124,12 +127,15 @@ export async function POST(req: Request) {
         branchId: noBranchRole ? null : (branchId || null),
         role,
         ...(ptLevelId && { ptLevelId }),
+        ...(jobPositionId && { jobPositionId }),
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) && { dateOfBirth: parsedDOB }),
       },
       select: {
         id: true, name: true, email: true, role: true, branchId: true,
         ptLevelId: true,
         ptLevel: { select: { id: true, name: true, color: true } },
+        jobPositionId: true,
+        jobPosition: { select: { id: true, name: true, color: true } },
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },

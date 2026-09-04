@@ -80,7 +80,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth } = body;
+  const { name, email, password, branchId, role, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId } = body;
 
   // FM cannot assign ADMIN or FM roles
   if (isFM && role && (role === "ADMIN" || role === "FM")) {
@@ -104,6 +104,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (email) updateData.email = email;
   if (password) updateData.password = await bcrypt.hash(password, 12);
   if (ptLevelId !== undefined) updateData.ptLevelId = ptLevelId || null;
+  // Chức vụ chỉ là nhãn nghề nghiệp — đổi nó không đụng gì tới quyền của người này.
+  if (jobPositionId !== undefined) updateData.jobPositionId = jobPositionId || null;
   if (dateOfBirth !== undefined) {
     const d = dateOfBirth ? new Date(dateOfBirth) : null;
     updateData.dateOfBirth = d && !isNaN(d.getTime()) ? d : null;
@@ -126,6 +128,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         id: true, name: true, email: true, role: true, branchId: true,
         ptLevelId: true,
         ptLevel: { select: { id: true, name: true, color: true } },
+        jobPositionId: true,
+        jobPosition: { select: { id: true, name: true, color: true } },
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },

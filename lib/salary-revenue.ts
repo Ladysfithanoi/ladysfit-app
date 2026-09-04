@@ -15,10 +15,13 @@ import { prisma } from "@/lib/prisma";
 
 const TO_VND = 1_000_000;
 
-/** Doanh số cả phòng tập trong tháng (VND) — dùng cho hoa hồng FM. */
+/**
+ * Doanh số cả phòng tập trong tháng (VND) — dùng cho hoa hồng FM.
+ * branchId rỗng = cả hệ thống (COO xuất Excel "Tất cả cơ sở").
+ */
 export async function getBranchRevenue(branchId: string, month: number, year: number): Promise<number> {
   const agg = await prisma.salesLead.aggregate({
-    where: { branchId, month, year },
+    where: { ...(branchId ? { branchId } : {}), month, year },
     _sum: { actualRevenue: true },
   });
   return Number(agg._sum.actualRevenue ?? 0) * TO_VND;

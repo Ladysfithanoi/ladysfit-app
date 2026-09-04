@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
 import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
+import { canAccessSessionDetail } from "@/lib/salary-access";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
     if (!ptId) return NextResponse.json({ error: "ptId required" }, { status: 400 });
 
     const role = session.user.role;
-    if (role !== "FM" && role !== "ADMIN" && session.user.id !== ptId) {
+    if (!canAccessSessionDetail(role, session.user.id, ptId)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

@@ -37,7 +37,11 @@ model User {
   emailVerified   DateTime?
   image           String?
   password        String?
+  // QUYỀN — quyết định vào được màn nào, sửa được gì. Cố định trong code.
   role            Role      @default(PT)
+  // CHỨC VỤ — nhãn nghề nghiệp do Admin tự thêm (lao công, marketing, lễ tân…).
+  // Tách hẳn khỏi role: chức vụ để gọi tên và xếp nhóm, KHÔNG cấp quyền gì.
+  jobPositionId   String?
   branchId        String?
   freeUpgradedAt  DateTime?
   createdAt       DateTime  @default(now())
@@ -47,6 +51,7 @@ model User {
   ptLevelId             String?
   deletedAt             DateTime?
   ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
+  jobPosition           JobPosition?         @relation(fields: [jobPositionId], references: [id], onDelete: SetNull)
 
   branch                Branch?              @relation(fields: [branchId], references: [id])
   accounts              Account[]
@@ -352,6 +357,28 @@ model WeightLog {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("weight_logs")
+}
+
+/// Chức vụ nhân sự — danh sách Admin tự quản, không phải sửa code để thêm.
+///
+/// CỐ Ý KHÔNG phải enum Role. Role là QUYỀN: mỗi giá trị của nó gắn với một bộ
+/// màn hình và một bộ thao tác được phép, và mọi kiểm tra quyền trong app đều
+/// so theo nó. Cho thêm giá trị mới vào Role lúc chạy nghĩa là sinh ra những
+/// người mà không đoạn mã nào biết họ được làm gì — mở đúng chỗ nguy hiểm nhất.
+///
+/// Chức vụ chỉ là nhãn nghề nghiệp: hiện ở danh sách nhân sự, bảng lương, bộ
+/// lọc. Thêm "Lao công" ở đây không cấp thêm quyền nào cho ai.
+model JobPosition {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#6b7280")
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  @@map("job_positions")
 }
 
 enum Role {
