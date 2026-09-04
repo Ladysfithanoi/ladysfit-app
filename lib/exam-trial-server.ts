@@ -5,7 +5,7 @@ import { parseQuestionIds } from "@/lib/exam-session";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer,
-  applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT,
+  applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT, honorAfter,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
 
@@ -215,7 +215,11 @@ export async function computeTrial(
         return gradeSortCard({ id: c.id, correctZone: c.correctZone }, answer);
       });
       const pillar = sortPillar(results);
-      const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared);
+      // Cạn Thanh danh giữa vòng là trượt vòng, dù mấy thẻ còn lại có đúng hết.
+      // Chấm bằng đúng hàm mà thanh trên màn hình đang chạy, nên con số lúc chấm
+      // không thể khác con số thí sinh đã nhìn thấy.
+      const collapsed = honorAfter(results) <= 0;
+      const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared, collapsed);
       roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
       review.push({
@@ -401,6 +405,40 @@ export function serializeRoundForAdmin<
     })),
   };
 }
+
+/**
+ * Mức lệch của những thẻ ĐÃ trả lời — { cardId: ratio }.
+ *
+ * Cần cho lúc tải lại trang giữa vòng: bài làm thì lấy từ trialState, nhưng
+ * thanh Thanh danh và mấy dòng "lệch một bậc" thì dựng lại từ đâu? Không có
+ * bảng này thì F5 xong thanh về đầy 100 — vừa sai, vừa là một cách xoá dấu vết
+ * đã bấm sai.
+ *
+ * Chỉ trả về THẺ ĐÃ TRẢ LỜI và chỉ trả về mức lệch, không kèm đáp án đúng. Thẻ
+ * đã khoá rồi nên biết mình lệch bao nhiêu cũng không giúp gì cho thẻ còn lại.
+ */
+export async function sortCardOutcomes(
+  roundIds: string[],
+  rawState: string | null
+): Promise<Record<string, number>> {
+  if (roundIds.length === 0) return {};
+  const state = parseTrialState(rawState);
+  if (Object.keys(state).length === 0) return {};
+
+  const cards = await prisma.examSortCard.findMany({
+    where: { roundId: { in: roundIds } },
+    select: { id: true, roundId: true, correctZone: true },
+  });
+
+  const out: Record<string, number> = {};
+  for (const c of cards) {
+    const answer = readSortAnswer(state, c.roundId, c.id);
+    if (!answer) continue;
+    out[c.id] = gradeSortCard({ id: c.id, correctZone: c.correctZone }, answer).ratio;
+  }
+  return out;
+}
+
 
 /**
  * CHỌN CÁC VÒNG CHO MỘT LƯỢT THI — bốc đề, không phải xếp thứ tự.

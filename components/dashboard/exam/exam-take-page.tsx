@@ -28,6 +28,7 @@ import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
 import {
   SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
+  HONOR_START, honorCost,
   type MealEntry, type SortZone, type Sin,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
@@ -381,6 +382,11 @@ export function ExamTakePage({
   // Nhịp giữa hai vòng: hiện cây Kaballah với sephirah vừa thắp, rồi mới sang vòng kế.
   const [advanceFrom, setAdvanceFrom] = useState<TrialRound | null>(null);
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
+  // Mức lệch của từng thẻ đã bấm — nuôi thanh Thanh danh và mấy dòng báo kết
+  // quả. Máy chủ trả về, client không tự tính được vì không có đáp án đúng.
+  const [cardOutcomes, setCardOutcomes] = useState<Record<string, number>>({});
+  const [pendingCard, setPendingCard] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
   // Chú giải cây ở màn kết quả: mặc định đóng, vì thứ người ta muốn thấy trước
   // là điểm, không phải mười ô sephirot.
   const [legendOpen, setLegendOpen] = useState(false);
@@ -472,6 +478,7 @@ export function ExamTakePage({
           const saved = (data.savedTrialState ?? {}) as TrialState;
           setTrialState(saved);
           trialRef.current = saved;
+          setCardOutcomes((data.cardOutcomes ?? {}) as Record<string, number>);
         }
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
@@ -664,6 +671,46 @@ export function ExamTakePage({
     },
     [mock]
   );
+
+/**
+   * Trả lời một thẻ: gửi lên máy chủ, khoá lại, hiện hậu quả ngay.
+   *
+   * KHÔNG đi qua updateTrial() như vòng khay ăn. Vòng khay ăn sửa thoải mái rồi
+   * hẹn giờ tự lưu; thẻ thì bấm một lần là xong, và chính máy chủ ghi bài làm
+   * xuống ngay trong lượt gọi này — không có khoảng chờ tự lưu nào để mất.
+   */
+  async function answerCard(roundId: string, cardId: string, zone: SortZone) {
+    if (pendingCard) return;
+    setPendingCard(cardId);
+    setCardError(null);
+    try {
+      const res = await fetch("/api/exam/trial-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardId,
+          zone,
+          ...(mock ? { mock: true, levelId: mockLevelId } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCardError(data.error ?? "Không gửi được thẻ này. Thử lại nhé.");
+        return;
+      }
+      setCardOutcomes((prev) => ({ ...prev, [cardId]: data.ratio }));
+      setTrialState((prev) => {
+        const next = { ...prev, [roundId]: { ...(prev[roundId] ?? {}), [cardId]: zone } };
+        trialRef.current = next;
+        return next;
+      });
+    } catch {
+      setCardError("Mất kết nối. Thử lại nhé.");
+    } finally {
+      setPendingCard(null);
+    }
+  }
+
 
   /** Sửa bài làm một vòng: cập nhật ngay, hẹn giờ ghi xuống server. */
   function updateTrial(roundId: string, key: string, value: MealEntry[] | SortZone) {
@@ -865,8 +912,24 @@ export function ExamTakePage({
         return Array.isArray(v) && v.length > 0;
       });
     }
-    return r.cards.every((c) => typeof st[c.id] === "string");
+    // Cạn Thanh danh cũng là XONG vòng, dù còn thẻ chưa bấm: máy chủ không nhận
+    // thêm thẻ nào của vòng đó nữa. Không tính thế thì người ta bị kẹt luôn ở
+    // vòng mình vừa hỏng, không sang được vòng sau mà cũng không nộp được bài.
+    return r.cards.every((c) => typeof st[c.id] === "string") || roundCollapsed(r);
   };
+  /** Vòng phân loại đã cạn Thanh danh — tính bằng đúng hàm máy chủ dùng lúc chấm. */
+  function roundCollapsed(r: TrialRound) {
+    if (r.type !== "SORT") return false;
+    const st = trialState[r.id] ?? {};
+    let left = HONOR_START;
+    for (const c of r.cards) {
+      if (typeof st[c.id] !== "string") continue;
+      const ratio = cardOutcomes[c.id];
+      if (ratio === undefined) continue;
+      left -= honorCost(ratio);
+    }
+    return left <= 0;
+  }
   const trialDoneCount = rounds.filter(roundDone).length;
   const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
 
@@ -1259,8 +1322,11 @@ export function ExamTakePage({
                       )
                     ) as Record<string, SortZone>
                   }
+                  outcomes={cardOutcomes}
+                  pendingCardId={pendingCard}
+                  error={cardError}
                   disabled={!!result}
-                  onChange={(cardId, zone) => updateTrial(currentRound.id, cardId, zone)}
+                  onAnswer={(cardId, zone) => answerCard(currentRound.id, cardId, zone)}
                 />
               )}
             </div>

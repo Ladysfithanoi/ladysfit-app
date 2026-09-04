@@ -435,6 +435,52 @@ export function sortPillar(results: SortCardResult[]): Pillar {
   return lenient === strict ? "BALANCE" : lenient > strict ? "MERCY" : "SEVERITY";
 }
 
+// ── Thanh Thanh danh — vòng lặp chơi của vòng phân loại thẻ ──────────────────
+//
+// Thẻ hiện từng thẻ một, bấm là KHOÁ, và hậu quả hiện ra ngay. Cái người ta
+// nhìn thấy tụt đi là thanh Thanh danh: xếp đúng thì không mất gì, lệch một bậc
+// mất ít, lệch hai bậc mất nhiều. Cạn thanh trước khi hết thẻ là trượt vòng
+// ngay tại chỗ — không cần đợi tới lúc chấm mới biết.
+//
+// Vì sao khoá thẻ lại: có khoá thì mới dám báo kết quả ngay mà không hở đề.
+// Sửa được đáp án mà lại thấy đúng/sai luôn thì bài thi thành trò mò mẫm.
+//
+// Ba con số dưới đây là chỗ chỉnh độ gắt. Với vòng 12 thẻ: lệch một bậc cả 12
+// thẻ vẫn sống sót (96 < 100), nhưng BỐN lần lệch hai bậc là cạn.
+
+export const HONOR_START = 100;
+export const HONOR_COST_NEAR = 8;
+export const HONOR_COST_FAR = 25;
+
+/** Một thẻ ăn mất bao nhiêu Thanh danh, theo tỉ lệ điểm của thẻ đó. */
+export function honorCost(ratio: number): number {
+  if (ratio >= 1) return 0;
+  return ratio > 0 ? HONOR_COST_NEAR : HONOR_COST_FAR;
+}
+
+/**
+ * Thanh danh còn lại của một vòng, sàn 0.
+ *
+ * CHỈ tính thẻ ĐÃ TRẢ LỜI. Thẻ bỏ trống (hết giờ, thoát giữa chừng) không được
+ * tính là lệch hai bậc — nếu tính thì con số lúc chấm sẽ khác hẳn con số thí
+ * sinh nhìn thấy lúc làm bài, mà thanh này thì họ nhìn suốt cả vòng.
+ */
+export function honorAfter(results: { answer: SortZone | null; ratio: number }[]): number {
+  let left = HONOR_START;
+  for (const r of results) {
+    if (!r.answer) continue;
+    left = Math.max(0, left - honorCost(r.ratio));
+  }
+  return left;
+}
+
+/** Câu báo ngay sau khi bấm — nói mức lệch, KHÔNG nói đáp án đúng là gì. */
+export const SORT_VERDICT: Record<number, { label: string; note: string }> = {
+  0: { label: "Chính xác", note: "Giữ nguyên Thanh danh." },
+  1: { label: "Lệch một bậc", note: "Gần đúng, nhưng chưa đúng vùng." },
+  2: { label: "Lệch hai bậc", note: "Sai hẳn hướng xử lý." },
+};
+
 // ── Ghép điểm cả lượt thi ────────────────────────────────────────────────────
 
 export type RoundScore = {
@@ -458,10 +504,13 @@ export function scoreRound(
   pillar: Pillar,
   /** Vòng của tội thí sinh tự khai — điểm và ngưỡng đạt đã được nâng trước khi vào đây. */
   declared = false,
+  /** Cạn Thanh danh giữa vòng — trượt vòng bất kể điểm, xem honorAfter(). */
+  collapsed = false,
 ): RoundScore {
   const avg = ratios.length === 0 ? 0 : ratios.reduce((s, r) => s + r, 0) / ratios.length;
   const points = Math.round(avg * round.maxPoints);
-  const passed = round.maxPoints > 0 && (points / round.maxPoints) * 100 >= round.passPercent;
+  const passed =
+    !collapsed && round.maxPoints > 0 && (points / round.maxPoints) * 100 >= round.passPercent;
   return {
     roundId: round.id,
     points,

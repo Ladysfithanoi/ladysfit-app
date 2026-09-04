@@ -14,7 +14,7 @@ import {
 } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
-import { loadTrialForCandidate, gradeTrialAttempt, pickTrialRounds } from "@/lib/exam-trial-server";
+import { loadTrialForCandidate, gradeTrialAttempt, pickTrialRounds, sortCardOutcomes } from "@/lib/exam-trial-server";
 import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
@@ -257,6 +257,11 @@ export async function GET(req: Request) {
       resumed: !!examSession?.trialState,
       // Bài dở của đề nhiều vòng nằm ở trialState, không phải answers.
       savedTrialState: parseTrialState(examSession?.trialState),
+      // Mức lệch của thẻ đã trả lời — để F5 giữa vòng vẫn dựng lại đúng thanh
+      // Thanh danh, chứ không phải về đầy 100 như chưa bấm gì.
+      cardOutcomes: examSession
+        ? await sortCardOutcomes(orderedRounds.map((r) => r.id), examSession.trialState)
+        : {},
       savedAnswers: {},
       examToken: null,
     });
