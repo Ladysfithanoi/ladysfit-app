@@ -232,24 +232,30 @@ export const TRIAL_CARD_MIX: Record<SortZone, number> = { ACCEPT: 3, CAUTION: 5,
 /** Số hồ sơ khách phát ra ở vòng khay ăn — cùng lý do như thẻ. */
 export const TRIAL_BRIEFS_PER_ROUND = 3;
 
-export type MealKind = "CUT" | "BULK" | "SPECIAL";
-export const MEAL_KINDS: MealKind[] = ["CUT", "BULK", "SPECIAL"];
+/**
+ * Nhóm hồ sơ khay ăn. CHỈ CÓ HAI: phòng tập không nhận khách mục tiêu tăng cân,
+ * nên một hồ sơ "khách muốn lên 4kg" là tình huống không có thật ở đây và không
+ * đo được gì. Từng có nhóm BULK, đã bỏ ngày 04/09/2026.
+ */
+export type MealKind = "CUT" | "SPECIAL";
+export const MEAL_KINDS: MealKind[] = ["CUT", "SPECIAL"];
 
 /**
- * Hình dạng bộ hồ sơ đã phát — mỗi lượt đúng một khách mỗi dạng.
+ * Hình dạng bộ hồ sơ đã phát — hai khách giảm cân thường, một khách có ràng
+ * buộc bắt buộc.
  *
- * Bốc bừa 3 trong 50 thì khoảng một phần ba số lượt sẽ ra cả ba khách đều muốn
- * giảm cân, và như thế là mất sạch cái bẫy vốn là linh hồn của vòng này: phản
- * xạ cắt calo cho bất kỳ ai bước vào phòng tập. Lượt nào cũng phải có một khách
- * cần TĂNG calo và một khách có ràng buộc bắt buộc.
+ * Bốc bừa 3 trong 51 thì có lượt ra cả ba khách đều là ca giảm cân thẳng thớm,
+ * và như thế là mất cái bẫy quan trọng nhất của vòng này: phản xạ cắt calo cho
+ * bất kỳ ai bước vào phòng tập. Lượt nào cũng phải có một hồ sơ mà chỉ định y
+ * tế hoặc ràng buộc ăn uống đứng trên nguyên tắc chung — khách mang thai, đang
+ * cho con bú, suy thận, dị ứng, ăn chay.
  *
- * Tổng ba con số phải đúng bằng TRIAL_BRIEFS_PER_ROUND.
+ * Tổng hai con số phải đúng bằng TRIAL_BRIEFS_PER_ROUND.
  */
-export const TRIAL_BRIEF_MIX: Record<MealKind, number> = { CUT: 1, BULK: 1, SPECIAL: 1 };
+export const TRIAL_BRIEF_MIX: Record<MealKind, number> = { CUT: 2, SPECIAL: 1 };
 
 export const MEAL_KIND_LABEL: Record<MealKind, string> = {
   CUT: "Giảm cân",
-  BULK: "Tăng cân / xây cơ",
   SPECIAL: "Có ràng buộc bắt buộc",
 };
 

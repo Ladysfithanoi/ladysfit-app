@@ -551,7 +551,8 @@ export function pickMealBriefs<T extends { id: string; kind?: MealKind | null }>
   const taken: T[] = [];
   const left: T[] = [];
   for (const kind of MEAL_KINDS) {
-    const pool = shuffled(briefs.filter((b) => (b.kind ?? "CUT") === kind));
+    // Hồ sơ chưa gắn nhóm, hoặc còn mang nhóm BULK đã bỏ, đều coi như CUT.
+    const pool = shuffled(briefs.filter((b) => (b.kind === "SPECIAL" ? "SPECIAL" : "CUT") === kind));
     const want = TRIAL_BRIEF_MIX[kind];
     taken.push(...pool.slice(0, want));
     left.push(...pool.slice(want));

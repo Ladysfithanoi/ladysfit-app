@@ -781,14 +781,13 @@ model ExamRound {
 
 /// Một hồ sơ khách của vòng Phàm ăn: thí sinh phải dựng khay ăn chạm đúng chỉ
 /// tiêu. Chỉ tiêu nào bỏ trống thì vòng không chấm chỉ tiêu đó.
-/// Nhóm hồ sơ khay ăn — để mỗi lượt thi luôn bốc đủ ba dạng, không rơi vào
-/// cảnh cả ba khách đều muốn giảm cân. Xem TRIAL_BRIEF_MIX.
+/// Nhóm hồ sơ khay ăn — để mỗi lượt thi luôn có một ca mà chỉ định y tế hoặc
+/// ràng buộc ăn uống đứng trên nguyên tắc chung. Xem TRIAL_BRIEF_MIX.
 enum ExamMealKind {
   /// Khách giảm cân — dạng phổ biến nhất.
   CUT
-  /// Khách cần TĂNG calo: gầy muốn lên cân, hoặc đang xây cơ.
-  BULK
-  /// Có ràng buộc bắt buộc: dị ứng, bệnh nền, thai kỳ, ăn chay.
+  /// Có ràng buộc bắt buộc: dị ứng, bệnh nền, thai kỳ, cho con bú, ăn chay.
+  /// Mỗi lượt thi luôn có đúng một hồ sơ dạng này.
   SPECIAL
 }
 

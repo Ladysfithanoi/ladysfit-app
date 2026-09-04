@@ -22,8 +22,13 @@ export type SortCardSeed = {
  * tăng cân, còn béo/đường thì đi theo.
  */
 export type MealBriefSeed = {
-  /** CUT giảm cân · BULK cần tăng calo · SPECIAL có ràng buộc bắt buộc. */
-  kind: "CUT" | "BULK" | "SPECIAL";
+  /**
+   * CUT giảm cân · SPECIAL có ràng buộc bắt buộc (dị ứng, bệnh nền, thai kỳ…).
+   *
+   * Không có nhóm "tăng cân": phòng tập không nhận khách mục tiêu đó, nên một
+   * hồ sơ như vậy là tình huống không có thật và không đo được gì.
+   */
+  kind: "CUT" | "SPECIAL";
   clientProfile: string;
   targetCalories: number;
   targetProtein: number;
