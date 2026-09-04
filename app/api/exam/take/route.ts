@@ -225,7 +225,13 @@ export async function GET(req: Request) {
     return NextResponse.json({
       format,
       levelName,
-      rounds,
+      // VÒNG CỦA TỘI ĐÃ KHAI ĐỨNG ĐẦU. Khai xong mà vẫn được chọn vòng dễ
+      // làm trước thì lời khai mất hết sức nặng — phải đối mặt trước đã.
+      rounds: declaredSin
+        ? [...rounds].sort((a, b) =>
+            (a.sin === declaredSin ? 0 : 1) - (b.sin === declaredSin ? 0 : 1)
+          )
+        : rounds,
       passingScore,
       questions: [],
       closesAt: mock ? null : window.endAt?.toISOString() ?? null,

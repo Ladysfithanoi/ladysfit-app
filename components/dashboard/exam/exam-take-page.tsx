@@ -18,6 +18,7 @@ import {
   AlarmClock,
   Cloud,
   CloudOff,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -774,7 +775,19 @@ export function ExamTakePage({
   };
   const trialDoneCount = rounds.filter(roundDone).length;
   const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
-  const currentRound: TrialRound | null = rounds[roundIdx] ?? null;
+
+  // ── Mở khoá tuần tự ────────────────────────────────────────────────────────
+  // Vòng của tội đã khai đứng đầu (server sắp xếp), và vòng sau chỉ mở khi vòng
+  // trước đã xong. Vòng ĐÃ XONG vẫn quay lại sửa được — chặn đi tới chứ không
+  // chặn nhìn lại, vì nhận ra mình đọc sót một dòng ở hồ sơ trước không đáng bị
+  // phạt bằng cách khoá luôn.
+  const firstUnfinished = rounds.findIndex((r) => !roundDone(r));
+  const unlockedCount = firstUnfinished === -1 ? rounds.length : firstUnfinished + 1;
+  // Xoá bớt bài ở vòng trước có thể khoá lại chính vòng đang xem — kéo về vòng
+  // gần nhất còn mở thay vì để màn hình trống.
+  const safeRoundIdx = Math.min(roundIdx, unlockedCount - 1);
+  const currentRound: TrialRound | null = rounds[safeRoundIdx] ?? null;
+  const nextLockedIdx = safeRoundIdx + 1 < rounds.length ? safeRoundIdx + 1 : -1;
   // Đề nhiều vòng dùng tiến độ vòng thay cho số câu đã trả lời.
   // Thi thử được nộp non: Admin thường chỉ muốn soi một vòng, bắt làm đủ cả đề
   // mỗi lần kiểm một câu chữ thì chẳng ai kiểm nữa.
@@ -1025,19 +1038,24 @@ export function ExamTakePage({
             <div className="flex w-max items-center gap-2">
               {rounds.map((r, i) => {
                 const done = roundDone(r);
-                const active = i === roundIdx;
+                const active = i === safeRoundIdx;
+                const locked = i >= unlockedCount;
                 return (
                   <button
                     key={r.id}
                     type="button"
-                    onClick={() => setRoundIdx(i)}
+                    disabled={locked}
+                    onClick={() => { if (!locked) setRoundIdx(i); }}
+                    title={locked ? "Xong vòng trước mới mở được vòng này" : undefined}
                     className={cn(
                       "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-colors",
-                      active
-                        ? "bg-[#f15b5c] text-white"
-                        : done
-                          ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                          : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                      locked
+                        ? "cursor-not-allowed bg-gray-50 text-gray-300"
+                        : active
+                          ? "bg-[#f15b5c] text-white"
+                          : done
+                            ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                            : "bg-gray-50 text-gray-500 hover:bg-gray-100"
                     )}
                   >
                     <span className={cn("text-[10px] font-extrabold", active ? "text-white/70" : "text-gray-300")}>
@@ -1049,6 +1067,7 @@ export function ExamTakePage({
                         ★ tội đã khai
                       </span>
                     )}
+                    {locked && <Lock className="h-3.5 w-3.5" />}
                     {done && !active && <CheckCircle className="h-3.5 w-3.5" />}
                   </button>
                 );
@@ -1075,8 +1094,9 @@ export function ExamTakePage({
                 </div>
                 {declaredSin && currentRound.sin === declaredSin && (
                   <p className="mt-2 rounded-xl bg-[#f15b5c]/10 px-3 py-2 text-xs font-bold leading-snug text-[#f15b5c]">
-                    ★ Đây là tội bạn đã khai. Vòng này điểm nhân đôi, ngưỡng đạt cao hơn, và
-                    bắt buộc phải qua — trượt vòng này là trượt cả kỳ.
+                    ★ Đây là tội bạn đã khai, nên nó đứng đầu — phải đối mặt trước đã.
+                    Vòng này điểm nhân đôi, ngưỡng đạt cao hơn, và bắt buộc phải qua:
+                    trượt vòng này là trượt cả kỳ.
                   </p>
                 )}
                 {currentRound.intro && (
@@ -1119,6 +1139,26 @@ export function ExamTakePage({
                 />
               )}
             </div>
+          )}
+
+          {/* Xong vòng này rồi thì mời sang vòng sau — tiến trình phải thấy được,
+              chứ không phải tự đoán qua thanh trên đầu. */}
+          {currentRound && !result && nextLockedIdx !== -1 && (
+            <button
+              onClick={() => setRoundIdx(nextLockedIdx)}
+              disabled={!roundDone(currentRound)}
+              className={cn(
+                "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-extrabold transition-colors",
+                roundDone(currentRound)
+                  ? "text-white"
+                  : "cursor-not-allowed bg-gray-100 text-gray-400"
+              )}
+              style={roundDone(currentRound) ? { backgroundColor: "#f15b5c" } : undefined}
+            >
+              {roundDone(currentRound)
+                ? `Sang vòng ${rounds[nextLockedIdx].name}`
+                : `Làm xong vòng này mới mở được vòng sau`}
+            </button>
           )}
 
           {/* Soi lại đề — CHỈ có ở thi thử. Người soạn đề cần thấy đáp án đúng
