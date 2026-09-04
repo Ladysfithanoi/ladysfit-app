@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { sessionDeadline } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
+import { gradePendingTrialSession } from "@/lib/exam-trial-server";
+import { parseTrialState } from "@/lib/exam-trial";
 
 /**
  * Chấm những lượt thi HẾT GIỜ MÀ KHÔNG AI NỘP, dựa trên bài đã tự lưu.
@@ -34,8 +36,15 @@ export async function POST() {
     examEndTime: config?.examEndTime ?? "23:59",
   });
 
+  // Bài dở của đề trắc nghiệm nằm ở answers, của đề nhiều vòng nằm ở trialState
+  // — phải quét cả hai, không thì người thi đề thử thách mà hết giờ chưa nộp sẽ
+  // không có cách nào thu bài về.
   const pending = await prisma.examSession.findMany({
-    where: { examKey, submittedAt: null, answers: { not: null } },
+    where: {
+      examKey,
+      submittedAt: null,
+      OR: [{ answers: { not: null } }, { trialState: { not: null } }],
+    },
   });
 
   const now = Date.now();
@@ -43,13 +52,16 @@ export async function POST() {
   let failed = 0;
 
   for (const s of pending) {
-    if (Object.keys(parseAnswers(s.answers)).length === 0) continue;
+    const isTrial = Object.keys(parseTrialState(s.trialState)).length > 0;
+    if (!isTrial && Object.keys(parseAnswers(s.answers)).length === 0) continue;
 
     const deadline = sessionDeadline(s, window.endAt);
     // Không đặt thời lượng thì lượt chỉ hết hạn khi phòng thi đóng cửa.
     if (deadline ? deadline.getTime() > now : window.open) continue;
 
-    const result = await gradePendingSession(s.id, config?.passingScore ?? 80);
+    const result = isTrial
+      ? await gradePendingTrialSession(s.id, config?.passingScore ?? 80)
+      : await gradePendingSession(s.id, config?.passingScore ?? 80);
     if (result.ok) graded++;
     else failed++;
   }

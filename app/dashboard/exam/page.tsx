@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getExamWindow } from "@/lib/exam-schedule";
 import { sessionDeadline } from "@/lib/exam-session";
 import { parseAnswers } from "@/lib/exam-grading";
+import { parseTrialState } from "@/lib/exam-trial";
 import { DEFAULT_RANK_WEIGHTS } from "@/lib/ranking-config";
 import { ExamAdminPage } from "@/components/dashboard/exam/exam-admin-page";
 
@@ -93,9 +94,15 @@ export default async function ExamPage() {
   let pendingGradeCount = 0;
   if (config.examDate) {
     const pending = await prisma.examSession.findMany({
-      where: { examKey: config.examDate, submittedAt: null, answers: { not: null } },
+      // Dem ca hai duong: de trac nghiem luu o answers, de nhieu vong o trialState.
+      where: {
+        examKey: config.examDate,
+        submittedAt: null,
+        OR: [{ answers: { not: null } }, { trialState: { not: null } }],
+      },
       select: {
         answers: true,
+        trialState: true,
         startedAt: true,
         durationMinutes: true,
         penaltyMinutes: true,
@@ -104,7 +111,10 @@ export default async function ExamPage() {
     });
     const now = Date.now();
     pendingGradeCount = pending.filter((s) => {
-      if (Object.keys(parseAnswers(s.answers)).length === 0) return false;
+      const hasWork =
+        Object.keys(parseAnswers(s.answers)).length > 0 ||
+        Object.keys(parseTrialState(s.trialState)).length > 0;
+      if (!hasWork) return false;
       const deadline = sessionDeadline(s, window.endAt);
       // Chưa đặt thời lượng thì lượt chỉ hết hạn khi phòng thi đóng cửa.
       return deadline ? deadline.getTime() <= now : !window.open;

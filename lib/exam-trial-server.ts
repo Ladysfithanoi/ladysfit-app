@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recordAttempt } from "@/lib/exam-grading";
+import { examSettingsForLevel } from "@/lib/exam-level";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer,
@@ -166,6 +167,73 @@ export async function gradeTrialAttempt(opts: {
   });
 
   return { ok: true, attemptId: recorded.attemptId, result, promoted: recorded.promoted };
+}
+
+/**
+ * Chấm một lượt thi ĐỀ NHIỀU VÒNG đã hết giờ mà không ai nộp, từ bài đã tự lưu.
+ *
+ * Song song với gradePendingSession() của đề trắc nghiệm và cùng một mục đích:
+ * mất mạng, sập trình duyệt hay hết pin thì phần người ta đã làm vẫn nằm ở
+ * server, không có lý do gì để họ mất trắng. Khác đúng một chỗ — bài dở của đề
+ * nhiều vòng nằm ở trialState chứ không phải answers, nên nút "Chấm bài đã lưu"
+ * của Admin phải đi cả hai đường mới thu đủ.
+ *
+ * Giành lượt bằng update có điều kiện submittedAt = null nên gọi song song từ
+ * hai chỗ cũng chỉ một bên chấm được.
+ */
+export async function gradePendingTrialSession(
+  sessionId: string,
+  fallbackPassingScore: number
+): Promise<TrialGradeOutcome> {
+  const examSession = await prisma.examSession.findUnique({
+    where: { id: sessionId },
+    include: { user: { select: { name: true, email: true, role: true } } },
+  });
+
+  if (!examSession) return { ok: false, error: "Không tìm thấy lượt thi" };
+  if (examSession.submittedAt) return { ok: false, error: "Lượt thi này đã nộp bài rồi" };
+  if (!examSession.levelId) return { ok: false, error: "Lượt thi này không gắn với cấp nào" };
+
+  const state = parseTrialState(examSession.trialState);
+  if (Object.keys(state).length === 0) {
+    return { ok: false, error: "Lượt thi này không có bài làm nào được lưu" };
+  }
+
+  const claimed = await prisma.examSession.updateMany({
+    where: { id: examSession.id, submittedAt: null },
+    data: { submittedAt: new Date() },
+  });
+  if (claimed.count === 0) return { ok: false, error: "Lượt thi này đã nộp bài rồi" };
+
+  // Điểm đạt theo cấp đã chốt lúc mở đề, không phải cấp hiện tại của người thi.
+  const settings = await examSettingsForLevel(examSession.levelId, {
+    passingScore: fallbackPassingScore,
+  });
+
+  const result = await gradeTrialAttempt({
+    userId: examSession.userId,
+    userName: examSession.user.name ?? examSession.user.email ?? "PT",
+    levelId: examSession.levelId,
+    passingScore: settings.passingScore,
+    violations: examSession.violations,
+    noPenalty: examSession.user.role === "FM",
+    state: examSession.trialState,
+  });
+
+  if (!result.ok) {
+    // Chấm không thành thì trả lượt về chưa nộp để còn thử lại.
+    await prisma.examSession.update({
+      where: { id: examSession.id },
+      data: { submittedAt: null },
+    });
+    return result;
+  }
+
+  await prisma.examSession.update({
+    where: { id: examSession.id },
+    data: { attemptId: result.attemptId },
+  });
+  return result;
 }
 
 /**

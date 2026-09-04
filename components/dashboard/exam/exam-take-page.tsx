@@ -884,7 +884,11 @@ export function ExamTakePage({
               <XCircle className="w-5 h-5 text-red-400 shrink-0" />
             )}
             <p className={cn("text-sm font-extrabold", result.passed ? "text-emerald-700" : "text-red-600")}>
-              {result.scorePct}% — đúng {result.correctCount}/{result.total} câu
+              {result.scorePct}% —{" "}
+              {/* Đề nhiều vòng tính bằng ĐIỂM, không phải số câu đúng. */}
+              {isTrial
+                ? `${result.correctCount}/${result.total} điểm`
+                : `đúng ${result.correctCount}/${result.total} câu`}
               <span className="font-semibold text-gray-500"> (điểm đạt {passingScore}%)</span>
             </p>
           </div>
@@ -1416,7 +1420,9 @@ export function ExamTakePage({
                   <p className="text-3xl font-extrabold text-gray-900">
                     {result.correctCount}/{result.total}
                   </p>
-                  <p className="mt-0.5 text-xs font-semibold text-gray-400">Câu đúng</p>
+                  <p className="mt-0.5 text-xs font-semibold text-gray-400">
+                    {isTrial ? "Điểm đạt được" : "Câu đúng"}
+                  </p>
                 </div>
               </div>
 
