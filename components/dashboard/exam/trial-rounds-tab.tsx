@@ -67,8 +67,13 @@ const emptyBrief: MealBrief = {
 const emptyCard: SortCard = { text: "", correctZone: "CAUTION", explanation: null };
 
 export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
-  const trialLevels = levels.filter((l) => l.format === "TRIAL");
-  const [levelId, setLevelId] = useState<string>(trialLevels[0]?.id ?? "");
+  // Hiện MỌI cấp chứ không chỉ cấp đã bật dạng thử thách: phải soạn xong đề
+  // rồi mới dám đổi dạng đề, chứ đổi trước thì người ở cấp đó mở đề ra là gặp
+  // màn trống.
+  const [levelId, setLevelId] = useState<string>(
+    levels.find((l) => l.format === "TRIAL")?.id ?? levels[0]?.id ?? ""
+  );
+  const selected = levels.find((l) => l.id === levelId) ?? null;
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -148,14 +153,11 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
     if (res.ok) setRounds((prev) => prev.filter((r) => r.id !== id));
   }
 
-  if (trialLevels.length === 0) {
+  if (levels.length === 0) {
     return (
       <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
         <Swords className="mx-auto mb-3 h-8 w-8 text-gray-200" />
-        <p className="text-sm font-bold text-gray-500">Chưa cấp nào dùng đề thử thách</p>
-        <p className="mt-1 text-xs text-gray-400">
-          Vào Cài đặt → Cấp độ, đổi dạng đề của cấp sang “Thử thách nhiều vòng” rồi quay lại đây.
-        </p>
+        <p className="text-sm font-bold text-gray-500">Chưa có cấp độ nào</p>
       </div>
     );
   }
@@ -169,7 +171,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
         </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {trialLevels.map((l) => (
+          {levels.map((l) => (
             <button
               key={l.id}
               onClick={() => setLevelId(l.id)}
@@ -180,9 +182,18 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
               style={levelId === l.id ? { backgroundColor: l.color } : undefined}
             >
               {l.name}
+              {l.format === "TRIAL" && <span className="ml-1.5 opacity-70">·  thử thách</span>}
             </button>
           ))}
         </div>
+
+        {selected && selected.format !== "TRIAL" && (
+          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
+            Cấp “{selected.name}” đang dùng đề trắc nghiệm phẳng. Soạn vòng ở đây trước cũng
+            được, nhưng phải vào Cài đặt → Cấp độ đổi dạng đề sang “Thử thách nhiều vòng”
+            thì người ở cấp này mới thi đề này.
+          </p>
+        )}
       </div>
 
       {/* Thêm vòng mới */}
