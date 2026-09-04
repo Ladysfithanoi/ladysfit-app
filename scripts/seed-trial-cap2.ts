@@ -1,5 +1,5 @@
 /**
- * Nạp bản nháp nội dung 3 vòng đầu của đề thử thách 7 đại tội cho một cấp độ.
+ * Nạp bản nháp nội dung đủ 7 vòng của đề thử thách 7 đại tội cho một cấp độ.
  *
  *   npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/seed-trial-cap2.ts "Cấp 2" [GREED ...]
  *
@@ -266,6 +266,388 @@ const GREED_CARDS: { text: string; correctZone: ExamSortZone; explanation: strin
   },
 ];
 
+// ── Vòng 4 · Kiêu ngạo ───────────────────────────────────────────────────────
+// Chuyên môn kỹ thuật. Kiêu ngạo của một HLV không phải là khoe mẽ — nó là
+// khoảnh khắc tin rằng mình xử lý được một ca mà mình chưa từng học. Nên vùng
+// "từ chối" ở vòng này gần như luôn là chuyện an toàn thân thể của khách.
+const PRIDE_INTRO = `Mỗi thẻ là một tình huống chuyên môn trên sàn tập. Xếp nó vào một trong ba vùng:
+
+• Chấp nhận — bạn tự xử lý được ngay trong buổi tập, không cần hỏi ai.
+• Cần cẩn trọng — làm được, nhưng phải đổi bài, hạ tải, hoặc hỏi người có chuyên môn hơn trước.
+• Từ chối & báo FM — không tự làm. Dừng lại, đưa lên quản lý hoặc yêu cầu khách có ý kiến y tế.
+
+Không ai đánh giá bạn vì hỏi. Người ta đánh giá bạn vì đã không hỏi.
+
+Xếp lệch một bậc còn nửa điểm. Xếp lệch hai bậc thì mất hết điểm của thẻ đó.`;
+
+const PRIDE_CARDS: { text: string; correctZone: ExamSortZone; explanation: string }[] = [
+  {
+    text: "Khách squat tới rep thứ 8 thì gối đổ vào trong. Tải đang vừa sức, khách chưa kêu đau.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Lỗi form phổ biến nhất của người mới và nằm gọn trong phần việc của HLV: hạ tải, nhắc đẩy gối ra ngoài, kẹp band nếu cần. Dừng cả buổi vì chuyện này không phải cẩn thận mà là chưa nắm được việc của mình.",
+  },
+  {
+    text: "Khách hỏi vì sao bạn cho tập bài này thay vì bài khác mà khách xem được trên TikTok.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Giải thích lý do là việc nên làm, và khách hiểu vì sao mình tập thì mới tập bền. Khó chịu vì bị hỏi mới đúng là kiêu ngạo — câu hỏi đó không đe doạ chuyên môn của ai cả.",
+  },
+  {
+    text: "Khách mới tập buổi đầu, hôm sau nhắn là đau nhức cơ hai ngày liền, hỏi có bình thường không.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Đau cơ khởi phát muộn ở người mới là bình thường. Giải thích, dặn cách xử lý, và điều chỉnh khối lượng buổi kế cho vừa hơn. Đây là câu hỏi bạn phải trả lời được.",
+  },
+  {
+    text: "Khách xin học một động tác cử tạ kỹ thuật cao mà bạn chưa từng được đào tạo.",
+    correctZone: "CAUTION",
+    explanation:
+      "Không nhận bừa, cũng không giấu. Nói thật là động tác này cần chuyên môn riêng, đề xuất bài thay thế đạt cùng mục tiêu, và nếu muốn dạy thì đi học trước. Dạy một động tác mình chưa từng học chính là chỗ chấn thương bắt đầu.",
+  },
+  {
+    text: "Khách 52 tuổi, huyết áp cao đang uống thuốc, muốn tập HIIT vì nghe nói giảm cân nhanh.",
+    correctZone: "CAUTION",
+    explanation:
+      "Không cấm, nhưng phải hạ cường độ, theo dõi nhịp tim, tránh động tác đầu thấp hơn tim và những đoạn nín thở. Hỏi khách lần khám gần nhất là khi nào; chưa có ý kiến bác sĩ thì lùi lại và tập nền trước.",
+  },
+  {
+    text: "Khách đau vai khi đẩy ngực. Bạn thấy form sai, nhưng khách bảo PT cũ dạy như vậy.",
+    correctZone: "CAUTION",
+    explanation:
+      "Sửa bằng lý do kỹ thuật, đừng chê người trước — chê PT cũ trước mặt khách chỉ làm khách nghi ngờ cả nghề này. Hạ tải, đổi góc, xem lại tầm vận động vai. Im lặng để khách đau tiếp thì còn tệ hơn cả chê.",
+  },
+  {
+    text: "Khách đưa đơn thuốc đang uống và hỏi bạn có nên dùng thêm thực phẩm bổ sung không.",
+    correctZone: "CAUTION",
+    explanation:
+      "Ranh giới nằm ở chỗ có toa hay không: whey, creatine, vitamin thông thường thì tư vấn được trong phạm vi dinh dưỡng thể thao. Thuốc kê đơn và tương tác thuốc là việc của bác sĩ — nói thẳng là bạn không trả lời phần đó.",
+  },
+  {
+    text: "Bạn quay video phân tích form cho khách, xem lại thì thấy chính mình làm mẫu sai trong video.",
+    correctZone: "CAUTION",
+    explanation:
+      "Sửa và nói với khách, đừng lặng lẽ xoá video. Nhận một lỗi kỹ thuật trước mặt khách không làm mất uy tín; giấu đi rồi để khách bắt chước cái sai mới làm mất, và mất lâu hơn nhiều.",
+  },
+  {
+    text: "Khách mới, có tiền sử thoát vị đĩa đệm, buổi đầu đòi tập deadlift nặng vì thấy bạn trai tập được.",
+    correctZone: "REFUSE",
+    explanation:
+      "Dừng, không tập bài đó, báo FM và yêu cầu khách có ý kiến chuyên môn y tế trước. Chiều theo là đặt cột sống của khách vào tay một người không được đào tạo để xử lý ca đó — và khách sẽ không nhớ rằng chính họ đòi.",
+  },
+  {
+    text: "Đang tập, khách choáng và tái mặt, phải ngồi xuống. Vài phút sau khách bảo đỡ rồi và muốn tập tiếp.",
+    correctZone: "REFUSE",
+    explanation:
+      "Dừng buổi, cho khách nghỉ, báo FM và ghi lại sự việc. \"Đỡ rồi\" là cảm giác của khách chứ không phải chẩn đoán, và tình huống này có thể là tụt huyết áp, hạ đường huyết hoặc chuyện nặng hơn.",
+  },
+  {
+    text: "Bạn thấy đồng nghiệp cho một khách đang đau vai gánh tạ sau gáy — sai rõ ràng và có nguy cơ.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không im lặng: báo FM. Nhảy vào giữa sàn dạy lại trước mặt khách của người khác thì không nên, nhưng để nguyên đấy vì ngại thì lần sau là một ca chấn thương, và bạn đã nhìn thấy trước.",
+  },
+  {
+    text: "Khách đau nhói thắt lưng sau một rep. Còn 3 buổi là hết gói và khách muốn tập cho hết.",
+    correctZone: "REFUSE",
+    explanation:
+      "Dừng, báo FM để xử lý bảo lưu hoặc gia hạn. Đổi sức khoẻ của khách lấy ba buổi đã dạy là phiên bản tệ nhất của tội kiêu ngạo: tin rằng mình biết cơn đau đó không sao, trong khi mình không có cách nào biết.",
+  },
+];
+
+// ── Vòng 5 · Ghen tị ─────────────────────────────────────────────────────────
+// Sale. Ghen tị của người bán hàng hiếm khi là ghét ai; nó là những việc rất
+// nhỏ làm để mình hơn người bên cạnh — giữ một lead lại, nói một câu về đồng
+// nghiệp, nhận một khách vốn không phải của mình.
+const ENVY_INTRO = `Mỗi thẻ là một tình huống giữa bạn và đồng nghiệp cùng phòng. Xếp nó vào một trong ba vùng:
+
+• Chấp nhận — làm bình thường, không cần hỏi ai.
+• Cần cẩn trọng — làm được nhưng phải minh bạch, hoặc phải qua FM trước.
+• Từ chối & báo FM — không làm, và quản lý phải biết.
+
+Doanh số của bạn là việc của bạn với FM. Nó không phải thứ để lấy từ tay người
+ngồi cạnh — phòng tập mất một PT giỏi thì cả bạn cũng nghèo đi.
+
+Xếp lệch một bậc còn nửa điểm. Xếp lệch hai bậc thì mất hết điểm của thẻ đó.`;
+
+const ENVY_CARDS: { text: string; correctZone: ExamSortZone; explanation: string }[] = [
+  {
+    text: "Đồng nghiệp tháng này chốt gấp đôi bạn. Bạn sang hỏi bạn ấy tư vấn thế nào.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Hỏi là cách duy nhất biến ghen tị thành chuyên môn. Người giỏi hơn ngồi cách bạn ba mét mà bạn không hỏi thì tháng sau vẫn thế.",
+  },
+  {
+    text: "Bạn thấy đồng nghiệp có một mẫu tin nhắn chốt sale rất tốt và xin dùng lại.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Học cách làm của nhau đúng là điều phòng tập cần. Xin đàng hoàng thì không có gì phải cân nhắc — khác hẳn với việc chụp trộm rồi nhận là của mình.",
+  },
+  {
+    text: "Tháng này FM chia lead cho bạn ít hơn tháng trước. Bạn hỏi thẳng FM tiêu chí chia lead.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Hỏi đúng người, đúng chuyện. Ấm ức mà không hỏi mới là chỗ sinh ra những việc ở hai vùng sau — người ta bắt đầu tự bù đắp theo cách của riêng mình.",
+  },
+  {
+    text: "Khách của đồng nghiệp khen bạn dạy hay và hỏi có chuyển sang tập với bạn được không.",
+    correctZone: "CAUTION",
+    explanation:
+      "Không tự nhận, cũng đừng lảng. Đưa lên FM quyết và nói cho đồng nghiệp biết. Khách chủ động không làm việc này thành trong sạch — người ngoài nhìn vào vẫn thấy một PT lấy khách của PT khác.",
+  },
+  {
+    text: "Một khách cũ đã hết gói 6 tháng, PT phụ trách trước đã nghỉ việc. Bạn muốn gọi lại mời tái ký.",
+    correctZone: "CAUTION",
+    explanation:
+      "Khách không còn PT phụ trách thì gọi được, nhưng phải qua danh sách của FM. Không thì hai người cùng gọi một khách trong một ngày, và khách sẽ hiểu ngay rằng ở đây không ai nói chuyện với ai.",
+  },
+  {
+    text: "Đang tập, khách hỏi bạn nghĩ gì về PT đang đứng bên cạnh.",
+    correctZone: "CAUTION",
+    explanation:
+      "Không chê, cũng không nịnh cho xong. Một câu trung tính rồi quay lại buổi tập. Chê đồng nghiệp trước mặt khách hạ uy tín cả phòng, và khách sẽ hiểu rằng bạn cũng nói về họ như thế với người khác.",
+  },
+  {
+    text: "Bạn và đồng nghiệp cùng tư vấn một khách walk-in. Khách chốt gói, cả hai đều muốn ghi doanh số.",
+    correctZone: "CAUTION",
+    explanation:
+      "Để FM quyết theo quy trình, đừng tự thoả thuận miệng rồi ai nhanh tay ghi trước. Những vụ ghi trước tính sau là thứ sinh ra mâu thuẫn kéo dài cả năm giữa hai người vốn không có gì với nhau.",
+  },
+  {
+    text: "Bạn được giao một lead mà bạn biết đồng nghiệp đã chăm hai tuần nhưng chưa chốt.",
+    correctZone: "CAUTION",
+    explanation:
+      "Nhận thì nhận, nhưng hỏi FM vì sao đổi người và hỏi đồng nghiệp đã trao đổi những gì với khách. Không thì bạn tư vấn ngược lại điều người trước đã nói, và khách mất niềm tin vào cả hai.",
+  },
+  {
+    text: "Bạn nhắn riêng cho khách của đồng nghiệp rằng tập với bạn sẽ được giá tốt hơn.",
+    correctZone: "REFUSE",
+    explanation:
+      "Vừa lấy khách của người khác, vừa tự ý hứa giá không thuộc thẩm quyền của mình. Hai việc sai chồng lên nhau trong một tin nhắn, và tin nhắn thì luôn được chụp lại.",
+  },
+  {
+    text: "Bạn nói với khách rằng PT đang dạy họ chưa có chứng chỉ, để khách chuyển sang tập với bạn.",
+    correctZone: "REFUSE",
+    explanation:
+      "Kể cả khi câu đó có thật. Chuyện bằng cấp của nhân sự là việc của phòng tập với FM, không phải thứ để lấy làm đòn bẩy bán hàng. Nói ra như thế là hạ uy tín nơi trả lương cho chính mình.",
+  },
+  {
+    text: "Một lead được phân cho đồng nghiệp nhưng đến tay bạn trước. Bạn giữ lại, cuối tháng tự chốt.",
+    correctZone: "REFUSE",
+    explanation:
+      "Giữ thông tin của người khác là lấy cắp cơ hội chứ không phải nhanh chân. Chuyển ngay cho đúng người và báo FM — hệ thống phân lead chỉ chạy được khi không ai giữ riêng cái gì.",
+  },
+  {
+    text: "Bạn báo với FM rằng đồng nghiệp hay bỏ buổi, trong khi thật ra bạn không chắc, để mình được nhận khách đó.",
+    correctZone: "REFUSE",
+    explanation:
+      "Đây không còn là ghen tị mà là vu cho người khác để lấy khách. Nếu thật sự nghi có buổi bị bỏ thì nói đúng những gì mình thấy, không thêm — và không kèm theo lời đề nghị nhận khách.",
+  },
+];
+
+// ── Vòng 6 · Phẫn nộ ─────────────────────────────────────────────────────────
+// Xử lý khiếu nại và xung đột. Phẫn nộ không chỉ là quát khách: nó còn là nhắn
+// tin lúc đang giận, là im lặng cho qua rồi để bụng, là một câu trả lời "cho bõ
+// tức" trong nhóm chat mà sáng hôm sau đọc lại thì không nhận ra mình.
+const WRATH_INTRO = `Mỗi thẻ là một tình huống căng thẳng có thật. Xếp nó vào một trong ba vùng:
+
+• Chấp nhận — bạn xử lý ngay tại chỗ được, không cần ai.
+• Cần cẩn trọng — xử lý được, nhưng phải ghi lại và nói với FM trong ngày.
+• Từ chối & báo FM — không tự xử lý. Dừng lại và đưa lên quản lý ngay.
+
+Thứ phân loại người ở vòng này không phải ai giỏi chịu đựng hơn, mà ai biết
+chuyện nào là của mình và chuyện nào phải chuyển đi.
+
+Xếp lệch một bậc còn nửa điểm. Xếp lệch hai bậc thì mất hết điểm của thẻ đó.`;
+
+const WRATH_CARDS: { text: string; correctZone: ExamSortZone; explanation: string }[] = [
+  {
+    text: "Khách trách bạn vì buổi trước bạn quên nhắc đổi mức tạ. Giọng hơi gắt nhưng khách nói đúng.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Nhận lỗi, sửa, đi tiếp. Đúng là lỗi của mình và nó nhỏ. Cãi lại một lời trách có căn cứ là cách nhanh nhất biến chuyện nhỏ thành chuyện phải nhờ FM.",
+  },
+  {
+    text: "Khách đến muộn 20 phút rồi khó chịu vì buổi tập bị rút ngắn.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Nói lại quy định giờ một cách bình thản, rồi tập cho ra hồn phần thời gian còn lại. Không cần báo ai — nhưng cũng không kéo dài bù giờ, vì bù một lần là thành lệ.",
+  },
+  {
+    text: "Hai khách tranh nhau một máy tập và cả hai cùng nhìn về phía bạn.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Điều phối cho tập xen kẽ, đổi thứ tự bài của khách mình. Việc thường ngày trên sàn, và cách bạn xử lý ba mươi giây này quyết định không khí cả buổi.",
+  },
+  {
+    text: "Khách nói mình giảm chưa đủ như cam kết và muốn được hoàn tiền. Khách vẫn đang bình tĩnh.",
+    correctZone: "CAUTION",
+    explanation:
+      "Nghe hết, không ngắt, và tuyệt đối không hứa gì về tiền — hoàn tiền không thuộc thẩm quyền của PT. Lấy lại số liệu cân đo, số buổi đã tập, nhật ký ăn, rồi báo FM ngay trong ngày kèm dữ liệu.",
+  },
+  {
+    text: "Nửa đêm khách nhắn một tin dài trách bạn không quan tâm. Đọc xong bạn thấy rất ức.",
+    correctZone: "CAUTION",
+    explanation:
+      "Đừng trả lời lúc đó. Sáng hôm sau nhắn một câu ngắn, hẹn nói trực tiếp, và báo FM là đang có chuyện. Tin nhắn viết lúc đang giận bao giờ cũng là tin nhắn bị chụp màn hình.",
+  },
+  {
+    text: "Khách kể lại rằng một đồng nghiệp đã nói xấu bạn với họ.",
+    correctZone: "CAUTION",
+    explanation:
+      "Không đối chất giữa sàn. Ghi lại chính xác lời khách kể — kể cả phần bạn không thích nghe — rồi đưa FM. Tự đi hỏi tội là biến chuyện của hai người thành chuyện cả phòng đứng nhìn.",
+  },
+  {
+    text: "Suốt buổi tập, khách liên tục chê bài tập bạn thiết kế là vô dụng.",
+    correctZone: "CAUTION",
+    explanation:
+      "Hỏi thẳng khách muốn gì và ghi nhận cho đàng hoàng. Nếu là khác biệt về phương pháp thì báo FM để tính chuyện đổi PT. Cắn răng chịu tới hết gói là chỗ phẫn nộ tích lại rồi bung ra vào lúc tệ nhất.",
+  },
+  {
+    text: "Bạn phát hiện bảng lương tháng này tính thiếu mấy buổi dạy của mình.",
+    correctZone: "CAUTION",
+    explanation:
+      "Gửi FM danh sách buổi kèm ảnh check-out, đúng quy trình và đúng người. Đăng lên nhóm chat chung thì không: nó không làm bạn được trả nhanh hơn, chỉ làm chuyện của bạn thành chuyện của tất cả.",
+  },
+  {
+    text: "Khách quát bạn giữa sàn trước mặt nhiều người, dùng từ xúc phạm.",
+    correctZone: "REFUSE",
+    explanation:
+      "Dừng buổi tập, không đáp trả một câu nào, mời khách sang chỗ riêng hoặc gọi FM ngay. Bạn không phải chịu đựng bị xúc phạm, nhưng cũng không phải người xử lý chuyện đó một mình giữa sàn.",
+  },
+  {
+    text: "Khách nhắn tin doạ sẽ đăng bài bóc phốt lên mạng nếu không được hoàn tiền.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không thương lượng, không trả lời một mình, không xoá tin. Chụp lại toàn bộ và báo FM ngay. Đây đã là chuyện của công ty chứ không còn là chuyện giữa bạn và một khách hàng.",
+  },
+  {
+    text: "Khách có mùi rượu, nói năng khó kiểm soát, vẫn đòi vào tập buổi hôm nay.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không cho tập, báo FM và lễ tân. Người say không giữ được thăng bằng lẫn phán đoán, và mọi thứ xảy ra sau đó sẽ được tính là lỗi của phòng tập vì đã cho vào.",
+  },
+  {
+    text: "Trong lúc nóng giận, một đồng nghiệp đẩy vai bạn giữa sàn.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không đẩy lại, tách ra, báo FM ngay. Đụng tay chân ở nơi làm việc không có phiên bản nhẹ — bỏ qua lần này là mặc định cho phép nó xảy ra lần nữa, với bạn hoặc với người khác.",
+  },
+];
+
+// ── Vòng 7 · Lười biếng ──────────────────────────────────────────────────────
+// Giữ khách, chống bỏ tập. Lười biếng của HLV không phải là ngủ quên: nó là để
+// một khách vắng ba buổi mà không nhắn lấy một tin, là "chắc bạn ấy bận", là
+// gói sắp hết hạn mà không ai nói với khách cho tới ngày cuối.
+const SLOTH_INTRO = `Mỗi thẻ là một dấu hiệu từ phía khách. Ba vùng ở vòng này đọc theo mức phải can thiệp:
+
+• Chấp nhận — chuyện bình thường, xử lý gọn trong buổi tập.
+• Cần cẩn trọng — phải chủ động làm gì đó và ghi lại, đừng ngồi chờ khách quay lại.
+• Từ chối & báo FM — không được để im và không tự ôm. Đẩy lên FM ngay.
+
+Khách hiếm khi bỏ tập vì bận. Họ bỏ vì thấy vô ích, hoặc vì thấy không ai để ý
+là mình đã vắng.
+
+Xếp lệch một bậc còn nửa điểm. Xếp lệch hai bậc thì mất hết điểm của thẻ đó.`;
+
+const SLOTH_CARDS: { text: string; correctZone: ExamSortZone; explanation: string }[] = [
+  {
+    text: "Khách báo trước hai ngày là tuần này đi công tác, xin nghỉ 3 buổi.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Có báo trước, có lý do rõ ràng. Xếp lại lịch bù và gửi vài bài tập tự làm nếu khách muốn. Khách chủ động báo là dấu hiệu tốt, đừng biến nó thành chuyện phải xử lý.",
+  },
+  {
+    text: "Khách vẫn tập đủ 6 buổi/tuần, tuần này xin đổi giờ từ sáng sang tối.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Đổi giờ mà vẫn giữ tần suất thì không phải dấu hiệu gì cả. Chốt lịch mới ngay trong lúc nhắn, đừng để trôi thành \"khi nào rảnh em báo\".",
+  },
+  {
+    text: "Khách hỏi tuần sau nghỉ lễ phòng có mở cửa không.",
+    correctZone: "ACCEPT",
+    explanation:
+      "Trả lời, và chốt luôn lịch bù trong chính câu trả lời đó. Kỳ nghỉ là chỗ nhiều khách rơi ra khỏi thói quen nhất — một tin nhắn có ngày giờ cụ thể giữ được cả tháng sau.",
+  },
+  {
+    text: "Khách vắng 2 buổi liên tiếp không báo. Tin nhắn của bạn đã xem nhưng chưa trả lời.",
+    correctZone: "CAUTION",
+    explanation:
+      "Gọi điện, đừng chỉ nhắn thêm tin thứ ba. Ghi vào ghi chú khách. Hai buổi im lặng là mốc sớm nhất mà mọi thứ còn kéo lại được — đến buổi thứ năm thì câu trả lời thường đã là lời từ chối lịch sự.",
+  },
+  {
+    text: "Khách đi đều nhưng cân không đổi suốt 3 tuần và bắt đầu ít nói hẳn trong buổi tập.",
+    correctZone: "CAUTION",
+    explanation:
+      "Đặt lại buổi đo, xem lại nhật ký ăn, và nói thẳng về con số thay vì động viên chung chung. Khách im lặng khi kết quả đứng yên là bước ngay trước khi họ nghỉ, không phải sau.",
+  },
+  {
+    text: "Gói L2 của khách còn 20 buổi nhưng chỉ còn 18 ngày là hết hạn.",
+    correctZone: "CAUTION",
+    explanation:
+      "Nói với khách ngay hôm nay, đưa phương án tăng tần suất hoặc xin FM về bảo lưu, gia hạn. Để tới ngày cuối mới báo thì chắc chắn thành khiếu nại, và khiếu nại đó bạn không cãi được câu nào.",
+  },
+  {
+    text: "Khách nhắn: \"Chị bận quá, để tháng sau chị tập lại nhé.\"",
+    correctZone: "CAUTION",
+    explanation:
+      "Đừng gật cho qua. Hẹn một buổi có ngày giờ cụ thể, dù chỉ 30 phút nhẹ. \"Tháng sau\" không kèm ngày là một lời tạm biệt lịch sự, và cả hai bên đều biết điều đó.",
+  },
+  {
+    text: "Bạn đang có 12 khách, trong đó 3 người bạn đã không nhắn gì suốt 10 ngày.",
+    correctZone: "CAUTION",
+    explanation:
+      "Đặt một khung giờ cố định trong tuần để rà lại toàn bộ danh sách, và báo FM nếu thật sự quá tải. Chăm tốt 9 người là đáng khen, nhưng mất 3 người thì vẫn là mất 3 người.",
+  },
+  {
+    text: "Khách vắng 3 tuần, gọi không nghe, nhắn không trả lời. Gói vẫn còn 30 buổi.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không tự ôm thêm nữa: báo FM để phòng tập liên hệ qua kênh khác. Ba tuần im lặng nghĩa là khách đã đi rồi, và 30 buổi còn lại là một khoản trách nhiệm của công ty chứ không phải chuyện riêng của bạn.",
+  },
+  {
+    text: "Khách nói muốn dừng hẳn vì \"không hợp\" nhưng không nói rõ không hợp chỗ nào.",
+    correctZone: "REFUSE",
+    explanation:
+      "Không xử lý một mình. Báo FM và xin một buổi có FM ngồi cùng. \"Không hợp\" gần như luôn là cách nói giảm cho một chuyện cụ thể — có thể là bạn, có thể không — và người trong cuộc thường là người khó hỏi ra nhất.",
+  },
+  {
+    text: "Khách xin bảo lưu vô thời hạn vì lý do cá nhân.",
+    correctZone: "REFUSE",
+    explanation:
+      "PT không quyết được bảo lưu: mỗi gói có quy định riêng, L5 có 2 lần miễn phí tối đa 30 ngày mỗi lần. Gật đầu cho khách yên lòng rồi để FM từ chối sau là đẩy đồng nghiệp vào thế khó và làm khách mất niềm tin hai lần.",
+  },
+  {
+    text: "Bạn nhận ra mình đã quên không check-out cho khách suốt 5 buổi liền.",
+    correctZone: "REFUSE",
+    explanation:
+      "Báo FM ngay kèm bằng chứng buổi tập, đừng lặng lẽ bấm bù cho đủ. Buổi dạy không có check-out là buổi không có bằng chứng — bấm bù sau lưng quản lý biến một chuyện đãng trí thành một chuyện gian lận bảng lương.",
+  },
+];
+
+/**
+ * Mọi vòng phân loại thẻ của đề, xếp theo thứ tự vòng. Thêm một đại tội mới thì
+ * thêm một dòng ở đây, không phải chép thêm một khối lệnh trong main().
+ */
+const SORT_ROUNDS: {
+  sin: ExamSin;
+  name: string;
+  order: number;
+  passPercent: number;
+  failPenalty: number;
+  intro: string;
+  cards: { text: string; correctZone: ExamSortZone; explanation: string }[];
+}[] = [
+  { sin: "LUST",  name: "Dục vọng",   order: 1, passPercent: 70, failPenalty: 25, intro: SORT_INTRO,  cards: SORT_CARDS },
+  { sin: "GREED", name: "Tham lam",   order: 2, passPercent: 65, failPenalty: 25, intro: GREED_INTRO, cards: GREED_CARDS },
+  // Kiêu ngạo gắt hơn phần còn lại vì gần như mọi thẻ vùng đỏ của nó là an toàn
+  // thân thể của khách — qua loa ở đây thì hậu quả không nằm trong bảng điểm.
+  { sin: "PRIDE", name: "Kiêu ngạo",  order: 3, passPercent: 70, failPenalty: 25, intro: PRIDE_INTRO, cards: PRIDE_CARDS },
+  { sin: "ENVY",  name: "Ghen tị",    order: 4, passPercent: 65, failPenalty: 20, intro: ENVY_INTRO,  cards: ENVY_CARDS },
+  { sin: "WRATH", name: "Phẫn nộ",    order: 5, passPercent: 65, failPenalty: 20, intro: WRATH_INTRO, cards: WRATH_CARDS },
+  { sin: "SLOTH", name: "Lười biếng", order: 6, passPercent: 60, failPenalty: 20, intro: SLOTH_INTRO, cards: SLOTH_CARDS },
+];
+
 async function main() {
   const levelName = process.argv[2] ?? "Cấp 2";
 
@@ -312,49 +694,27 @@ async function main() {
     console.log(`  Phàm ăn: ${MEAL_BRIEFS.length} hồ sơ`);
   }
 
-  // ── Vòng Sa ngã ───────────────────────────────────────────────────────────
-  if (wanted("LUST")) {
-    // "Sa ngã" không nằm trong thất đại tội — tên kinh điển là Dục vọng.
-    const sort = await upsertRound(level.id, "Dục vọng", "SORT", "LUST", {
-      intro: SORT_INTRO,
-      order: 1,
+  // ── Các vòng phân loại thẻ ────────────────────────────────────────────────
+  for (const r of SORT_ROUNDS) {
+    if (!wanted(r.sin)) continue;
+    const round = await upsertRound(level.id, r.name, "SORT", r.sin, {
+      intro: r.intro,
+      order: r.order,
       maxPoints: 100,
-      passPercent: 70,
-      failPenalty: 25,
+      passPercent: r.passPercent,
+      failPenalty: r.failPenalty,
     });
-    await prisma.examSortCard.deleteMany({ where: { roundId: sort.id } });
+    await prisma.examSortCard.deleteMany({ where: { roundId: round.id } });
     await prisma.examSortCard.createMany({
-      data: SORT_CARDS.map((c, i) => ({
-        roundId: sort.id,
+      data: r.cards.map((c, i) => ({
+        roundId: round.id,
         order: i,
         text: c.text,
         correctZone: c.correctZone,
         explanation: c.explanation,
       })),
     });
-    console.log(`  Dục vọng: ${SORT_CARDS.length} thẻ`);
-  }
-
-  // ── Vòng Tham lam ─────────────────────────────────────────────────────────
-  if (wanted("GREED")) {
-    const greed = await upsertRound(level.id, "Tham lam", "SORT", "GREED", {
-      intro: GREED_INTRO,
-      order: 2,
-      maxPoints: 100,
-      passPercent: 65,
-      failPenalty: 25,
-    });
-    await prisma.examSortCard.deleteMany({ where: { roundId: greed.id } });
-    await prisma.examSortCard.createMany({
-      data: GREED_CARDS.map((c, i) => ({
-        roundId: greed.id,
-        order: i,
-        text: c.text,
-        correctZone: c.correctZone,
-        explanation: c.explanation,
-      })),
-    });
-    console.log(`  Tham lam: ${GREED_CARDS.length} thẻ`);
+    console.log(`  ${round.name}: ${r.cards.length} thẻ`);
   }
 
   console.log("\nXong. Vào Bài thi → Đề thử thách để duyệt và sửa.");
@@ -383,9 +743,16 @@ async function upsertRound(
     (await prisma.examRound.findFirst({ where: { levelId, sin } })) ??
     (await prisma.examRound.findFirst({ where: { levelId, type, sin: null } }));
   if (existing) {
-    return prisma.examRound.update({ where: { id: existing.id }, data: { name, type, sin, ...data } });
+    // GIỮ NGUYÊN TÊN Admin đã đặt. Tên vòng là thứ người dùng sửa trong giao
+    // diện; nạp lại nội dung mà đè luôn tên thì công đổi tên của họ mất trắng
+    // và họ không hề được báo. Chỉ vòng tạo mới mới lấy tên mặc định ở đây.
+    return prisma.examRound.update({ where: { id: existing.id }, data: { type, sin, ...data } });
   }
-  return prisma.examRound.create({ data: { levelId, name, type, sin, ...data } });
+  // VÒNG NẠP MỚI LUÔN Ở TRẠNG THÁI TẮT. Script này chỉ mồi nội dung; bật một
+  // vòng là đổi hẳn bài thi của mọi người ở cấp đó, và thời lượng làm bài trong
+  // Lịch thi phải đủ cho số vòng đang bật. Quyết định đó là của Admin sau khi
+  // duyệt nội dung, không phải của một lệnh chạy trong terminal.
+  return prisma.examRound.create({ data: { levelId, name, type, sin, isActive: false, ...data } });
 }
 
 main()
