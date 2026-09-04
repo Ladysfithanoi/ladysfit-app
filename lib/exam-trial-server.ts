@@ -376,3 +376,47 @@ export function serializeRoundForAdmin<
     })),
   };
 }
+
+/**
+ * Thứ tự các vòng của một lượt thi.
+ *
+ *   • Vòng của tội ĐÃ KHAI luôn đứng đầu — phải đối mặt trước đã.
+ *   • Các vòng còn lại XÁO NGẪU NHIÊN, để không đoán được vòng kế là gì và
+ *     không mách nhau được thứ tự.
+ *   • Đã có thứ tự chốt trong lượt thi thì dùng lại đúng thứ tự đó. F5 không
+ *     phải là cách xáo lại cho tới khi ra thứ tự vừa ý.
+ *
+ * Vòng lạ trong thứ tự cũ (Admin vừa xoá) bị bỏ qua; vòng mới thêm sau khi đã
+ * chốt thì nối vào cuối — đề đổi giữa kỳ không được làm hỏng lượt đang thi.
+ */
+export function orderTrialRounds<T extends { id: string; sin: string | null }>(
+  rounds: T[],
+  declaredSin: string | null,
+  pinnedJson?: string | null,
+): T[] {
+  const byId = new Map(rounds.map((r) => [r.id, r]));
+
+  if (pinnedJson) {
+    try {
+      const ids = JSON.parse(pinnedJson);
+      if (Array.isArray(ids) && ids.length > 0) {
+        const kept = ids
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => byId.get(id))
+          .filter((r): r is T => !!r);
+        const seen = new Set(kept.map((r) => r.id));
+        return [...kept, ...rounds.filter((r) => !seen.has(r.id))];
+      }
+    } catch {
+      // Thứ tự cũ hỏng → xáo lại từ đầu, còn hơn trả về đề rỗng.
+    }
+  }
+
+  const first = declaredSin ? rounds.filter((r) => r.sin === declaredSin) : [];
+  const rest = rounds.filter((r) => !first.includes(r));
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  return [...first, ...rest];
+}

@@ -80,8 +80,28 @@ export const SIN_SEPHIRAH: Record<Sin, number> = {
   GREED: 4,
 };
 
-/** Vương miện — chỉ sáng khi đạt cả kỳ thi. */
+/**
+ * BA SEPHIROT TRÊN VỰC THẲM — ba điều kiện thăng cấp còn lại.
+ *
+ * Bảy sephirot dưới là bảy đại tội, tức phần LÝ THUYẾT. Nhưng đậu lý thuyết
+ * chưa đưa ai lên cấp: lib/pt-promotion.ts đòi đủ BỐN điều kiện. Ba điều kiện
+ * còn lại đặt đúng vào ba ô trên cùng, và Vực Thẳm ngăn giữa chúng với bảy tội
+ * chính là chỗ mà bài thi không vượt qua hộ được ai.
+ *
+ *   Chokmah — Minh triết : cái biết THỂ HIỆN RA NGOÀI     → bài thực hành
+ *   Binah   — Thấu hiểu  : cái biết ĐÃ THÀNH HÌNH ở khách → doanh số + transform
+ *   Kether  — Vương miện : đủ cả bốn, thăng cấp thật sự
+ */
+export const CHOKMAH = 2;
+export const BINAH = 3;
 export const KETHER = 1;
+
+/** Nhãn ba ô trên cùng, hiện kèm trạng thái ở màn kết quả. */
+export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = {
+  [CHOKMAH]: { name: "Chokmah — Minh triết", need: "Bài kiểm tra thực hành" },
+  [BINAH]: { name: "Binah — Thấu hiểu", need: "Doanh số & khách transform" },
+  [KETHER]: { name: "Kether — Vương miện", need: "Đủ cả bốn điều kiện — thăng cấp" },
+};
 
 // ── Tội tự khai ──────────────────────────────────────────────────────────────
 //

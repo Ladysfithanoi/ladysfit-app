@@ -7,6 +7,7 @@ import { checkCanSitExam } from "@/lib/exam-required-fm";
 import { ALREADY_TAKEN_MESSAGE, SESSION_EXPIRED_MESSAGE, sessionDeadline } from "@/lib/exam-session";
 import { resolveExamLevel } from "@/lib/exam-level";
 import { gradeTrialAttempt } from "@/lib/exam-trial-server";
+import { evaluatePtById } from "@/lib/pt-promotion";
 
 /**
  * Nộp bài đề thử thách nhiều vòng.
@@ -124,7 +125,14 @@ export async function POST(req: NextRequest) {
     data: { attemptId: graded.attemptId },
   });
 
+  // Ba ô trên cùng của cây là ba điều kiện thăng cấp còn lại — gửi kèm để màn
+  // kết quả cho thấy cả con đường lên cấp, không chỉ mỗi bài thi vừa làm.
+  const promotion = noPenalty ? null : await evaluatePtById(userId).catch(() => null);
+
   return NextResponse.json({
+    promotion: promotion
+      ? Object.fromEntries(promotion.conditions.map((c) => [c.key, { ok: c.ok, detail: c.detail }]))
+      : null,
     scorePct: graded.result.scorePct,
     score: graded.result.score,
     total: graded.result.total,

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { SIN_SEPHIRAH, SIN_LABEL, type Sin } from "@/lib/exam-trial";
+import { SIN_SEPHIRAH, SIN_LABEL, SUPERNAL_LABEL, type Sin } from "@/lib/exam-trial";
 
 /**
  * Cây Sự Sống (Kaballah) — bản đồ những đại tội một người đã đối mặt.
@@ -11,8 +11,10 @@ import { SIN_SEPHIRAH, SIN_LABEL, type Sin } from "@/lib/exam-trial";
  * sephirah đó sáng lên. Thí sinh không phải thi cả bảy tội — đề của cấp có bao
  * nhiêu vòng thì cây sáng bấy nhiêu chỗ.
  *
- * Ba sephirot trên cùng (Kether · Chokmah · Binah) không gắn tội nào; Kether chỉ
- * sáng khi đạt cả kỳ.
+ * Ba sephirot trên cùng gắn BA ĐIỀU KIỆN THĂNG CẤP CÒN LẠI (xem SUPERNAL_LABEL):
+ * Chokmah là bài thực hành, Binah là doanh số & transform, Kether là thăng cấp
+ * thật sự. Vực Thẳm ngăn giữa chúng với bảy tội — bài thi không vượt hộ ai qua
+ * vạch đó.
  *
  * Ba trụ cũng không phải hoạ tiết: trái Nghiêm khắc, phải Khoan dung, giữa Cân
  * bằng — đúng trục mà bài thi đang đo qua hướng lệch của bài làm (PILLAR_LABEL).
@@ -106,6 +108,13 @@ export function KabbalahTree({
           );
         })}
 
+        {/* VỰC THẲM — lằn ngăn giữa bảy đại tội (bài thi) và ba điều kiện còn
+            lại của việc thăng cấp. Bài thi không vượt hộ ai qua vạch này. */}
+        <line x1={20} y1={148} x2={280} y2={148} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="5 5" />
+        <text x={286} y={144} textAnchor="end" fontSize="9" fontWeight="700" fill="#94a3b8">
+          Vực Thẳm
+        </text>
+
         {NODES.map((n) => {
           const isLit = litSet.has(n.id);
           const isFocus = n.id === focusId;
@@ -127,6 +136,18 @@ export function KabbalahTree({
                 strokeWidth={2}
               />
               {/* Tên tội đặt cạnh sephirah của nó — cho thấy cây và bảy tội là một */}
+              {!sin && SUPERNAL_LABEL[n.id] && (
+                <text
+                  x={onLeft ? n.x - 20 : onRight ? n.x + 20 : n.x}
+                  y={n.y + (onLeft || onRight ? 4 : -24)}
+                  textAnchor={onLeft ? "end" : onRight ? "start" : "middle"}
+                  fontSize="10.5"
+                  fontWeight="700"
+                  fill={isLit || isFocus ? BRAND : "#c7cbd1"}
+                >
+                  {SUPERNAL_LABEL[n.id].need}
+                </text>
+              )}
               {sin && (
                 <text
                   x={onLeft ? n.x - 20 : onRight ? n.x + 20 : n.x}

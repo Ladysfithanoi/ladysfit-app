@@ -14,7 +14,7 @@ import {
 } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
-import { loadTrialForCandidate, gradeTrialAttempt } from "@/lib/exam-trial-server";
+import { loadTrialForCandidate, gradeTrialAttempt, orderTrialRounds } from "@/lib/exam-trial-server";
 import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
@@ -170,6 +170,22 @@ export async function GET(req: Request) {
       });
     }
 
+    // ── Thứ tự vòng: khai đứng đầu, phần còn lại XÁO NGẪU NHIÊN ──────────────
+    // Vòng của tội đã khai luôn đứng đầu — phải đối mặt trước đã. Các vòng sau
+    // xáo ngẫu nhiên để không ai đoán được vòng kế là gì, cũng không mách nhau
+    // được "vòng hai là Ghen tị, ôn trước đi".
+    //
+    // Thứ tự CHỐT vào lượt thi ngay lần đầu, tái dùng ở mọi lần tải sau: F5
+    // không phải là cách xáo lại cho tới khi ra thứ tự vừa ý. Cùng cách đề trắc
+    // nghiệm ghim đề đã bốc — chính là công dụng của questionIds.
+    const orderedRounds = orderTrialRounds(rounds, declaredSin, examSession?.questionIds);
+    if (!mock && examSession && parseQuestionIds(examSession.questionIds).length === 0) {
+      await prisma.examSession.update({
+        where: { id: examSession.id },
+        data: { questionIds: JSON.stringify(orderedRounds.map((r) => r.id)) },
+      });
+    }
+
     let trialEndsAt: Date | null = null;
     if (examSession) {
       trialEndsAt = sessionDeadline(examSession, window.endAt);
@@ -225,13 +241,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       format,
       levelName,
-      // VÒNG CỦA TỘI ĐÃ KHAI ĐỨNG ĐẦU. Khai xong mà vẫn được chọn vòng dễ
-      // làm trước thì lời khai mất hết sức nặng — phải đối mặt trước đã.
-      rounds: declaredSin
-        ? [...rounds].sort((a, b) =>
-            (a.sin === declaredSin ? 0 : 1) - (b.sin === declaredSin ? 0 : 1)
-          )
-        : rounds,
+      rounds: orderedRounds,
       passingScore,
       questions: [],
       closesAt: mock ? null : window.endAt?.toISOString() ?? null,

@@ -25,7 +25,7 @@ import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
 import {
-  SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER,
+  SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH,
   type MealEntry, type SortZone, type Sin,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
@@ -82,7 +82,13 @@ function litSephirot(r: TrialSubmitResult, rounds: TrialRound[]): number[] {
     const round = rounds.find((x) => x.id === rs.roundId);
     if (round?.sin) out.push(SIN_SEPHIRAH[round.sin]);
   }
-  if (r.passed) out.push(KETHER);
+  // Ba ô trên Vực Thẳm: thực hành, doanh số+transform, và vương miện. Đậu lý
+  // thuyết chưa đưa ai lên cấp — cây phải nói đúng điều đó.
+  const p = r.promotion;
+  if (p?.practical?.ok) out.push(CHOKMAH);
+  if (p?.revenue?.ok && p?.transform?.ok) out.push(BINAH);
+  if (p && p.exam?.ok && p.practical?.ok && p.revenue?.ok && p.transform?.ok) out.push(KETHER);
+  else if (!p && r.passed) out.push(KETHER); // thi thử: không có dữ liệu thăng cấp
   return out;
 }
 
@@ -127,6 +133,8 @@ type TrialSubmitResult = {
   rounds: { roundId: string; points: number; maxPoints: number; passed: boolean; penalty: number }[];
   /** Chỉ có ở thi thử. */
   review?: TrialReviewRound[];
+  /** Ba điều kiện thăng cấp còn lại — ba ô trên Vực Thẳm của cây. */
+  promotion?: Record<string, { ok: boolean; detail: string }> | null;
 };
 
 /**
@@ -1291,10 +1299,10 @@ export function ExamTakePage({
                 lit={litSephirot(trialResult, rounds)}
                 current={trialResult.passed ? KETHER : null}
                 caption={
-                  trialResult.passed
-                    ? "Vương miện sáng — bạn đạt cả kỳ thi."
-                    : trialResult.declaredFailed
-                      ? "Chỗ của tội bạn khai vẫn tối — đó là chỗ phải quay lại."
+                  trialResult.declaredFailed
+                    ? "Chỗ của tội bạn khai vẫn tối — đó là chỗ phải quay lại."
+                    : trialResult.passed
+                      ? "Đã qua lý thuyết. Ba ô trên Vực Thẳm là phần còn lại của con đường lên cấp."
                       : "Sephirot sáng là những tội bạn đã vượt qua."
                 }
               />
