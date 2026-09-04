@@ -14,7 +14,7 @@ import {
 } from "@/lib/exam-session";
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
-import { loadTrialForCandidate, gradeTrialAttempt, orderTrialRounds } from "@/lib/exam-trial-server";
+import { loadTrialForCandidate, gradeTrialAttempt, pickTrialRounds } from "@/lib/exam-trial-server";
 import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
@@ -170,15 +170,15 @@ export async function GET(req: Request) {
       });
     }
 
-    // ── Thứ tự vòng: khai đứng đầu, phần còn lại XÁO NGẪU NHIÊN ──────────────
-    // Vòng của tội đã khai luôn đứng đầu — phải đối mặt trước đã. Các vòng sau
-    // xáo ngẫu nhiên để không ai đoán được vòng kế là gì, cũng không mách nhau
-    // được "vòng hai là Ghen tị, ôn trước đi".
+    // ── Bốc vòng: khai đứng đầu, phần còn lại NGẪU NHIÊN ─────────────────────
+    // Không ai phải đi qua cả bảy đại tội trong một buổi. Mỗi lượt chỉ lấy vài
+    // vòng: vòng của tội đã khai đứng đầu — phải đối mặt trước đã — rồi bốc
+    // ngẫu nhiên cho đủ số, nên không đoán được kỳ này rơi vào tội nào.
     //
-    // Thứ tự CHỐT vào lượt thi ngay lần đầu, tái dùng ở mọi lần tải sau: F5
-    // không phải là cách xáo lại cho tới khi ra thứ tự vừa ý. Cùng cách đề trắc
-    // nghiệm ghim đề đã bốc — chính là công dụng của questionIds.
-    const orderedRounds = orderTrialRounds(rounds, declaredSin, examSession?.questionIds);
+    // Bộ vòng CHỐT vào lượt thi ngay lần đầu, tái dùng ở mọi lần tải sau: F5
+    // không phải là cách bốc lại cho tới khi ra đề dễ. Cùng cách đề trắc nghiệm
+    // ghim đề đã bốc — chính là công dụng của questionIds.
+    const orderedRounds = pickTrialRounds(rounds, declaredSin, examSession?.questionIds);
     if (!mock && examSession && parseQuestionIds(examSession.questionIds).length === 0) {
       await prisma.examSession.update({
         where: { id: examSession.id },

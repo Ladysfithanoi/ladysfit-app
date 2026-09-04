@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getExamWindow, SUBMIT_GRACE_MS } from "@/lib/exam-schedule";
 import { checkCanSitExam } from "@/lib/exam-required-fm";
-import { ALREADY_TAKEN_MESSAGE, SESSION_EXPIRED_MESSAGE, sessionDeadline } from "@/lib/exam-session";
+import { ALREADY_TAKEN_MESSAGE, SESSION_EXPIRED_MESSAGE, parseQuestionIds, sessionDeadline } from "@/lib/exam-session";
 import { resolveExamLevel } from "@/lib/exam-level";
 import { gradeTrialAttempt } from "@/lib/exam-trial-server";
 import { evaluatePtById } from "@/lib/pt-promotion";
@@ -108,6 +108,9 @@ export async function POST(req: NextRequest) {
     state,
     // Tội đã khai chốt từ lúc mở đề — chấm phải theo đúng nó.
     declaredSin: examSession.declaredSin,
+    // Chỉ chấm ĐÚNG những vòng đã bốc cho lượt này. Chấm cả bảy vòng của đề thì
+    // những vòng người ta chưa từng nhìn thấy đều thành 0 điểm.
+    roundIds: parseQuestionIds(examSession.questionIds),
   });
 
   if (!graded.ok) {

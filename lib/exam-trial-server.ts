@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { recordAttempt } from "@/lib/exam-grading";
 import { examSettingsForLevel } from "@/lib/exam-level";
+import { parseQuestionIds } from "@/lib/exam-session";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer,
-  applyDeclaredSin, declaredTolerance,
+  applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
 
@@ -130,12 +131,27 @@ export async function computeTrial(
   rawState: unknown,
   passingScore: number,
   /** Tội thí sinh tự khai — vòng của tội đó khó hơn và bắt buộc phải qua. */
-  declaredSin: Sin | null = null
+  declaredSin: Sin | null = null,
+  /**
+   * Đúng những vòng đã bốc cho lượt thi này (questionIds của ExamSession).
+   *
+   * BẮT BUỘC phải truyền với bài thi thật. Một lượt chỉ được phát vài vòng
+   * trong bảy vòng của đề; chấm cả bảy thì những vòng thí sinh chưa từng nhìn
+   * thấy đều thành 0 điểm và không ai đậu nổi.
+   *
+   * Để trống thì chấm mọi vòng đang bật — lối cũ, giữ lại cho những lượt thi
+   * mở trước khi có cơ chế bốc vòng.
+   */
+  roundIds: string[] | null = null
 ): Promise<{ ok: false; error: string } | ({ ok: true; state: TrialStateShape } & ComputedTrial)> {
   const state = parseTrialState(typeof rawState === "string" ? rawState : JSON.stringify(rawState));
 
   const rounds = await prisma.examRound.findMany({
-    where: { levelId, isActive: true },
+    where: {
+      levelId,
+      isActive: true,
+      ...(roundIds && roundIds.length > 0 ? { id: { in: roundIds } } : {}),
+    },
     orderBy: { order: "asc" },
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
@@ -255,8 +271,16 @@ export async function gradeTrialAttempt(opts: {
   /** Bài làm: { roundId: { briefId: MealEntry[] | cardId: SortZone } } */
   state: unknown;
   declaredSin?: Sin | null;
+  /** Vòng đã bốc cho lượt thi này — xem computeTrial. */
+  roundIds?: string[] | null;
 }): Promise<TrialGradeOutcome> {
-  const computed = await computeTrial(opts.levelId, opts.state, opts.passingScore, opts.declaredSin ?? null);
+  const computed = await computeTrial(
+    opts.levelId,
+    opts.state,
+    opts.passingScore,
+    opts.declaredSin ?? null,
+    opts.roundIds ?? null
+  );
   if (!computed.ok) return computed;
   const { state, roundScores, details, result } = computed;
 
@@ -340,6 +364,7 @@ export async function gradePendingTrialSession(
     noPenalty: examSession.user.role === "FM",
     state: examSession.trialState,
     declaredSin: examSession.declaredSin,
+    roundIds: parseQuestionIds(examSession.questionIds),
   });
 
   if (!result.ok) {
@@ -378,21 +403,29 @@ export function serializeRoundForAdmin<
 }
 
 /**
- * Thứ tự các vòng của một lượt thi.
+ * CHỌN CÁC VÒNG CHO MỘT LƯỢT THI — bốc đề, không phải xếp thứ tự.
  *
- *   • Vòng của tội ĐÃ KHAI luôn đứng đầu — phải đối mặt trước đã.
- *   • Các vòng còn lại XÁO NGẪU NHIÊN, để không đoán được vòng kế là gì và
- *     không mách nhau được thứ tự.
- *   • Đã có thứ tự chốt trong lượt thi thì dùng lại đúng thứ tự đó. F5 không
- *     phải là cách xáo lại cho tới khi ra thứ tự vừa ý.
+ * Đề của cấp có đủ bảy đại tội, nhưng KHÔNG ai phải đi qua cả bảy trong một
+ * buổi. Mỗi lượt thi chỉ lấy TRIAL_ROUNDS_PER_ATTEMPT vòng:
  *
- * Vòng lạ trong thứ tự cũ (Admin vừa xoá) bị bỏ qua; vòng mới thêm sau khi đã
- * chốt thì nối vào cuối — đề đổi giữa kỳ không được làm hỏng lượt đang thi.
+ *   • Vòng của tội ĐÃ KHAI luôn đứng đầu — thí sinh tự nhận mình yếu ở đâu thì
+ *     phải đối mặt với đúng chỗ đó trước, và vòng ấy bắt buộc phải qua.
+ *   • Những vòng còn lại bốc NGẪU NHIÊN cho đủ số. Không ai đoán được kỳ này
+ *     rơi vào tội nào, nên ôn tủ hay mách nhau thứ tự đều vô nghĩa.
+ *
+ * Bộ vòng đã bốc được CHỐT vào lượt thi ngay lần mở đề đầu tiên và tái dùng ở
+ * mọi lần tải sau: F5 không phải là cách bốc lại cho tới khi ra đề dễ. Đúng
+ * cách đề trắc nghiệm ghim đề đã bốc — chính là công dụng của questionIds.
+ *
+ * Vòng lạ trong bộ đã chốt (Admin vừa xoá) thì bỏ qua. Nhưng vòng MỚI thêm sau
+ * khi đã chốt thì không nhét thêm vào: đề đổi giữa kỳ không được làm dài thêm
+ * lượt thi mà người ta đang ngồi làm dở.
  */
-export function orderTrialRounds<T extends { id: string; sin: string | null }>(
+export function pickTrialRounds<T extends { id: string; sin: string | null }>(
   rounds: T[],
   declaredSin: string | null,
   pinnedJson?: string | null,
+  limit: number = TRIAL_ROUNDS_PER_ATTEMPT,
 ): T[] {
   const byId = new Map(rounds.map((r) => [r.id, r]));
 
@@ -404,19 +437,19 @@ export function orderTrialRounds<T extends { id: string; sin: string | null }>(
           .filter((id): id is string => typeof id === "string")
           .map((id) => byId.get(id))
           .filter((r): r is T => !!r);
-        const seen = new Set(kept.map((r) => r.id));
-        return [...kept, ...rounds.filter((r) => !seen.has(r.id))];
+        if (kept.length > 0) return kept;
       }
     } catch {
-      // Thứ tự cũ hỏng → xáo lại từ đầu, còn hơn trả về đề rỗng.
+      /* bộ đã chốt hỏng → bốc lại */
     }
   }
 
-  const first = declaredSin ? rounds.filter((r) => r.sin === declaredSin) : [];
-  const rest = rounds.filter((r) => !first.includes(r));
+  const declared = declaredSin ? rounds.filter((r) => r.sin === declaredSin) : [];
+  const declaredIds = new Set(declared.map((r) => r.id));
+  const rest = rounds.filter((r) => !declaredIds.has(r.id));
   for (let i = rest.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [rest[i], rest[j]] = [rest[j], rest[i]];
   }
-  return [...first, ...rest];
+  return [...declared, ...rest].slice(0, Math.max(1, limit));
 }

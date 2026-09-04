@@ -143,7 +143,9 @@ function sephirahStatus(
 
     const round = rounds.find((x) => x.sin === s.sin);
     if (!round) {
-      out[s.id] = { text: "Không có trong đề cấp này", tone: "off" };
+      // Đề có đủ bảy tội nhưng một lượt chỉ bốc vài vòng — nói rõ là chưa
+      // rơi vào lượt này, chứ không phải đề thiếu.
+      out[s.id] = { text: "Không rơi vào lượt thi này", tone: "off" };
       continue;
     }
     const res = r.rounds.find((x) => x.roundId === round.id);
@@ -516,7 +518,11 @@ export function ExamTakePage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             trialState: trialRef.current,
-            ...(mock ? { levelId: mockLevelId, declaredSin: mockSin } : {}),
+            // Thi thử: báo luôn bộ vòng vừa được phát, để nơi chấm không
+            // chấm sang những vòng khác của đề mà lượt này không bốc trúng.
+            ...(mock
+              ? { levelId: mockLevelId, declaredSin: mockSin, roundIds: rounds.map((r) => r.id) }
+              : {}),
           }),
         }
       );

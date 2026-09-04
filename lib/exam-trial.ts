@@ -193,6 +193,18 @@ export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = Ob
 // Ba con số dưới đây là chỗ chỉnh độ gắt của cơ chế. Đặt tên hằng để sau này
 // muốn nới hay siết thì sửa một chỗ, không phải đi dò trong công thức.
 
+/**
+ * SỐ VÒNG MỖI LƯỢT THI.
+ *
+ * Đề của cấp có đủ bảy đại tội nhưng không ai phải đi qua cả bảy trong một
+ * buổi: mỗi lượt chỉ bốc bấy nhiêu vòng — vòng của tội đã khai, cộng phần còn
+ * lại bốc ngẫu nhiên (xem pickTrialRounds trong lib/exam-trial-server.ts).
+ *
+ * Thay đổi con số này là thay đổi độ dài bài thi của mọi người, nên phải xem
+ * lại thời lượng làm bài trong Lịch thi cùng lúc.
+ */
+export const TRIAL_ROUNDS_PER_ATTEMPT = 2;
+
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
 

@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { levelId, trialState, declaredSin } = body as {
-    levelId?: string; trialState?: unknown; declaredSin?: string | null;
+  const { levelId, trialState, declaredSin, roundIds } = body as {
+    levelId?: string; trialState?: unknown; declaredSin?: string | null; roundIds?: unknown;
   };
 
   if (!levelId) return NextResponse.json({ error: "Thiếu cấp độ của đề" }, { status: 400 });
@@ -47,7 +47,15 @@ export async function POST(req: NextRequest) {
       ? (declaredSin as Sin)
       : null;
 
-  const computed = await computeTrial(levelId, trialState, settings.passingScore, sin);
+  // Thi thử cũng chỉ bốc vài vòng như bài thật, nên phải chấm đúng bộ vòng đã
+  // phát ra. Bài thi thật lấy danh sách này từ lượt thi trong cơ sở dữ liệu;
+  // thi thử không có lượt thi nào nên client gửi lên — chấp nhận được vì thi
+  // thử không ghi điểm vào đâu cả.
+  const served = Array.isArray(roundIds)
+    ? roundIds.filter((id): id is string => typeof id === "string")
+    : [];
+
+  const computed = await computeTrial(levelId, trialState, settings.passingScore, sin, served);
   if (!computed.ok) return NextResponse.json({ error: computed.error }, { status: 400 });
 
   return NextResponse.json({
