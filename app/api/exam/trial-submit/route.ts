@@ -105,6 +105,8 @@ export async function POST(req: NextRequest) {
     violations: examSession.violations,
     noPenalty,
     state,
+    // Tội đã khai chốt từ lúc mở đề — chấm phải theo đúng nó.
+    declaredSin: examSession.declaredSin,
   });
 
   if (!graded.ok) {
@@ -128,6 +130,8 @@ export async function POST(req: NextRequest) {
     total: graded.result.total,
     penalty: graded.result.penalty,
     passed: graded.result.passed,
+    declaredFailed: graded.result.declaredFailed,
+    declaredSin: examSession.declaredSin,
     promoted: graded.promoted,
     pillar: graded.result.pillar,
     rounds: graded.result.rounds,

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { examSettingsForLevel } from "@/lib/exam-level";
 import { computeTrial } from "@/lib/exam-trial-server";
+import { SINS, type Sin } from "@/lib/exam-trial";
 
 /**
  * Chấm bài THI THỬ của đề nhiều vòng.
@@ -25,7 +26,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { levelId, trialState } = body as { levelId?: string; trialState?: unknown };
+  const { levelId, trialState, declaredSin } = body as {
+    levelId?: string; trialState?: unknown; declaredSin?: string | null;
+  };
 
   if (!levelId) return NextResponse.json({ error: "Thiếu cấp độ của đề" }, { status: 400 });
   if (!trialState || typeof trialState !== "object" || Array.isArray(trialState)) {
@@ -37,7 +40,14 @@ export async function POST(req: NextRequest) {
   // xong vẫn không biết ngưỡng mình đặt có vừa không.
   const settings = await examSettingsForLevel(levelId, { passingScore: config?.passingScore });
 
-  const computed = await computeTrial(levelId, trialState, settings.passingScore);
+  // Thi thử khai tội nào thì chấm đúng theo tội đó — có vậy mới kiểm được cả
+  // cơ chế nhân đôi điểm và "bắt buộc phải qua".
+  const sin: Sin | null =
+    typeof declaredSin === "string" && (SINS as string[]).includes(declaredSin)
+      ? (declaredSin as Sin)
+      : null;
+
+  const computed = await computeTrial(levelId, trialState, settings.passingScore, sin);
   if (!computed.ok) return NextResponse.json({ error: computed.error }, { status: 400 });
 
   return NextResponse.json({
@@ -46,6 +56,8 @@ export async function POST(req: NextRequest) {
     total: computed.result.total,
     penalty: computed.result.penalty,
     passed: computed.result.passed,
+    declaredFailed: computed.result.declaredFailed,
+    declaredSin: sin,
     pillar: computed.result.pillar,
     passingScore: settings.passingScore,
     rounds: computed.result.rounds,

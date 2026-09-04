@@ -4,7 +4,8 @@ import { examSettingsForLevel } from "@/lib/exam-level";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer,
-  type MealEntry, type Pillar, type RoundScore, type SortZone, type TrialScore,
+  applyDeclaredSin, declaredTolerance,
+  type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
 
 /**
@@ -127,7 +128,9 @@ type ComputedTrial = {
 export async function computeTrial(
   levelId: string,
   rawState: unknown,
-  passingScore: number
+  passingScore: number,
+  /** Tội thí sinh tự khai — vòng của tội đó khó hơn và bắt buộc phải qua. */
+  declaredSin: Sin | null = null
 ): Promise<{ ok: false; error: string } | ({ ok: true; state: TrialStateShape } & ComputedTrial)> {
   const state = parseTrialState(typeof rawState === "string" ? rawState : JSON.stringify(rawState));
 
@@ -146,6 +149,10 @@ export async function computeTrial(
   const review: TrialReviewRound[] = [];
 
   for (const round of rounds) {
+    // Vòng của tội đã khai: điểm nhân đôi, ngưỡng đạt cao hơn, sai số hẹp lại.
+    const tuned = applyDeclaredSin(round, declaredSin);
+    const scored = { ...round, maxPoints: tuned.maxPoints, passPercent: tuned.passPercent };
+
     if (round.type === "MEAL") {
       const results = round.mealBriefs.map((b) => {
         const entries: MealEntry[] = readMealEntries(state, round.id, b.id);
@@ -156,7 +163,7 @@ export async function computeTrial(
             targetProtein: b.targetProtein,
             targetFat: b.targetFat,
             targetCarbs: b.targetCarbs,
-            tolerancePercent: b.tolerancePercent,
+            tolerancePercent: declaredTolerance(b.tolerancePercent, tuned.declared),
             bannedFoods: parseBannedFoods(b.bannedFoods),
           },
           entries
@@ -168,7 +175,7 @@ export async function computeTrial(
       const pillar: Pillar =
         lean.SEVERITY === lean.MERCY ? "BALANCE" : lean.SEVERITY > lean.MERCY ? "SEVERITY" : "MERCY";
 
-      const rs = scoreRound(round, results.map((r) => r.ratio), pillar);
+      const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared);
       roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
       review.push({
@@ -192,7 +199,7 @@ export async function computeTrial(
         return gradeSortCard({ id: c.id, correctZone: c.correctZone }, answer);
       });
       const pillar = sortPillar(results);
-      const rs = scoreRound(round, results.map((r) => r.ratio), pillar);
+      const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared);
       roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
       review.push({
@@ -247,8 +254,9 @@ export async function gradeTrialAttempt(opts: {
   noPenalty: boolean;
   /** Bài làm: { roundId: { briefId: MealEntry[] | cardId: SortZone } } */
   state: unknown;
+  declaredSin?: Sin | null;
 }): Promise<TrialGradeOutcome> {
-  const computed = await computeTrial(opts.levelId, opts.state, opts.passingScore);
+  const computed = await computeTrial(opts.levelId, opts.state, opts.passingScore, opts.declaredSin ?? null);
   if (!computed.ok) return computed;
   const { state, roundScores, details, result } = computed;
 
@@ -262,6 +270,7 @@ export async function gradeTrialAttempt(opts: {
     noPenalty: opts.noPenalty,
     levelId: opts.levelId,
     answersJson: JSON.stringify(state),
+    declaredSin: opts.declaredSin ?? null,
   });
   if (!recorded.ok) return { ok: false, error: recorded.error };
 
@@ -330,6 +339,7 @@ export async function gradePendingTrialSession(
     violations: examSession.violations,
     noPenalty: examSession.user.role === "FM",
     state: examSession.trialState,
+    declaredSin: examSession.declaredSin,
   });
 
   if (!result.ok) {

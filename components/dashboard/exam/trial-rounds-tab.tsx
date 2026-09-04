@@ -143,6 +143,8 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   const [newSin, setNewSin] = useState<Sin>("GLUTTONY");
   // Tên vòng mặc định lấy theo tên tội; sửa tay thì giữ nguyên phần đã sửa.
   const [newName, setNewName] = useState("");
+  // Thi thử khai tội nào — để Admin kiểm được cả cơ chế nhân đôi điểm, không chỉ nội dung.
+  const [mockSin, setMockSin] = useState<Sin | "">("");
 
   const load = useCallback(async () => {
     if (!levelId) return;
@@ -246,7 +248,11 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
           {/* Tự làm thử đề của cấp đang chọn — chấm bằng đúng luật của bài thật
               nhưng không ghi vào đâu, và chấm xong soi lại được đáp án từng phần. */}
           <button
-            onClick={() => router.push(`/dashboard/exam/thi-thu?levelId=${levelId}`)}
+            onClick={() =>
+              router.push(
+                `/dashboard/exam/thi-thu?levelId=${levelId}${mockSin ? `&declaredSin=${mockSin}` : ""}`
+              )
+            }
             disabled={activeRounds === 0}
             title={
               activeRounds === 0
@@ -258,6 +264,28 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
             <FlaskConical className="h-4 w-4 shrink-0" />
             Thi thử đề này
           </button>
+        </div>
+
+        {/* Thi thử khai tội nào — để kiểm được cả cơ chế nhân đôi điểm và
+            "bắt buộc phải qua", chứ không chỉ kiểm nội dung. */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="shrink-0 whitespace-nowrap text-[11px] font-bold text-gray-500">
+            Thi thử với tội đã khai
+          </label>
+          <select
+            value={mockSin}
+            onChange={(e) => setMockSin(e.target.value as Sin | "")}
+            className={cn(inputCls, "sm:w-64")}
+          >
+            <option value="">— Không khai tội nào —</option>
+            {rounds
+              .filter((r) => r.isActive && r.sin)
+              .map((r) => (
+                <option key={r.id} value={r.sin!}>
+                  {SIN_LABEL[r.sin!]} ({r.name})
+                </option>
+              ))}
+          </select>
         </div>
 
         <div className={cn(SLIDER, "mt-3")}>

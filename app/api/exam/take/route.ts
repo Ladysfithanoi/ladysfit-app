@@ -15,7 +15,7 @@ import {
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
 import { loadTrialForCandidate, gradeTrialAttempt } from "@/lib/exam-trial-server";
-import { parseTrialState } from "@/lib/exam-trial";
+import { parseTrialState, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
 // cách bốc đề, nhưng mở được ngoài lịch thi (đề chưa tới ngày vẫn phải kiểm
@@ -133,6 +133,36 @@ export async function GET(req: Request) {
       }
     }
 
+    // ── Khai tội trước, xem đề sau ────────────────────────────────────────
+    // Đề CHỈ được gửi xuống sau khi đã khai. Gửi trước rồi mới hỏi khai thì
+    // người ta mở đề, xem vòng nào dễ, rồi mới khai — cơ chế mất sạch ý nghĩa.
+    // Thi thử của Admin lấy tội khai từ địa chỉ trang, khỏi phải qua bước này.
+    const declaredSin = mock
+      ? (url.searchParams.get("declaredSin") as Sin | null)
+      : examSession?.declaredSin ?? null;
+
+    if (!mock && !declaredSin) {
+      // Chỉ cho khai những tội mà đề của cấp này thật sự có vòng.
+      const sinRows = await prisma.examRound.findMany({
+        where: { levelId, isActive: true, sin: { not: null } },
+        select: { sin: true, name: true },
+        orderBy: { order: "asc" },
+      });
+      return NextResponse.json({
+        format,
+        levelName,
+        needsDeclaration: true,
+        sinOptions: sinRows.map((r) => ({ sin: r.sin, roundName: r.name })),
+        rounds: [],
+        questions: [],
+        passingScore,
+        durationMinutes,
+        noPenalty,
+        closesAt: window.endAt?.toISOString() ?? null,
+        scheduleNote: window.message,
+      });
+    }
+
     let trialEndsAt: Date | null = null;
     if (examSession) {
       trialEndsAt = sessionDeadline(examSession, window.endAt);
@@ -154,6 +184,7 @@ export async function GET(req: Request) {
               violations: examSession.violations,
               noPenalty,
               state: examSession.trialState,
+              declaredSin: examSession.declaredSin,
             });
             if (graded.ok) {
               await prisma.examSession.update({
@@ -198,6 +229,8 @@ export async function GET(req: Request) {
       focusPenaltyMinutes: mock ? 0 : focusPenaltyMinutes,
       violations: examSession?.violations ?? 0,
       penaltyMinutes: examSession?.penaltyMinutes ?? 0,
+      // Tội đã khai — trang làm bài đánh dấu vòng đó để người thi không quên.
+      declaredSin,
       resumed: !!examSession?.trialState,
       // Bài dở của đề nhiều vòng nằm ở trialState, không phải answers.
       savedTrialState: parseTrialState(examSession?.trialState),

@@ -8,12 +8,18 @@ import { ExamTakePage } from "@/components/dashboard/exam/exam-take-page";
 export default async function MockExamPage({
   searchParams,
 }: {
-  searchParams: { levelId?: string };
+  searchParams: { levelId?: string; declaredSin?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
   // Mỗi cấp một đề riêng — thi thử phải nói rõ soi đề của cấp nào.
-  return <ExamTakePage mock mockLevelId={searchParams.levelId} />;
+  return (
+    <ExamTakePage
+      mock
+      mockLevelId={searchParams.levelId}
+      mockDeclaredSin={searchParams.declaredSin}
+    />
+  );
 }

@@ -24,7 +24,8 @@ import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
-import { SIN_LABEL, SORT_ZONE_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
+import { SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, type MealEntry, type SortZone, type Sin } from "@/lib/exam-trial";
+import { TrialDeclareSin } from "./trial-declare-sin";
 
 type Question = {
   id: string;
@@ -99,6 +100,10 @@ type TrialSubmitResult = {
   penalty: number;
   passed: boolean;
   promoted: boolean;
+  /** Trượt đúng vòng của tội đã khai — tự nó đánh rớt cả kỳ. */
+  declaredFailed?: boolean;
+  declaredSin?: Sin | null;
+  pillar?: "SEVERITY" | "MERCY" | "BALANCE";
   rounds: { roundId: string; points: number; maxPoints: number; passed: boolean; penalty: number }[];
   /** Chỉ có ở thi thử. */
   review?: TrialReviewRound[];
@@ -248,10 +253,13 @@ function QuestionTracker({
 export function ExamTakePage({
   mock = false,
   mockLevelId,
+  mockDeclaredSin,
 }: {
   mock?: boolean;
   /** Thi thử đề của cấp nào — Admin chọn ở tab Ngân hàng câu hỏi. */
   mockLevelId?: string;
+  /** Thi thử với tội đã khai nào — để kiểm cả cơ chế, không chỉ nội dung. */
+  mockDeclaredSin?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -272,6 +280,12 @@ export function ExamTakePage({
   const [trialState, setTrialState] = useState<TrialState>({});
   const [roundIdx, setRoundIdx] = useState(0);
   const [trialResult, setTrialResult] = useState<TrialSubmitResult | null>(null);
+  // Chưa khai tội thì chưa được xem đề — server chưa gửi vòng nào xuống.
+  const [needsDeclaration, setNeedsDeclaration] = useState(false);
+  const [sinOptions, setSinOptions] = useState<{ sin: Sin; roundName: string }[]>([]);
+  const [declaredSin, setDeclaredSin] = useState<Sin | null>(null);
+  // Đổi số này để bắt tải lại đề sau khi khai xong.
+  const [reloadKey, setReloadKey] = useState(0);
   const trialRef = useRef<TrialState>({});
   const isTrial = rounds.length > 0;
   // ── Chống ra ngoài đọc tài liệu ──────────────────────────────────────────
@@ -329,7 +343,8 @@ export function ExamTakePage({
     async function loadExam() {
       try {
         const mockQuery = mock
-          ? `?mock=1&levelId=${encodeURIComponent(mockLevelId ?? "")}`
+          ? `?mock=1&levelId=${encodeURIComponent(mockLevelId ?? "")}` +
+            (mockDeclaredSin ? `&declaredSin=${encodeURIComponent(mockDeclaredSin)}` : "")
           : "";
         const res = await fetch(`/api/exam/take${mockQuery}`);
         if (!res.ok) {
@@ -342,6 +357,10 @@ export function ExamTakePage({
         setPassingScore(data.passingScore);
         setScheduleNote(data.scheduleNote ?? "");
         setLevelName(data.levelName ?? null);
+        setNeedsDeclaration(!!data.needsDeclaration);
+        setSinOptions(data.sinOptions ?? []);
+        setDeclaredSin(data.declaredSin ?? null);
+        if (data.needsDeclaration) return; // chưa khai thì chưa có đề để dựng
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           setRounds(data.rounds);
           const saved = (data.savedTrialState ?? {}) as TrialState;
@@ -371,7 +390,7 @@ export function ExamTakePage({
       }
     }
     loadExam();
-  }, [mock, mockLevelId]);
+  }, [mock, mockLevelId, mockDeclaredSin, reloadKey]);
 
   /**
    * Nộp bài đề thử thách. Thi thử của Admin không ghi gì nên chỉ báo ngay là
@@ -393,7 +412,7 @@ export function ExamTakePage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             trialState: trialRef.current,
-            ...(mock ? { levelId: mockLevelId } : {}),
+            ...(mock ? { levelId: mockLevelId, declaredSin: mockDeclaredSin ?? null } : {}),
           }),
         }
       );
@@ -758,6 +777,20 @@ export function ExamTakePage({
     );
   }
 
+  // Khai tội xong mới được xem đề — server chưa gửi vòng nào xuống ở bước này.
+  if (needsDeclaration) {
+    return (
+      <TrialDeclareSin
+        levelName={levelName}
+        options={sinOptions}
+        onDeclared={() => {
+          setLoading(true);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    );
+  }
+
   if (error) {
     return (
       <div className="max-w-lg mx-auto py-12">
@@ -799,8 +832,21 @@ export function ExamTakePage({
         </div>
         {!result && (
           <div className="shrink-0 text-right">
-            <p className="text-sm font-bold text-gray-700">{answeredCount}/{questions.length}</p>
-            <p className="text-xs text-gray-400 whitespace-nowrap">đã trả lời</p>
+            {/* Đồng hồ NGAY TRÊN ĐẦU BÀI.
+                Trước đây nó chỉ nằm trong bảng theo dõi câu hỏi, mà bảng đó bị
+                ẩn với đề nhiều vòng — server vẫn đếm giờ và vẫn tự nộp khi hết,
+                nhưng người thi không thấy gì. Giờ để ở đây cho cả hai dạng đề. */}
+            {remainingMs != null && (
+              <div className="mb-1 flex justify-end">
+                <CountdownChip ms={remainingMs} />
+              </div>
+            )}
+            <p className="text-sm font-bold text-gray-700">
+              {isTrial ? `${trialDoneCount}/${rounds.length}` : `${answeredCount}/${questions.length}`}
+            </p>
+            <p className="text-xs text-gray-400 whitespace-nowrap">
+              {isTrial ? "vòng đã xong" : "đã trả lời"}
+            </p>
             {!mock && saveState !== "idle" && (
               <p
                 className={cn(
@@ -979,6 +1025,11 @@ export function ExamTakePage({
                       {i + 1}
                     </span>
                     {r.name}
+                    {declaredSin && r.sin === declaredSin && (
+                      <span className={cn("text-[10px] font-extrabold", active ? "text-white" : "text-[#f15b5c]")}>
+                        ★ tội đã khai
+                      </span>
+                    )}
                     {done && !active && <CheckCircle className="h-3.5 w-3.5" />}
                   </button>
                 );
@@ -1003,6 +1054,12 @@ export function ExamTakePage({
                     {currentRound.maxPoints} điểm · đạt vòng từ {currentRound.passPercent}% · trượt bị trừ {currentRound.failPenalty} điểm
                   </p>
                 </div>
+                {declaredSin && currentRound.sin === declaredSin && (
+                  <p className="mt-2 rounded-xl bg-[#f15b5c]/10 px-3 py-2 text-xs font-bold leading-snug text-[#f15b5c]">
+                    ★ Đây là tội bạn đã khai. Vòng này điểm nhân đôi, ngưỡng đạt cao hơn, và
+                    bắt buộc phải qua — trượt vòng này là trượt cả kỳ.
+                  </p>
+                )}
                 {currentRound.intro && (
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-600">
                     {currentRound.intro}
@@ -1124,6 +1181,38 @@ export function ExamTakePage({
                   ))}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Trượt vòng đã khai thì phải nói thẳng lý do, đừng để người ta ngồi
+              cộng điểm rồi không hiểu vì sao tổng đẹp mà vẫn trượt. */}
+          {trialResult?.declaredFailed && (
+            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3.5">
+              <p className="text-sm font-extrabold text-red-700">
+                Trượt vòng của tội đã khai
+                {trialResult.declaredSin ? ` — ${SIN_LABEL[trialResult.declaredSin]}` : ""}
+              </p>
+              <p className="mt-1 text-xs font-semibold leading-snug text-red-600">
+                Vòng này bắt buộc phải qua nên cả kỳ tính là chưa đạt, dù tổng điểm có đủ.
+                Đó là điều bạn nhận về khi tự khai mảng mình yếu — và cũng là chỗ đáng để
+                luyện nhất trước kỳ sau.
+              </p>
+            </div>
+          )}
+
+          {/* Chân dung huấn luyện: nghiêng về trụ nào khi làm sai */}
+          {trialResult?.pillar && (
+            <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3.5">
+              <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                Chân dung huấn luyện
+              </p>
+              <p className="mt-1 text-sm font-extrabold text-gray-800">
+                Bạn nghiêng về: {PILLAR_LABEL[trialResult.pillar]}
+              </p>
+              <p className="mt-1 text-xs leading-snug text-gray-500">
+                Đọc theo hướng lệch của những chỗ bạn làm sai — không phải điểm số, và không
+                có trụ nào là sai. Nó cho biết khi phải quyết nhanh thì bạn ngả về đâu.
+              </p>
             </div>
           )}
 

@@ -52,6 +52,51 @@ export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT", string> = {
   SORT: "Phân loại tình huống vào 3 vùng",
 };
 
+// ── Tội tự khai ──────────────────────────────────────────────────────────────
+//
+// Thí sinh khai một tội TRƯỚC KHI được xem đề. Không phải chọn thế mạnh mà là
+// nhận mình yếu ở đâu — nên vòng của tội đã khai nặng hơn về mọi mặt:
+//
+//   • điểm nhân đôi           → nó chiếm phần lớn tổng điểm
+//   • ngưỡng đạt vòng cao hơn → qua loa không qua được
+//   • sai số hẹp lại (vòng khay ăn) → phải tính chính xác hơn
+//   • BẮT BUỘC PHẢI QUA       → trượt vòng khai là trượt cả kỳ, không bù được
+//
+// Ba con số dưới đây là chỗ chỉnh độ gắt của cơ chế. Đặt tên hằng để sau này
+// muốn nới hay siết thì sửa một chỗ, không phải đi dò trong công thức.
+
+/** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
+export const DECLARED_POINT_MULTIPLIER = 2;
+
+/** Ngưỡng đạt của vòng đã khai cộng thêm bấy nhiêu %, trần 95%. */
+export const DECLARED_PASS_BONUS = 15;
+export const DECLARED_PASS_CAP = 95;
+
+/** Sai số cho phép của vòng khay ăn đã khai co lại còn bấy nhiêu phần, sàn 3%. */
+export const DECLARED_TOLERANCE_FACTOR = 0.6;
+export const DECLARED_TOLERANCE_FLOOR = 3;
+
+/** Thông số một vòng sau khi đã áp luật "tội tự khai". */
+export function applyDeclaredSin<
+  T extends { sin: string | null; maxPoints: number; passPercent: number }
+>(round: T, declaredSin: Sin | null) {
+  const declared = !!declaredSin && round.sin === declaredSin;
+  if (!declared) {
+    return { declared, maxPoints: round.maxPoints, passPercent: round.passPercent };
+  }
+  return {
+    declared,
+    maxPoints: round.maxPoints * DECLARED_POINT_MULTIPLIER,
+    passPercent: Math.min(DECLARED_PASS_CAP, round.passPercent + DECLARED_PASS_BONUS),
+  };
+}
+
+/** Sai số của một hồ sơ khay ăn sau khi áp luật tội tự khai. */
+export function declaredTolerance(tolerancePercent: number, declared: boolean): number {
+  if (!declared) return tolerancePercent;
+  return Math.max(DECLARED_TOLERANCE_FLOOR, Math.round(tolerancePercent * DECLARED_TOLERANCE_FACTOR));
+}
+
 export type SortZone = "ACCEPT" | "CAUTION" | "REFUSE";
 
 /** Ba vùng xếp theo mức cứng rắn tăng dần — khoảng cách giữa chúng là điểm trừ. */
@@ -259,6 +304,8 @@ export type RoundScore = {
   passed: boolean;
   penalty: number;
   pillar: Pillar;
+  /** Đây có phải vòng của tội thí sinh tự khai không. */
+  declared: boolean;
 };
 
 /**
@@ -269,6 +316,8 @@ export function scoreRound(
   round: { id: string; maxPoints: number; passPercent: number; failPenalty: number },
   ratios: number[],
   pillar: Pillar,
+  /** Vòng của tội thí sinh tự khai — điểm và ngưỡng đạt đã được nâng trước khi vào đây. */
+  declared = false,
 ): RoundScore {
   const avg = ratios.length === 0 ? 0 : ratios.reduce((s, r) => s + r, 0) / ratios.length;
   const points = Math.round(avg * round.maxPoints);
@@ -280,6 +329,7 @@ export function scoreRound(
     passed,
     penalty: passed ? 0 : Math.max(0, round.failPenalty),
     pillar,
+    declared,
   };
 }
 
@@ -294,6 +344,8 @@ export type TrialScore = {
   penalty: number;
   /** Trụ nghiêng của cả lượt thi. */
   pillar: Pillar;
+  /** Trượt đúng vòng của tội mình đã khai — tự nó đánh rớt cả kỳ. */
+  declaredFailed: boolean;
 };
 
 export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialScore {
@@ -308,7 +360,21 @@ export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialSco
   const pillar: Pillar =
     lean.SEVERITY === lean.MERCY ? "BALANCE" : lean.SEVERITY > lean.MERCY ? "SEVERITY" : "MERCY";
 
-  return { rounds, score, total, scorePct, passed: scorePct >= passingScore, penalty, pillar };
+  // Trượt vòng đã tự khai là trượt cả kỳ, dù tổng điểm có đẹp tới đâu. Đó là
+  // toàn bộ ý nghĩa của việc khai: dám nhận mình yếu ở đâu thì phải vượt qua
+  // đúng chỗ đó, không bù bằng những vòng mình vốn đã giỏi.
+  const declaredFailed = rounds.some((r) => r.declared && !r.passed);
+
+  return {
+    rounds,
+    score,
+    total,
+    scorePct,
+    passed: scorePct >= passingScore && !declaredFailed,
+    declaredFailed,
+    penalty,
+    pillar,
+  };
 }
 
 // ── Đọc bài làm dở từ ExamSession.trialState ─────────────────────────────────

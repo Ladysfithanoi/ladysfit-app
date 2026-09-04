@@ -101,6 +101,8 @@ export async function recordAttempt(opts: {
   levelId: string | null;
   /** Bài làm lưu lại nguyên văn để soi lại sau. */
   answersJson: string;
+  /** Đề nhiều vòng: tội thí sinh đã tự khai ở lượt thi này. */
+  declaredSin?: "PRIDE" | "GREED" | "LUST" | "ENVY" | "GLUTTONY" | "WRATH" | "SLOTH" | null;
 }): Promise<GradeOutcome> {
   const { score, total } = opts;
   const scorePct = total > 0 ? Math.round((score / total) * 100) : 0;
@@ -115,6 +117,7 @@ export async function recordAttempt(opts: {
       answers: opts.answersJson,
       violations: opts.violations,
       levelId: opts.levelId,
+      declaredSin: opts.declaredSin ?? null,
     },
   });
 

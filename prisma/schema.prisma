@@ -879,6 +879,9 @@ model ExamAttempt {
   // đang ở Cấp 2 đã thi đề Cấp 2 hay mới chỉ đậu đề Cấp 1 từ đợt thăng cấp
   // trước — xem lib/pt-promotion.ts, điều kiện lý thuyết soát theo đúng cấp.
   levelId    String?
+  /// Tội thí sinh đã khai ở lượt thi này (đề nhiều vòng). Lưu lại để về sau còn
+  /// biết họ đã dám nhận mình yếu ở đâu, và có vượt qua được không.
+  declaredSin ExamSin?
 
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   level        PTLevel?          @relation(fields: [levelId], references: [id], onDelete: SetNull)
@@ -929,6 +932,10 @@ model ExamSession {
   /// Bài làm dở của đề nhiều vòng (JSON). Tách khỏi answers vì answers là bản
   /// đồ phẳng { idCâuHỏi: "A" } của đề trắc nghiệm, không chứa nổi bài của vòng chơi.
   trialState      String?   @db.Text
+  /// TỘI THÍ SINH TỰ KHAI trước khi được xem đề — vòng của tội đó khó hơn, điểm
+  /// nhân đôi, và bắt buộc phải qua. Khai xong là chốt, không đổi lại được: cho
+  /// đổi thì người ta xem đề rồi mới khai, mất sạch ý nghĩa của việc khai.
+  declaredSin     ExamSin?
 
   user  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   level PTLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
