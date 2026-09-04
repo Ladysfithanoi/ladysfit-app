@@ -203,7 +203,7 @@ export const SUPERNAL_LABEL: Record<number, { name: string; need: string }> = Ob
  * Thay đổi con số này là thay đổi độ dài bài thi của mọi người, nên phải xem
  * lại thời lượng làm bài trong Lịch thi cùng lúc.
  */
-export const TRIAL_ROUNDS_PER_ATTEMPT = 2;
+export const TRIAL_ROUNDS_PER_ATTEMPT = 3;
 
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
