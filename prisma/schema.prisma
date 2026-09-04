@@ -371,6 +371,12 @@ model WeightLog {
 model JobPosition {
   id        String   @id @default(cuid())
   name      String   @unique
+  /// QUYỀN mà chức vụ này cấp. Admin chọn khi tạo chức vụ, rồi lúc thêm nhân sự
+  /// chỉ phải chọn MỘT ô — quyền đi theo chức vụ.
+  ///
+  /// Vẫn là enum cố định: Admin chọn TỪ danh sách có sẵn, không tự đặt ra quyền
+  /// mới. Chức vụ thì thêm bao nhiêu cũng được, quyền thì không.
+  role      Role     @default(STAFF)
   color     String   @default("#6b7280")
   order     Int      @default(0)
   isActive  Boolean  @default(true)
@@ -387,6 +393,10 @@ enum Role {
   CEO_FITPARTNER
   COO
   PT
+  /// Nhân sự không dùng phần mềm quản lý (lao công, marketing, lễ tân…).
+  /// Đăng nhập chỉ để xem lương của chính mình; mọi màn quản lý đều từ chối
+  /// vì không danh sách cho phép nào có STAFF.
+  STAFF
 }
 
 model FMBranchAssignment {

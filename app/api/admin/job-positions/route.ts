@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
+
+/** Quyền hợp lệ — enum cố định trong code, Admin chỉ CHỌN chứ không đặt ra mới. */
+const ROLES: Role[] = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT", "STAFF"];
 
 /**
  * Chức vụ nhân sự — danh sách Admin tự quản.
@@ -43,6 +47,8 @@ export async function POST(req: Request) {
     data: {
       name,
       color: typeof body.color === "string" && /^#[0-9a-f]{6}$/i.test(body.color) ? body.color : "#6b7280",
+      // Quyền không hợp lệ thì rơi về STAFF — thấp nhất, không phải quyền cao nhất.
+      role: ROLES.includes(body.role as Role) ? (body.role as Role) : "STAFF",
       order: (max._max.order ?? -1) + 1,
     },
     include: { _count: { select: { users: { where: { deletedAt: null } } } } },

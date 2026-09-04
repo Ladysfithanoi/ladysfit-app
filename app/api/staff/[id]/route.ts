@@ -80,9 +80,23 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId } = body;
+  const { name, email, password, branchId, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId } = body;
 
-  // FM cannot assign ADMIN or FM roles
+  // QUYỀN SUY TỪ CHỨC VỤ, không lấy theo giá trị client gửi lên — xem POST
+  // /api/staff. Không gửi chức vụ thì giữ nguyên quyền cũ.
+  let role: string | undefined;
+  if (jobPositionId) {
+    const position = await prisma.jobPosition.findUnique({
+      where: { id: String(jobPositionId) },
+      select: { role: true, isActive: true },
+    });
+    if (!position || !position.isActive) {
+      return NextResponse.json({ error: "Chức vụ không hợp lệ" }, { status: 400 });
+    }
+    role = position.role;
+  }
+
+  // FM không gán được quyền Admin hoặc FM cho ai
   if (isFM && role && (role === "ADMIN" || role === "FM")) {
     return NextResponse.json({ error: "FM không thể gán quyền Admin hoặc FM" }, { status: 403 });
   }
@@ -104,8 +118,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (email) updateData.email = email;
   if (password) updateData.password = await bcrypt.hash(password, 12);
   if (ptLevelId !== undefined) updateData.ptLevelId = ptLevelId || null;
-  // Chức vụ chỉ là nhãn nghề nghiệp — đổi nó không đụng gì tới quyền của người này.
+  // Đổi chức vụ là đổi luôn quyền — hai thứ đi liền nhau, đúng như ô chọn duy
+  // nhất trên giao diện thể hiện.
   if (jobPositionId !== undefined) updateData.jobPositionId = jobPositionId || null;
+  if (role) updateData.role = role;
   if (dateOfBirth !== undefined) {
     const d = dateOfBirth ? new Date(dateOfBirth) : null;
     updateData.dateOfBirth = d && !isNaN(d.getTime()) ? d : null;

@@ -13,11 +13,21 @@ import { AlertDialog } from "@/components/ui/alert-dialog";
 type Branch = { id: string; name: string };
 type FMAssignment = { branchId: string; branch: { id: string; name: string } };
 type PTLevel = { id: string; name: string; color: string; isActive: boolean };
+
+/** Chức vụ — nhãn nghề nghiệp Admin tự quản, mang theo QUYỀN mà nó cấp. */
+type JobPositionRow = {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
+  _count: { users: number };
+};
 type StaffMember = {
   id: string;
   name: string | null;
   email: string;
-  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT";
+  role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
   branchId: string | null;
   dateOfBirth: Date | null;
   ptLevelId: string | null;
@@ -36,6 +46,7 @@ const ROLE_STYLE: Record<string, string> = {
   CEO_FITPARTNER: "bg-amber-100 text-amber-700",
   COO: "bg-orange-100 text-orange-700",
   PT: "bg-blue-100 text-blue-700",
+  STAFF: "bg-gray-100 text-gray-600",
 };
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -43,6 +54,20 @@ const ROLE_LABEL: Record<string, string> = {
   CEO_FITPARTNER: "CEO Fitpartner",
   COO: "COO",
   PT: "Huấn luyện viên",
+  STAFF: "Nhân sự",
+};
+
+/**
+ * Quyền mà mỗi chức vụ cấp — hiện ngay dưới ô chọn để Admin biết mình đang trao gì.
+ * Danh sách này CỐ ĐỊNH trong code; Admin chọn từ đây chứ không đặt ra quyền mới.
+ */
+const ROLE_POWER: Record<string, string> = {
+  ADMIN: "Toàn quyền hệ thống",
+  FM: "Quản lý cơ sở được phân công",
+  COO: "Xem toàn hệ thống, không sửa",
+  CEO_FITPARTNER: "Chỉ xem Setup doanh số",
+  PT: "Khách hàng của mình, thi thăng cấp",
+  STAFF: "Chỉ xem lương của chính mình",
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -177,7 +202,7 @@ export function StaffPageClient({
   const [selectedPtLevelId, setSelectedPtLevelId] = useState<string>("");
   // Chức vụ — danh sách Admin tự quản, nạp từ /api/admin/job-positions.
   const [selectedJobPositionId, setSelectedJobPositionId] = useState<string>("");
-  const [jobPositions, setJobPositions] = useState<{ id: string; name: string; color: string; isActive: boolean; _count: { users: number } }[]>([]);
+  const [jobPositions, setJobPositions] = useState<JobPositionRow[]>([]);
   const [posOpen, setPosOpen] = useState(false);
   const [birthDateVal, setBirthDateVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -206,6 +231,15 @@ export function StaffPageClient({
   useEffect(() => {
     if (open || posOpen) loadPositions();
   }, [open, posOpen, loadPositions]);
+
+  // FM không tạo được tài khoản Admin/FM — lọc ngay ở danh sách chọn thay vì để
+  // họ chọn xong mới bị máy chủ từ chối. Chức vụ đã tắt vẫn hiện nếu người đang
+  // sửa đang giữ nó, để không bị mất khi lưu lại.
+  const assignablePositions = jobPositions.filter(
+    (p) =>
+      (p.isActive || p.id === selectedJobPositionId) &&
+      (isAdmin || (p.role !== "ADMIN" && p.role !== "FM"))
+  );
 
   const canManage = isAdmin || isFM;
 
@@ -239,7 +273,8 @@ export function StaffPageClient({
   function openAdd() {
     setEditing(null);
     setError("");
-    setSelectedRole("PT");
+    setSelectedRole("STAFF");
+    setSelectedJobPositionId("");
     setSelectedBranchIds([]);
     setSelectedPtLevelId("");
     setBirthDateVal("");
@@ -311,18 +346,22 @@ export function StaffPageClient({
     setError("");
     const fd = new FormData(e.currentTarget);
 
+    if (!selectedJobPositionId) {
+      setError("Vui lòng chọn chức vụ");
+      setLoading(false);
+      return;
+    }
     if (selectedRole === "FM" && selectedBranchIds.length === 0) {
       setError("FM phải có ít nhất 1 cơ sở quản lý");
       setLoading(false);
       return;
     }
 
-    const actualRole = selectedRole;
-
+    // KHÔNG gửi role: máy chủ tự suy từ chức vụ. Gửi lên là mở đường cho việc
+    // sửa gói tin để tự phong quyền.
     const body: Record<string, unknown> = {
       name: fd.get("name") as string,
       email: fd.get("email") as string,
-      role: actualRole,
       dateOfBirth: birthDateVal ? new Date(birthDateVal + "T00:00:00.000Z").toISOString() : null,
     };
 
@@ -837,22 +876,31 @@ export function StaffPageClient({
             </div>
           </Field>
 
+          {/* MỘT ô duy nhất. Chức vụ mang theo quyền của nó, nên không còn ô
+              "Vai trò" riêng nữa — trước đây hai ô cùng tên "Chức vụ" nằm cạnh
+              nhau, ai nhìn cũng phải đoán ô nào là ô nào. */}
           <Field label="Chức vụ *">
             <select
-              value={selectedRole}
+              value={selectedJobPositionId}
               onChange={(e) => {
-                setSelectedRole(e.target.value);
+                const pos = jobPositions.find((p) => p.id === e.target.value);
+                setSelectedJobPositionId(e.target.value);
+                setSelectedRole(pos?.role ?? "STAFF");
                 setSelectedBranchIds([]);
                 setSelectedPtLevelId("");
               }}
               className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
             >
-              {isAdmin && <option value="ADMIN">Admin</option>}
-              {isAdmin && <option value="FM">FM (Fitness Manager)</option>}
-              {isAdmin && <option value="CEO_FITPARTNER">CEO</option>}
-              {isAdmin && <option value="COO">COO</option>}
-              <option value="PT">PT (Personal Trainer)</option>
+              <option value="">— Chọn chức vụ —</option>
+              {assignablePositions.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
+            <p className="text-[11px] text-gray-400">
+              {selectedJobPositionId
+                ? `Quyền đi kèm: ${ROLE_POWER[selectedRole] ?? "—"}`
+                : "Quyền của nhân sự đi theo chức vụ. Thêm chức vụ mới ở nút “Chức vụ” trên đầu trang."}
+            </p>
           </Field>
 
           {selectedRole === "PT" && (
@@ -870,29 +918,6 @@ export function StaffPageClient({
             </Field>
           )}
 
-          {/* Chức vụ — cho MỌI vai trò, kể cả người không phải HLV.
-              Đây là nhãn nghề nghiệp, không cấp quyền: quyền vẫn nằm ở ô Vai trò. */}
-          <Field label="Chức vụ">
-            <select
-              value={selectedJobPositionId}
-              onChange={(e) => setSelectedJobPositionId(e.target.value)}
-              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
-            >
-              <option value="">— Chưa gán —</option>
-              {jobPositions
-                .filter((p) => p.isActive || p.id === selectedJobPositionId)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {!p.isActive ? " (đã tắt)" : ""}
-                  </option>
-                ))}
-            </select>
-            <p className="text-[11px] text-gray-400">
-              Chỉ là nhãn nghề nghiệp — không đổi quyền của người này. Thêm chức vụ mới ở nút
-              “Chức vụ” trên đầu trang.
-            </p>
-          </Field>
 
           {selectedRole === "FM" ? (
             <Field label="Cơ sở quản lý *">
@@ -963,16 +988,9 @@ export function StaffPageClient({
 
 // ── Quản lý chức vụ ─────────────────────────────────────────────────────────
 //
-// Chức vụ là NHÃN NGHỀ NGHIỆP (lao công, marketing, lễ tân…), không phải quyền.
-// Quyền vẫn nằm ở ô "Vai trò" của từng nhân sự và cố định trong code — thêm một
-// chức vụ ở đây không cấp thêm quyền cho ai.
-type JobPositionRow = {
-  id: string;
-  name: string;
-  color: string;
-  isActive: boolean;
-  _count: { users: number };
-};
+// Mỗi chức vụ mang theo QUYỀN mà nó cấp, chọn từ danh sách cố định trong code.
+// Nhờ vậy lúc thêm nhân sự chỉ phải chọn MỘT ô. Admin thêm bao nhiêu chức vụ
+// cũng được, nhưng không đặt ra được quyền mới.
 
 function JobPositionManager({
   positions,
@@ -982,6 +1000,8 @@ function JobPositionManager({
   onChanged: () => void;
 }) {
   const [name, setName] = useState("");
+  // Quyền của chức vụ sắp thêm. Mặc định STAFF — thấp nhất, phải cố ý mới nâng.
+  const [role, setRole] = useState<string>("STAFF");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -994,7 +1014,7 @@ function JobPositionManager({
       const res = await fetch("/api/admin/job-positions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({ name: trimmed, role }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -1002,6 +1022,7 @@ function JobPositionManager({
         return;
       }
       setName("");
+      setRole("STAFF");
       onChanged();
     } finally {
       setBusy(false);
@@ -1042,14 +1063,23 @@ function JobPositionManager({
         “Vai trò” của từng người quyết định.
       </p>
 
-      <div className="flex gap-2">
+      <div className="space-y-2">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") add(); }}
           placeholder="Tên chức vụ mới, vd: Lao công"
-          className="h-11 flex-1 rounded-xl"
+          className="h-11 w-full rounded-xl"
         />
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+        >
+          {Object.entries(ROLE_POWER).map(([r, power]) => (
+            <option key={r} value={r}>{ROLE_LABEL[r]} — {power}</option>
+          ))}
+        </select>
         <Button
           onClick={add}
           disabled={busy || !name.trim()}
@@ -1081,7 +1111,7 @@ function JobPositionManager({
                 {p.name}
               </span>
               <span className="min-w-0 flex-1 truncate text-xs text-gray-400">
-                {p._count.users} nhân sự{!p.isActive ? " · đã tắt" : ""}
+                {ROLE_LABEL[p.role]} · {p._count.users} nhân sự{!p.isActive ? " · đã tắt" : ""}
               </span>
               <button
                 onClick={() => patch(p.id, { isActive: !p.isActive })}

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
+
+const ROLES: Role[] = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT", "STAFF"];
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -30,6 +33,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(typeof body.color === "string" && /^#[0-9a-f]{6}$/i.test(body.color) && { color: body.color }),
       ...(typeof body.isActive === "boolean" && { isActive: body.isActive }),
       ...(Number.isInteger(body.order) && { order: body.order }),
+      ...(ROLES.includes(body.role as Role) && { role: body.role as Role }),
     },
     include: { _count: { select: { users: { where: { deletedAt: null } } } } },
   });

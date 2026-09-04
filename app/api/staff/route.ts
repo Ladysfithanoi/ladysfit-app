@@ -74,11 +74,23 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, role, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId } = body;
+  const { name, email, password, branchId, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId } = body;
 
-  if (!name || !email || !password || !role) {
+  if (!name || !email || !password || !jobPositionId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
+
+  // QUYỀN SUY TỪ CHỨC VỤ, không lấy theo giá trị client gửi lên: client sửa gói
+  // tin là tự phong quyền cho mình. Chức vụ là danh sách Admin quản, mỗi chức vụ
+  // gắn sẵn một quyền trong enum cố định.
+  const position = await prisma.jobPosition.findUnique({
+    where: { id: String(jobPositionId) },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!position || !position.isActive) {
+    return NextResponse.json({ error: "Chức vụ không hợp lệ" }, { status: 400 });
+  }
+  const role = position.role;
 
   // FM cannot create ADMIN or FM accounts
   if (isFM && (role === "ADMIN" || role === "FM")) {
