@@ -4,8 +4,9 @@ import { examSettingsForLevel } from "@/lib/exam-level";
 import { parseQuestionIds } from "@/lib/exam-session";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
-  parseTrialState, readMealEntries, readSortAnswer,
+  parseTrialState, readMealEntries, readSortAnswer, readProgramEntries,
   applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT, honorAfter,
+  gradeProgramCase, type ProgramEntry,
   TRIAL_CARDS_PER_ROUND, TRIAL_BRIEFS_PER_ROUND, TRIAL_CARD_MIX, SORT_ZONES,
   TRIAL_BRIEF_MIX, MEAL_KINDS, type MealKind,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
@@ -18,7 +19,7 @@ import {
  */
 
 /** Món cấm lưu dạng JSON mảng — hỏng thì coi như không cấm gì, đừng làm sập bài thi. */
-export function parseBannedFoods(raw: string | null): string[] {
+export function parseStringList(raw: string | null): string[] {
   if (!raw?.trim()) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -42,6 +43,7 @@ export async function loadTrialForCandidate(levelId: string, pinnedItemIds: stri
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
       sortCards: { orderBy: { order: "asc" } },
+      programCases: { orderBy: { order: "asc" } },
     },
   });
 
@@ -68,11 +70,26 @@ export async function loadTrialForCandidate(levelId: string, pinnedItemIds: stri
       targetFat: b.targetFat,
       targetCarbs: b.targetCarbs,
       tolerancePercent: b.tolerancePercent,
-      bannedFoods: parseBannedFoods(b.bannedFoods),
+      bannedFoods: parseStringList(b.bannedFoods),
       // explanation KHÔNG gửi đi — đó là lời giải, chỉ hiện sau khi chấm.
     })),
     // correctZone KHÔNG gửi đi, nếu không mở F12 là thấy hết đáp án.
     cards: r.sortCards.map((c) => ({ id: c.id, text: c.text })),
+    cases: r.programCases.map((pc) => ({
+      id: pc.id,
+      clientProfile: pc.clientProfile,
+      targetTotalSets: pc.targetTotalSets,
+      targetLowerSets: pc.targetLowerSets,
+      targetUpperSets: pc.targetUpperSets,
+      targetCoreSets: pc.targetCoreSets,
+      tolerancePercent: pc.tolerancePercent,
+      // Mẫu bắt buộc và bài chống chỉ định PHẢI gửi đi — đó là ĐỀ BÀI, không
+      // phải đáp án. Giấu đi thì hồ sơ thành đoán mò, mà ngoài đời hồ sơ khách
+      // nào cũng ghi rõ chống chỉ định.
+      requiredPatterns: parseStringList(pc.requiredPatterns),
+      bannedExercises: parseStringList(pc.bannedExercises),
+      // explanation KHÔNG gửi đi — đó là lời giải, chỉ hiện sau khi chấm.
+    })),
   }));
 }
 
@@ -99,7 +116,7 @@ export type TrialReviewRound = {
   id: string;
   name: string;
   sin: string | null;
-  type: "MEAL" | "SORT";
+  type: "MEAL" | "SORT" | "PROGRAM";
   points: number;
   maxPoints: number;
   passed: boolean;
@@ -110,6 +127,16 @@ export type TrialReviewRound = {
     ratio: number;
     totals: { calories: number; protein: number; fat: number; carbs: number };
     metrics: { metric: string; target: number; actual: number; min: number; max: number; ok: boolean }[];
+    usedBanned: string[];
+    explanation: string | null;
+  }[];
+  cases: {
+    id: string;
+    clientProfile: string;
+    ratio: number;
+    totals: { total: number; lower: number; upper: number; core: number; cardio: number };
+    metrics: { metric: string; target: number; actual: number; min: number; max: number; ok: boolean }[];
+    missingPatterns: string[];
     usedBanned: string[];
     explanation: string | null;
   }[];
@@ -181,6 +208,7 @@ export async function computeTrial(
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
       sortCards: { orderBy: { order: "asc" } },
+      programCases: { orderBy: { order: "asc" } },
     },
   });
   const served = itemIds && itemIds.length > 0 ? itemIds : null;
@@ -188,6 +216,7 @@ export async function computeTrial(
     ...r,
     mealBriefs: served ? pickMealBriefs(r.mealBriefs, served, r.mealBriefs.length) : r.mealBriefs,
     sortCards: served ? pickSortCards(r.sortCards, served, r.sortCards.length) : r.sortCards,
+    programCases: served ? pickProgramCases(r.programCases, served, r.programCases.length) : r.programCases,
   }));
   if (rounds.length === 0) return { ok: false, error: "Đề của cấp này chưa có vòng nào" };
 
@@ -211,7 +240,7 @@ export async function computeTrial(
             targetFat: b.targetFat,
             targetCarbs: b.targetCarbs,
             tolerancePercent: declaredTolerance(b.tolerancePercent, tuned.declared),
-            bannedFoods: parseBannedFoods(b.bannedFoods),
+            bannedFoods: parseStringList(b.bannedFoods),
           },
           entries
         );
@@ -239,6 +268,50 @@ export async function computeTrial(
           explanation: round.mealBriefs[i].explanation,
         })),
         cards: [],
+        cases: [],
+      });
+    } else if (round.type === "PROGRAM") {
+      const results = round.programCases.map((pc) => {
+        const entries: ProgramEntry[] = readProgramEntries(state, round.id, pc.id);
+        return gradeProgramCase(
+          {
+            id: pc.id,
+            targetTotalSets: pc.targetTotalSets,
+            targetLowerSets: pc.targetLowerSets,
+            targetUpperSets: pc.targetUpperSets,
+            targetCoreSets: pc.targetCoreSets,
+            tolerancePercent: pc.tolerancePercent,
+            requiredPatterns: parseStringList(pc.requiredPatterns),
+            bannedExercises: parseStringList(pc.bannedExercises),
+          },
+          entries
+        );
+      });
+      // Trụ của vòng = hướng lệch chiếm đa số trong các hồ sơ.
+      const lean = { SEVERITY: 0, MERCY: 0, BALANCE: 0 };
+      for (const r of results) lean[r.pillar]++;
+      const pillar: Pillar =
+        lean.SEVERITY === lean.MERCY ? "BALANCE" : lean.SEVERITY > lean.MERCY ? "SEVERITY" : "MERCY";
+
+      const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared);
+      roundScores.push(rs);
+      details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
+      review.push({
+        ...roundHead(round, rs),
+        briefs: [],
+        cards: [],
+        cases: results.map((r, i) => ({
+          id: r.caseId,
+          clientProfile: round.programCases[i].clientProfile,
+          ratio: r.ratio,
+          totals: r.totals,
+          metrics: r.metrics.map((m) => ({
+            metric: m.metric, target: m.target, actual: m.actual, min: m.min, max: m.max, ok: m.ok,
+          })),
+          missingPatterns: r.missingPatterns,
+          usedBanned: r.usedBanned,
+          explanation: round.programCases[i].explanation,
+        })),
       });
     } else {
       const results = round.sortCards.map((c) => {
@@ -264,6 +337,7 @@ export async function computeTrial(
           ratio: r.ratio,
           explanation: round.sortCards[i].explanation,
         })),
+        cases: [],
       });
     }
   }
@@ -281,7 +355,7 @@ export async function computeTrial(
 type TrialStateShape = ReturnType<typeof parseTrialState>;
 
 function roundHead(
-  round: { id: string; name: string; sin: string | null; type: "MEAL" | "SORT" },
+  round: { id: string; name: string; sin: string | null; type: "MEAL" | "SORT" | "PROGRAM" },
   rs: RoundScore
 ) {
   return {
@@ -430,13 +504,21 @@ export async function gradePendingTrialSession(
  * gọi .join() trên một chuỗi rồi ném lỗi, sập cả trang — đúng một lần đã xảy ra.
  */
 export function serializeRoundForAdmin<
-  T extends { mealBriefs: { bannedFoods: string | null }[] }
+  T extends {
+    mealBriefs: { bannedFoods: string | null }[];
+    programCases: { requiredPatterns: string | null; bannedExercises: string | null }[];
+  }
 >(round: T) {
   return {
     ...round,
     mealBriefs: round.mealBriefs.map((b) => ({
       ...b,
-      bannedFoods: parseBannedFoods(b.bannedFoods),
+      bannedFoods: parseStringList(b.bannedFoods),
+    })),
+    programCases: round.programCases.map((pc) => ({
+      ...pc,
+      requiredPatterns: parseStringList(pc.requiredPatterns),
+      bannedExercises: parseStringList(pc.bannedExercises),
     })),
   };
 }
@@ -529,6 +611,22 @@ export function pickSortCards<T extends { id: string; correctZone: SortZone }>(
   }
   if (taken.length < limit) taken.push(...shuffled(left).slice(0, limit - taken.length));
   return shuffled(taken).slice(0, limit);
+}
+
+/**
+ * Hồ sơ dựng giáo án: bốc thẳng, không chia tầng — số hồ sơ mỗi lượt bằng đúng
+ * số hồ sơ khay ăn, vì đây cũng là một case study nặng ngang như thế.
+ */
+export function pickProgramCases<T extends { id: string }>(
+  cases: T[],
+  pinned: string[] | null,
+  limit: number = TRIAL_BRIEFS_PER_ROUND
+): T[] {
+  if (pinned && pinned.length > 0) {
+    const kept = byPinnedOrder(cases, pinned);
+    if (kept.length > 0) return kept;
+  }
+  return shuffled(cases).slice(0, limit);
 }
 
 /**

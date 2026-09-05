@@ -11,6 +11,7 @@
 // Trượt một vòng KHÔNG đánh rớt cả kỳ — nhưng bị trừ thẳng failPenalty vào
 // tổng, nên trượt hai vòng thì gần như không gỡ lại được.
 import { FOODS } from "./foods-data";
+import { EXERCISE_BY_NAME } from "./exercises-data";
 
 // ── Bảy đại tội ──────────────────────────────────────────────────────────────
 //
@@ -47,9 +48,10 @@ export const SIN_DOMAIN: Record<Sin, string> = {
 };
 
 /** Lối chơi — mô tả CƠ CHẾ, tuyệt đối không kèm tên tội nào. */
-export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT", string> = {
+export const ROUND_TYPE_LABEL: Record<"MEAL" | "SORT" | "PROGRAM", string> = {
   MEAL: "Dựng khay ăn theo chỉ tiêu",
   SORT: "Phân loại tình huống vào 3 vùng",
+  PROGRAM: "Dựng giáo án buổi tập theo chỉ tiêu",
 };
 
 /**
@@ -447,6 +449,163 @@ export function gradeMealBrief(brief: MealBrief, entries: MealEntry[]): MealBrie
   };
 }
 
+// ── Vòng Dựng giáo án ────────────────────────────────────────────────────────
+//
+// Case study về CHUYÊN MÔN: cho một hồ sơ khách kèm chống chỉ định, thí sinh tự
+// dựng một buổi tập — chọn bài và chia số set.
+//
+// Cùng triết lý chấm với vòng khay ăn, vì cùng một loại việc: có chỉ tiêu, có
+// sai số, có thứ tuyệt đối cấm. Khác ở chỗ khối lượng buổi tập không phải một
+// con số mà là bốn: tổng set, và phần chia cho thân dưới / thân trên / core.
+// Đúng tổng mà dồn hết vào chân thì vẫn là một buổi tập hỏng.
+//
+// BA THỨ KHIẾN NÓ KHÓ HƠN CHỌN MÓN ĂN:
+//   • Bốn chỉ tiêu ràng buộc lẫn nhau — kéo nhóm này lên là nhóm kia lệch.
+//   • Mẫu vận động bắt buộc: thiếu Hinge thì dù số set đẹp vẫn mất điểm, vì
+//     một buổi chỉ toàn Squat là một buổi thiếu hẳn chuỗi sau cơ thể.
+//   • Bài chống chỉ định: dùng một bài là hỏng cả hồ sơ, đúng như dị ứng bên
+//     khay ăn. Chống chỉ định không phải chuyện thương lượng.
+
+/** Một dòng trong giáo án: tên bài trong danh mục + số set. */
+export type ProgramEntry = { exercise: string; sets: number };
+
+export type ProgramCase = {
+  id: string;
+  targetTotalSets: number | null;
+  targetLowerSets: number | null;
+  targetUpperSets: number | null;
+  targetCoreSets: number | null;
+  tolerancePercent: number;
+  /** Mẫu vận động buổi tập bắt buộc phải có — "Squat", "Hinge", "Push"… */
+  requiredPatterns: string[];
+  /** Bài chống chỉ định với khách này — dùng là hỏng cả hồ sơ. */
+  bannedExercises: string[];
+};
+
+export type ProgramTotals = { total: number; lower: number; upper: number; core: number; cardio: number };
+
+/** Trọng số 4 chỉ tiêu. Thân dưới nặng ngang tổng — phòng tập nữ, gốc là chân mông. */
+const PROGRAM_WEIGHTS = { total: 30, lower: 30, upper: 25, core: 15 } as const;
+type ProgramMetric = keyof typeof PROGRAM_WEIGHTS;
+
+export type ProgramMetricResult = {
+  metric: ProgramMetric;
+  target: number;
+  actual: number;
+  min: number;
+  max: number;
+  ok: boolean;
+  weight: number;
+};
+
+export type ProgramCaseResult = {
+  caseId: string;
+  ratio: number;
+  totals: ProgramTotals;
+  metrics: ProgramMetricResult[];
+  /** Mẫu vận động bắt buộc mà giáo án còn thiếu. */
+  missingPatterns: string[];
+  usedBanned: string[];
+  pillar: Pillar;
+};
+
+export const PROGRAM_METRIC_LABEL: Record<ProgramMetric, string> = {
+  total: "Tổng set",
+  lower: "Set thân dưới",
+  upper: "Set thân trên",
+  core: "Set core",
+};
+
+/** Cộng set theo nhóm. Bài lạ (không có trong danh mục) chỉ vào tổng. */
+export function programTotals(entries: ProgramEntry[]): ProgramTotals {
+  const t: ProgramTotals = { total: 0, lower: 0, upper: 0, core: 0, cardio: 0 };
+  for (const e of entries) {
+    const sets = Number(e.sets);
+    if (!Number.isFinite(sets) || sets <= 0) continue;
+    t.total += sets;
+    const found = EXERCISE_BY_NAME.get(e.exercise);
+    if (!found) continue;
+    if (found.group === "LOWER") t.lower += sets;
+    else if (found.group === "UPPER") t.upper += sets;
+    else if (found.group === "CORE") t.core += sets;
+    else if (found.group === "CARDIO") t.cardio += sets;
+  }
+  return t;
+}
+
+/** Những mẫu vận động giáo án đang có. */
+export function programPatterns(entries: ProgramEntry[]): Set<string> {
+  const out = new Set<string>();
+  for (const e of entries) {
+    if (!Number.isFinite(Number(e.sets)) || Number(e.sets) <= 0) continue;
+    const found = EXERCISE_BY_NAME.get(e.exercise);
+    if (found) out.add(found.pattern);
+  }
+  return out;
+}
+
+export function gradeProgramCase(c: ProgramCase, entries: ProgramEntry[]): ProgramCaseResult {
+  const totals = programTotals(entries);
+
+  const banned = new Set(c.bannedExercises.map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const usedBanned = entries
+    .filter((e) => Number(e.sets) > 0 && banned.has(e.exercise.trim().toLowerCase()))
+    .map((e) => e.exercise);
+
+  const targets: Record<ProgramMetric, number | null> = {
+    total: c.targetTotalSets,
+    lower: c.targetLowerSets,
+    upper: c.targetUpperSets,
+    core: c.targetCoreSets,
+  };
+
+  const tol = Math.max(0, c.tolerancePercent) / 100;
+  const metrics: ProgramMetricResult[] = [];
+  let earned = 0;
+  let available = 0;
+  let over = 0;
+  let under = 0;
+
+  for (const metric of Object.keys(PROGRAM_WEIGHTS) as ProgramMetric[]) {
+    const target = targets[metric];
+    if (target == null) continue; // chỉ tiêu bỏ trống = không chấm mục này
+    const weight = PROGRAM_WEIGHTS[metric];
+    // Set là số nguyên nhỏ, sai số phần trăm dễ ra khoảng rỗng — nới ít nhất 1 set.
+    const span = Math.max(1, target * tol);
+    const min = Math.ceil(target - span);
+    const max = Math.floor(target + span);
+    const actual = totals[metric];
+    const ok = actual >= min && actual <= max;
+    available += weight;
+    if (ok) earned += weight;
+    else if (actual > max) over++;
+    else under++;
+    metrics.push({ metric, target, actual, min, max, ok, weight });
+  }
+
+  const have = programPatterns(entries);
+  const missingPatterns = c.requiredPatterns.filter((p) => p.trim() && !have.has(p.trim()));
+  const patternFactor =
+    c.requiredPatterns.length === 0
+      ? 1
+      : (c.requiredPatterns.length - missingPatterns.length) / c.requiredPatterns.length;
+
+  // Nhồi quá chỉ tiêu = Nghiêm khắc, cho tập ít hơn cần = Khoan dung. Ngược chiều
+  // với vòng khay ăn, vì ở đây "quá tay" nghĩa là bắt khách gánh nhiều hơn.
+  const pillar: Pillar = over === under ? "BALANCE" : over > under ? "SEVERITY" : "MERCY";
+  const base = available === 0 ? 1 : earned / available;
+
+  return {
+    caseId: c.id,
+    ratio: usedBanned.length > 0 ? 0 : base * patternFactor,
+    totals,
+    metrics,
+    missingPatterns,
+    usedBanned,
+    pillar,
+  };
+}
+
 // ── Vòng Sa ngã ──────────────────────────────────────────────────────────────
 
 export type SortCard = { id: string; correctZone: SortZone };
@@ -674,6 +833,22 @@ export function readMealEntries(state: TrialState, roundId: string, briefId: str
         (e as MealEntry).grams > 0
     )
     .map((e) => ({ food: e.food, grams: Math.min(5000, Math.round(e.grams)) }));
+}
+
+/** Giáo án của một hồ sơ, đã lọc bỏ dòng rác do client gửi lên. */
+export function readProgramEntries(state: TrialState, roundId: string, caseId: string): ProgramEntry[] {
+  const raw = state[roundId]?.[caseId];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (e): e is ProgramEntry =>
+        !!e && typeof e === "object" &&
+        typeof (e as ProgramEntry).exercise === "string" &&
+        typeof (e as ProgramEntry).sets === "number" &&
+        (e as ProgramEntry).sets > 0
+    )
+    // Chặn trần 20 set/bài: gõ nhầm một số ba chữ số không được làm vỡ bảng điểm.
+    .map((e) => ({ exercise: e.exercise, sets: Math.min(20, Math.round(e.sets)) }));
 }
 
 export function readSortAnswer(state: TrialState, roundId: string, cardId: string): SortZone | null {

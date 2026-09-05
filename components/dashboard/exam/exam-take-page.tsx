@@ -26,10 +26,11 @@ import { QuestionMedia } from "./question-media";
 import { QuestionPreview } from "./question-preview";
 import { MealRound, type MealBriefView } from "./trial-meal-round";
 import { SortRound, type SortCardView } from "./trial-sort-round";
+import { ProgramRound, type ProgramCaseView } from "./trial-program-round";
 import {
   SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
   HONOR_START, honorCost,
-  type MealEntry, type SortZone, type Sin,
+  type MealEntry, type SortZone, type Sin, type ProgramEntry,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
 import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
@@ -58,7 +59,7 @@ const OPTIONS = ["A", "B", "C", "D"] as const;
 /** Một vòng của đề thử thách (7 đại tội) — đã bỏ đáp án trước khi gửi xuống. */
 type TrialRound = {
   id: string;
-  type: "MEAL" | "SORT";
+  type: "MEAL" | "SORT" | "PROGRAM";
   /** Đại tội của vòng — hiện kèm tên vòng cho thí sinh biết đang bị đo mảng nào. */
   sin: Sin | null;
   name: string;
@@ -68,10 +69,17 @@ type TrialRound = {
   failPenalty: number;
   briefs: MealBriefView[];
   cards: SortCardView[];
+  cases: ProgramCaseView[];
 };
 
-/** Bài làm cả lượt: { roundId: { briefId: MealEntry[] } | { cardId: SortZone } }. */
-type TrialState = Record<string, Record<string, MealEntry[] | SortZone>>;
+/**
+ * Bài làm cả lượt, khoá theo vòng rồi tới từng mục trong vòng:
+ *   khay ăn   → { briefId: MealEntry[] }
+ *   phân loại → { cardId: SortZone }
+ *   giáo án   → { caseId: ProgramEntry[] }
+ */
+type TrialCell = MealEntry[] | SortZone | ProgramEntry[];
+type TrialState = Record<string, Record<string, TrialCell>>;
 
 /**
  * Sephirot sáng lên sau một lượt thi: mỗi VÒNG ĐÃ ĐẠT thắp đúng sephirah của
@@ -168,7 +176,7 @@ function sephirahStatus(
 type TrialReviewRound = {
   id: string;
   name: string;
-  type: "MEAL" | "SORT";
+  type: "MEAL" | "SORT" | "PROGRAM";
   points: number;
   maxPoints: number;
   passed: boolean;
@@ -187,6 +195,15 @@ type TrialReviewRound = {
     answer: SortZone | null;
     correct: SortZone;
     ratio: number;
+    explanation: string | null;
+  }[];
+  cases: {
+    id: string;
+    clientProfile: string;
+    ratio: number;
+    metrics: { metric: string; target: number; actual: number; min: number; max: number; ok: boolean }[];
+    missingPatterns: string[];
+    usedBanned: string[];
     explanation: string | null;
   }[];
 };
@@ -721,7 +738,7 @@ export function ExamTakePage({
 
 
   /** Sửa bài làm một vòng: cập nhật ngay, hẹn giờ ghi xuống server. */
-  function updateTrial(roundId: string, key: string, value: MealEntry[] | SortZone) {
+  function updateTrial(roundId: string, key: string, value: TrialCell) {
     setTrialState((prev) => {
       const next = { ...prev, [roundId]: { ...(prev[roundId] ?? {}), [key]: value } };
       trialRef.current = next;
@@ -923,6 +940,12 @@ export function ExamTakePage({
     // Cạn Thanh danh cũng là XONG vòng, dù còn thẻ chưa bấm: máy chủ không nhận
     // thêm thẻ nào của vòng đó nữa. Không tính thế thì người ta bị kẹt luôn ở
     // vòng mình vừa hỏng, không sang được vòng sau mà cũng không nộp được bài.
+    if (r.type === "PROGRAM") {
+      return r.cases.every((c) => {
+        const v = st[c.id];
+        return Array.isArray(v) && v.length > 0;
+      });
+    }
     return r.cards.every((c) => typeof st[c.id] === "string") || roundCollapsed(r);
   };
   /** Vòng phân loại đã cạn Thanh danh — tính bằng đúng hàm máy chủ dùng lúc chấm. */
@@ -1302,7 +1325,25 @@ export function ExamTakePage({
                 )}
               </div>
 
-              {currentRound.type === "MEAL" ? (
+              {currentRound.type === "PROGRAM" ? (
+                <div className="space-y-5">
+                  {currentRound.cases.map((pc, i) => (
+                    <div key={pc.id}>
+                      {currentRound.cases.length > 1 && (
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">
+                          Hồ sơ {i + 1}/{currentRound.cases.length}
+                        </p>
+                      )}
+                      <ProgramRound
+                        programCase={pc}
+                        entries={(trialState[currentRound.id]?.[pc.id] as ProgramEntry[]) ?? []}
+                        disabled={!!result}
+                        onChange={(next) => updateTrial(currentRound.id, pc.id, next)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : currentRound.type === "MEAL" ? (
                 <div className="space-y-6">
                   {currentRound.briefs.map((brief, i) => (
                     <div key={brief.id}>
@@ -1373,6 +1414,43 @@ export function ExamTakePage({
                       {rv.points}/{rv.maxPoints}
                     </span>
                   </div>
+
+                  {/* Vòng dựng giáo án: chỉ tiêu số set, mẫu vận động còn thiếu */}
+                  {rv.cases.map((c, i) => (
+                    <div key={c.id} className="border-b border-gray-50 px-4 py-3 last:border-0">
+                      <p className="text-xs font-extrabold text-[#f15b5c]">Hồ sơ {i + 1}</p>
+                      {c.usedBanned.length > 0 && (
+                        <p className="mt-1 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600">
+                          Dùng bài chống chỉ định ({c.usedBanned.join(", ")}) — mất trắng hồ sơ này
+                        </p>
+                      )}
+                      {c.missingPatterns.length > 0 && (
+                        <p className="mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700">
+                          Thiếu mẫu vận động: {c.missingPatterns.join(", ")}
+                        </p>
+                      )}
+                      <div className={cn(SLIDER_ROUNDS, "mt-1.5")}>
+                        <div className="flex w-max gap-2">
+                          {c.metrics.map((m) => (
+                            <span
+                              key={m.metric}
+                              className={cn(
+                                "shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-bold",
+                                m.ok ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
+                              )}
+                            >
+                              {m.metric}: {m.actual} · cần {m.min}–{m.max} {m.ok ? "✓" : "✗"}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {c.explanation && (
+                        <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-gray-500">
+                          {c.explanation}
+                        </p>
+                      )}
+                    </div>
+                  ))}
 
                   {/* Vòng dựng khay ăn: từng chỉ tiêu đạt hay trượt */}
                   {rv.briefs.map((b, i) => (

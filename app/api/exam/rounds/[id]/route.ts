@@ -39,6 +39,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   // điểm và điểm tối đa của vòng ngay lúc chấm.
   const briefs = Array.isArray(b.briefs) ? (b.briefs as Record<string, unknown>[]) : null;
   const cards = Array.isArray(b.cards) ? (b.cards as Record<string, unknown>[]) : null;
+  const cases = Array.isArray(b.cases) ? (b.cases as Record<string, unknown>[]) : null;
+
+  /** Mảng chuỗi (mẫu vận động bắt buộc, bài chống chỉ định) → JSON, rỗng thì null. */
+  const strList = (v: unknown) =>
+    Array.isArray(v)
+      ? JSON.stringify(v.filter((s): s is string => typeof s === "string" && !!s.trim()).map((s) => s.trim()))
+      : null;
 
   if (round.type === "MEAL" && briefs) {
     const clean = briefs
@@ -80,6 +87,26 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (clean.length > 0) await prisma.examSortCard.createMany({ data: clean });
   }
 
+  if (round.type === "PROGRAM" && cases) {
+    const clean = cases
+      .filter((x) => typeof x.clientProfile === "string" && x.clientProfile.trim())
+      .map((x, i) => ({
+        roundId: round.id,
+        order: i,
+        clientProfile: String(x.clientProfile).trim(),
+        targetTotalSets: optionalTarget(x.targetTotalSets),
+        targetLowerSets: optionalTarget(x.targetLowerSets),
+        targetUpperSets: optionalTarget(x.targetUpperSets),
+        targetCoreSets: optionalTarget(x.targetCoreSets),
+        tolerancePercent: clampInt(x.tolerancePercent, 1, 100, 15),
+        requiredPatterns: strList(x.requiredPatterns),
+        bannedExercises: strList(x.bannedExercises),
+        explanation: typeof x.explanation === "string" && x.explanation.trim() ? x.explanation.trim() : null,
+      }));
+    await prisma.examProgramCase.deleteMany({ where: { roundId: round.id } });
+    if (clean.length > 0) await prisma.examProgramCase.createMany({ data: clean });
+  }
+
   const updated = await prisma.examRound.update({
     where: { id: params.id },
     data: {
@@ -101,6 +128,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
       sortCards: { orderBy: { order: "asc" } },
+      programCases: { orderBy: { order: "asc" } },
     },
   });
 

@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     include: {
       mealBriefs: { orderBy: { order: "asc" } },
       sortCards: { orderBy: { order: "asc" } },
+      programCases: { orderBy: { order: "asc" } },
     },
   });
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
   if (!levelId || !name?.trim()) {
     return NextResponse.json({ error: "Thiếu cấp độ hoặc tên vòng" }, { status: 400 });
   }
-  if (type !== "MEAL" && type !== "SORT") {
+  if (type !== "MEAL" && type !== "SORT" && type !== "PROGRAM") {
     return NextResponse.json({ error: "Lối chơi không hợp lệ" }, { status: 400 });
   }
   // Đại tội là danh sách đóng — gõ sai thì để trống còn hơn ghi bậy.
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       order: (max._max.order ?? -1) + 1,
     },
-    include: { mealBriefs: true, sortCards: true },
+    include: { mealBriefs: true, sortCards: true, programCases: true },
   });
 
   return NextResponse.json(serializeRoundForAdmin(round), { status: 201 });

@@ -14,7 +14,7 @@ import { PrismaClient, type ExamSortZone, type ExamSin } from "@prisma/client";
 import * as GLUTTONY from "./trial-content/gluttony";
 import * as LUST from "./trial-content/lust";
 import * as GREED from "./trial-content/greed";
-import * as PRIDE from "./trial-content/pride";
+import * as PRIDE_PROGRAM from "./trial-content/pride-program";
 import * as ENVY from "./trial-content/envy";
 import * as WRATH from "./trial-content/wrath";
 import * as SLOTH from "./trial-content/sloth";
@@ -40,9 +40,6 @@ const SORT_ROUNDS: {
 }[] = [
   { sin: "LUST",  name: "Dục vọng",   order: 1, passPercent: 70, failPenalty: 25, intro: LUST.INTRO,  cards: LUST.CARDS },
   { sin: "GREED", name: "Tham lam",   order: 2, passPercent: 65, failPenalty: 25, intro: GREED.INTRO, cards: GREED.CARDS },
-  // Kiêu ngạo gắt hơn phần còn lại vì gần như mọi thẻ vùng đỏ của nó là an toàn
-  // thân thể của khách — qua loa ở đây thì hậu quả không nằm trong bảng điểm.
-  { sin: "PRIDE", name: "Kiêu ngạo",  order: 3, passPercent: 70, failPenalty: 25, intro: PRIDE.INTRO, cards: PRIDE.CARDS },
   { sin: "ENVY",  name: "Ghen tị",    order: 4, passPercent: 65, failPenalty: 20, intro: ENVY.INTRO,  cards: ENVY.CARDS },
   { sin: "WRATH", name: "Phẫn nộ",    order: 5, passPercent: 65, failPenalty: 20, intro: WRATH.INTRO, cards: WRATH.CARDS },
   { sin: "SLOTH", name: "Lười biếng", order: 6, passPercent: 60, failPenalty: 20, intro: SLOTH.INTRO, cards: SLOTH.CARDS },
@@ -85,12 +82,45 @@ async function main() {
         clientProfile: b.clientProfile,
         targetCalories: b.targetCalories,
         targetProtein: b.targetProtein,
+        targetFat: b.targetFat,
+        targetCarbs: b.targetCarbs,
         tolerancePercent: b.tolerancePercent,
         bannedFoods: b.bannedFoods.length ? JSON.stringify(b.bannedFoods) : null,
         explanation: b.explanation,
       })),
     });
     console.log(`  Phàm ăn: ${GLUTTONY.BRIEFS.length} hồ sơ`);
+  }
+
+  // ── Vòng dựng giáo án ─────────────────────────────────────────────────────
+  // Chuyên môn kỹ thuật không đo được bằng cách bấm một trong ba vùng. Vòng này
+  // đổi từ phân loại thẻ sang case study ngày 05/09/2026; 50 thẻ cũ vẫn nằm
+  // nguyên trong cơ sở dữ liệu, đổi type là dùng lại được.
+  if (wanted("PRIDE")) {
+    const round = await upsertRound(level.id, "Kiêu ngạo", "PROGRAM", "PRIDE", {
+      intro: PRIDE_PROGRAM.INTRO,
+      order: 3,
+      maxPoints: 100,
+      passPercent: 70,
+      failPenalty: 25,
+    });
+    await prisma.examProgramCase.deleteMany({ where: { roundId: round.id } });
+    await prisma.examProgramCase.createMany({
+      data: PRIDE_PROGRAM.CASES.map((c, i) => ({
+        roundId: round.id,
+        order: i,
+        clientProfile: c.clientProfile,
+        targetTotalSets: c.targetTotalSets,
+        targetLowerSets: c.targetLowerSets,
+        targetUpperSets: c.targetUpperSets,
+        targetCoreSets: c.targetCoreSets,
+        tolerancePercent: c.tolerancePercent,
+        requiredPatterns: c.requiredPatterns.length ? JSON.stringify(c.requiredPatterns) : null,
+        bannedExercises: c.bannedExercises.length ? JSON.stringify(c.bannedExercises) : null,
+        explanation: c.explanation,
+      })),
+    });
+    console.log(`  ${round.name}: ${PRIDE_PROGRAM.CASES.length} hồ sơ giáo án`);
   }
 
   // ── Các vòng phân loại thẻ ────────────────────────────────────────────────
@@ -128,7 +158,7 @@ async function main() {
 async function upsertRound(
   levelId: string,
   name: string,
-  type: "MEAL" | "SORT",
+  type: "MEAL" | "SORT" | "PROGRAM",
   sin: ExamSin,
   data: { intro: string; order: number; maxPoints: number; passPercent: number; failPenalty: number }
 ) {

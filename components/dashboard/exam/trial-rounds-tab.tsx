@@ -10,6 +10,7 @@ import {
   SIN_SEPHIRAH, SEPHIROT,
 } from "@/lib/exam-trial";
 import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
+import { EXAM_EXERCISES } from "@/lib/exercises-data";
 
 /**
  * Soạn đề thử thách nhiều vòng — chỉ hiện với cấp đã đặt dạng đề TRIAL.
@@ -41,7 +42,7 @@ type SortCard = {
 type Round = {
   id: string;
   /** Lối chơi — cơ chế, không phải tên tội. */
-  type: "MEAL" | "SORT";
+  type: "MEAL" | "SORT" | "PROGRAM";
   /** Đại tội của vòng, tách hẳn khỏi lối chơi và khỏi tên hiển thị. */
   sin: Sin | null;
   name: string;
@@ -53,6 +54,43 @@ type Round = {
   isActive: boolean;
   mealBriefs: MealBrief[];
   sortCards: SortCard[];
+  programCases: ProgramCase[];
+};
+
+type ProgramCase = {
+  id?: string;
+  clientProfile: string;
+  targetTotalSets: number | null;
+  targetLowerSets: number | null;
+  targetUpperSets: number | null;
+  targetCoreSets: number | null;
+  tolerancePercent: number;
+  requiredPatterns: string[];
+  bannedExercises: string[];
+  explanation: string | null;
+};
+
+/**
+ * Mẫu vận động chọn được — suy ra từ chính danh mục, không gõ tay.
+ *
+ * Lọc bỏ mã viết thường (arm, quad, back…): đó là mã cũ còn sót trong Kho bài
+ * tập, không phải mẫu vận động để ra đề. Bài của chúng vẫn dùng được bình thường,
+ * chỉ là không đặt làm yêu cầu bắt buộc.
+ */
+const EXERCISE_PATTERNS = Array.from(new Set(EXAM_EXERCISES.map((e) => e.pattern)))
+  .filter((p) => /^[A-Z]/.test(p))
+  .sort();
+
+const emptyCase: ProgramCase = {
+  clientProfile: "",
+  targetTotalSets: null,
+  targetLowerSets: null,
+  targetUpperSets: null,
+  targetCoreSets: null,
+  tolerancePercent: 15,
+  requiredPatterns: [],
+  bannedExercises: [],
+  explanation: null,
 };
 
 type LevelOption = { id: string; name: string; color: string; format: "FLAT" | "TRIAL" };
@@ -106,13 +144,24 @@ function normalizeRounds(raw: unknown): Round[] {
             : [],
       })),
       sortCards: Array.isArray(r.sortCards) ? r.sortCards : [],
+      programCases: (Array.isArray(r.programCases) ? r.programCases : []).map((c) => ({
+        ...c,
+        requiredPatterns: Array.isArray(c.requiredPatterns)
+          ? c.requiredPatterns
+          : typeof c.requiredPatterns === "string" ? safeParseList(c.requiredPatterns) : [],
+        bannedExercises: Array.isArray(c.bannedExercises)
+          ? c.bannedExercises
+          : typeof c.bannedExercises === "string" ? safeParseList(c.bannedExercises) : [],
+      })),
     };
   });
 }
 
 /** "3 hồ sơ" / "13 thẻ" — nói rõ vừa lưu được cái gì, không chỉ nói "đã lưu". */
 function countOf(r: Round): string {
-  return r.type === "MEAL" ? `${r.mealBriefs.length} hồ sơ` : `${r.sortCards.length} thẻ`;
+  if (r.type === "MEAL") return `${r.mealBriefs.length} hồ sơ`;
+  if (r.type === "PROGRAM") return `${r.programCases.length} hồ sơ giáo án`;
+  return `${r.sortCards.length} thẻ`;
 }
 
 function safeParseList(raw: string): string[] {
@@ -206,7 +255,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
   // đang cuộn xuống trong vòng đã mở mà bấm Lưu thì dòng đó nằm ngoài màn hình,
   // nhìn y như bấm xong không có gì xảy ra.
   const [msg, setMsg] = useState<{ roundId: string; text: string; ok: boolean } | null>(null);
-  const [newType, setNewType] = useState<"MEAL" | "SORT">("MEAL");
+  const [newType, setNewType] = useState<"MEAL" | "SORT" | "PROGRAM">("MEAL");
   const [newSin, setNewSin] = useState<Sin>("GLUTTONY");
   // Tên vòng mặc định lấy theo tên tội; sửa tay thì giữ nguyên phần đã sửa.
   const [newName, setNewName] = useState("");
@@ -267,6 +316,7 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
           isActive: r.isActive,
           briefs: r.type === "MEAL" ? r.mealBriefs : undefined,
           cards: r.type === "SORT" ? r.sortCards : undefined,
+          cases: r.type === "PROGRAM" ? r.programCases : undefined,
         }),
       });
       if (!res.ok) {
@@ -378,12 +428,13 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
         </select>
         <select
           value={newType}
-          onChange={(e) => setNewType(e.target.value as "MEAL" | "SORT")}
+          onChange={(e) => setNewType(e.target.value as "MEAL" | "SORT" | "PROGRAM")}
           className={cn(inputCls, "sm:w-52")}
           title="Lối chơi — cách đo"
         >
           <option value="MEAL">{ROUND_TYPE_LABEL.MEAL}</option>
           <option value="SORT">{ROUND_TYPE_LABEL.SORT}</option>
+          <option value="PROGRAM">{ROUND_TYPE_LABEL.PROGRAM}</option>
         </select>
         <input
           value={newName}
@@ -524,7 +575,12 @@ export function TrialRoundsTab({ levels }: { levels: LevelOption[] }) {
                   </Field>
                 </div>
 
-                {r.type === "MEAL" ? (
+                {r.type === "PROGRAM" ? (
+                  <ProgramCaseEditor
+                    cases={r.programCases}
+                    onChange={(programCases) => patch(r.id, { programCases })}
+                  />
+                ) : r.type === "MEAL" ? (
                   <MealBriefEditor
                     briefs={r.mealBriefs}
                     onChange={(mealBriefs) => patch(r.id, { mealBriefs })}
@@ -742,6 +798,192 @@ function SortCardEditor({
         <Plus className="h-3.5 w-3.5" />
         Thêm thẻ
       </button>
+    </div>
+  );
+}
+
+/**
+ * Soạn hồ sơ của vòng DỰNG GIÁO ÁN.
+ *
+ * Chỉ tiêu để trống = không chấm mục đó, đúng như vòng khay ăn. Mẫu vận động
+ * bắt buộc và bài chống chỉ định nhập bằng cách chọn trong danh mục, không gõ
+ * tay: gõ sai một ký tự là lệnh cấm không bao giờ kích hoạt mà không ai biết.
+ */
+function ProgramCaseEditor({
+  cases,
+  onChange,
+}: {
+  cases: ProgramCase[];
+  onChange: (next: ProgramCase[]) => void;
+}) {
+  const [query, setQuery] = useState<Record<number, string>>({});
+
+  function patchCase(i: number, next: Partial<ProgramCase>) {
+    onChange(cases.map((c, idx) => (idx === i ? { ...c, ...next } : c)));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-extrabold text-gray-700">Hồ sơ khách ({cases.length})</p>
+        <button
+          onClick={() => onChange([...cases, { ...emptyCase }])}
+          className="flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c]"
+        >
+          <Plus className="h-3.5 w-3.5" /> Thêm hồ sơ
+        </button>
+      </div>
+
+      {cases.map((c, i) => (
+        <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Hồ sơ {i + 1}</p>
+            <button
+              onClick={() => onChange(cases.filter((_, idx) => idx !== i))}
+              className="rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+
+          <Field label="Mô tả khách (tuổi, cân nặng, mục tiêu, chấn thương, số buổi/tuần…)">
+            <textarea
+              value={c.clientProfile}
+              onChange={(e) => patchCase(i, { clientProfile: e.target.value })}
+              rows={4}
+              className={proseCls}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {([
+              ["targetTotalSets", "Tổng set"],
+              ["targetLowerSets", "Set thân dưới"],
+              ["targetUpperSets", "Set thân trên"],
+              ["targetCoreSets", "Set core"],
+            ] as const).map(([key, label]) => (
+              <Field key={key} label={label}>
+                <input
+                  type="number"
+                  value={c[key] ?? ""}
+                  placeholder="—"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) =>
+                    patchCase(i, { [key]: e.target.value === "" ? null : parseInt(e.target.value) || 0 } as Partial<ProgramCase>)
+                  }
+                  className={inputCls}
+                />
+              </Field>
+            ))}
+            <Field label="Sai số (%)">
+              <input
+                type="number"
+                value={c.tolerancePercent}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => patchCase(i, { tolerancePercent: parseInt(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <p className="-mt-1 text-[11px] font-semibold text-gray-400">
+            Chỉ tiêu để trống thì vòng không chấm mục đó. Set là số nguyên nhỏ nên lúc chấm luôn
+            nới thêm ít nhất 1 set, không thì khoảng cho phép thành rỗng.
+          </p>
+
+          <Field label="Mẫu vận động bắt buộc — thiếu một mẫu là mất phần điểm tương ứng">
+            <div className="flex flex-wrap gap-1.5">
+              {EXERCISE_PATTERNS.map((p) => {
+                const on = c.requiredPatterns.includes(p);
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() =>
+                      patchCase(i, {
+                        requiredPatterns: on
+                          ? c.requiredPatterns.filter((x) => x !== p)
+                          : [...c.requiredPatterns, p],
+                      })
+                    }
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors",
+                      on
+                        ? "border-[#f15b5c] bg-[#f15b5c]/5 text-[#f15b5c]"
+                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    )}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Bài chống chỉ định — dùng một bài là hồ sơ mất trắng">
+            <input
+              value={query[i] ?? ""}
+              onChange={(e) => setQuery((q) => ({ ...q, [i]: e.target.value }))}
+              placeholder="Gõ tên bài để tìm trong danh mục…"
+              className={inputCls}
+            />
+            {(query[i] ?? "").trim() && (
+              <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-gray-200 bg-white p-1">
+                {EXAM_EXERCISES.filter(
+                  (e) =>
+                    e.name.toLowerCase().includes((query[i] ?? "").trim().toLowerCase()) &&
+                    !c.bannedExercises.includes(e.name)
+                )
+                  .slice(0, 12)
+                  .map((e) => (
+                    <button
+                      key={e.name}
+                      type="button"
+                      onClick={() => {
+                        patchCase(i, { bannedExercises: [...c.bannedExercises, e.name] });
+                        setQuery((q) => ({ ...q, [i]: "" }));
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+                    >
+                      <Plus className="h-3 w-3 shrink-0 text-gray-300" />
+                      <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                      <span className="shrink-0 text-[10px] text-gray-400">{e.pattern}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+            {c.bannedExercises.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {c.bannedExercises.map((name) => (
+                  <span
+                    key={name}
+                    className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700"
+                  >
+                    {name}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patchCase(i, { bannedExercises: c.bannedExercises.filter((x) => x !== name) })
+                      }
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </Field>
+
+          <Field label="Giảng giải (hiện sau khi chấm)">
+            <textarea
+              value={c.explanation ?? ""}
+              onChange={(e) => patchCase(i, { explanation: e.target.value || null })}
+              rows={3}
+              className={proseCls}
+            />
+          </Field>
+        </div>
+      ))}
     </div>
   );
 }

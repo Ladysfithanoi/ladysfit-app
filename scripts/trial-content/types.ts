@@ -32,9 +32,33 @@ export type MealBriefSeed = {
   clientProfile: string;
   targetCalories: number;
   targetProtein: number;
+  /** Suy ra từ calo và đạm: phần năng lượng còn lại chia béo 30% / bột đường 70%. */
+  targetFat: number;
+  targetCarbs: number;
   /** Sai số cho phép quanh mỗi chỉ tiêu (%). */
   tolerancePercent: number;
   /** Tên món khách KHÔNG được ăn — phải trùng đúng tên trong lib/foods-data.ts. */
   bannedFoods: string[];
+  explanation: string;
+};
+
+/**
+ * Một hồ sơ của vòng DỰNG GIÁO ÁN.
+ *
+ * Chỉ tiêu nào để null thì vòng không chấm mục đó — nhưng lưu ý 0 KHÁC null:
+ * targetUpperSets = 0 nghĩa là "buổi này không được có bài thân trên", còn null
+ * là "không chấm". Buổi chia nhóm dùng số 0, buổi toàn thân dùng null.
+ */
+export type ProgramCaseSeed = {
+  clientProfile: string;
+  targetTotalSets: number | null;
+  targetLowerSets: number | null;
+  targetUpperSets: number | null;
+  targetCoreSets: number | null;
+  tolerancePercent: number;
+  /** Mẫu vận động bắt buộc — phải trùng đúng pattern trong lib/exercises-data.ts. */
+  requiredPatterns: string[];
+  /** Bài chống chỉ định — phải trùng đúng tên bài trong lib/exercises-data.ts. */
+  bannedExercises: string[];
   explanation: string;
 };

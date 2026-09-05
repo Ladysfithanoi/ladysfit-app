@@ -191,6 +191,7 @@ export async function GET(req: Request) {
       const itemIds = orderedRounds.flatMap((r) => [
         ...r.briefs.map((b) => b.id),
         ...r.cards.map((c) => c.id),
+        ...r.cases.map((c) => c.id),
       ]);
       await prisma.examSession.update({
         where: { id: examSession.id },

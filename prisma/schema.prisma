@@ -720,6 +720,8 @@ enum ExamRoundType {
   MEAL
   /// Xếp thẻ tình huống vào đúng một trong ba vùng.
   SORT
+  /// Dựng giáo án một buổi tập chạm đúng chỉ tiêu số set, đủ mẫu vận động.
+  PROGRAM
 }
 
 /// Bảy đại tội — danh sách đóng, đúng bản kinh điển. Mỗi vòng gắn một tội.
@@ -771,7 +773,8 @@ model ExamRound {
   createdAt   DateTime      @default(now())
 
   level      PTLevel           @relation(fields: [levelId], references: [id], onDelete: Cascade)
-  mealBriefs ExamMealBrief[]
+  mealBriefs   ExamMealBrief[]
+  programCases ExamProgramCase[]
   sortCards  ExamSortCard[]
   results    ExamRoundResult[]
 
@@ -831,6 +834,36 @@ model ExamSortCard {
 
   @@index([roundId, order])
   @@map("exam_sort_cards")
+}
+
+/// Một hồ sơ khách của vòng DỰNG GIÁO ÁN — case study về chuyên môn.
+///
+/// Song song với ExamMealBrief: có chỉ tiêu, có sai số, có thứ tuyệt đối cấm.
+/// Khác ở chỗ khối lượng một buổi tập là BỐN con số ràng buộc lẫn nhau, nên đúng
+/// tổng mà dồn hết vào chân thì vẫn là một buổi tập hỏng.
+model ExamProgramCase {
+  id               String  @id @default(cuid())
+  roundId          String
+  order            Int     @default(0)
+  /// Mô tả khách: tuổi, cân nặng, mục tiêu, chấn thương, số buổi/tuần…
+  clientProfile    String  @db.Text
+  targetTotalSets  Int?
+  targetLowerSets  Int?
+  targetUpperSets  Int?
+  targetCoreSets   Int?
+  /// Sai số cho phép quanh mỗi chỉ tiêu (%) — khi chấm luôn nới ít nhất 1 set.
+  tolerancePercent Int     @default(15)
+  /// Mẫu vận động bắt buộc phải có (JSON mảng): "Squat", "Hinge", "Pull"…
+  requiredPatterns String? @db.Text
+  /// Bài CHỐNG CHỈ ĐỊNH (JSON mảng) — dùng một bài là hỏng cả hồ sơ.
+  bannedExercises  String? @db.Text
+  /// Giảng giải hiện sau khi chấm.
+  explanation      String? @db.Text
+
+  round ExamRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, order])
+  @@map("exam_program_cases")
 }
 
 /// Kết quả từng vòng của một lượt thi — để Admin soi được người này mạnh yếu
