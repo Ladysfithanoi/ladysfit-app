@@ -281,7 +281,7 @@ type GenEntry = {
 };
 
 /**
- * Tiền buổi dạy: 100k gói L3/L4/L5, 60k gói L1/L2/Loyalfit, 50k gói trải nghiệm
+ * Tiền buổi dạy: 100k gói L3/L4/L5, 60k gói L1/L2/Loyalfit và gói trải nghiệm
  * L0, 35k gói tài trợ Cư dân.
  */
 function calcShowPay(l1: number, l3: number, resident: number, l0: number) {
@@ -384,7 +384,7 @@ export async function POST(req: Request) {
       const rate             = takesBranchCommission ? fmRate(totalBranchRevenue) : 0;
       const commissionAmount = totalBranchRevenue * rate;
 
-      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất (100k → 60k → 50k → 35k)
+      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất (100k → 60k → 35k)
       const totalShows    = Math.min(
         entry.showsL1L2Loyal + entry.showsL3L4L5 + entry.showsResident + entry.showsL0,
         60

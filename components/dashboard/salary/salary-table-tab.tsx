@@ -4,6 +4,12 @@ import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, X, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDays } from "@/lib/work-days";
+import {
+  SESSION_PAY_L1_L2_LOYAL,
+  SESSION_PAY_L3_L4_L5,
+  SESSION_PAY_RESIDENT,
+  SESSION_PAY_TRIAL,
+} from "@/lib/packages";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
 import { SessionDetailTable } from "./session-detail-table";
@@ -103,10 +109,10 @@ function standardWorkDays(month: number, year: number) {
 
 /** Tiền buổi dạy ước tính trong modal tạo bảng lương — khớp công thức phía server. */
 function showPayOf(e: { showsL1L2Loyal: number; showsL3L4L5: number; showsResident: number; showsL0: number }) {
-  return e.showsL1L2Loyal * 60_000
-       + e.showsL3L4L5 * 100_000
-       + e.showsResident * 35_000
-       + e.showsL0 * 50_000;
+  return e.showsL1L2Loyal * SESSION_PAY_L1_L2_LOYAL
+       + e.showsL3L4L5 * SESSION_PAY_L3_L4_L5
+       + e.showsResident * SESSION_PAY_RESIDENT
+       + e.showsL0 * SESSION_PAY_TRIAL;
 }
 
 const STATUS_LABELS = { PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán" };

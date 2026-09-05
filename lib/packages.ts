@@ -22,7 +22,7 @@ export const PACKAGES: Record<string, PackageDef> = {
     price: 2_000_000,
     commitment: "Trải nghiệm 4 buổi tập cùng PT",
     conditions:
-      "Được hoàn tiền: sau khi tập xong buổi 1, và khi tập hết 4 buổi. PT nhận 50.000đ/buổi dạy. Chỉ mua 1 lần.",
+      "Được hoàn tiền: sau khi tập xong buổi 1, và khi tập hết 4 buổi. PT nhận 60.000đ/buổi dạy. Chỉ mua 1 lần.",
     canBuyMultiple: false,
   },
   L1: {
@@ -130,7 +130,7 @@ export function isSponsoredPackage(packageName: string) {
 export const TRIAL_PACKAGE = "L0";
 
 export const SESSION_PAY_RESIDENT = 35_000;
-export const SESSION_PAY_TRIAL = 50_000;
+export const SESSION_PAY_TRIAL = 60_000;
 export const SESSION_PAY_L1_L2_LOYAL = 60_000;
 export const SESSION_PAY_L3_L4_L5 = 100_000;
 
