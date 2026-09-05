@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField } from "@/lib/exam-level";
+import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField, trialStreakTiersField } from "@/lib/exam-level";
 
 export async function PUT(
   req: Request,
@@ -27,6 +27,8 @@ export async function PUT(
     trialCaseRounds?: number | null;
     trialCardsPerRound?: number | null;
     trialItemsPerCase?: number | null;
+    /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
+    trialStreakTiers?: unknown;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -53,6 +55,7 @@ export async function PUT(
       ...(body.trialCaseRounds !== undefined && { trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds") }),
       ...(body.trialCardsPerRound !== undefined && { trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound") }),
       ...(body.trialItemsPerCase !== undefined && { trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase") }),
+      ...(body.trialStreakTiers !== undefined && { trialStreakTiers: trialStreakTiersField(body.trialStreakTiers) }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

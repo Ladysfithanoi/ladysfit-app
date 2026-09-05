@@ -1,0 +1,13 @@
+-- Mốc TRỪ LŨY TIẾN KHI SAI LIÊN TIẾP ở vòng phân loại thẻ của đề thử thách.
+--
+-- Thanh Thanh danh vốn phạt từng thẻ rời rạc: sai rải rác mười thẻ hay sai liền
+-- mười thẻ đều mất như nhau. Ngoài sàn tập thì không phải vậy — người sai liền
+-- một mạch là người đang mất phương hướng, không phải người lỡ tay một nhịp.
+--
+-- Lưu JSON mảng, mỗi phần tử là một mốc:
+--   [{"streak":2,"penalty":10},{"streak":3,"penalty":20},{"streak":4,"penalty":30}]
+--   = sai liên tiếp 2 thẻ trừ thêm 10, thẻ thứ 3 trừ 20, thẻ thứ 4 trở đi trừ 30.
+--
+-- Số mốc do Admin quyết, nên đây là JSON chứ không phải mấy cột số: thêm một mốc
+-- không được là thêm một cột. NULL / mảng rỗng = tắt hẳn, vòng chạy đúng như cũ.
+ALTER TABLE "pt_levels" ADD COLUMN "trialStreakTiers" TEXT;

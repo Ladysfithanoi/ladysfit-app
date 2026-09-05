@@ -277,6 +277,11 @@ export type TrialSetup = {
   cardsPerRound: number;
   /** Số hồ sơ phát ra ở mỗi vòng case study. */
   itemsPerCase: number;
+  /**
+   * Mốc trừ Thanh danh khi sai liên tiếp ở vòng phân loại. Mảng rỗng = tắt.
+   * Xem phần "Trừ lũy tiến khi sai liên tiếp" ở cuối file.
+   */
+  streakTiers: StreakTier[];
 };
 
 export const TRIAL_SETUP_DEFAULT: TrialSetup = {
@@ -284,6 +289,7 @@ export const TRIAL_SETUP_DEFAULT: TrialSetup = {
   caseRounds: 1,
   cardsPerRound: TRIAL_CARDS_PER_ROUND,
   itemsPerCase: TRIAL_BRIEFS_PER_ROUND,
+  streakTiers: [],
 };
 
 /** Giới hạn cho ô nhập của Admin — đặt số vô lý thì bài thi vỡ chứ không báo gì. */
@@ -305,6 +311,7 @@ export function trialSetupFor(level: {
   trialCaseRounds?: number | null;
   trialCardsPerRound?: number | null;
   trialItemsPerCase?: number | null;
+  trialStreakTiers?: string | null;
 } | null | undefined): TrialSetup {
   const clamp = (v: number | null | undefined, d: number, lo: number, hi: number) =>
     v == null || !Number.isFinite(v) ? d : Math.max(lo, Math.min(hi, Math.round(v)));
@@ -328,6 +335,7 @@ export function trialSetupFor(level: {
       level?.trialItemsPerCase, TRIAL_SETUP_DEFAULT.itemsPerCase,
       L.itemsPerCase.min, L.itemsPerCase.max
     ),
+    streakTiers: parseStreakTiers(level?.trialStreakTiers),
   };
 }
 
@@ -746,6 +754,181 @@ export function honorCost(ratio: number): number {
   return ratio > 0 ? HONOR_COST_NEAR : HONOR_COST_FAR;
 }
 
+// ── Trừ lũy tiến khi sai liên tiếp ───────────────────────────────────────────
+//
+// Hao Thanh danh ở trên phạt TỪNG thẻ rời rạc: sai thẻ nào trả giá thẻ đó, sai
+// rải rác mười thẻ hay sai liền mười thẻ đều mất như nhau. Nhưng hai chuyện đó
+// không giống nhau ngoài sàn tập — người sai liền một mạch là người đang mất
+// phương hướng, không phải người lỡ tay một nhịp.
+//
+// MỘT MỐC = "sai liên tiếp bấy nhiêu thẻ thì trừ THÊM bấy nhiêu Thanh danh".
+// Admin đặt bao nhiêu mốc tuỳ ý ở Cài đặt → Cấp độ; không đặt mốc nào thì cơ
+// chế này tắt hẳn và vòng chạy đúng như trước.
+//
+// LUẬT ĐẾM, ba dòng, cố ý để đơn giản vì thí sinh phải nhẩm được trong đầu:
+//   • Thẻ không ĐÚNG HẲN đều tính là sai — lệch một bậc cũng là sai. Nó đã trả
+//     giá nhẹ hơn ở phần hao thường rồi, nhưng lệch một bậc bốn lần liền thì
+//     vẫn là bốn lần liền không đọc đúng tình huống.
+//   • Một thẻ đúng hẳn là chuỗi về 0. Gỡ được thì được tha, không mang nợ.
+//   • Thẻ bỏ trống không tính, cũng không cắt chuỗi — cùng lý do honorAfter()
+//     bỏ qua chúng.
+
+/** Một mốc phạt: sai liên tiếp `streak` thẻ thì trừ thêm `penalty` Thanh danh. */
+export type StreakTier = { streak: number; penalty: number };
+
+/**
+ * Khoảng hợp lệ của ô Admin nhập. Mốc bắt đầu từ 2 vì "sai liên tiếp 1 thẻ"
+ * không phải một chuỗi — đó là hao thẻ thường, đã có honorCost() lo.
+ */
+export const STREAK_TIER_LIMITS = {
+  streak: { min: 2, max: 50 },
+  penalty: { min: 1, max: 100 },
+  /** Nhiều mốc hơn số thẻ một vòng thì những mốc cuối không bao giờ chạm tới. */
+  count: { min: 0, max: 10 },
+} as const;
+
+/** Không cấu hình gì = KHÔNG phạt liên tiếp. Bật lên là quyết định của Admin. */
+export const STREAK_TIERS_DEFAULT: StreakTier[] = [];
+
+/** Gợi ý điền sẵn ở trang cấu hình — chưa phải luật, Admin bấm Tạo mốc mới thành. */
+export const STREAK_TIER_SUGGESTION = { firstStreak: 2, basePenalty: 10, step: 10, gap: 1, count: 3 };
+
+/**
+ * Bảng mốc đọc từ JSON đã lưu (hoặc từ mảng client gửi lên), đã dọn sạch.
+ *
+ * Dọn chứ không từ chối: bảng mốc hỏng mà ném lỗi thì cả vòng thi không chấm
+ * được. Số vô lý bị kẹp về biên, mốc trùng số thẻ giữ mốc nặng hơn, và bảng
+ * luôn ra theo thứ tự tăng dần — mọi chỗ dùng bên dưới đều trông vào điều đó.
+ */
+export function parseStreakTiers(raw: unknown): StreakTier[] {
+  let list: unknown = raw;
+  if (typeof raw === "string") {
+    if (!raw.trim()) return [];
+    try {
+      list = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(list)) return [];
+
+  const L = STREAK_TIER_LIMITS;
+  const bySteak = new Map<number, number>();
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const s = Number((item as StreakTier).streak);
+    const p = Number((item as StreakTier).penalty);
+    if (!Number.isFinite(s) || !Number.isFinite(p)) continue;
+    const streak = Math.max(L.streak.min, Math.min(L.streak.max, Math.round(s)));
+    const penalty = Math.max(L.penalty.min, Math.min(L.penalty.max, Math.round(p)));
+    // Hai dòng cùng số thẻ thì giữ dòng phạt nặng hơn: Admin sửa dở dang không
+    // được biến một mốc gắt thành mốc nhẹ sau lưng mình.
+    bySteak.set(streak, Math.max(bySteak.get(streak) ?? 0, penalty));
+  }
+
+  return Array.from(bySteak.entries())
+    .map(([streak, penalty]) => ({ streak, penalty }))
+    .sort((a, b) => a.streak - b.streak)
+    .slice(0, L.count.max);
+}
+
+/**
+ * Dựng cả thang từ bốn con số: mốc nền, điểm trừ nền, bước lũy tiến, số đoạn.
+ *
+ * Chỉ là chỗ điền nhanh cho trang cấu hình — cái được lưu vẫn là bảng mốc, nên
+ * Admin sửa tay một dòng bất kỳ sau khi tạo cũng không sao.
+ */
+export function buildStreakTiers(opts: {
+  /** Chuỗi sai đầu tiên bị phạt. */
+  firstStreak: number;
+  /** Trừ bao nhiêu ở mốc nền. */
+  basePenalty: number;
+  /** Mỗi mốc sau trừ thêm bấy nhiêu so với mốc trước. */
+  step: number;
+  /** Cách bao nhiêu thẻ sai nữa thì lên mốc kế. */
+  gap: number;
+  /** Bao nhiêu đoạn. */
+  count: number;
+}): StreakTier[] {
+  const L = STREAK_TIER_LIMITS;
+  const count = Math.max(L.count.min, Math.min(L.count.max, Math.round(opts.count) || 0));
+  const gap = Math.max(1, Math.round(opts.gap) || 1);
+  const out: StreakTier[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push({
+      streak: Math.round(opts.firstStreak) + i * gap,
+      penalty: Math.round(opts.basePenalty) + i * Math.round(opts.step),
+    });
+  }
+  return parseStreakTiers(out);
+}
+
+/** Thẻ này có tính vào chuỗi sai không — đúng hẳn mới thoát. */
+export function isStreakMiss(ratio: number): boolean {
+  return ratio < 1;
+}
+
+/**
+ * Chuỗi sai dài `streak` thẻ thì thẻ vừa rồi bị trừ thêm bao nhiêu.
+ *
+ * CHẠM MỐC MỚI TRỪ, mỗi mốc một lần trong một chuỗi: bảng "2 thẻ → 10, 4 thẻ →
+ * 30" nghĩa là sai thẻ thứ 2 mất 10, thẻ thứ 3 không thêm gì, thẻ thứ 4 mất 30.
+ * Qua mốc cuối rồi thì mỗi thẻ sai tiếp theo lặp lại mức của mốc cuối — không
+ * thể có chuyện sai càng dài càng rẻ.
+ */
+export function streakPenaltyAt(streak: number, tiers: StreakTier[]): number {
+  if (streak <= 0 || tiers.length === 0) return 0;
+  const exact = tiers.find((t) => t.streak === streak);
+  if (exact) return exact.penalty;
+  const top = tiers[tiers.length - 1];
+  return streak > top.streak ? top.penalty : 0;
+}
+
+/** Một thẻ trong mạch Thanh danh — đủ để vẽ lại đúng cái thí sinh đã thấy. */
+export type HonorStep = {
+  /** Thẻ chưa bấm: không hao gì, cũng không cắt chuỗi. */
+  answered: boolean;
+  ratio: number;
+  /** Hao thường của thẻ (lệch một / hai bậc). */
+  cost: number;
+  /** Chuỗi sai liên tiếp tính tới thẻ này; 0 nếu thẻ này đúng hẳn. */
+  streak: number;
+  /** Trừ thêm vì chuỗi vừa chạm mốc. */
+  streakPenalty: number;
+  /** Thanh danh còn lại ngay sau thẻ này. */
+  left: number;
+};
+
+/**
+ * Chạy cả mạch Thanh danh của một vòng, trả về từng bước.
+ *
+ * Client dựng thanh trên màn hình bằng hàm này, server chấm cũng bằng hàm này —
+ * một đường tính duy nhất, nên con số lúc chấm không thể khác con số thí sinh
+ * đã nhìn thấy suốt cả vòng.
+ */
+export function honorRun(
+  results: { answer: SortZone | null; ratio: number }[],
+  tiers: StreakTier[] = STREAK_TIERS_DEFAULT,
+): { steps: HonorStep[]; left: number } {
+  let left = HONOR_START;
+  let streak = 0;
+  const steps: HonorStep[] = [];
+
+  for (const r of results) {
+    if (!r.answer) {
+      steps.push({ answered: false, ratio: 0, cost: 0, streak: 0, streakPenalty: 0, left });
+      continue;
+    }
+    const cost = honorCost(r.ratio);
+    streak = isStreakMiss(r.ratio) ? streak + 1 : 0;
+    const streakPenalty = streakPenaltyAt(streak, tiers);
+    left = Math.max(0, left - cost - streakPenalty);
+    steps.push({ answered: true, ratio: r.ratio, cost, streak, streakPenalty, left });
+  }
+
+  return { steps, left };
+}
+
 /**
  * Thanh danh còn lại của một vòng, sàn 0.
  *
@@ -753,13 +936,11 @@ export function honorCost(ratio: number): number {
  * tính là lệch hai bậc — nếu tính thì con số lúc chấm sẽ khác hẳn con số thí
  * sinh nhìn thấy lúc làm bài, mà thanh này thì họ nhìn suốt cả vòng.
  */
-export function honorAfter(results: { answer: SortZone | null; ratio: number }[]): number {
-  let left = HONOR_START;
-  for (const r of results) {
-    if (!r.answer) continue;
-    left = Math.max(0, left - honorCost(r.ratio));
-  }
-  return left;
+export function honorAfter(
+  results: { answer: SortZone | null; ratio: number }[],
+  tiers: StreakTier[] = STREAK_TIERS_DEFAULT,
+): number {
+  return honorRun(results, tiers).left;
 }
 
 /** Câu báo ngay sau khi bấm — nói mức lệch, KHÔNG nói đáp án đúng là gì. */

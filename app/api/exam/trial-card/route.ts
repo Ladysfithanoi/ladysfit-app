@@ -6,7 +6,7 @@ import { getExamWindow } from "@/lib/exam-schedule";
 import { parseQuestionIds, sessionDeadline, ALREADY_TAKEN_MESSAGE } from "@/lib/exam-session";
 import { resolveExamLevel } from "@/lib/exam-level";
 import {
-  gradeSortCard, honorAfter, parseTrialState, readSortAnswer,
+  gradeSortCard, honorAfter, parseStreakTiers, parseTrialState, readSortAnswer,
   SORT_ZONES, type SortZone,
 } from "@/lib/exam-trial";
 
@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
           id: true,
           levelId: true,
           isActive: true,
+          // Mốc phạt sai liên tiếp là của CẤP, mà cạn Thanh danh thì đóng vòng —
+          // nên chỗ chặn thẻ ở dưới phải đọc đúng bảng mốc đang chạy.
+          level: { select: { trialStreakTiers: true } },
           sortCards: { select: { id: true, correctZone: true }, orderBy: { order: "asc" } },
         },
       },
@@ -150,7 +153,8 @@ export async function POST(req: NextRequest) {
   const before = servedCards.map((c) =>
     gradeSortCard({ id: c.id, correctZone: c.correctZone }, readSortAnswer(state, card.round.id, c.id))
   );
-  if (honorAfter(before) <= 0) {
+  const streakTiers = parseStreakTiers(card.round.level?.trialStreakTiers);
+  if (honorAfter(before, streakTiers) <= 0) {
     return NextResponse.json({ error: "Vòng này đã kết thúc — bạn đã cạn Thanh danh" }, { status: 409 });
   }
 

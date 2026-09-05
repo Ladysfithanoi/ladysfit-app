@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { TRIAL_SETUP_LIMITS } from "@/lib/exam-trial";
+import { TRIAL_SETUP_LIMITS, parseStreakTiers } from "@/lib/exam-trial";
 
 /**
  * ── Đề thi theo cấp độ ───────────────────────────────────────────────────────
@@ -205,4 +205,17 @@ export function trialField(raw: unknown, key: keyof typeof TRIAL_SETUP_LIMITS): 
   if (!Number.isFinite(n)) return null;
   const { min, max } = TRIAL_SETUP_LIMITS[key];
   return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+/**
+ * Bảng mốc phạt sai liên tiếp Admin gửi lên → JSON để lưu, hoặc null.
+ *
+ * Dọn bằng đúng parseStreakTiers() mà lúc chấm sẽ dùng, nên cái đã lưu luôn là
+ * cái sẽ chạy — không có chuyện lưu được một bảng mà lúc thi đọc ra bảng khác.
+ * Không còn mốc nào hợp lệ = null = tắt phạt liên tiếp.
+ */
+export function trialStreakTiersField(raw: unknown): string | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const tiers = parseStreakTiers(raw);
+  return tiers.length === 0 ? null : JSON.stringify(tiers);
 }

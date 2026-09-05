@@ -122,6 +122,7 @@ export async function GET(req: Request) {
         trialCaseRounds: true,
         trialCardsPerRound: true,
         trialItemsPerCase: true,
+        trialStreakTiers: true,
       },
     });
     const setup = trialSetupFor(levelSetup);
@@ -273,6 +274,9 @@ export async function GET(req: Request) {
       format,
       levelName,
       rounds: orderedRounds,
+      // Mốc phạt sai liên tiếp của cấp này — thanh Thanh danh trên màn hình phải
+      // trừ đúng bằng cái máy chủ sẽ trừ lúc chấm, nên nó phải xuống theo đề.
+      streakTiers: setup.streakTiers,
       passingScore,
       questions: [],
       closesAt: mock ? null : window.endAt?.toISOString() ?? null,

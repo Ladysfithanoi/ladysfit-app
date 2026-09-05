@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2, Flame, X } from "lucide-react";
 import { AlertDialog } from "@/components/ui/alert-dialog";
-import { TRIAL_SETUP_DEFAULT, TRIAL_SETUP_LIMITS } from "@/lib/exam-trial";
+import { cn } from "@/lib/utils";
+import {
+  TRIAL_SETUP_DEFAULT, TRIAL_SETUP_LIMITS,
+  STREAK_TIER_LIMITS, STREAK_TIER_SUGGESTION,
+  buildStreakTiers, parseStreakTiers, type StreakTier,
+} from "@/lib/exam-trial";
 
 type WorkoutPhase = {
   id: string;
@@ -37,6 +42,8 @@ type PTLevel = {
   trialCaseRounds: number | null;
   trialCardsPerRound: number | null;
   trialItemsPerCase: number | null;
+  /** Mốc phạt sai liên tiếp, lưu JSON. Null = cấp này không phạt liên tiếp. */
+  trialStreakTiers: string | null;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -112,6 +119,9 @@ export function PTLevelsTab() {
     trialCaseRounds: "",
     trialCardsPerRound: "",
     trialItemsPerCase: "",
+    // Bảng mốc phạt sai liên tiếp. Mảng chứ không phải ô số: số mốc do Admin
+    // quyết, thêm một mốc không được là thêm một ô.
+    trialStreakTiers: [] as StreakTier[],
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -193,7 +203,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialStreakTiers: [], isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -213,6 +223,7 @@ export function PTLevelsTab() {
       trialCaseRounds: level.trialCaseRounds == null ? "" : String(level.trialCaseRounds),
       trialCardsPerRound: level.trialCardsPerRound == null ? "" : String(level.trialCardsPerRound),
       trialItemsPerCase: level.trialItemsPerCase == null ? "" : String(level.trialItemsPerCase),
+      trialStreakTiers: parseStreakTiers(level.trialStreakTiers),
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -243,6 +254,7 @@ export function PTLevelsTab() {
             trialCaseRounds: form.trialCaseRounds === "" ? null : Number(form.trialCaseRounds),
             trialCardsPerRound: form.trialCardsPerRound === "" ? null : Number(form.trialCardsPerRound),
             trialItemsPerCase: form.trialItemsPerCase === "" ? null : Number(form.trialItemsPerCase),
+            trialStreakTiers: form.trialStreakTiers,
             isDefault: form.isDefault,
           }),
         });
@@ -615,6 +627,16 @@ export function PTLevelsTab() {
                       khay ăn hoặc dựng giáo án, cộng 2 vòng phân loại tình huống. Vòng của tội đã
                       khai luôn đứng đầu và tính vào số này. Bỏ trống ô nào thì dùng số mặc định.
                     </p>
+
+                    <StreakTierEditor
+                      tiers={form.trialStreakTiers}
+                      cardsPerRound={
+                        form.trialCardsPerRound === ""
+                          ? TRIAL_SETUP_DEFAULT.cardsPerRound
+                          : Number(form.trialCardsPerRound)
+                      }
+                      onChange={(tiers) => setForm((f) => ({ ...f, trialStreakTiers: tiers }))}
+                    />
                   </div>
                 )}
 
@@ -789,5 +811,186 @@ export function PTLevelsTab() {
         variant="danger"
       />
     </>
+  );
+}
+
+/**
+ * ── Bảng mốc trừ lũy tiến khi sai liên tiếp ──────────────────────────────────
+ *
+ * Cái được LƯU luôn là bảng mốc, không phải công thức: bốn ô "mốc nền / điểm
+ * trừ nền / bước lũy tiến / số đoạn" chỉ là chỗ bung nhanh cả thang ra bảng.
+ * Làm ngược lại — lưu công thức rồi tính ra mốc — thì Admin không thể sửa riêng
+ * một mốc, mà "cho tôi 2 thẻ trừ 10 rồi 5 thẻ trừ 50" là một yêu cầu hoàn toàn
+ * bình thường.
+ *
+ * Bảng trống = cấp này KHÔNG phạt liên tiếp, vòng chạy đúng như trước.
+ */
+function StreakTierEditor({
+  tiers,
+  cardsPerRound,
+  onChange,
+}: {
+  tiers: StreakTier[];
+  /** Số thẻ một vòng — để cảnh báo mốc nằm ngoài tầm với. */
+  cardsPerRound: number;
+  onChange: (tiers: StreakTier[]) => void;
+}) {
+  const [gen, setGen] = useState(STREAK_TIER_SUGGESTION);
+  const L = STREAK_TIER_LIMITS;
+
+  /** Sửa một dòng rồi chuẩn hoá lại cả bảng — thứ tự và mốc trùng do đây lo. */
+  function patch(index: number, field: keyof StreakTier, value: string) {
+    const next = tiers.map((t, i) => (i === index ? { ...t, [field]: Number(value) || 0 } : t));
+    onChange(next);
+  }
+
+  const numCls =
+    "h-8 w-16 rounded-lg border border-gray-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
+
+  return (
+    <div className="space-y-3 rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+      <div className="flex items-center gap-1.5">
+        <Flame className="h-3.5 w-3.5 text-amber-500" />
+        <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-700">
+          Sai liên tiếp — trừ lũy tiến
+        </p>
+      </div>
+      <p className="text-[11px] leading-snug text-gray-500">
+        Trừ thêm vào thanh Thanh danh ở vòng phân loại thẻ. Thẻ không đúng hẳn đều tính là sai
+        (lệch một bậc cũng vậy); một thẻ đúng là chuỗi về 0. Không đặt mốc nào = tắt.
+      </p>
+
+      {/* ── Tạo nhanh cả thang ────────────────────────────────────────────── */}
+      <div className="rounded-lg border border-amber-100 bg-white/70 p-2.5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {([
+            ["firstStreak", "Mốc nền (thẻ)"],
+            ["basePenalty", "Trừ ở mốc nền"],
+            ["step", "Bước lũy tiến"],
+            ["count", "Số đoạn"],
+          ] as const).map(([key, label]) => (
+            <div key={key} className="space-y-1">
+              <label className="text-[10px] font-semibold text-gray-500">{label}</label>
+              <input
+                type="number"
+                min={0}
+                value={gen[key]}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setGen((g) => ({ ...g, [key]: Number(e.target.value) || 0 }))}
+                className={cn(numCls, "w-full")}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onChange(buildStreakTiers(gen))}
+            className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-amber-600"
+          >
+            Tạo {gen.count} mốc
+          </button>
+          <p className="text-[10px] leading-snug text-gray-400">
+            Cách {gen.gap} thẻ một mốc. Tạo xong vẫn sửa tay từng dòng được.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Bảng mốc ──────────────────────────────────────────────────────── */}
+      {tiers.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-gray-200 bg-white/60 px-3 py-2 text-[11px] font-semibold text-gray-400">
+          Chưa có mốc nào — cấp này không phạt sai liên tiếp.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {tiers.map((t, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-gray-500">Sai liên tiếp</span>
+              <input
+                type="number"
+                min={L.streak.min}
+                max={L.streak.max}
+                value={t.streak}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => patch(i, "streak", e.target.value)}
+                className={numCls}
+              />
+              <span className="text-[11px] font-semibold text-gray-500">thẻ → trừ</span>
+              <input
+                type="number"
+                min={L.penalty.min}
+                max={L.penalty.max}
+                value={t.penalty}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => patch(i, "penalty", e.target.value)}
+                className={numCls}
+              />
+              <span className="text-[11px] font-semibold text-gray-500">Thanh danh</span>
+              {t.streak > cardsPerRound && (
+                <span className="text-[10px] font-bold text-amber-600">
+                  vòng chỉ có {cardsPerRound} thẻ — mốc này không chạm tới
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onChange(tiers.filter((_, x) => x !== i))}
+                className="ml-auto rounded-lg p-1 text-gray-300 hover:bg-red-50 hover:text-red-500"
+                title="Xoá mốc"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={tiers.length >= L.count.max}
+          onClick={() =>
+            onChange([
+              ...tiers,
+              {
+                // Mốc mới nối tiếp mốc cuối, nặng hơn một bậc — gần như luôn là
+                // cái Admin định gõ, và không bao giờ đẻ ra mốc trùng.
+                streak: (tiers[tiers.length - 1]?.streak ?? STREAK_TIER_SUGGESTION.firstStreak - 1) + 1,
+                penalty:
+                  (tiers[tiers.length - 1]?.penalty ?? 0) + STREAK_TIER_SUGGESTION.step,
+              },
+            ])
+          }
+          className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-gray-600 hover:border-amber-300 hover:text-amber-600 disabled:opacity-40"
+        >
+          + Thêm mốc
+        </button>
+        {tiers.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="rounded-lg px-2 py-1.5 text-[11px] font-bold text-gray-400 hover:text-red-500"
+          >
+            Xoá hết
+          </button>
+        )}
+        {tiers.length >= L.count.max && (
+          <span className="text-[10px] font-bold text-gray-400">Tối đa {L.count.max} mốc</span>
+        )}
+      </div>
+
+      {/* Diễn giải bằng lời — đọc một lượt là biết luật, không phải suy từ bảng. */}
+      {tiers.length > 0 && (
+        <p className="rounded-lg bg-white/70 px-2.5 py-2 text-[11px] leading-relaxed text-gray-500">
+          {tiers.map((t, i) => (
+            <span key={i}>
+              Sai thẻ thứ <b>{t.streak}</b> liên tiếp mất thêm <b>{t.penalty}</b>
+              {i < tiers.length - 1 ? "; " : ". "}
+            </span>
+          ))}
+          Từ thẻ sai thứ {tiers[tiers.length - 1].streak + 1} trở đi vẫn mất{" "}
+          {tiers[tiers.length - 1].penalty} mỗi thẻ cho tới khi xếp đúng một thẻ.
+        </p>
+      )}
+    </div>
   );
 }

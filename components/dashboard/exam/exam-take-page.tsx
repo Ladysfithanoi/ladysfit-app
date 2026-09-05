@@ -29,8 +29,8 @@ import { SortRound, type SortCardView } from "./trial-sort-round";
 import { ProgramRound, type ProgramCaseView } from "./trial-program-round";
 import {
   SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
-  HONOR_START, honorCost,
-  type MealEntry, type SortZone, type Sin, type ProgramEntry,
+  honorAfter, parseStreakTiers,
+  type MealEntry, type SortZone, type Sin, type ProgramEntry, type StreakTier,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
 import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
@@ -402,6 +402,8 @@ export function ExamTakePage({
   // Mức lệch của từng thẻ đã bấm — nuôi thanh Thanh danh và mấy dòng báo kết
   // quả. Máy chủ trả về, client không tự tính được vì không có đáp án đúng.
   const [cardOutcomes, setCardOutcomes] = useState<Record<string, number>>({});
+  // Mốc phạt sai liên tiếp của cấp — server gửi kèm đề, client chỉ vẽ lại.
+  const [streakTiers, setStreakTiers] = useState<StreakTier[]>([]);
   const [pendingCard, setPendingCard] = useState<string | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
   // Chú giải cây ở màn kết quả: mặc định đóng, vì thứ người ta muốn thấy trước
@@ -496,6 +498,7 @@ export function ExamTakePage({
           setTrialState(saved);
           trialRef.current = saved;
           setCardOutcomes((data.cardOutcomes ?? {}) as Record<string, number>);
+          setStreakTiers(parseStreakTiers(data.streakTiers));
         }
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
@@ -952,14 +955,17 @@ export function ExamTakePage({
   function roundCollapsed(r: TrialRound) {
     if (r.type !== "SORT") return false;
     const st = trialState[r.id] ?? {};
-    let left = HONOR_START;
-    for (const c of r.cards) {
-      if (typeof st[c.id] !== "string") continue;
-      const ratio = cardOutcomes[c.id];
-      if (ratio === undefined) continue;
-      left -= honorCost(ratio);
-    }
-    return left <= 0;
+    // Đi theo ĐÚNG thứ tự thẻ đã phát: phần trừ lũy tiến phụ thuộc chuỗi sai
+    // liền nhau, nên cộng dồn rời rạc từng thẻ sẽ ra một con số khác.
+    return (
+      honorAfter(
+        r.cards.map((c) => {
+          const answered = typeof st[c.id] === "string" && cardOutcomes[c.id] !== undefined;
+          return { answer: answered ? (st[c.id] as SortZone) : null, ratio: cardOutcomes[c.id] ?? 0 };
+        }),
+        streakTiers
+      ) <= 0
+    );
   }
   const trialDoneCount = rounds.filter(roundDone).length;
   const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
@@ -1372,6 +1378,7 @@ export function ExamTakePage({
                     ) as Record<string, SortZone>
                   }
                   outcomes={cardOutcomes}
+                  streakTiers={streakTiers}
                   pendingCardId={pendingCard}
                   error={cardError}
                   disabled={!!result}

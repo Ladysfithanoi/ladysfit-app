@@ -1851,6 +1851,11 @@ model PTLevel {
   trialCardsPerRound    Int?
   /// Số hồ sơ phát ra ở mỗi vòng case study.
   trialItemsPerCase     Int?
+  /// Mốc trừ Thanh danh khi SAI LIÊN TIẾP ở vòng phân loại thẻ — JSON mảng
+  /// [{"streak":2,"penalty":10},{"streak":3,"penalty":20}]: sai liên tiếp bấy
+  /// nhiêu thẻ thì trừ thêm bấy nhiêu. Bỏ trống = không phạt liên tiếp.
+  /// Luật đếm và cách cộng dồn: xem lib/exam-trial.ts.
+  trialStreakTiers      String?            @db.Text
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]

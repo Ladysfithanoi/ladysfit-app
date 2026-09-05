@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check, ShieldAlert, Skull, Lock } from "lucide-react";
+import { Check, ShieldAlert, Skull, Lock, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SORT_ZONES, SORT_ZONE_LABEL, SORT_VERDICT,
-  HONOR_START, honorCost, type SortZone,
+  HONOR_START, honorCost, honorRun, streakPenaltyAt,
+  type HonorStep, type SortZone, type StreakTier,
 } from "@/lib/exam-trial";
 
 /**
@@ -59,6 +60,7 @@ export function SortRound({
   cards,
   answers,
   outcomes,
+  streakTiers,
   onAnswer,
   pendingCardId,
   error,
@@ -69,6 +71,8 @@ export function SortRound({
   answers: Record<string, SortZone>;
   /** { cardId: tỉ lệ điểm } do máy chủ trả về sau mỗi lần bấm. */
   outcomes: Record<string, number>;
+  /** Mốc phạt sai liên tiếp của cấp — rỗng = cấp này không bật phạt liên tiếp. */
+  streakTiers: StreakTier[];
   onAnswer: (cardId: string, zone: SortZone) => void;
   /** Thẻ đang chờ máy chủ trả lời — khoá nút để không bấm hai lần. */
   pendingCardId?: string | null;
@@ -77,23 +81,36 @@ export function SortRound({
 }) {
   const answeredCount = cards.filter((c) => answers[c.id]).length;
 
-  // Thanh Thanh danh dựng bằng ĐÚNG hàm honorCost() mà máy chủ dùng lúc chấm,
-  // nên con số ở đây không thể lệch con số trong bảng điểm.
-  const honor = useMemo(() => {
-    let left = HONOR_START;
-    for (const c of cards) {
-      if (!answers[c.id]) continue;
-      const ratio = outcomes[c.id];
-      if (ratio === undefined) continue;
-      left = Math.max(0, left - honorCost(ratio));
-    }
-    return left;
-  }, [cards, answers, outcomes]);
+  // Thanh Thanh danh dựng bằng ĐÚNG hàm honorRun() mà máy chủ dùng lúc chấm,
+  // nên con số ở đây không thể lệch con số trong bảng điểm — kể cả phần trừ
+  // lũy tiến, thứ phụ thuộc vào THỨ TỰ thẻ chứ không cộng dồn rời rạc được.
+  const run = useMemo(
+    () =>
+      honorRun(
+        cards.map((c) => {
+          const ratio = outcomes[c.id];
+          const answered = !!answers[c.id] && ratio !== undefined;
+          return { answer: answered ? answers[c.id] : null, ratio: ratio ?? 0 };
+        }),
+        streakTiers
+      ),
+    [cards, answers, outcomes, streakTiers]
+  );
+  const honor = run.left;
+  /** Bước của từng thẻ, tra theo id — để nói rõ thẻ nào ăn thêm bao nhiêu. */
+  const stepOf = (cardId: string): HonorStep | undefined => {
+    const i = cards.findIndex((c) => c.id === cardId);
+    return i < 0 ? undefined : run.steps[i];
+  };
 
   const collapsed = honor <= 0;
   const current = collapsed ? null : cards.find((c) => !answers[c.id]) ?? null;
   const lastDone = [...cards].reverse().find((c) => answers[c.id] && outcomes[c.id] !== undefined);
   const tone = honorTone(honor);
+  /** Chuỗi sai đang chạy — con số quyết định thẻ kế tiếp đắt tới đâu. */
+  const streak = lastDone ? stepOf(lastDone.id)?.streak ?? 0 : 0;
+  /** Sai thêm một thẻ nữa thì mất thêm bao nhiêu — cảnh báo TRƯỚC khi bấm. */
+  const nextStreakPenalty = streakPenaltyAt(streak + 1, streakTiers);
 
   return (
     <div className="space-y-4">
@@ -118,7 +135,34 @@ export function SortRound({
           Bấm chọn là khoá, không sửa lại được. Lệch một bậc mất {honorCost(0.5)} Thanh danh, lệch hai
           bậc mất {honorCost(0)}. Cạn thanh là hỏng cả vòng.
         </p>
+        {/* Luật phạt liên tiếp phải nói TRƯỚC, không phải để người ta phát hiện
+            ra sau khi đã mất. Cấp không bật thì cả khối này biến mất. */}
+        {streakTiers.length > 0 && (
+          <p className="mt-1.5 text-[11px] font-semibold leading-snug text-amber-600">
+            Sai liền nhau còn bị trừ thêm:{" "}
+            {streakTiers.map((t, i) => (
+              <span key={t.streak}>
+                {i > 0 && " · "}
+                {t.streak} thẻ liền −{t.penalty}
+              </span>
+            ))}
+            . Một thẻ đúng là chuỗi về 0.
+          </p>
+        )}
       </div>
+
+      {/* ── Chuỗi sai đang chạy ──────────────────────────────────────────── */}
+      {!collapsed && streak > 0 && streakTiers.length > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <Flame className="h-4 w-4 shrink-0 text-amber-500" />
+          <p className="text-xs font-bold text-amber-700">
+            Đang sai {streak} thẻ liên tiếp.
+            {nextStreakPenalty > 0
+              ? ` Sai thẻ nữa là mất thêm ${nextStreakPenalty} Thanh danh.`
+              : " Xếp đúng một thẻ là chuỗi về 0."}
+          </p>
+        </div>
+      )}
 
       {error && (
         <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-xs font-bold text-red-600">
@@ -140,7 +184,7 @@ export function SortRound({
 
       {/* ── Kết quả thẻ vừa bấm ──────────────────────────────────────────── */}
       {!collapsed && lastDone && outcomes[lastDone.id] !== undefined && (
-        <Verdict ratio={outcomes[lastDone.id]} />
+        <Verdict ratio={outcomes[lastDone.id]} step={stepOf(lastDone.id)} />
       )}
 
       {/* ── Thẻ đang chơi ────────────────────────────────────────────────── */}
@@ -219,12 +263,19 @@ export function SortRound({
   );
 }
 
-/** Câu báo ngay sau khi bấm — nói mức lệch, tuyệt đối không nói đáp án đúng. */
-function Verdict({ ratio }: { ratio: number }) {
+/**
+ * Câu báo ngay sau khi bấm — nói mức lệch, tuyệt đối không nói đáp án đúng.
+ *
+ * Hai khoản trừ hiện TÁCH nhau: hao của thẻ, và phần phạt vì chuỗi sai. Gộp lại
+ * một số thì người thi chỉ thấy mình mất nhiều mà không hiểu vì sao, mà cả cơ
+ * chế này chỉ có tác dụng khi họ hiểu ngay lúc đó là phải dừng chuỗi lại.
+ */
+function Verdict({ ratio, step }: { ratio: number; step?: HonorStep }) {
   const distance = ratio >= 1 ? 0 : ratio > 0 ? 1 : 2;
   const style = VERDICT_STYLE[distance];
   const Icon = style.icon;
   const cost = honorCost(ratio);
+  const streakPenalty = step?.streakPenalty ?? 0;
   return (
     <div className={cn("flex items-start gap-2.5 rounded-2xl border px-4 py-3", style.box)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -232,6 +283,11 @@ function Verdict({ ratio }: { ratio: number }) {
         <p className="text-sm font-extrabold">
           {SORT_VERDICT[distance].label}
           {cost > 0 && <span className="ml-1.5 font-bold opacity-80">−{cost} Thanh danh</span>}
+          {streakPenalty > 0 && (
+            <span className="ml-1.5 font-bold opacity-80">
+              −{streakPenalty} vì sai {step?.streak} thẻ liên tiếp
+            </span>
+          )}
         </p>
         <p className="mt-0.5 text-xs font-semibold opacity-90">{SORT_VERDICT[distance].note}</p>
       </div>

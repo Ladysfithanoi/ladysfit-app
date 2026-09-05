@@ -5,7 +5,7 @@ import { parseQuestionIds } from "@/lib/exam-session";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer, readProgramEntries,
-  applyDeclaredSin, declaredTolerance, honorAfter, isCaseRound,
+  applyDeclaredSin, declaredTolerance, honorAfter, isCaseRound, parseStreakTiers,
   TRIAL_SETUP_DEFAULT, type TrialSetup,
   gradeProgramCase, type ProgramEntry,
   TRIAL_CARD_MIX, SORT_ZONES,
@@ -226,6 +226,15 @@ export async function computeTrial(
   }));
   if (rounds.length === 0) return { ok: false, error: "Đề của cấp này chưa có vòng nào" };
 
+  // Mốc phạt sai liên tiếp của cấp — cùng bảng mà thanh Thanh danh trên màn hình
+  // đã chạy suốt vòng. Đọc lúc chấm chứ không lưu vào lượt thi: Admin sửa bảng
+  // giữa kỳ thì bài chấm sau sửa theo, đúng như mọi thông số khác của vòng.
+  const levelRow = await prisma.pTLevel.findUnique({
+    where: { id: levelId },
+    select: { trialStreakTiers: true },
+  });
+  const streakTiers = parseStreakTiers(levelRow?.trialStreakTiers);
+
   const roundScores: RoundScore[] = [];
   const details: { roundId: string; detail: string; pillar: Pillar }[] = [];
   const review: TrialReviewRound[] = [];
@@ -328,7 +337,7 @@ export async function computeTrial(
       // Cạn Thanh danh giữa vòng là trượt vòng, dù mấy thẻ còn lại có đúng hết.
       // Chấm bằng đúng hàm mà thanh trên màn hình đang chạy, nên con số lúc chấm
       // không thể khác con số thí sinh đã nhìn thấy.
-      const collapsed = honorAfter(results) <= 0;
+      const collapsed = honorAfter(results, streakTiers) <= 0;
       const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared, collapsed);
       roundScores.push(rs);
       details.push({ roundId: round.id, detail: JSON.stringify(results), pillar });
