@@ -71,6 +71,8 @@ export async function POST(req: NextRequest) {
               trialCostNear: true,
               trialCostFar: true,
               trialStreakTiers: true,
+              trialDeclaredMultiplier: true,
+              trialDeclaredMustPass: true,
               trialDeclaredPassBonus: true,
               trialDeclaredPassCap: true,
               trialDeclaredCostNear: true,
@@ -182,7 +184,7 @@ export async function POST(req: NextRequest) {
   // khai tự nó đánh rớt cả kỳ (scoreTrial.declaredFailed), nên mọi thẻ sau đó
   // không còn đổi được gì. Trang làm bài đã khoá lại rồi, nhưng luật thì phải
   // do máy chủ giữ — không thì gọi thẳng route này là chơi tiếp được.
-  if (examSession.declaredSin && !isDeclaredRound) {
+  if (examSession.declaredSin && !isDeclaredRound && declaredSetup.mustPass) {
     const declaredRound = await prisma.examRound.findFirst({
       where: { levelId, isActive: true, sin: examSession.declaredSin },
       select: {

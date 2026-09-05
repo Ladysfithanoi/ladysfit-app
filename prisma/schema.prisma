@@ -1864,6 +1864,11 @@ model PTLevel {
   // Vòng của tội thí sinh tự khai là chỗ đắt nhất của bài thi — trượt nó là rớt
   // cả kỳ — nên nó có thang riêng, không dùng chung với các vòng bốc ngẫu nhiên.
   // Bỏ trống = dùng số mặc định trong lib/exam-trial.ts. Xem declaredSetupFor().
+  /// Điểm tối đa của vòng khai nhân bấy nhiêu lần (mặc định 2).
+  trialDeclaredMultiplier Int?
+  /// Trượt vòng khai có đánh rớt cả kỳ không (mặc định có). Tắt thì vòng khai
+  /// chỉ còn là một vòng nặng điểm hơn, đậu hay không tính bằng tổng.
+  trialDeclaredMustPass   Boolean?
   /// Ngưỡng đạt của vòng khai cộng thêm bấy nhiêu % (mặc định 15).
   trialDeclaredPassBonus  Int?
   /// Trần ngưỡng đạt của vòng khai (mặc định 95).

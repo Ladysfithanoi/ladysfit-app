@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   TRIAL_SETUP_DEFAULT, TRIAL_SETUP_LIMITS,
   STREAK_TIER_LIMITS, STREAK_TIER_SUGGESTION,
-  DECLARED_SETUP_DEFAULT, DECLARED_SETUP_LIMITS, DECLARED_POINT_MULTIPLIER,
+  DECLARED_SETUP_DEFAULT, DECLARED_SETUP_LIMITS,
   buildStreakTiers, parseStreakTiers, type StreakTier,
 } from "@/lib/exam-trial";
 
@@ -49,6 +49,8 @@ type PTLevel = {
   /** Mốc phạt sai liên tiếp, lưu JSON. Null = cấp này không phạt liên tiếp. */
   trialStreakTiers: string | null;
   // Độ gắt riêng của vòng đã khai — null = dùng mặc định trong lib/exam-trial.ts.
+  trialDeclaredMultiplier: number | null;
+  trialDeclaredMustPass: boolean | null;
   trialDeclaredPassBonus: number | null;
   trialDeclaredPassCap: number | null;
   trialDeclaredCostNear: number | null;
@@ -136,6 +138,8 @@ export function PTLevelsTab() {
     // Bảng mốc phạt sai liên tiếp. Mảng chứ không phải ô số: số mốc do Admin
     // quyết, thêm một mốc không được là thêm một ô.
     trialStreakTiers: [] as StreakTier[],
+    trialDeclaredMultiplier: "",
+    trialDeclaredMustPass: true,
     trialDeclaredPassBonus: "",
     trialDeclaredPassCap: "",
     trialDeclaredCostNear: "",
@@ -222,7 +226,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialCostNear: "", trialCostFar: "", trialStreakTiers: [], trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialCostNear: "", trialCostFar: "", trialStreakTiers: [], trialDeclaredMultiplier: "", trialDeclaredMustPass: true, trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -245,6 +249,8 @@ export function PTLevelsTab() {
       trialCostNear: level.trialCostNear == null ? "" : String(level.trialCostNear),
       trialCostFar: level.trialCostFar == null ? "" : String(level.trialCostFar),
       trialStreakTiers: parseStreakTiers(level.trialStreakTiers),
+      trialDeclaredMultiplier: level.trialDeclaredMultiplier == null ? "" : String(level.trialDeclaredMultiplier),
+      trialDeclaredMustPass: level.trialDeclaredMustPass ?? true,
       trialDeclaredPassBonus: level.trialDeclaredPassBonus == null ? "" : String(level.trialDeclaredPassBonus),
       trialDeclaredPassCap: level.trialDeclaredPassCap == null ? "" : String(level.trialDeclaredPassCap),
       trialDeclaredCostNear: level.trialDeclaredCostNear == null ? "" : String(level.trialDeclaredCostNear),
@@ -283,6 +289,8 @@ export function PTLevelsTab() {
             trialCostNear: form.trialCostNear === "" ? null : Number(form.trialCostNear),
             trialCostFar: form.trialCostFar === "" ? null : Number(form.trialCostFar),
             trialStreakTiers: form.trialStreakTiers,
+            trialDeclaredMultiplier: form.trialDeclaredMultiplier === "" ? null : Number(form.trialDeclaredMultiplier),
+            trialDeclaredMustPass: form.trialDeclaredMustPass,
             trialDeclaredPassBonus: form.trialDeclaredPassBonus === "" ? null : Number(form.trialDeclaredPassBonus),
             trialDeclaredPassCap: form.trialDeclaredPassCap === "" ? null : Number(form.trialDeclaredPassCap),
             trialDeclaredCostNear: form.trialDeclaredCostNear === "" ? null : Number(form.trialDeclaredCostNear),
@@ -688,12 +696,36 @@ export function PTLevelsTab() {
                         </p>
                       </div>
                       <p className="text-[11px] leading-snug text-gray-500">
-                        Điểm vòng khai luôn nhân {DECLARED_POINT_MULTIPLIER} và trượt nó là rớt cả
-                        kỳ — hai điều đó cố định. Bốn ô dưới đặt phần còn lại. Bỏ trống ô nào thì
+                        Vòng của tội thí sinh tự khai — chỗ đắt nhất của cả kỳ. Bỏ trống ô nào thì
                         dùng số mặc định.
                       </p>
+
+                      {/* Công tắc gắt nhất của cả kỳ thi, nên để riêng một dòng
+                          chứ không lẫn vào lưới số. */}
+                      <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-purple-100 bg-white/70 p-2.5">
+                        <input
+                          type="checkbox"
+                          checked={form.trialDeclaredMustPass}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, trialDeclaredMustPass: e.target.checked }))
+                          }
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#f15b5c]"
+                        />
+                        <span className="min-w-0">
+                          <span className="text-[12px] font-bold text-gray-700">
+                            Trượt vòng khai là rớt cả kỳ
+                          </span>
+                          <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">
+                            {form.trialDeclaredMustPass
+                              ? "Đang bật — dám nhận mình yếu ở đâu thì phải vượt qua đúng chỗ đó, không bù bằng vòng khác. Cạn Thanh danh ở vòng khai cũng dừng luôn kỳ thi."
+                              : "Đang tắt — vòng khai chỉ còn là một vòng nặng điểm hơn, đậu hay không tính bằng tổng như mọi vòng."}
+                          </span>
+                        </span>
+                      </label>
+
                       <div className="grid grid-cols-2 gap-3">
                         {([
+                          ["trialDeclaredMultiplier", "Điểm vòng khai nhân", DECLARED_SETUP_DEFAULT.pointMultiplier, "pointMultiplier"],
                           ["trialDeclaredPassBonus", "Ngưỡng đạt +% ", DECLARED_SETUP_DEFAULT.passBonus, "passBonus"],
                           ["trialDeclaredPassCap", "Trần ngưỡng đạt (%)", DECLARED_SETUP_DEFAULT.passCap, "passCap"],
                           // Bỏ trống = kế thừa mức của vòng thường ở trên, chứ

@@ -403,6 +403,17 @@ export const DECLARED_TOLERANCE_FLOOR = 3;
  * rớt cả kỳ. Chỗ đắt nhất của bài thi xứng đáng có thang riêng.
  */
 export type DeclaredSetup = {
+  /** Điểm tối đa của vòng khai nhân bấy nhiêu lần. */
+  pointMultiplier: number;
+  /**
+   * Trượt vòng khai có đánh rớt cả kỳ không.
+   *
+   * Bật (mặc định) là toàn bộ ý nghĩa của việc khai: dám nhận mình yếu ở đâu
+   * thì phải vượt qua đúng chỗ đó, không bù bằng những vòng mình vốn đã giỏi.
+   * Tắt thì vòng khai chỉ còn là một vòng nặng điểm hơn — kỳ thi vẫn tính bằng
+   * tổng, và cạn Thanh danh ở đó không dừng bài nữa.
+   */
+  mustPass: boolean;
   /** Ngưỡng đạt của vòng khai cộng thêm bấy nhiêu %. */
   passBonus: number;
   /** Trần ngưỡng đạt của vòng khai — chặn cộng lên tới mức không ai qua nổi. */
@@ -416,6 +427,8 @@ export type DeclaredSetup = {
 };
 
 export const DECLARED_SETUP_DEFAULT: DeclaredSetup = {
+  pointMultiplier: DECLARED_POINT_MULTIPLIER,
+  mustPass: true,
   passBonus: DECLARED_PASS_BONUS,
   passCap: DECLARED_PASS_CAP,
   costNear: HONOR_COST_NEAR,
@@ -424,6 +437,8 @@ export const DECLARED_SETUP_DEFAULT: DeclaredSetup = {
 };
 
 export const DECLARED_SETUP_LIMITS = {
+  /** Nhân 1 = vòng khai nặng điểm ngang vòng thường. Trên 5 thì cả kỳ chỉ còn là vòng đó. */
+  pointMultiplier: { min: 1, max: 5 },
   passBonus: { min: 0, max: 50 },
   /** Sàn 50: đặt trần thấp hơn thế thì vòng khai dễ hơn vòng thường, vô nghĩa. */
   passCap: { min: 50, max: 100 },
@@ -442,6 +457,8 @@ export function declaredSetupFor(level: {
   /** Mức của vòng thường ở cấp này — dùng làm mặc định cho hai ô hao thẻ. */
   trialCostNear?: number | null;
   trialCostFar?: number | null;
+  trialDeclaredMultiplier?: number | null;
+  trialDeclaredMustPass?: boolean | null;
   trialDeclaredPassBonus?: number | null;
   trialDeclaredPassCap?: number | null;
   trialDeclaredCostNear?: number | null;
@@ -455,6 +472,10 @@ export function declaredSetupFor(level: {
   const base = trialSetupFor(level);
 
   return {
+    pointMultiplier: clamp(level?.trialDeclaredMultiplier, DECLARED_SETUP_DEFAULT.pointMultiplier, L.pointMultiplier.min, L.pointMultiplier.max),
+    // Chưa đặt = BẬT. Cơ chế khai tội sinh ra là để bắt buộc phải qua; tắt nó
+    // phải là một lựa chọn có chủ ý, không phải hệ quả của một ô bỏ trống.
+    mustPass: level?.trialDeclaredMustPass ?? DECLARED_SETUP_DEFAULT.mustPass,
     passBonus: clamp(level?.trialDeclaredPassBonus, DECLARED_SETUP_DEFAULT.passBonus, L.passBonus.min, L.passBonus.max),
     passCap: clamp(level?.trialDeclaredPassCap, DECLARED_SETUP_DEFAULT.passCap, L.passCap.min, L.passCap.max),
     costNear: clamp(level?.trialDeclaredCostNear, base.costNear, L.costNear.min, L.costNear.max),
@@ -473,7 +494,7 @@ export function applyDeclaredSin<
   }
   return {
     declared,
-    maxPoints: round.maxPoints * DECLARED_POINT_MULTIPLIER,
+    maxPoints: round.maxPoints * setup.pointMultiplier,
     passPercent: Math.min(setup.passCap, round.passPercent + setup.passBonus),
   };
 }
@@ -1155,7 +1176,12 @@ export type TrialScore = {
   declaredFailed: boolean;
 };
 
-export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialScore {
+export function scoreTrial(
+  rounds: RoundScore[],
+  passingScore: number,
+  /** Cấp này có bật luật "trượt vòng khai là rớt cả kỳ" không. */
+  declaredMustPass = DECLARED_SETUP_DEFAULT.mustPass,
+): TrialScore {
   const raw = rounds.reduce((s, r) => s + r.points, 0);
   const penalty = rounds.reduce((s, r) => s + r.penalty, 0);
   const total = rounds.reduce((s, r) => s + r.maxPoints, 0);
@@ -1170,7 +1196,10 @@ export function scoreTrial(rounds: RoundScore[], passingScore: number): TrialSco
   // Trượt vòng đã tự khai là trượt cả kỳ, dù tổng điểm có đẹp tới đâu. Đó là
   // toàn bộ ý nghĩa của việc khai: dám nhận mình yếu ở đâu thì phải vượt qua
   // đúng chỗ đó, không bù bằng những vòng mình vốn đã giỏi.
-  const declaredFailed = rounds.some((r) => r.declared && !r.passed);
+  //
+  // Admin tắt được luật này ở từng cấp — lúc đó vòng khai chỉ còn nặng điểm hơn
+  // và khó hơn, còn đậu hay không thì tính bằng tổng như mọi vòng.
+  const declaredFailed = declaredMustPass && rounds.some((r) => r.declared && !r.passed);
 
   return {
     rounds,

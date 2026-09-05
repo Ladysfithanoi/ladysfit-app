@@ -5,7 +5,6 @@ import { Swords, AlertTriangle, Lock, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SIN_LABEL, SIN_DOMAIN, SINS, SIN_SEPHIRAH,
-  DECLARED_POINT_MULTIPLIER,
   type DeclaredSetup, type HonorBase, type Sin,
 } from "@/lib/exam-trial";
 import { KabbalahTree } from "./kabbalah-tree";
@@ -108,7 +107,9 @@ export function TrialDeclareSin({
 
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-gray-500">
           Mỗi đại tội có một chỗ riêng trên cây. Bạn thi tội nào thì thắp sáng chỗ đó —
-          và tội bạn vừa khai là chỗ bạn không được phép trượt.
+          {declaredSetup.mustPass
+            ? " và tội bạn vừa khai là chỗ bạn không được phép trượt."
+            : " và tội bạn vừa khai là chỗ nặng điểm nhất cả kỳ."}
         </p>
 
         <button
@@ -146,9 +147,19 @@ export function TrialDeclareSin({
           <span>
             Đây không phải chọn phần mình giỏi. Hãy chọn mảng bạn thấy mình{" "}
             <span className="font-extrabold">yếu nhất</span> — vòng đó sẽ khó hơn, điểm nhân{" "}
-            {DECLARED_POINT_MULTIPLIER}, ngưỡng đạt cao hơn {declaredSetup.passBonus}%, và{" "}
-            <span className="font-extrabold">bắt buộc phải qua</span>. Trượt vòng đã khai là
-            trượt cả kỳ, dù các vòng khác có tốt tới đâu.
+            {declaredSetup.pointMultiplier}, ngưỡng đạt cao hơn {declaredSetup.passBonus}%
+            {/* Cấp nào tắt luật "trượt là rớt" thì tuyệt đối không được nói câu
+                đó ra: doạ một hậu quả không có thật cũng là nói dối người thi. */}
+            {declaredSetup.mustPass ? (
+              <>
+                , và <span className="font-extrabold">bắt buộc phải qua</span>. Trượt vòng đã khai
+                là trượt cả kỳ, dù các vòng khác có tốt tới đâu.
+              </>
+            ) : (
+              <>
+                . Vòng này nặng điểm nhất cả kỳ, nên hỏng ở đây thì các vòng còn lại rất khó gỡ.
+              </>
+            )}
             {/* Thanh danh đắt hơn thì phải nói ra, vì đó là thứ ăn mòn ngay
                 trong lúc chơi chứ không đợi tới lúc chấm. Cấp nào không đặt
                 nặng hơn thì câu này không hiện. */}

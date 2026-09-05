@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, trialCostNear: true, trialCostFar: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, trialDeclaredMultiplier: true, trialDeclaredMustPass: true, trialCostNear: true, trialCostFar: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -58,6 +58,8 @@ export async function POST(req: Request) {
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
     /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
+    trialDeclaredMultiplier?: number | null;
+    trialDeclaredMustPass?: boolean | null;
     trialDeclaredPassBonus?: number | null;
     trialDeclaredPassCap?: number | null;
     trialDeclaredCostNear?: number | null;
@@ -100,6 +102,8 @@ export async function POST(req: Request) {
       trialCostFar: trialField(body.trialCostFar, "costFar"),
       trialStreakTiers: trialStreakTiersField(body.trialStreakTiers),
       // Vòng đã khai: bỏ trống = dùng mặc định (xem declaredSetupFor).
+      trialDeclaredMultiplier: declaredField(body.trialDeclaredMultiplier, "pointMultiplier"),
+      trialDeclaredMustPass: typeof body.trialDeclaredMustPass === "boolean" ? body.trialDeclaredMustPass : null,
       trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus"),
       trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap"),
       trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear"),

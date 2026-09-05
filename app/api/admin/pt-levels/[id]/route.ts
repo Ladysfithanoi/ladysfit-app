@@ -33,6 +33,8 @@ export async function PUT(
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
     /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
+    trialDeclaredMultiplier?: number | null;
+    trialDeclaredMustPass?: boolean | null;
     trialDeclaredPassBonus?: number | null;
     trialDeclaredPassCap?: number | null;
     trialDeclaredCostNear?: number | null;
@@ -68,6 +70,11 @@ export async function PUT(
       ...(body.trialCostFar !== undefined && { trialCostFar: trialField(body.trialCostFar, "costFar") }),
       ...(body.trialStreakTiers !== undefined && { trialStreakTiers: trialStreakTiersField(body.trialStreakTiers) }),
       // Vòng đã khai: gửi lên rỗng = quay về mặc định trong lib/exam-trial.ts.
+      ...(body.trialDeclaredMultiplier !== undefined && { trialDeclaredMultiplier: declaredField(body.trialDeclaredMultiplier, "pointMultiplier") }),
+      // Không phải boolean thì để null = dùng mặc định (BẬT), chứ không đoán.
+      ...(body.trialDeclaredMustPass !== undefined && {
+        trialDeclaredMustPass: typeof body.trialDeclaredMustPass === "boolean" ? body.trialDeclaredMustPass : null,
+      }),
       ...(body.trialDeclaredPassBonus !== undefined && { trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus") }),
       ...(body.trialDeclaredPassCap !== undefined && { trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap") }),
       ...(body.trialDeclaredCostNear !== undefined && { trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear") }),

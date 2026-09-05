@@ -237,6 +237,8 @@ export async function computeTrial(
       trialCostNear: true,
       trialCostFar: true,
       trialStreakTiers: true,
+      trialDeclaredMultiplier: true,
+      trialDeclaredMustPass: true,
       trialDeclaredPassBonus: true,
       trialDeclaredPassCap: true,
       trialDeclaredCostNear: true,
@@ -379,7 +381,7 @@ export async function computeTrial(
     roundScores,
     details,
     review,
-    result: scoreTrial(roundScores, passingScore),
+    result: scoreTrial(roundScores, passingScore, declaredSetup.mustPass),
   };
 }
 

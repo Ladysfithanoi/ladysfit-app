@@ -998,7 +998,9 @@ export function ExamTakePage({
    * Vòng khai là Case Study thì không có thanh Thanh danh nên không có nhánh này.
    */
   const declaredRound = rounds.find((r) => !!declaredSin && r.sin === declaredSin) ?? null;
-  const trialHalted = !!declaredRound && roundCollapsed(declaredRound);
+  // Cấp nào tắt luật "trượt vòng khai là rớt" thì không dừng: lúc đó vòng khai
+  // chỉ nặng điểm hơn, và những vòng còn lại vẫn đổi được kết quả.
+  const trialHalted = !!declaredRound && declaredSetup.mustPass && roundCollapsed(declaredRound);
 
   const trialDoneCount = rounds.filter(roundDone).length;
   // Dừng kỳ thi thì coi như đã xong — nút Nộp bài phải mở, không thì người ta

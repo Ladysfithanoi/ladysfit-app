@@ -125,6 +125,8 @@ export async function GET(req: Request) {
         trialCostNear: true,
         trialCostFar: true,
         trialStreakTiers: true,
+        trialDeclaredMultiplier: true,
+        trialDeclaredMustPass: true,
         trialDeclaredPassBonus: true,
         trialDeclaredPassCap: true,
         trialDeclaredCostNear: true,
