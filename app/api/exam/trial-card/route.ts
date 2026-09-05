@@ -170,13 +170,47 @@ export async function POST(req: NextRequest) {
   );
   // Vòng của tội đã khai đắt hơn ở từng thẻ — cùng bộ luật mà màn hình đang
   // chạy và mà computeTrial() sẽ chấm lại lúc nộp.
-  const rules = honorRulesFor({
-    base: trialSetupFor(card.round.level),
-    declared: !!examSession.declaredSin && card.round.sin === examSession.declaredSin,
-    declaredSetup: declaredSetupFor(card.round.level),
-  });
+  const base = trialSetupFor(card.round.level);
+  const declaredSetup = declaredSetupFor(card.round.level);
+  const isDeclaredRound = !!examSession.declaredSin && card.round.sin === examSession.declaredSin;
+  const rules = honorRulesFor({ base, declared: isDeclaredRound, declaredSetup });
   if (honorAfter(before, rules) <= 0) {
     return NextResponse.json({ error: "Vòng này đã kết thúc — bạn đã cạn Thanh danh" }, { status: 409 });
+  }
+
+  // CẠN THANH DANH Ở VÒNG KHAI LÀ DỪNG CẢ KỲ, không riêng vòng đó: trượt vòng
+  // khai tự nó đánh rớt cả kỳ (scoreTrial.declaredFailed), nên mọi thẻ sau đó
+  // không còn đổi được gì. Trang làm bài đã khoá lại rồi, nhưng luật thì phải
+  // do máy chủ giữ — không thì gọi thẳng route này là chơi tiếp được.
+  if (examSession.declaredSin && !isDeclaredRound) {
+    const declaredRound = await prisma.examRound.findFirst({
+      where: { levelId, isActive: true, sin: examSession.declaredSin },
+      select: {
+        id: true,
+        sortCards: { select: { id: true, correctZone: true }, orderBy: { order: "asc" } },
+      },
+    });
+    if (declaredRound) {
+      const declaredServed =
+        servedItems.length > 0
+          ? declaredRound.sortCards.filter((c) => servedItems.includes(c.id))
+          : declaredRound.sortCards;
+      const declaredResults = declaredServed.map((c) =>
+        gradeSortCard(
+          { id: c.id, correctZone: c.correctZone },
+          readSortAnswer(state, declaredRound.id, c.id)
+        )
+      );
+      // Vòng khai là Case Study thì không có thẻ nào — honorAfter([]) đầy thanh,
+      // nên nhánh này tự nó không chặn nhầm ai.
+      const declaredRules = honorRulesFor({ base, declared: true, declaredSetup });
+      if (honorAfter(declaredResults, declaredRules) <= 0) {
+        return NextResponse.json(
+          { error: "Kỳ thi đã dừng — bạn cạn Thanh danh ở vòng của tội mình khai. Hãy nộp bài." },
+          { status: 409 }
+        );
+      }
+    }
   }
 
   const nextState = {

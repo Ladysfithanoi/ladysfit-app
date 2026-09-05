@@ -20,6 +20,7 @@ import {
   CloudOff,
   ChevronDown,
   ChevronUp,
+  Skull,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QuestionMedia } from "./question-media";
@@ -985,8 +986,24 @@ export function ExamTakePage({
       ) <= 0
     );
   }
+  /**
+   * ── CẠN THANH DANH Ở VÒNG KHAI = KỲ THI DỪNG TẠI ĐÂY ──────────────────────
+   *
+   * Trượt vòng đã khai là trượt cả kỳ, dù các vòng khác có tốt tới đâu
+   * (scoreTrial.declaredFailed). Bắt người ta ngồi làm nốt hai vòng nữa chỉ để
+   * nhận một kết quả đã chốt từ trước là vô nghĩa với cả họ lẫn người chấm.
+   *
+   * Cạn thanh là cách DUY NHẤT biết được điều đó ngay giữa chừng: trượt vòng
+   * khai vì thiếu điểm thì phải chấm xong mới biết, mà lúc đó bài đã nộp rồi.
+   * Vòng khai là Case Study thì không có thanh Thanh danh nên không có nhánh này.
+   */
+  const declaredRound = rounds.find((r) => !!declaredSin && r.sin === declaredSin) ?? null;
+  const trialHalted = !!declaredRound && roundCollapsed(declaredRound);
+
   const trialDoneCount = rounds.filter(roundDone).length;
-  const trialComplete = rounds.length > 0 && trialDoneCount === rounds.length;
+  // Dừng kỳ thi thì coi như đã xong — nút Nộp bài phải mở, không thì người ta
+  // kẹt lại trong một bài thi đã kết thúc mà không nộp được.
+  const trialComplete = rounds.length > 0 && (trialHalted || trialDoneCount === rounds.length);
 
   // ── Mở khoá tuần tự ────────────────────────────────────────────────────────
   // Vòng của tội đã khai đứng đầu (server sắp xếp), và vòng sau chỉ mở khi vòng
@@ -994,7 +1011,11 @@ export function ExamTakePage({
   // chặn nhìn lại, vì nhận ra mình đọc sót một dòng ở hồ sơ trước không đáng bị
   // phạt bằng cách khoá luôn.
   const firstUnfinished = rounds.findIndex((r) => !roundDone(r));
-  const unlockedCount = firstUnfinished === -1 ? rounds.length : firstUnfinished + 1;
+  const unlockedCount = trialHalted
+    ? rounds.indexOf(declaredRound) + 1
+    : firstUnfinished === -1
+      ? rounds.length
+      : firstUnfinished + 1;
   // Xoá bớt bài ở vòng trước có thể khoá lại chính vòng đang xem — kéo về vòng
   // gần nhất còn mở thay vì để màn hình trống.
   const safeRoundIdx = Math.min(roundIdx, unlockedCount - 1);
@@ -1408,9 +1429,25 @@ export function ExamTakePage({
             </div>
           )}
 
+          {/* ── Kỳ thi dừng vì cạn Thanh danh ở vòng khai ──────────────────
+              Nói thẳng là hết, và vì sao. Để im thì người ta ngồi tìm nút sang
+              vòng sau, tưởng màn hình hỏng. */}
+          {trialHalted && !result && declaredRound && (
+            <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-5 text-center">
+              <Skull className="mx-auto h-9 w-9 text-red-400" />
+              <p className="mt-2 text-lg font-extrabold text-red-700">Kỳ thi dừng tại đây</p>
+              <p className="mx-auto mt-1.5 max-w-md text-xs font-semibold leading-relaxed text-red-600">
+                Bạn đã cạn Thanh danh ở <b>{declaredRound.name}</b> — chính đại tội bạn tự khai.
+                Trượt vòng đã khai là trượt cả kỳ, nên{" "}
+                {rounds.length - 1 > 0 ? `${rounds.length - 1} vòng còn lại` : "phần còn lại"} không
+                cần làm nữa. Bấm Nộp bài để xem kết quả.
+              </p>
+            </div>
+          )}
+
           {/* Xong vòng này thì đi qua màn cây Kabbalah, rồi mới sang vòng sau.
               Vòng cuối không có nút này — chỗ đó là nút Nộp bài. */}
-          {currentRound && !result && nextLockedIdx !== -1 && (
+          {currentRound && !result && !trialHalted && nextLockedIdx !== -1 && (
             <button
               onClick={() => setAdvanceFrom(currentRound)}
               disabled={!roundDone(currentRound)}
