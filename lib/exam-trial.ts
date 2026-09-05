@@ -44,7 +44,7 @@ export const SIN_DOMAIN: Record<Sin, string> = {
   ENVY: "Sale",
   GLUTTONY: "Dinh dưỡng",
   WRATH: "Xử lý khiếu nại, xung đột",
-  SLOTH: "Giữ khách, chống bỏ tập",
+  SLOTH: "Thiết kế chương trình tập luyện",
 };
 
 /** Lối chơi — mô tả CƠ CHẾ, tuyệt đối không kèm tên tội nào. */
@@ -142,7 +142,7 @@ export const SEPHIROT: SephirahInfo[] = [
   {
     id: 9, name: "Yesod", vi: "Nền móng", pillar: "BALANCE", sin: "SLOTH",
     short: SIN_LABEL.SLOTH,
-    why: "Nền của mọi thói quen. Móng lún thì khách bỏ tập — và trước đó là HLV thôi nhắn tin hỏi han.",
+    why: "Nền móng của mọi kết quả là giáo án. Móng dựng ẩu thì khách tập đủ buổi vẫn không đi tới đâu.",
     aboveAbyss: false,
   },
   {

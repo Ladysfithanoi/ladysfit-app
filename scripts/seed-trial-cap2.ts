@@ -17,7 +17,7 @@ import * as GREED from "./trial-content/greed";
 import * as PRIDE_PROGRAM from "./trial-content/pride-program";
 import * as ENVY from "./trial-content/envy";
 import * as WRATH from "./trial-content/wrath";
-import * as SLOTH from "./trial-content/sloth";
+import * as SLOTH_PROGRAM from "./trial-content/sloth-program";
 
 const prisma = new PrismaClient();
 
@@ -42,7 +42,6 @@ const SORT_ROUNDS: {
   { sin: "GREED", name: "Tham lam",   order: 2, passPercent: 65, failPenalty: 25, intro: GREED.INTRO, cards: GREED.CARDS },
   { sin: "ENVY",  name: "Ghen tị",    order: 4, passPercent: 65, failPenalty: 20, intro: ENVY.INTRO,  cards: ENVY.CARDS },
   { sin: "WRATH", name: "Phẫn nộ",    order: 5, passPercent: 65, failPenalty: 20, intro: WRATH.INTRO, cards: WRATH.CARDS },
-  { sin: "SLOTH", name: "Lười biếng", order: 6, passPercent: 60, failPenalty: 20, intro: SLOTH.INTRO, cards: SLOTH.CARDS },
 ];
 
 async function main() {
@@ -121,6 +120,33 @@ async function main() {
       })),
     });
     console.log(`  ${round.name}: ${PRIDE_PROGRAM.CASES.length} hồ sơ giáo án`);
+  }
+
+  if (wanted("SLOTH")) {
+    const round = await upsertRound(level.id, "Lười biếng", "PROGRAM", "SLOTH", {
+      intro: SLOTH_PROGRAM.INTRO,
+      order: 6,
+      maxPoints: 100,
+      passPercent: 65,
+      failPenalty: 20,
+    });
+    await prisma.examProgramCase.deleteMany({ where: { roundId: round.id } });
+    await prisma.examProgramCase.createMany({
+      data: SLOTH_PROGRAM.CASES.map((c, i) => ({
+        roundId: round.id,
+        order: i,
+        clientProfile: c.clientProfile,
+        targetTotalSets: c.targetTotalSets,
+        targetLowerSets: c.targetLowerSets,
+        targetUpperSets: c.targetUpperSets,
+        targetCoreSets: c.targetCoreSets,
+        tolerancePercent: c.tolerancePercent,
+        requiredPatterns: c.requiredPatterns.length ? JSON.stringify(c.requiredPatterns) : null,
+        bannedExercises: c.bannedExercises.length ? JSON.stringify(c.bannedExercises) : null,
+        explanation: c.explanation,
+      })),
+    });
+    console.log(`  ${round.name}: ${SLOTH_PROGRAM.CASES.length} hồ sơ giáo án`);
   }
 
   // ── Các vòng phân loại thẻ ────────────────────────────────────────────────
