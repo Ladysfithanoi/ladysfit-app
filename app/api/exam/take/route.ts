@@ -122,6 +122,8 @@ export async function GET(req: Request) {
         trialCaseRounds: true,
         trialCardsPerRound: true,
         trialItemsPerCase: true,
+        trialCostNear: true,
+        trialCostFar: true,
         trialStreakTiers: true,
         trialDeclaredPassBonus: true,
         trialDeclaredPassCap: true,
@@ -194,19 +196,14 @@ export async function GET(req: Request) {
         closesAt: window.endAt?.toISOString() ?? null,
         scheduleNote: window.message,
         // Cái giá của việc khai phải nói ĐÚNG con số của cấp này, ngay ở màn
-        // khai — người ta chọn xong là không đổi lại được nữa.
-        declaredSetup: declaredSetupFor(
-          await prisma.pTLevel.findUnique({
-            where: { id: levelId },
-            select: {
-              trialDeclaredPassBonus: true,
-              trialDeclaredPassCap: true,
-              trialDeclaredCostNear: true,
-              trialDeclaredCostFar: true,
-              trialDeclaredStreakTiers: true,
-            },
-          })
-        ),
+        // khai — người ta chọn xong là không đổi lại được nữa. Kèm cả thang của
+        // vòng thường để màn khai so được hai bên hơn kém bao nhiêu.
+        declaredSetup: declaredSetupFor(levelSetup),
+        honorBase: {
+          costNear: setup.costNear,
+          costFar: setup.costFar,
+          streakTiers: setup.streakTiers,
+        },
       });
     }
 
@@ -295,7 +292,8 @@ export async function GET(req: Request) {
       rounds: orderedRounds,
       // Mốc phạt sai liên tiếp của cấp này — thanh Thanh danh trên màn hình phải
       // trừ đúng bằng cái máy chủ sẽ trừ lúc chấm, nên nó phải xuống theo đề.
-      streakTiers: setup.streakTiers,
+      // Thang Thanh danh của vòng thường ở cấp này: hao mỗi thẻ + bảng mốc.
+      honorBase: { costNear: setup.costNear, costFar: setup.costFar, streakTiers: setup.streakTiers },
       // Thang riêng của vòng đã khai — trang làm bài phải biết để vẽ đúng thanh
       // Thanh danh của vòng đó, và để màn khai tội nói đúng cái giá phải trả.
       declaredSetup: declaredSetupFor(levelSetup),

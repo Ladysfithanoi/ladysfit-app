@@ -261,6 +261,29 @@ export const MEAL_KIND_LABEL: Record<MealKind, string> = {
   SPECIAL: "Có ràng buộc bắt buộc",
 };
 
+// ── Hao Thanh danh của một thẻ ───────────────────────────────────────────────
+//
+// Ba con số gốc của vòng phân loại thẻ. Vòng lặp chơi mà chúng phục vụ nằm ở
+// phần "Thanh Thanh danh" cuối file; đứng ở đây vì cả cấu hình của cấp lẫn cấu
+// hình riêng của vòng đã khai đều đặt lại được hai trong ba, mà cái đặt lại thì
+// phải khai báo sau cái nó đặt lại.
+//
+// HONOR_START chưa cho chỉnh: thanh vẽ theo phần trăm nên đổi mốc đầy là phải
+// sửa cả cách vẽ, và không ai đòi thanh dài 150.
+
+export const HONOR_START = 100;
+export const HONOR_COST_NEAR = 8;
+export const HONOR_COST_FAR = 25;
+
+/**
+ * Một thẻ ăn mất bao nhiêu Thanh danh, theo tỉ lệ điểm của thẻ đó.
+ * Hai mức truyền vào theo VÒNG đang chơi; hai hằng trên chỉ là mặc định cuối.
+ */
+export function honorCost(ratio: number, near = HONOR_COST_NEAR, far = HONOR_COST_FAR): number {
+  if (ratio >= 1) return 0;
+  return ratio > 0 ? near : far;
+}
+
 /**
  * CẤU HÌNH ĐỀ THỬ THÁCH của một cấp — bốn con số Admin chỉnh được ở Cài đặt →
  * Cấp độ, không phải sửa mã.
@@ -277,6 +300,10 @@ export type TrialSetup = {
   cardsPerRound: number;
   /** Số hồ sơ phát ra ở mỗi vòng case study. */
   itemsPerCase: number;
+  /** Hao Thanh danh khi lệch một bậc ở vòng thường. */
+  costNear: number;
+  /** Hao Thanh danh khi lệch hai bậc ở vòng thường. */
+  costFar: number;
   /**
    * Mốc trừ Thanh danh khi sai liên tiếp ở vòng phân loại. Mảng rỗng = tắt.
    * Xem phần "Trừ lũy tiến khi sai liên tiếp" ở cuối file.
@@ -289,6 +316,8 @@ export const TRIAL_SETUP_DEFAULT: TrialSetup = {
   caseRounds: 1,
   cardsPerRound: TRIAL_CARDS_PER_ROUND,
   itemsPerCase: TRIAL_BRIEFS_PER_ROUND,
+  costNear: HONOR_COST_NEAR,
+  costFar: HONOR_COST_FAR,
   streakTiers: [],
 };
 
@@ -298,6 +327,8 @@ export const TRIAL_SETUP_LIMITS = {
   caseRounds: { min: 0, max: 7 },
   cardsPerRound: { min: 3, max: 50 },
   itemsPerCase: { min: 1, max: 10 },
+  costNear: { min: 0, max: 100 },
+  costFar: { min: 0, max: 100 },
 } as const;
 
 /**
@@ -311,6 +342,8 @@ export function trialSetupFor(level: {
   trialCaseRounds?: number | null;
   trialCardsPerRound?: number | null;
   trialItemsPerCase?: number | null;
+  trialCostNear?: number | null;
+  trialCostFar?: number | null;
   trialStreakTiers?: string | null;
 } | null | undefined): TrialSetup {
   const clamp = (v: number | null | undefined, d: number, lo: number, hi: number) =>
@@ -335,6 +368,8 @@ export function trialSetupFor(level: {
       level?.trialItemsPerCase, TRIAL_SETUP_DEFAULT.itemsPerCase,
       L.itemsPerCase.min, L.itemsPerCase.max
     ),
+    costNear: clamp(level?.trialCostNear, TRIAL_SETUP_DEFAULT.costNear, L.costNear.min, L.costNear.max),
+    costFar: clamp(level?.trialCostFar, TRIAL_SETUP_DEFAULT.costFar, L.costFar.min, L.costFar.max),
     streakTiers: parseStreakTiers(level?.trialStreakTiers),
   };
 }
@@ -342,25 +377,6 @@ export function trialSetupFor(level: {
 /** Vòng này là CASE STUDY hay vòng phân loại? */
 export function isCaseRound(type: string): boolean {
   return type === "MEAL" || type === "PROGRAM";
-}
-
-// ── Hao Thanh danh của một thẻ ───────────────────────────────────────────────
-//
-// Ba con số gốc của vòng phân loại thẻ. Vòng lặp chơi mà chúng phục vụ nằm ở
-// phần "Thanh Thanh danh" cuối file; đứng ở đây vì vòng đã khai đặt lại được
-// hai trong ba, và cái đặt lại phải khai báo sau cái nó đặt lại.
-
-export const HONOR_START = 100;
-export const HONOR_COST_NEAR = 8;
-export const HONOR_COST_FAR = 25;
-
-/**
- * Một thẻ ăn mất bao nhiêu Thanh danh, theo tỉ lệ điểm của thẻ đó.
- * Vòng đã khai truyền vào mức riêng của nó; vòng thường dùng hai số gốc.
- */
-export function honorCost(ratio: number, near = HONOR_COST_NEAR, far = HONOR_COST_FAR): number {
-  if (ratio >= 1) return 0;
-  return ratio > 0 ? near : far;
 }
 
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
@@ -415,8 +431,17 @@ export const DECLARED_SETUP_LIMITS = {
   costFar: { min: 0, max: 100 },
 } as const;
 
-/** Cấu hình vòng khai của một cấp, đã kẹp về khoảng hợp lệ. */
+/**
+ * Cấu hình vòng khai của một cấp, đã kẹp về khoảng hợp lệ.
+ *
+ * Hai ô hao thẻ bỏ trống thì KẾ THỪA mức của vòng thường ở chính cấp này, không
+ * tụt về hai hằng gốc: Admin nâng vòng thường lên 12/35 rồi để trống vòng khai
+ * thì vòng khai phải là 12/35, chứ không thể hoá ra nhẹ hơn vòng thường.
+ */
 export function declaredSetupFor(level: {
+  /** Mức của vòng thường ở cấp này — dùng làm mặc định cho hai ô hao thẻ. */
+  trialCostNear?: number | null;
+  trialCostFar?: number | null;
   trialDeclaredPassBonus?: number | null;
   trialDeclaredPassCap?: number | null;
   trialDeclaredCostNear?: number | null;
@@ -427,11 +452,13 @@ export function declaredSetupFor(level: {
   const clamp = (v: number | null | undefined, d: number, lo: number, hi: number) =>
     v == null || !Number.isFinite(v) ? d : Math.max(lo, Math.min(hi, Math.round(v)));
 
+  const base = trialSetupFor(level);
+
   return {
     passBonus: clamp(level?.trialDeclaredPassBonus, DECLARED_SETUP_DEFAULT.passBonus, L.passBonus.min, L.passBonus.max),
     passCap: clamp(level?.trialDeclaredPassCap, DECLARED_SETUP_DEFAULT.passCap, L.passCap.min, L.passCap.max),
-    costNear: clamp(level?.trialDeclaredCostNear, DECLARED_SETUP_DEFAULT.costNear, L.costNear.min, L.costNear.max),
-    costFar: clamp(level?.trialDeclaredCostFar, DECLARED_SETUP_DEFAULT.costFar, L.costFar.min, L.costFar.max),
+    costNear: clamp(level?.trialDeclaredCostNear, base.costNear, L.costNear.min, L.costNear.max),
+    costFar: clamp(level?.trialDeclaredCostFar, base.costFar, L.costFar.min, L.costFar.max),
     streakTiers: parseStreakTiers(level?.trialDeclaredStreakTiers),
   };
 }
@@ -978,6 +1005,9 @@ export const HONOR_RULES_DEFAULT: HonorRules = {
   tiers: [],
 };
 
+/** Phần cấu hình của CẤP mà thanh Thanh danh cần — lấy sẵn từ TrialSetup. */
+export type HonorBase = Pick<TrialSetup, "costNear" | "costFar" | "streakTiers">;
+
 /**
  * Vòng này chạy luật nào: vòng thường dùng hai số gốc + bảng mốc của cấp; vòng
  * đã khai dùng bộ riêng của nó.
@@ -986,19 +1016,20 @@ export const HONOR_RULES_DEFAULT: HonorRules = {
  * phải tắt phạt liên tiếp: bỏ trống một ô không bao giờ được làm bài thi dễ đi.
  */
 export function honorRulesFor(opts: {
-  /** Bảng mốc chung của cấp. */
-  streakTiers: StreakTier[];
+  /** Thang của vòng thường ở cấp này. */
+  base: HonorBase;
   declared: boolean;
   declaredSetup: DeclaredSetup;
 }): HonorRules {
+  const { base } = opts;
   if (!opts.declared) {
-    return { costNear: HONOR_COST_NEAR, costFar: HONOR_COST_FAR, tiers: opts.streakTiers };
+    return { costNear: base.costNear, costFar: base.costFar, tiers: base.streakTiers };
   }
   const d = opts.declaredSetup;
   return {
     costNear: d.costNear,
     costFar: d.costFar,
-    tiers: d.streakTiers.length > 0 ? d.streakTiers : opts.streakTiers,
+    tiers: d.streakTiers.length > 0 ? d.streakTiers : base.streakTiers,
   };
 }
 

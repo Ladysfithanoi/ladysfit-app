@@ -6,8 +6,8 @@ import { getExamWindow } from "@/lib/exam-schedule";
 import { parseQuestionIds, sessionDeadline, ALREADY_TAKEN_MESSAGE } from "@/lib/exam-session";
 import { resolveExamLevel } from "@/lib/exam-level";
 import {
-  gradeSortCard, honorAfter, honorRulesFor, declaredSetupFor,
-  parseStreakTiers, parseTrialState, readSortAnswer,
+  gradeSortCard, honorAfter, honorRulesFor, declaredSetupFor, trialSetupFor,
+  parseTrialState, readSortAnswer,
   SORT_ZONES, type SortZone,
 } from "@/lib/exam-trial";
 
@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
           // chặn thẻ ở dưới phải đọc đúng bộ luật đang chạy.
           level: {
             select: {
+              trialCostNear: true,
+              trialCostFar: true,
               trialStreakTiers: true,
               trialDeclaredPassBonus: true,
               trialDeclaredPassCap: true,
@@ -169,7 +171,7 @@ export async function POST(req: NextRequest) {
   // Vòng của tội đã khai đắt hơn ở từng thẻ — cùng bộ luật mà màn hình đang
   // chạy và mà computeTrial() sẽ chấm lại lúc nộp.
   const rules = honorRulesFor({
-    streakTiers: parseStreakTiers(card.round.level?.trialStreakTiers),
+    base: trialSetupFor(card.round.level),
     declared: !!examSession.declaredSin && card.round.sin === examSession.declaredSin,
     declaredSetup: declaredSetupFor(card.round.level),
   });

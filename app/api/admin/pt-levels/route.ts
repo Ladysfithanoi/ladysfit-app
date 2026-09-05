@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, trialCostNear: true, trialCostFar: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -52,6 +52,9 @@ export async function POST(req: Request) {
     trialCaseRounds?: number | null;
     trialCardsPerRound?: number | null;
     trialItemsPerCase?: number | null;
+    /** Hao Thanh danh mỗi thẻ ở vòng thường. */
+    trialCostNear?: number | null;
+    trialCostFar?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
     /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
@@ -93,6 +96,8 @@ export async function POST(req: Request) {
       trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds"),
       trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound"),
       trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase"),
+      trialCostNear: trialField(body.trialCostNear, "costNear"),
+      trialCostFar: trialField(body.trialCostFar, "costFar"),
       trialStreakTiers: trialStreakTiersField(body.trialStreakTiers),
       // Vòng đã khai: bỏ trống = dùng mặc định (xem declaredSetupFor).
       trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus"),

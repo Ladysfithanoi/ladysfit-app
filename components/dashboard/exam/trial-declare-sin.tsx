@@ -5,8 +5,8 @@ import { Swords, AlertTriangle, Lock, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SIN_LABEL, SIN_DOMAIN, SINS, SIN_SEPHIRAH,
-  DECLARED_POINT_MULTIPLIER, honorCost,
-  type DeclaredSetup, type Sin,
+  DECLARED_POINT_MULTIPLIER,
+  type DeclaredSetup, type HonorBase, type Sin,
 } from "@/lib/exam-trial";
 import { KabbalahTree } from "./kabbalah-tree";
 
@@ -31,6 +31,7 @@ export function TrialDeclareSin({
   levelName,
   options,
   declaredSetup,
+  honorBase,
   mock = false,
   onDeclared,
 }: {
@@ -39,6 +40,8 @@ export function TrialDeclareSin({
   options: SinOption[];
   /** Cái giá của việc khai ở cấp này — phải nói đúng số, vì chọn xong không đổi được. */
   declaredSetup: DeclaredSetup;
+  /** Thang của vòng thường, để chỉ nói "đắt hơn" khi nó thật sự đắt hơn. */
+  honorBase: HonorBase;
   /** Thi thử của Admin — không có lượt thi để ghi, chỉ chốt ở bộ nhớ trang. */
   mock?: boolean;
   onDeclared: (sin: Sin) => void;
@@ -149,7 +152,8 @@ export function TrialDeclareSin({
             {/* Thanh danh đắt hơn thì phải nói ra, vì đó là thứ ăn mòn ngay
                 trong lúc chơi chứ không đợi tới lúc chấm. Cấp nào không đặt
                 nặng hơn thì câu này không hiện. */}
-            {(declaredSetup.costNear > honorCost(0.5) || declaredSetup.costFar > honorCost(0)) && (
+            {(declaredSetup.costNear > honorBase.costNear ||
+              declaredSetup.costFar > honorBase.costFar) && (
               <>
                 {" "}Ở vòng đó mỗi thẻ sai cũng đắt hơn: lệch một bậc mất{" "}
                 {declaredSetup.costNear} Thanh danh, lệch hai bậc mất {declaredSetup.costFar}.

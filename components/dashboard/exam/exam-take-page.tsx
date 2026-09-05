@@ -29,9 +29,9 @@ import { SortRound, type SortCardView } from "./trial-sort-round";
 import { ProgramRound, type ProgramCaseView } from "./trial-program-round";
 import {
   SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
-  honorAfter, honorRulesFor, parseStreakTiers, declaredSetupFor,
-  type MealEntry, type SortZone, type Sin, type ProgramEntry, type StreakTier,
-  type DeclaredSetup,
+  honorAfter, honorRulesFor, declaredSetupFor, trialSetupFor,
+  type MealEntry, type SortZone, type Sin, type ProgramEntry,
+  type DeclaredSetup, type HonorBase,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
 import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
@@ -404,7 +404,8 @@ export function ExamTakePage({
   // quả. Máy chủ trả về, client không tự tính được vì không có đáp án đúng.
   const [cardOutcomes, setCardOutcomes] = useState<Record<string, number>>({});
   // Mốc phạt sai liên tiếp của cấp — server gửi kèm đề, client chỉ vẽ lại.
-  const [streakTiers, setStreakTiers] = useState<StreakTier[]>([]);
+  // Thang Thanh danh của vòng thường ở cấp này — hao mỗi thẻ và bảng mốc.
+  const [honorBase, setHonorBase] = useState<HonorBase>(() => trialSetupFor(null));
   // Thang riêng của vòng đã khai — nặng hơn ở từng thẻ, do Admin đặt theo cấp.
   const [declaredSetup, setDeclaredSetup] = useState<DeclaredSetup>(() => declaredSetupFor(null));
   const [pendingCard, setPendingCard] = useState<string | null>(null);
@@ -496,6 +497,7 @@ export function ExamTakePage({
         setDeclaredSin(data.declaredSin ?? null);
         // Đặt trước cửa khai: màn khai tội phải nói đúng cái giá của cấp này.
         if (data.declaredSetup) setDeclaredSetup(data.declaredSetup as DeclaredSetup);
+        if (data.honorBase) setHonorBase(data.honorBase as HonorBase);
         if (data.needsDeclaration) return; // chưa khai thì chưa có đề để dựng
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           setRounds(data.rounds);
@@ -503,7 +505,6 @@ export function ExamTakePage({
           setTrialState(saved);
           trialRef.current = saved;
           setCardOutcomes((data.cardOutcomes ?? {}) as Record<string, number>);
-          setStreakTiers(parseStreakTiers(data.streakTiers));
         }
         setNoPenalty(!!data.noPenalty);
         setExamToken(data.examToken ?? null);
@@ -962,7 +963,7 @@ export function ExamTakePage({
    */
   function honorRulesOf(r: TrialRound) {
     return honorRulesFor({
-      streakTiers,
+      base: honorBase,
       declared: !!declaredSin && r.sin === declaredSin,
       declaredSetup,
     });
@@ -1087,6 +1088,7 @@ export function ExamTakePage({
         levelName={levelName}
         options={sinOptions}
         declaredSetup={declaredSetup}
+        honorBase={honorBase}
         mock={mock}
         onDeclared={(sin) => {
           setLoading(true);

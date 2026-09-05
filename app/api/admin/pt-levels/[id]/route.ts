@@ -27,6 +27,9 @@ export async function PUT(
     trialCaseRounds?: number | null;
     trialCardsPerRound?: number | null;
     trialItemsPerCase?: number | null;
+    /** Hao Thanh danh mỗi thẻ ở vòng thường. */
+    trialCostNear?: number | null;
+    trialCostFar?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
     /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
@@ -61,6 +64,8 @@ export async function PUT(
       ...(body.trialCaseRounds !== undefined && { trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds") }),
       ...(body.trialCardsPerRound !== undefined && { trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound") }),
       ...(body.trialItemsPerCase !== undefined && { trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase") }),
+      ...(body.trialCostNear !== undefined && { trialCostNear: trialField(body.trialCostNear, "costNear") }),
+      ...(body.trialCostFar !== undefined && { trialCostFar: trialField(body.trialCostFar, "costFar") }),
       ...(body.trialStreakTiers !== undefined && { trialStreakTiers: trialStreakTiersField(body.trialStreakTiers) }),
       // Vòng đã khai: gửi lên rỗng = quay về mặc định trong lib/exam-trial.ts.
       ...(body.trialDeclaredPassBonus !== undefined && { trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus") }),

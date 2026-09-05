@@ -43,6 +43,9 @@ type PTLevel = {
   trialCaseRounds: number | null;
   trialCardsPerRound: number | null;
   trialItemsPerCase: number | null;
+  // Hao Thanh danh mỗi thẻ ở vòng thường — null = 8 và 25 như cũ.
+  trialCostNear: number | null;
+  trialCostFar: number | null;
   /** Mốc phạt sai liên tiếp, lưu JSON. Null = cấp này không phạt liên tiếp. */
   trialStreakTiers: string | null;
   // Độ gắt riêng của vòng đã khai — null = dùng mặc định trong lib/exam-trial.ts.
@@ -80,6 +83,8 @@ const TRIAL_KEY = {
   trialCaseRounds: "caseRounds",
   trialCardsPerRound: "cardsPerRound",
   trialItemsPerCase: "itemsPerCase",
+  trialCostNear: "costNear",
+  trialCostFar: "costFar",
 } as const;
 
 const inputCls =
@@ -126,6 +131,8 @@ export function PTLevelsTab() {
     trialCaseRounds: "",
     trialCardsPerRound: "",
     trialItemsPerCase: "",
+    trialCostNear: "",
+    trialCostFar: "",
     // Bảng mốc phạt sai liên tiếp. Mảng chứ không phải ô số: số mốc do Admin
     // quyết, thêm một mốc không được là thêm một ô.
     trialStreakTiers: [] as StreakTier[],
@@ -215,7 +222,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialStreakTiers: [], trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialCostNear: "", trialCostFar: "", trialStreakTiers: [], trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -235,6 +242,8 @@ export function PTLevelsTab() {
       trialCaseRounds: level.trialCaseRounds == null ? "" : String(level.trialCaseRounds),
       trialCardsPerRound: level.trialCardsPerRound == null ? "" : String(level.trialCardsPerRound),
       trialItemsPerCase: level.trialItemsPerCase == null ? "" : String(level.trialItemsPerCase),
+      trialCostNear: level.trialCostNear == null ? "" : String(level.trialCostNear),
+      trialCostFar: level.trialCostFar == null ? "" : String(level.trialCostFar),
       trialStreakTiers: parseStreakTiers(level.trialStreakTiers),
       trialDeclaredPassBonus: level.trialDeclaredPassBonus == null ? "" : String(level.trialDeclaredPassBonus),
       trialDeclaredPassCap: level.trialDeclaredPassCap == null ? "" : String(level.trialDeclaredPassCap),
@@ -271,6 +280,8 @@ export function PTLevelsTab() {
             trialCaseRounds: form.trialCaseRounds === "" ? null : Number(form.trialCaseRounds),
             trialCardsPerRound: form.trialCardsPerRound === "" ? null : Number(form.trialCardsPerRound),
             trialItemsPerCase: form.trialItemsPerCase === "" ? null : Number(form.trialItemsPerCase),
+            trialCostNear: form.trialCostNear === "" ? null : Number(form.trialCostNear),
+            trialCostFar: form.trialCostFar === "" ? null : Number(form.trialCostFar),
             trialStreakTiers: form.trialStreakTiers,
             trialDeclaredPassBonus: form.trialDeclaredPassBonus === "" ? null : Number(form.trialDeclaredPassBonus),
             trialDeclaredPassCap: form.trialDeclaredPassCap === "" ? null : Number(form.trialDeclaredPassCap),
@@ -628,6 +639,11 @@ export function PTLevelsTab() {
                         ["trialCaseRounds", "Trong đó là Case Study", TRIAL_SETUP_DEFAULT.caseRounds],
                         ["trialCardsPerRound", "Thẻ mỗi vòng phân loại", TRIAL_SETUP_DEFAULT.cardsPerRound],
                         ["trialItemsPerCase", "Hồ sơ mỗi vòng Case Study", TRIAL_SETUP_DEFAULT.itemsPerCase],
+                        // Hai mức hao Thanh danh của vòng THƯỜNG. Vòng đã khai
+                        // có hai ô riêng ở khối tím bên dưới; để trống hai ô đó
+                        // thì nó kế thừa đúng hai số này.
+                        ["trialCostNear", "Lệch một bậc mất", TRIAL_SETUP_DEFAULT.costNear],
+                        ["trialCostFar", "Lệch hai bậc mất", TRIAL_SETUP_DEFAULT.costFar],
                       ] as const).map(([key, label, dflt]) => (
                         <div key={key} className="space-y-1">
                           <label className="text-[11px] font-semibold text-gray-500">{label}</label>
@@ -680,8 +696,19 @@ export function PTLevelsTab() {
                         {([
                           ["trialDeclaredPassBonus", "Ngưỡng đạt +% ", DECLARED_SETUP_DEFAULT.passBonus, "passBonus"],
                           ["trialDeclaredPassCap", "Trần ngưỡng đạt (%)", DECLARED_SETUP_DEFAULT.passCap, "passCap"],
-                          ["trialDeclaredCostNear", "Lệch một bậc mất", DECLARED_SETUP_DEFAULT.costNear, "costNear"],
-                          ["trialDeclaredCostFar", "Lệch hai bậc mất", DECLARED_SETUP_DEFAULT.costFar, "costFar"],
+                          // Bỏ trống = kế thừa mức của vòng thường ở trên, chứ
+                          // không tụt về hằng gốc — vòng khai không bao giờ
+                          // được nhẹ hơn vòng thường.
+                          [
+                            "trialDeclaredCostNear", "Lệch một bậc mất",
+                            form.trialCostNear === "" ? DECLARED_SETUP_DEFAULT.costNear : Number(form.trialCostNear),
+                            "costNear",
+                          ],
+                          [
+                            "trialDeclaredCostFar", "Lệch hai bậc mất",
+                            form.trialCostFar === "" ? DECLARED_SETUP_DEFAULT.costFar : Number(form.trialCostFar),
+                            "costFar",
+                          ],
                         ] as const).map(([key, label, dflt, limitKey]) => (
                           <div key={key} className="space-y-1">
                             <label className="text-[11px] font-semibold text-gray-500">{label}</label>

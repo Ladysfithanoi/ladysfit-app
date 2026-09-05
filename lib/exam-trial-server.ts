@@ -6,7 +6,7 @@ import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer, readProgramEntries,
   applyDeclaredSin, declaredSetupFor, declaredTolerance, honorAfter, honorRulesFor,
-  isCaseRound, parseStreakTiers,
+  isCaseRound, trialSetupFor,
   TRIAL_SETUP_DEFAULT, type TrialSetup,
   gradeProgramCase, type ProgramEntry,
   TRIAL_CARD_MIX, SORT_ZONES,
@@ -234,6 +234,8 @@ export async function computeTrial(
   const levelRow = await prisma.pTLevel.findUnique({
     where: { id: levelId },
     select: {
+      trialCostNear: true,
+      trialCostFar: true,
       trialStreakTiers: true,
       trialDeclaredPassBonus: true,
       trialDeclaredPassCap: true,
@@ -242,7 +244,7 @@ export async function computeTrial(
       trialDeclaredStreakTiers: true,
     },
   });
-  const streakTiers = parseStreakTiers(levelRow?.trialStreakTiers);
+  const base = trialSetupFor(levelRow);
   const declaredSetup = declaredSetupFor(levelRow);
 
   const roundScores: RoundScore[] = [];
@@ -350,7 +352,7 @@ export async function computeTrial(
       const collapsed =
         honorAfter(
           results,
-          honorRulesFor({ streakTiers, declared: tuned.declared, declaredSetup })
+          honorRulesFor({ base, declared: tuned.declared, declaredSetup })
         ) <= 0;
       const rs = scoreRound(scored, results.map((r) => r.ratio), pillar, tuned.declared, collapsed);
       roundScores.push(rs);
