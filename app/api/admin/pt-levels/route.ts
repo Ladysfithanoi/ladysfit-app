@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, trialDeclaredMultiplier: true, trialDeclaredMustPass: true, trialCostNear: true, trialCostFar: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, trialHonorStart: true, trialDeclaredHonorStart: true, trialDeclaredMultiplier: true, trialDeclaredMustPass: true, trialCostNear: true, trialCostFar: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -52,7 +52,8 @@ export async function POST(req: Request) {
     trialCaseRounds?: number | null;
     trialCardsPerRound?: number | null;
     trialItemsPerCase?: number | null;
-    /** Hao Thanh danh mỗi thẻ ở vòng thường. */
+    /** Thanh Thanh danh ở vòng thường: mốc đầy và hao mỗi thẻ. */
+    trialHonorStart?: number | null;
     trialCostNear?: number | null;
     trialCostFar?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
     trialDeclaredMustPass?: boolean | null;
     trialDeclaredPassBonus?: number | null;
     trialDeclaredPassCap?: number | null;
+    trialDeclaredHonorStart?: number | null;
     trialDeclaredCostNear?: number | null;
     trialDeclaredCostFar?: number | null;
     trialDeclaredStreakTiers?: unknown;
@@ -98,6 +100,7 @@ export async function POST(req: Request) {
       trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds"),
       trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound"),
       trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase"),
+      trialHonorStart: trialField(body.trialHonorStart, "honorStart"),
       trialCostNear: trialField(body.trialCostNear, "costNear"),
       trialCostFar: trialField(body.trialCostFar, "costFar"),
       trialStreakTiers: trialStreakTiersField(body.trialStreakTiers),
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
       trialDeclaredMustPass: typeof body.trialDeclaredMustPass === "boolean" ? body.trialDeclaredMustPass : null,
       trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus"),
       trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap"),
+      trialDeclaredHonorStart: declaredField(body.trialDeclaredHonorStart, "honorStart"),
       trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear"),
       trialDeclaredCostFar: declaredField(body.trialDeclaredCostFar, "costFar"),
       trialDeclaredStreakTiers: trialStreakTiersField(body.trialDeclaredStreakTiers),

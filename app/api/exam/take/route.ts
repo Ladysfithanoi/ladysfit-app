@@ -122,14 +122,16 @@ export async function GET(req: Request) {
         trialCaseRounds: true,
         trialCardsPerRound: true,
         trialItemsPerCase: true,
-        trialCostNear: true,
+        trialHonorStart: true,
+      trialCostNear: true,
         trialCostFar: true,
         trialStreakTiers: true,
         trialDeclaredMultiplier: true,
         trialDeclaredMustPass: true,
         trialDeclaredPassBonus: true,
         trialDeclaredPassCap: true,
-        trialDeclaredCostNear: true,
+        trialDeclaredHonorStart: true,
+      trialDeclaredCostNear: true,
         trialDeclaredCostFar: true,
         trialDeclaredStreakTiers: true,
       },
@@ -202,6 +204,7 @@ export async function GET(req: Request) {
         // vòng thường để màn khai so được hai bên hơn kém bao nhiêu.
         declaredSetup: declaredSetupFor(levelSetup),
         honorBase: {
+          honorStart: setup.honorStart,
           costNear: setup.costNear,
           costFar: setup.costFar,
           streakTiers: setup.streakTiers,
@@ -295,7 +298,12 @@ export async function GET(req: Request) {
       // Mốc phạt sai liên tiếp của cấp này — thanh Thanh danh trên màn hình phải
       // trừ đúng bằng cái máy chủ sẽ trừ lúc chấm, nên nó phải xuống theo đề.
       // Thang Thanh danh của vòng thường ở cấp này: hao mỗi thẻ + bảng mốc.
-      honorBase: { costNear: setup.costNear, costFar: setup.costFar, streakTiers: setup.streakTiers },
+      honorBase: {
+        honorStart: setup.honorStart,
+        costNear: setup.costNear,
+        costFar: setup.costFar,
+        streakTiers: setup.streakTiers,
+      },
       // Thang riêng của vòng đã khai — trang làm bài phải biết để vẽ đúng thanh
       // Thanh danh của vòng đó, và để màn khai tội nói đúng cái giá phải trả.
       declaredSetup: declaredSetupFor(levelSetup),

@@ -5,7 +5,7 @@ import { Check, ShieldAlert, Skull, Lock, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SORT_ZONES, SORT_ZONE_LABEL, SORT_VERDICT,
-  HONOR_START, honorCost, honorRun, streakPenaltyAt,
+  honorCost, honorRun, streakPenaltyAt,
   type HonorRules, type HonorStep, type SortZone,
 } from "@/lib/exam-trial";
 
@@ -43,10 +43,16 @@ const ZONE_STYLE: Record<SortZone, { active: string; idle: string }> = {
   },
 };
 
-/** Màu thanh đổi theo mức còn lại — nhìn là biết mình đang ở đâu. */
-function honorTone(honor: number) {
-  if (honor > 60) return { bar: "bg-emerald-500", text: "text-emerald-600" };
-  if (honor > 30) return { bar: "bg-amber-500", text: "text-amber-600" };
+/**
+ * Màu thanh đổi theo PHẦN CÒN LẠI, không theo con số tuyệt đối.
+ *
+ * Mốc đầy do Admin đặt nên 40 Thanh danh có thể là gần cạn (thanh 50) hoặc mới
+ * sứt một góc (thanh 200) — lấy ngưỡng cứng 60/30 là màu nói sai chuyện.
+ */
+function honorTone(honor: number, start: number) {
+  const left = start > 0 ? honor / start : 0;
+  if (left > 0.6) return { bar: "bg-emerald-500", text: "text-emerald-600" };
+  if (left > 0.3) return { bar: "bg-amber-500", text: "text-amber-600" };
   return { bar: "bg-red-500", text: "text-red-600" };
 }
 
@@ -110,7 +116,7 @@ export function SortRound({
   const collapsed = honor <= 0;
   const current = collapsed ? null : cards.find((c) => !answers[c.id]) ?? null;
   const lastDone = [...cards].reverse().find((c) => answers[c.id] && outcomes[c.id] !== undefined);
-  const tone = honorTone(honor);
+  const tone = honorTone(honor, rules.start);
   /** Chuỗi sai đang chạy — con số quyết định thẻ kế tiếp đắt tới đâu. */
   const streak = lastDone ? stepOf(lastDone.id)?.streak ?? 0 : 0;
   /** Sai thêm một thẻ nữa thì mất thêm bao nhiêu — cảnh báo TRƯỚC khi bấm. */
@@ -132,7 +138,8 @@ export function SortRound({
         <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
           <div
             className={cn("h-full rounded-full transition-all duration-500", tone.bar)}
-            style={{ width: `${honor}%` }}
+            // Chia cho mốc đầy của vòng: con số Thanh danh không còn là phần trăm.
+            style={{ width: `${rules.start > 0 ? Math.round((honor / rules.start) * 100) : 0}%` }}
           />
         </div>
         <p className="mt-2 text-[11px] font-semibold leading-snug text-gray-400">
@@ -224,7 +231,7 @@ export function SortRound({
           <Check className="mx-auto h-7 w-7 text-emerald-500" />
           <p className="mt-2 text-sm font-extrabold text-emerald-700">Xong vòng này</p>
           <p className="mt-1 text-xs font-semibold text-emerald-600">
-            Còn {honor}/{HONOR_START} Thanh danh.
+            Còn {honor}/{rules.start} Thanh danh.
           </p>
         </div>
       )}

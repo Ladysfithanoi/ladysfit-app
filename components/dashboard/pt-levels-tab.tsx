@@ -43,7 +43,8 @@ type PTLevel = {
   trialCaseRounds: number | null;
   trialCardsPerRound: number | null;
   trialItemsPerCase: number | null;
-  // Hao Thanh danh mỗi thẻ ở vòng thường — null = 8 và 25 như cũ.
+  // Thanh Thanh danh ở vòng thường — null = mốc đầy 100, hao 8 và 25 như cũ.
+  trialHonorStart: number | null;
   trialCostNear: number | null;
   trialCostFar: number | null;
   /** Mốc phạt sai liên tiếp, lưu JSON. Null = cấp này không phạt liên tiếp. */
@@ -53,6 +54,7 @@ type PTLevel = {
   trialDeclaredMustPass: boolean | null;
   trialDeclaredPassBonus: number | null;
   trialDeclaredPassCap: number | null;
+  trialDeclaredHonorStart: number | null;
   trialDeclaredCostNear: number | null;
   trialDeclaredCostFar: number | null;
   trialDeclaredStreakTiers: string | null;
@@ -85,6 +87,7 @@ const TRIAL_KEY = {
   trialCaseRounds: "caseRounds",
   trialCardsPerRound: "cardsPerRound",
   trialItemsPerCase: "itemsPerCase",
+  trialHonorStart: "honorStart",
   trialCostNear: "costNear",
   trialCostFar: "costFar",
 } as const;
@@ -133,6 +136,7 @@ export function PTLevelsTab() {
     trialCaseRounds: "",
     trialCardsPerRound: "",
     trialItemsPerCase: "",
+    trialHonorStart: "",
     trialCostNear: "",
     trialCostFar: "",
     // Bảng mốc phạt sai liên tiếp. Mảng chứ không phải ô số: số mốc do Admin
@@ -142,6 +146,7 @@ export function PTLevelsTab() {
     trialDeclaredMustPass: true,
     trialDeclaredPassBonus: "",
     trialDeclaredPassCap: "",
+    trialDeclaredHonorStart: "",
     trialDeclaredCostNear: "",
     trialDeclaredCostFar: "",
     trialDeclaredStreakTiers: [] as StreakTier[],
@@ -226,7 +231,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialCostNear: "", trialCostFar: "", trialStreakTiers: [], trialDeclaredMultiplier: "", trialDeclaredMustPass: true, trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialHonorStart: "", trialCostNear: "", trialCostFar: "", trialStreakTiers: [], trialDeclaredMultiplier: "", trialDeclaredMustPass: true, trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredHonorStart: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -246,6 +251,7 @@ export function PTLevelsTab() {
       trialCaseRounds: level.trialCaseRounds == null ? "" : String(level.trialCaseRounds),
       trialCardsPerRound: level.trialCardsPerRound == null ? "" : String(level.trialCardsPerRound),
       trialItemsPerCase: level.trialItemsPerCase == null ? "" : String(level.trialItemsPerCase),
+      trialHonorStart: level.trialHonorStart == null ? "" : String(level.trialHonorStart),
       trialCostNear: level.trialCostNear == null ? "" : String(level.trialCostNear),
       trialCostFar: level.trialCostFar == null ? "" : String(level.trialCostFar),
       trialStreakTiers: parseStreakTiers(level.trialStreakTiers),
@@ -253,6 +259,7 @@ export function PTLevelsTab() {
       trialDeclaredMustPass: level.trialDeclaredMustPass ?? true,
       trialDeclaredPassBonus: level.trialDeclaredPassBonus == null ? "" : String(level.trialDeclaredPassBonus),
       trialDeclaredPassCap: level.trialDeclaredPassCap == null ? "" : String(level.trialDeclaredPassCap),
+      trialDeclaredHonorStart: level.trialDeclaredHonorStart == null ? "" : String(level.trialDeclaredHonorStart),
       trialDeclaredCostNear: level.trialDeclaredCostNear == null ? "" : String(level.trialDeclaredCostNear),
       trialDeclaredCostFar: level.trialDeclaredCostFar == null ? "" : String(level.trialDeclaredCostFar),
       trialDeclaredStreakTiers: parseStreakTiers(level.trialDeclaredStreakTiers),
@@ -286,6 +293,7 @@ export function PTLevelsTab() {
             trialCaseRounds: form.trialCaseRounds === "" ? null : Number(form.trialCaseRounds),
             trialCardsPerRound: form.trialCardsPerRound === "" ? null : Number(form.trialCardsPerRound),
             trialItemsPerCase: form.trialItemsPerCase === "" ? null : Number(form.trialItemsPerCase),
+            trialHonorStart: form.trialHonorStart === "" ? null : Number(form.trialHonorStart),
             trialCostNear: form.trialCostNear === "" ? null : Number(form.trialCostNear),
             trialCostFar: form.trialCostFar === "" ? null : Number(form.trialCostFar),
             trialStreakTiers: form.trialStreakTiers,
@@ -293,6 +301,7 @@ export function PTLevelsTab() {
             trialDeclaredMustPass: form.trialDeclaredMustPass,
             trialDeclaredPassBonus: form.trialDeclaredPassBonus === "" ? null : Number(form.trialDeclaredPassBonus),
             trialDeclaredPassCap: form.trialDeclaredPassCap === "" ? null : Number(form.trialDeclaredPassCap),
+            trialDeclaredHonorStart: form.trialDeclaredHonorStart === "" ? null : Number(form.trialDeclaredHonorStart),
             trialDeclaredCostNear: form.trialDeclaredCostNear === "" ? null : Number(form.trialDeclaredCostNear),
             trialDeclaredCostFar: form.trialDeclaredCostFar === "" ? null : Number(form.trialDeclaredCostFar),
             trialDeclaredStreakTiers: form.trialDeclaredStreakTiers,
@@ -650,6 +659,7 @@ export function PTLevelsTab() {
                         // Hai mức hao Thanh danh của vòng THƯỜNG. Vòng đã khai
                         // có hai ô riêng ở khối tím bên dưới; để trống hai ô đó
                         // thì nó kế thừa đúng hai số này.
+                        ["trialHonorStart", "Thanh danh khởi điểm", TRIAL_SETUP_DEFAULT.honorStart],
                         ["trialCostNear", "Lệch một bậc mất", TRIAL_SETUP_DEFAULT.costNear],
                         ["trialCostFar", "Lệch hai bậc mất", TRIAL_SETUP_DEFAULT.costFar],
                       ] as const).map(([key, label, dflt]) => (
@@ -727,6 +737,11 @@ export function PTLevelsTab() {
                         {([
                           ["trialDeclaredMultiplier", "Điểm vòng khai nhân", DECLARED_SETUP_DEFAULT.pointMultiplier, "pointMultiplier"],
                           ["trialDeclaredPassBonus", "Ngưỡng đạt +% ", DECLARED_SETUP_DEFAULT.passBonus, "passBonus"],
+                          [
+                            "trialDeclaredHonorStart", "Thanh danh khởi điểm",
+                            form.trialHonorStart === "" ? DECLARED_SETUP_DEFAULT.honorStart : Number(form.trialHonorStart),
+                            "honorStart",
+                          ],
                           ["trialDeclaredPassCap", "Trần ngưỡng đạt (%)", DECLARED_SETUP_DEFAULT.passCap, "passCap"],
                           // Bỏ trống = kế thừa mức của vòng thường ở trên, chứ
                           // không tụt về hằng gốc — vòng khai không bao giờ

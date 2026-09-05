@@ -1851,6 +1851,8 @@ model PTLevel {
   trialCardsPerRound    Int?
   /// Số hồ sơ phát ra ở mỗi vòng case study.
   trialItemsPerCase     Int?
+  /// Thanh danh khởi điểm của một vòng phân loại (mặc định 100).
+  trialHonorStart       Int?
   /// Hao Thanh danh khi lệch một bậc ở vòng phân loại thường (mặc định 8).
   trialCostNear         Int?
   /// Hao Thanh danh khi lệch hai bậc ở vòng phân loại thường (mặc định 25).
@@ -1873,6 +1875,8 @@ model PTLevel {
   trialDeclaredPassBonus  Int?
   /// Trần ngưỡng đạt của vòng khai (mặc định 95).
   trialDeclaredPassCap    Int?
+  /// Thanh danh khởi điểm của vòng khai. Bỏ trống = theo vòng thường.
+  trialDeclaredHonorStart Int?
   /// Hao Thanh danh khi lệch một bậc ở vòng khai (mặc định 8).
   trialDeclaredCostNear   Int?
   /// Hao Thanh danh khi lệch hai bậc ở vòng khai (mặc định 25).

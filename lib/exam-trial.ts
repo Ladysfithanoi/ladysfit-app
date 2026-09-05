@@ -268,9 +268,11 @@ export const MEAL_KIND_LABEL: Record<MealKind, string> = {
 // hình riêng của vòng đã khai đều đặt lại được hai trong ba, mà cái đặt lại thì
 // phải khai báo sau cái nó đặt lại.
 //
-// HONOR_START chưa cho chỉnh: thanh vẽ theo phần trăm nên đổi mốc đầy là phải
-// sửa cả cách vẽ, và không ai đòi thanh dài 150.
+// Cả ba đều đặt lại được theo cấp, và vòng đã khai còn đặt lại được lần nữa.
+// Mốc đầy KHÔNG còn là 100 cố định, nên mọi chỗ vẽ thanh phải chia cho mốc đầy
+// của vòng đang chơi chứ không coi con số Thanh danh là phần trăm.
 
+/** Mốc đầy mặc định. Cấp không đặt riêng thì thanh vẫn bắt đầu từ đây. */
 export const HONOR_START = 100;
 export const HONOR_COST_NEAR = 8;
 export const HONOR_COST_FAR = 25;
@@ -300,6 +302,8 @@ export type TrialSetup = {
   cardsPerRound: number;
   /** Số hồ sơ phát ra ở mỗi vòng case study. */
   itemsPerCase: number;
+  /** Thanh danh khởi điểm của một vòng phân loại. */
+  honorStart: number;
   /** Hao Thanh danh khi lệch một bậc ở vòng thường. */
   costNear: number;
   /** Hao Thanh danh khi lệch hai bậc ở vòng thường. */
@@ -316,6 +320,7 @@ export const TRIAL_SETUP_DEFAULT: TrialSetup = {
   caseRounds: 1,
   cardsPerRound: TRIAL_CARDS_PER_ROUND,
   itemsPerCase: TRIAL_BRIEFS_PER_ROUND,
+  honorStart: HONOR_START,
   costNear: HONOR_COST_NEAR,
   costFar: HONOR_COST_FAR,
   streakTiers: [],
@@ -327,6 +332,7 @@ export const TRIAL_SETUP_LIMITS = {
   caseRounds: { min: 0, max: 7 },
   cardsPerRound: { min: 3, max: 50 },
   itemsPerCase: { min: 1, max: 10 },
+  honorStart: { min: 10, max: 500 },
   costNear: { min: 0, max: 100 },
   costFar: { min: 0, max: 100 },
 } as const;
@@ -342,6 +348,7 @@ export function trialSetupFor(level: {
   trialCaseRounds?: number | null;
   trialCardsPerRound?: number | null;
   trialItemsPerCase?: number | null;
+  trialHonorStart?: number | null;
   trialCostNear?: number | null;
   trialCostFar?: number | null;
   trialStreakTiers?: string | null;
@@ -368,6 +375,7 @@ export function trialSetupFor(level: {
       level?.trialItemsPerCase, TRIAL_SETUP_DEFAULT.itemsPerCase,
       L.itemsPerCase.min, L.itemsPerCase.max
     ),
+    honorStart: clamp(level?.trialHonorStart, TRIAL_SETUP_DEFAULT.honorStart, L.honorStart.min, L.honorStart.max),
     costNear: clamp(level?.trialCostNear, TRIAL_SETUP_DEFAULT.costNear, L.costNear.min, L.costNear.max),
     costFar: clamp(level?.trialCostFar, TRIAL_SETUP_DEFAULT.costFar, L.costFar.min, L.costFar.max),
     streakTiers: parseStreakTiers(level?.trialStreakTiers),
@@ -418,6 +426,8 @@ export type DeclaredSetup = {
   passBonus: number;
   /** Trần ngưỡng đạt của vòng khai — chặn cộng lên tới mức không ai qua nổi. */
   passCap: number;
+  /** Thanh danh khởi điểm của vòng khai. */
+  honorStart: number;
   /** Hao Thanh danh khi lệch một bậc ở vòng khai. */
   costNear: number;
   /** Hao Thanh danh khi lệch hai bậc ở vòng khai. */
@@ -431,6 +441,7 @@ export const DECLARED_SETUP_DEFAULT: DeclaredSetup = {
   mustPass: true,
   passBonus: DECLARED_PASS_BONUS,
   passCap: DECLARED_PASS_CAP,
+  honorStart: HONOR_START,
   costNear: HONOR_COST_NEAR,
   costFar: HONOR_COST_FAR,
   streakTiers: [],
@@ -442,6 +453,7 @@ export const DECLARED_SETUP_LIMITS = {
   passBonus: { min: 0, max: 50 },
   /** Sàn 50: đặt trần thấp hơn thế thì vòng khai dễ hơn vòng thường, vô nghĩa. */
   passCap: { min: 50, max: 100 },
+  honorStart: { min: 10, max: 500 },
   costNear: { min: 0, max: 100 },
   costFar: { min: 0, max: 100 },
 } as const;
@@ -454,10 +466,12 @@ export const DECLARED_SETUP_LIMITS = {
  * thì vòng khai phải là 12/35, chứ không thể hoá ra nhẹ hơn vòng thường.
  */
 export function declaredSetupFor(level: {
-  /** Mức của vòng thường ở cấp này — dùng làm mặc định cho hai ô hao thẻ. */
+  /** Mức của vòng thường ở cấp này — dùng làm mặc định cho ba ô thanh Thanh danh. */
+  trialHonorStart?: number | null;
   trialCostNear?: number | null;
   trialCostFar?: number | null;
   trialDeclaredMultiplier?: number | null;
+  trialDeclaredHonorStart?: number | null;
   trialDeclaredMustPass?: boolean | null;
   trialDeclaredPassBonus?: number | null;
   trialDeclaredPassCap?: number | null;
@@ -478,6 +492,7 @@ export function declaredSetupFor(level: {
     mustPass: level?.trialDeclaredMustPass ?? DECLARED_SETUP_DEFAULT.mustPass,
     passBonus: clamp(level?.trialDeclaredPassBonus, DECLARED_SETUP_DEFAULT.passBonus, L.passBonus.min, L.passBonus.max),
     passCap: clamp(level?.trialDeclaredPassCap, DECLARED_SETUP_DEFAULT.passCap, L.passCap.min, L.passCap.max),
+    honorStart: clamp(level?.trialDeclaredHonorStart, base.honorStart, L.honorStart.min, L.honorStart.max),
     costNear: clamp(level?.trialDeclaredCostNear, base.costNear, L.costNear.min, L.costNear.max),
     costFar: clamp(level?.trialDeclaredCostFar, base.costFar, L.costFar.min, L.costFar.max),
     streakTiers: parseStreakTiers(level?.trialDeclaredStreakTiers),
@@ -1015,19 +1030,22 @@ export function streakPenaltyAt(streak: number, tiers: StreakTier[]): number {
  * thì sớm muộn có chỗ truyền hai số của vòng khai kèm bảng mốc của vòng thường.
  */
 export type HonorRules = {
+  /** Mốc đầy của thanh — mọi chỗ vẽ phải chia cho nó, không coi là phần trăm. */
+  start: number;
   costNear: number;
   costFar: number;
   tiers: StreakTier[];
 };
 
 export const HONOR_RULES_DEFAULT: HonorRules = {
+  start: HONOR_START,
   costNear: HONOR_COST_NEAR,
   costFar: HONOR_COST_FAR,
   tiers: [],
 };
 
 /** Phần cấu hình của CẤP mà thanh Thanh danh cần — lấy sẵn từ TrialSetup. */
-export type HonorBase = Pick<TrialSetup, "costNear" | "costFar" | "streakTiers">;
+export type HonorBase = Pick<TrialSetup, "honorStart" | "costNear" | "costFar" | "streakTiers">;
 
 /**
  * Vòng này chạy luật nào: vòng thường dùng hai số gốc + bảng mốc của cấp; vòng
@@ -1044,10 +1062,11 @@ export function honorRulesFor(opts: {
 }): HonorRules {
   const { base } = opts;
   if (!opts.declared) {
-    return { costNear: base.costNear, costFar: base.costFar, tiers: base.streakTiers };
+    return { start: base.honorStart, costNear: base.costNear, costFar: base.costFar, tiers: base.streakTiers };
   }
   const d = opts.declaredSetup;
   return {
+    start: d.honorStart,
     costNear: d.costNear,
     costFar: d.costFar,
     tiers: d.streakTiers.length > 0 ? d.streakTiers : base.streakTiers,
@@ -1080,7 +1099,7 @@ export function honorRun(
   results: { answer: SortZone | null; ratio: number }[],
   rules: HonorRules = HONOR_RULES_DEFAULT,
 ): { steps: HonorStep[]; left: number } {
-  let left = HONOR_START;
+  let left = rules.start;
   let streak = 0;
   const steps: HonorStep[] = [];
 

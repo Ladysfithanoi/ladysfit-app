@@ -234,6 +234,7 @@ export async function computeTrial(
   const levelRow = await prisma.pTLevel.findUnique({
     where: { id: levelId },
     select: {
+      trialHonorStart: true,
       trialCostNear: true,
       trialCostFar: true,
       trialStreakTiers: true,
@@ -241,6 +242,7 @@ export async function computeTrial(
       trialDeclaredMustPass: true,
       trialDeclaredPassBonus: true,
       trialDeclaredPassCap: true,
+      trialDeclaredHonorStart: true,
       trialDeclaredCostNear: true,
       trialDeclaredCostFar: true,
       trialDeclaredStreakTiers: true,

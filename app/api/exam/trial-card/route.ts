@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
           // chặn thẻ ở dưới phải đọc đúng bộ luật đang chạy.
           level: {
             select: {
+              trialHonorStart: true,
               trialCostNear: true,
               trialCostFar: true,
               trialStreakTiers: true,
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
               trialDeclaredMustPass: true,
               trialDeclaredPassBonus: true,
               trialDeclaredPassCap: true,
+              trialDeclaredHonorStart: true,
               trialDeclaredCostNear: true,
               trialDeclaredCostFar: true,
               trialDeclaredStreakTiers: true,

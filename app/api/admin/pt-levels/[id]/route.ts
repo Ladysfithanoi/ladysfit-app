@@ -27,7 +27,8 @@ export async function PUT(
     trialCaseRounds?: number | null;
     trialCardsPerRound?: number | null;
     trialItemsPerCase?: number | null;
-    /** Hao Thanh danh mỗi thẻ ở vòng thường. */
+    /** Thanh Thanh danh ở vòng thường: mốc đầy và hao mỗi thẻ. */
+    trialHonorStart?: number | null;
     trialCostNear?: number | null;
     trialCostFar?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
@@ -37,6 +38,7 @@ export async function PUT(
     trialDeclaredMustPass?: boolean | null;
     trialDeclaredPassBonus?: number | null;
     trialDeclaredPassCap?: number | null;
+    trialDeclaredHonorStart?: number | null;
     trialDeclaredCostNear?: number | null;
     trialDeclaredCostFar?: number | null;
     trialDeclaredStreakTiers?: unknown;
@@ -66,6 +68,7 @@ export async function PUT(
       ...(body.trialCaseRounds !== undefined && { trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds") }),
       ...(body.trialCardsPerRound !== undefined && { trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound") }),
       ...(body.trialItemsPerCase !== undefined && { trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase") }),
+      ...(body.trialHonorStart !== undefined && { trialHonorStart: trialField(body.trialHonorStart, "honorStart") }),
       ...(body.trialCostNear !== undefined && { trialCostNear: trialField(body.trialCostNear, "costNear") }),
       ...(body.trialCostFar !== undefined && { trialCostFar: trialField(body.trialCostFar, "costFar") }),
       ...(body.trialStreakTiers !== undefined && { trialStreakTiers: trialStreakTiersField(body.trialStreakTiers) }),
@@ -77,6 +80,7 @@ export async function PUT(
       }),
       ...(body.trialDeclaredPassBonus !== undefined && { trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus") }),
       ...(body.trialDeclaredPassCap !== undefined && { trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap") }),
+      ...(body.trialDeclaredHonorStart !== undefined && { trialDeclaredHonorStart: declaredField(body.trialDeclaredHonorStart, "honorStart") }),
       ...(body.trialDeclaredCostNear !== undefined && { trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear") }),
       ...(body.trialDeclaredCostFar !== undefined && { trialDeclaredCostFar: declaredField(body.trialDeclaredCostFar, "costFar") }),
       ...(body.trialDeclaredStreakTiers !== undefined && { trialDeclaredStreakTiers: trialStreakTiersField(body.trialDeclaredStreakTiers) }),
