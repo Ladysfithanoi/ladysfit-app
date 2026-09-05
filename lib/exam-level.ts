@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { TRIAL_SETUP_LIMITS } from "@/lib/exam-trial";
 
 /**
  * ── Đề thi theo cấp độ ───────────────────────────────────────────────────────
@@ -190,4 +191,18 @@ export async function questionCountByLevel(): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const r of rows) out[r.levelId] = r._count._all;
   return out;
+}
+/**
+ * Một ô cấu hình đề thử thách do Admin nhập → số hợp lệ, hoặc null.
+ *
+ * Rỗng/không phải số = null = dùng số mặc định. Số ngoài khoảng thì KẸP về biên
+ * chứ không từ chối: Admin gõ 99 vòng thì nhận 7, còn hơn là báo lỗi rồi mất
+ * luôn mấy ô vừa điền.
+ */
+export function trialField(raw: unknown, key: keyof typeof TRIAL_SETUP_LIMITS): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+  if (!Number.isFinite(n)) return null;
+  const { min, max } = TRIAL_SETUP_LIMITS[key];
+  return Math.max(min, Math.min(max, Math.round(n)));
 }

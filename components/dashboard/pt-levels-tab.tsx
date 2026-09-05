@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2 } from "lucide-react";
 import { AlertDialog } from "@/components/ui/alert-dialog";
+import { TRIAL_SETUP_DEFAULT, TRIAL_SETUP_LIMITS } from "@/lib/exam-trial";
 
 type WorkoutPhase = {
   id: string;
@@ -32,6 +33,10 @@ type PTLevel = {
   examPassingScore: number | null;
   // FLAT = trắc nghiệm phẳng; TRIAL = đề thử thách nhiều vòng (7 đại tội).
   examFormat: "FLAT" | "TRIAL";
+  trialRoundsPerAttempt: number | null;
+  trialCaseRounds: number | null;
+  trialCardsPerRound: number | null;
+  trialItemsPerCase: number | null;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -54,6 +59,14 @@ const PRESET_COLORS = [
   { value: "#eab308", label: "Vàng" },
   { value: "#6b7280", label: "Xám" },
 ];
+
+/** Ô nhập nào ứng với giới hạn nào trong TRIAL_SETUP_LIMITS. */
+const TRIAL_KEY = {
+  trialRoundsPerAttempt: "roundsPerAttempt",
+  trialCaseRounds: "caseRounds",
+  trialCardsPerRound: "cardsPerRound",
+  trialItemsPerCase: "itemsPerCase",
+} as const;
 
 const inputCls =
   "w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
@@ -95,6 +108,10 @@ export function PTLevelsTab() {
     examNumQuestions: "",
     examPassingScore: "",
     examFormat: "FLAT" as "FLAT" | "TRIAL",
+    trialRoundsPerAttempt: "",
+    trialCaseRounds: "",
+    trialCardsPerRound: "",
+    trialItemsPerCase: "",
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -176,7 +193,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -192,6 +209,10 @@ export function PTLevelsTab() {
       examNumQuestions: level.examNumQuestions == null ? "" : String(level.examNumQuestions),
       examPassingScore: level.examPassingScore == null ? "" : String(level.examPassingScore),
       examFormat: level.examFormat,
+      trialRoundsPerAttempt: level.trialRoundsPerAttempt == null ? "" : String(level.trialRoundsPerAttempt),
+      trialCaseRounds: level.trialCaseRounds == null ? "" : String(level.trialCaseRounds),
+      trialCardsPerRound: level.trialCardsPerRound == null ? "" : String(level.trialCardsPerRound),
+      trialItemsPerCase: level.trialItemsPerCase == null ? "" : String(level.trialItemsPerCase),
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -218,6 +239,10 @@ export function PTLevelsTab() {
             examNumQuestions: form.examNumQuestions === "" ? null : Number(form.examNumQuestions),
             examPassingScore: form.examPassingScore === "" ? null : Number(form.examPassingScore),
             examFormat: form.examFormat,
+            trialRoundsPerAttempt: form.trialRoundsPerAttempt === "" ? null : Number(form.trialRoundsPerAttempt),
+            trialCaseRounds: form.trialCaseRounds === "" ? null : Number(form.trialCaseRounds),
+            trialCardsPerRound: form.trialCardsPerRound === "" ? null : Number(form.trialCardsPerRound),
+            trialItemsPerCase: form.trialItemsPerCase === "" ? null : Number(form.trialItemsPerCase),
             isDefault: form.isDefault,
           }),
         });
@@ -555,6 +580,44 @@ export function PTLevelsTab() {
               {/* Điều kiện thăng hạng */}
               <div className="space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50">
                 <p className="text-xs font-bold text-gray-600">Điều kiện để thăng lên cấp kế tiếp</p>
+                {/* Cấu hình đề thử thách — chỉ hiện khi cấp này thật sự dùng dạng
+                    đề đó. Bốn con số này trước đây nằm trong mã nguồn, mỗi lần
+                    muốn đổi độ dài bài thi lại phải sửa mã và deploy. */}
+                {form.examFormat === "TRIAL" && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 space-y-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500">
+                      Cấu hình đề thử thách
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        ["trialRoundsPerAttempt", "Số đại tội mỗi lượt", TRIAL_SETUP_DEFAULT.roundsPerAttempt],
+                        ["trialCaseRounds", "Trong đó là Case Study", TRIAL_SETUP_DEFAULT.caseRounds],
+                        ["trialCardsPerRound", "Thẻ mỗi vòng phân loại", TRIAL_SETUP_DEFAULT.cardsPerRound],
+                        ["trialItemsPerCase", "Hồ sơ mỗi vòng Case Study", TRIAL_SETUP_DEFAULT.itemsPerCase],
+                      ] as const).map(([key, label, dflt]) => (
+                        <div key={key} className="space-y-1">
+                          <label className="text-[11px] font-semibold text-gray-500">{label}</label>
+                          <input
+                            type="number"
+                            min={TRIAL_SETUP_LIMITS[TRIAL_KEY[key]].min}
+                            max={TRIAL_SETUP_LIMITS[TRIAL_KEY[key]].max}
+                            placeholder={`Mặc định ${dflt}`}
+                            value={form[key]}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                            className={inputCls}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] leading-snug text-gray-400">
+                      Ví dụ: 3 đại tội mỗi lượt, trong đó 1 Case Study — người thi làm 1 vòng dựng
+                      khay ăn hoặc dựng giáo án, cộng 2 vòng phân loại tình huống. Vòng của tội đã
+                      khai luôn đứng đầu và tính vào số này. Bỏ trống ô nào thì dùng số mặc định.
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-gray-500">DS TB tối thiểu (triệu/tháng)</label>

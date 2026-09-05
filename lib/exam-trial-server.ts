@@ -5,9 +5,10 @@ import { parseQuestionIds } from "@/lib/exam-session";
 import {
   gradeMealBrief, gradeSortCard, scoreRound, scoreTrial, sortPillar,
   parseTrialState, readMealEntries, readSortAnswer, readProgramEntries,
-  applyDeclaredSin, declaredTolerance, TRIAL_ROUNDS_PER_ATTEMPT, honorAfter,
+  applyDeclaredSin, declaredTolerance, honorAfter, isCaseRound,
+  TRIAL_SETUP_DEFAULT, type TrialSetup,
   gradeProgramCase, type ProgramEntry,
-  TRIAL_CARDS_PER_ROUND, TRIAL_BRIEFS_PER_ROUND, TRIAL_CARD_MIX, SORT_ZONES,
+  TRIAL_CARD_MIX, SORT_ZONES,
   TRIAL_BRIEF_MIX, MEAL_KINDS, type MealKind,
   type MealEntry, type Pillar, type RoundScore, type Sin, type SortZone, type TrialScore,
 } from "@/lib/exam-trial";
@@ -36,7 +37,11 @@ export function parseStringList(raw: string | null): string[] {
  * ngân hàng 50 thẻ mà gửi hết thì mở F12 là đọc được 37 thẻ chưa hỏi tới.
  * pinnedItemIds có giá trị thì dùng lại đúng bộ cũ (F5 giữa chừng).
  */
-export async function loadTrialForCandidate(levelId: string, pinnedItemIds: string[] | null = null) {
+export async function loadTrialForCandidate(
+  levelId: string,
+  pinnedItemIds: string[] | null = null,
+  setup: TrialSetup = TRIAL_SETUP_DEFAULT
+) {
   const raw = await prisma.examRound.findMany({
     where: { levelId, isActive: true },
     orderBy: { order: "asc" },
@@ -49,8 +54,9 @@ export async function loadTrialForCandidate(levelId: string, pinnedItemIds: stri
 
   const rounds = raw.map((r) => ({
     ...r,
-    mealBriefs: pickMealBriefs(r.mealBriefs, pinnedItemIds),
-    sortCards: pickSortCards(r.sortCards, pinnedItemIds),
+    mealBriefs: pickMealBriefs(r.mealBriefs, pinnedItemIds, setup.itemsPerCase),
+    sortCards: pickSortCards(r.sortCards, pinnedItemIds, setup.cardsPerRound),
+    programCases: pickProgramCases(r.programCases, pinnedItemIds, setup.itemsPerCase),
   }));
 
   return rounds.map((r) => ({
@@ -594,7 +600,7 @@ function byPinnedOrder<T extends { id: string }>(items: T[], pinned: string[]): 
 export function pickSortCards<T extends { id: string; correctZone: SortZone }>(
   cards: T[],
   pinned: string[] | null,
-  limit: number = TRIAL_CARDS_PER_ROUND
+  limit: number = TRIAL_SETUP_DEFAULT.cardsPerRound
 ): T[] {
   if (pinned && pinned.length > 0) {
     const kept = byPinnedOrder(cards, pinned);
@@ -620,7 +626,7 @@ export function pickSortCards<T extends { id: string; correctZone: SortZone }>(
 export function pickProgramCases<T extends { id: string }>(
   cases: T[],
   pinned: string[] | null,
-  limit: number = TRIAL_BRIEFS_PER_ROUND
+  limit: number = TRIAL_SETUP_DEFAULT.itemsPerCase
 ): T[] {
   if (pinned && pinned.length > 0) {
     const kept = byPinnedOrder(cases, pinned);
@@ -639,7 +645,7 @@ export function pickProgramCases<T extends { id: string }>(
 export function pickMealBriefs<T extends { id: string; kind?: MealKind | null }>(
   briefs: T[],
   pinned: string[] | null,
-  limit: number = TRIAL_BRIEFS_PER_ROUND
+  limit: number = TRIAL_SETUP_DEFAULT.itemsPerCase
 ): T[] {
   if (pinned && pinned.length > 0) {
     const kept = byPinnedOrder(briefs, pinned);
@@ -667,8 +673,9 @@ export function pickMealBriefs<T extends { id: string; kind?: MealKind | null }>
  *
  *   • Vòng của tội ĐÃ KHAI luôn đứng đầu — thí sinh tự nhận mình yếu ở đâu thì
  *     phải đối mặt với đúng chỗ đó trước, và vòng ấy bắt buộc phải qua.
- *   • Những vòng còn lại bốc NGẪU NHIÊN cho đủ số. Không ai đoán được kỳ này
- *     rơi vào tội nào, nên ôn tủ hay mách nhau thứ tự đều vô nghĩa.
+ *   • Những vòng còn lại bốc NGẪU NHIÊN cho đủ số, THEO ĐÚNG TỈ LỆ Admin đặt:
+ *     bao nhiêu vòng case study, còn lại là vòng phân loại (xem trialSetupFor).
+ *     Không ai đoán được kỳ này rơi vào tội nào, nên ôn tủ là vô nghĩa.
  *
  * Bộ vòng đã bốc được CHỐT vào lượt thi ngay lần mở đề đầu tiên và tái dùng ở
  * mọi lần tải sau: F5 không phải là cách bốc lại cho tới khi ra đề dễ. Đúng
@@ -678,11 +685,11 @@ export function pickMealBriefs<T extends { id: string; kind?: MealKind | null }>
  * khi đã chốt thì không nhét thêm vào: đề đổi giữa kỳ không được làm dài thêm
  * lượt thi mà người ta đang ngồi làm dở.
  */
-export function pickTrialRounds<T extends { id: string; sin: string | null }>(
+export function pickTrialRounds<T extends { id: string; sin: string | null; type: string }>(
   rounds: T[],
   declaredSin: string | null,
   pinnedJson?: string | null,
-  limit: number = TRIAL_ROUNDS_PER_ATTEMPT,
+  setup: TrialSetup = TRIAL_SETUP_DEFAULT,
 ): T[] {
   const byId = new Map(rounds.map((r) => [r.id, r]));
 
@@ -704,9 +711,25 @@ export function pickTrialRounds<T extends { id: string; sin: string | null }>(
   const declared = declaredSin ? rounds.filter((r) => r.sin === declaredSin) : [];
   const declaredIds = new Set(declared.map((r) => r.id));
   const rest = rounds.filter((r) => !declaredIds.has(r.id));
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
+
+  // Vòng đã khai đã chiếm sẵn một suất, và nếu nó là case study thì nó cũng
+  // chiếm luôn một suất case study.
+  const caseUsed = declared.filter((r) => isCaseRound(r.type)).length;
+  const needCase = Math.max(0, setup.caseRounds - caseUsed);
+  const needSort = Math.max(0, setup.roundsPerAttempt - declared.length - needCase);
+
+  const cases = shuffled(rest.filter((r) => isCaseRound(r.type)));
+  const sorts = shuffled(rest.filter((r) => !isCaseRound(r.type)));
+
+  const chosen = [...cases.slice(0, needCase), ...sorts.slice(0, needSort)];
+
+  // Ngân hàng thiếu loại nào thì bù bằng loại còn lại — đề đang soạn dở vẫn thi
+  // được, chỉ là tỉ lệ chưa đúng ý Admin.
+  if (chosen.length < setup.roundsPerAttempt - declared.length) {
+    const takenIds = new Set(chosen.map((r) => r.id));
+    const spare = shuffled(rest.filter((r) => !takenIds.has(r.id)));
+    chosen.push(...spare.slice(0, setup.roundsPerAttempt - declared.length - chosen.length));
   }
-  return [...declared, ...rest].slice(0, Math.max(1, limit));
+
+  return [...declared, ...shuffled(chosen)].slice(0, Math.max(1, setup.roundsPerAttempt));
 }

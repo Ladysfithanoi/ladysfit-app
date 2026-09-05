@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeExamNumQuestions, normalizeExamPassingScore } from "@/lib/exam-level";
+import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField } from "@/lib/exam-level";
 
 export async function PUT(
   req: Request,
@@ -23,6 +23,10 @@ export async function PUT(
     examNumQuestions?: number | null;
     examPassingScore?: number | null;
     examFormat?: "FLAT" | "TRIAL";
+    trialRoundsPerAttempt?: number | null;
+    trialCaseRounds?: number | null;
+    trialCardsPerRound?: number | null;
+    trialItemsPerCase?: number | null;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -44,6 +48,11 @@ export async function PUT(
       ...(body.examNumQuestions !== undefined && { examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions) }),
       ...(body.examPassingScore !== undefined && { examPassingScore: normalizeExamPassingScore(body.examPassingScore) }),
       ...((body.examFormat === "FLAT" || body.examFormat === "TRIAL") && { examFormat: body.examFormat }),
+      // Cấu hình đề thử thách: gửi lên rỗng = quay về số mặc định.
+      ...(body.trialRoundsPerAttempt !== undefined && { trialRoundsPerAttempt: trialField(body.trialRoundsPerAttempt, "roundsPerAttempt") }),
+      ...(body.trialCaseRounds !== undefined && { trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds") }),
+      ...(body.trialCardsPerRound !== undefined && { trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound") }),
+      ...(body.trialItemsPerCase !== undefined && { trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase") }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

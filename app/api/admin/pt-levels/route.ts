@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeExamNumQuestions, normalizeExamPassingScore } from "@/lib/exam-level";
+import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -48,6 +48,10 @@ export async function POST(req: Request) {
     examNumQuestions?: number | null;
     examPassingScore?: number | null;
     examFormat?: "FLAT" | "TRIAL";
+    trialRoundsPerAttempt?: number | null;
+    trialCaseRounds?: number | null;
+    trialCardsPerRound?: number | null;
+    trialItemsPerCase?: number | null;
     isDefault?: boolean;
     phaseIds?: string[];
   };
@@ -76,6 +80,11 @@ export async function POST(req: Request) {
       examNumQuestions: normalizeExamNumQuestions(body.examNumQuestions),
       examPassingScore: normalizeExamPassingScore(body.examPassingScore),
       examFormat: body.examFormat === "TRIAL" ? "TRIAL" : "FLAT",
+      // Cấu hình đề thử thách: bỏ trống = dùng số mặc định (xem trialSetupFor).
+      trialRoundsPerAttempt: trialField(body.trialRoundsPerAttempt, "roundsPerAttempt"),
+      trialCaseRounds: trialField(body.trialCaseRounds, "caseRounds"),
+      trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound"),
+      trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase"),
       isDefault: body.isDefault ?? false,
       phaseAccess: body.phaseIds?.length
         ? { create: body.phaseIds.map((phaseId) => ({ phaseId, hasAccess: true })) }

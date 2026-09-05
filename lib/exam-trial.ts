@@ -261,6 +261,81 @@ export const MEAL_KIND_LABEL: Record<MealKind, string> = {
   SPECIAL: "Có ràng buộc bắt buộc",
 };
 
+/**
+ * CẤU HÌNH ĐỀ THỬ THÁCH của một cấp — bốn con số Admin chỉnh được ở Cài đặt →
+ * Cấp độ, không phải sửa mã.
+ *
+ * Bỏ trống ô nào thì dùng số mặc định ở đây. Bốn hằng dưới là mặc định, KHÔNG
+ * còn là luật cứng: luật cứng nằm ở cái Admin đặt cho từng cấp.
+ */
+export type TrialSetup = {
+  /** Mỗi lượt thi bốc bao nhiêu đại tội. */
+  roundsPerAttempt: number;
+  /** Trong số đó bao nhiêu vòng là CASE STUDY; phần còn lại là vòng phân loại. */
+  caseRounds: number;
+  /** Số thẻ phát ra ở mỗi vòng phân loại. */
+  cardsPerRound: number;
+  /** Số hồ sơ phát ra ở mỗi vòng case study. */
+  itemsPerCase: number;
+};
+
+export const TRIAL_SETUP_DEFAULT: TrialSetup = {
+  roundsPerAttempt: TRIAL_ROUNDS_PER_ATTEMPT,
+  caseRounds: 1,
+  cardsPerRound: TRIAL_CARDS_PER_ROUND,
+  itemsPerCase: TRIAL_BRIEFS_PER_ROUND,
+};
+
+/** Giới hạn cho ô nhập của Admin — đặt số vô lý thì bài thi vỡ chứ không báo gì. */
+export const TRIAL_SETUP_LIMITS = {
+  roundsPerAttempt: { min: 1, max: 7 },
+  caseRounds: { min: 0, max: 7 },
+  cardsPerRound: { min: 3, max: 50 },
+  itemsPerCase: { min: 1, max: 10 },
+} as const;
+
+/**
+ * Đọc cấu hình của một cấp, đã kẹp về khoảng hợp lệ.
+ *
+ * caseRounds không bao giờ vượt quá roundsPerAttempt: đặt "5 case study trong đề
+ * 3 vòng" thì phần thừa bị bỏ, không làm vỡ lần bốc nào.
+ */
+export function trialSetupFor(level: {
+  trialRoundsPerAttempt?: number | null;
+  trialCaseRounds?: number | null;
+  trialCardsPerRound?: number | null;
+  trialItemsPerCase?: number | null;
+} | null | undefined): TrialSetup {
+  const clamp = (v: number | null | undefined, d: number, lo: number, hi: number) =>
+    v == null || !Number.isFinite(v) ? d : Math.max(lo, Math.min(hi, Math.round(v)));
+
+  const L = TRIAL_SETUP_LIMITS;
+  const roundsPerAttempt = clamp(
+    level?.trialRoundsPerAttempt, TRIAL_SETUP_DEFAULT.roundsPerAttempt,
+    L.roundsPerAttempt.min, L.roundsPerAttempt.max
+  );
+  return {
+    roundsPerAttempt,
+    caseRounds: Math.min(
+      roundsPerAttempt,
+      clamp(level?.trialCaseRounds, TRIAL_SETUP_DEFAULT.caseRounds, L.caseRounds.min, L.caseRounds.max)
+    ),
+    cardsPerRound: clamp(
+      level?.trialCardsPerRound, TRIAL_SETUP_DEFAULT.cardsPerRound,
+      L.cardsPerRound.min, L.cardsPerRound.max
+    ),
+    itemsPerCase: clamp(
+      level?.trialItemsPerCase, TRIAL_SETUP_DEFAULT.itemsPerCase,
+      L.itemsPerCase.min, L.itemsPerCase.max
+    ),
+  };
+}
+
+/** Vòng này là CASE STUDY hay vòng phân loại? */
+export function isCaseRound(type: string): boolean {
+  return type === "MEAL" || type === "PROGRAM";
+}
+
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
 

@@ -15,6 +15,7 @@ import {
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
 import { loadTrialForCandidate, gradeTrialAttempt, pickTrialRounds, sortCardOutcomes } from "@/lib/exam-trial-server";
+import { trialSetupFor } from "@/lib/exam-trial";
 import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
@@ -112,9 +113,23 @@ export async function GET(req: Request) {
   if (format === "TRIAL" && levelId) {
     // Đã có bộ thẻ chốt từ lần mở trước thì dùng lại đúng bộ đó; chưa có thì
     // bốc mới (13 thẻ trong ngân hàng ~50 của mỗi vòng).
+    // Cấu hình đề của chính cấp này — số vòng, tỉ lệ case study, số mục mỗi
+    // vòng. Admin đặt ở Cài đặt → Cấp độ, không phải sửa mã.
+    const levelSetup = await prisma.pTLevel.findUnique({
+      where: { id: levelId },
+      select: {
+        trialRoundsPerAttempt: true,
+        trialCaseRounds: true,
+        trialCardsPerRound: true,
+        trialItemsPerCase: true,
+      },
+    });
+    const setup = trialSetupFor(levelSetup);
+
     const rounds = await loadTrialForCandidate(
       levelId,
-      parseQuestionIds(examSession?.trialItemIds)
+      parseQuestionIds(examSession?.trialItemIds),
+      setup
     );
     if (rounds.length === 0) {
       return NextResponse.json({ error: emptyTrialMessage(levelName) }, { status: 400 });
@@ -183,7 +198,7 @@ export async function GET(req: Request) {
     // Bộ vòng CHỐT vào lượt thi ngay lần đầu, tái dùng ở mọi lần tải sau: F5
     // không phải là cách bốc lại cho tới khi ra đề dễ. Cùng cách đề trắc nghiệm
     // ghim đề đã bốc — chính là công dụng của questionIds.
-    const orderedRounds = pickTrialRounds(rounds, declaredSin, examSession?.questionIds);
+    const orderedRounds = pickTrialRounds(rounds, declaredSin, examSession?.questionIds, setup);
     if (!mock && examSession && parseQuestionIds(examSession.questionIds).length === 0) {
       // Chốt CẢ HAI: bộ vòng, và bộ thẻ/hồ sơ của đúng những vòng đó theo đúng
       // thứ tự đang trình bày. Thứ tự phải giữ vì thanh Thanh danh trừ theo

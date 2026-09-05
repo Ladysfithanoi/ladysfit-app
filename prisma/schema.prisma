@@ -1840,6 +1840,17 @@ model PTLevel {
   // Đề của cấp này thuộc dạng nào: trắc nghiệm phẳng, hay nhiều vòng chơi.
   // Đổi dạng là đổi hẳn trang làm bài — xem enum ExamFormat.
   examFormat           ExamFormat         @default(FLAT)
+  // ── Cấu hình đề THỬ THÁCH của cấp này ────────────────────────────────────
+  // Bốn con số quyết định một lượt thi dài bao nhiêu và gồm những gì. Bỏ trống =
+  // dùng số mặc định trong lib/exam-trial.ts. Xem trialSetupFor().
+  /// Mỗi lượt thi bốc bao nhiêu đại tội.
+  trialRoundsPerAttempt Int?
+  /// Trong số đó bao nhiêu vòng là CASE STUDY; phần còn lại là vòng phân loại.
+  trialCaseRounds       Int?
+  /// Số thẻ phát ra ở mỗi vòng phân loại.
+  trialCardsPerRound    Int?
+  /// Số hồ sơ phát ra ở mỗi vòng case study.
+  trialItemsPerCase     Int?
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]

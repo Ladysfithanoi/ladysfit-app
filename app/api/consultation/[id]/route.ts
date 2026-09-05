@@ -132,6 +132,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   // Upsert info (step 1)
   if (info) {
+    // NGÀY TƯ VẤN — thời điểm ghi nhận khách đăng ký — CHỈ ADMIN được sửa.
+    //
+    // Ngày này quyết định hồ sơ rơi vào kỳ nào, mà kỳ thì kéo theo doanh số và
+    // bảng lương. Ai cũng sửa được thì chỉ cần lùi vài ngày là một hợp đồng nhảy
+    // sang tháng khác. Ô nhập ở giao diện đã khoá với người không phải Admin,
+    // nhưng khoá ở trình duyệt không phải là quyền — chặn thật nằm ở đây.
+    const infoPatch = info as Record<string, unknown>;
+    if (session.user.role !== "ADMIN" && "consultDate" in infoPatch) {
+      const current = await prisma.consultationInfo.findUnique({
+        where: { consultationId: params.id },
+        select: { consultDate: true },
+      });
+      // Hồ sơ mới chưa có gì thì vẫn cho đặt lần đầu; đã có rồi thì giữ nguyên.
+      if (current) infoPatch.consultDate = current.consultDate;
+    }
+
     await prisma.consultationInfo.upsert({
       where: { consultationId: params.id },
       create: { consultationId: params.id, ...info },

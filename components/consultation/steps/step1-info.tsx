@@ -267,8 +267,20 @@ export function Step1Info({
             <Field label="Ngày sinh">
               <input type="date" lang="vi" name="dateOfBirth" defaultValue={isoToYMD(info?.dateOfBirth as string | undefined)} disabled={fieldsDisabled} className={inputCls} />
             </Field>
+            {/* Ngày tư vấn quyết định hồ sơ rơi vào kỳ nào, mà kỳ kéo theo doanh
+                số và bảng lương — chỉ Admin được sửa. Máy chủ chặn lại lần nữa. */}
             <Field label="Ngày tư vấn (dd/mm/yyyy)">
-              <input name="consultDate" defaultValue={defaultConsultDate} disabled={fieldsDisabled} placeholder="dd/mm/yyyy" className={inputCls} />
+              <input
+                name="consultDate"
+                defaultValue={defaultConsultDate}
+                disabled={!isAdmin || fieldsDisabled}
+                placeholder="dd/mm/yyyy"
+                title={isAdmin ? undefined : "Chỉ Admin được sửa ngày tư vấn"}
+                className={inputCls}
+              />
+              {!isAdmin && (
+                <p className="mt-1 text-[11px] font-semibold text-gray-400">Chỉ Admin sửa được</p>
+              )}
             </Field>
           </Row>
         </div>
