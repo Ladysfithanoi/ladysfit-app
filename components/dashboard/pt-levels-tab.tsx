@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2, Flame, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, ShieldOff, Clock, Loader2, Flame, X, Swords } from "lucide-react";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   TRIAL_SETUP_DEFAULT, TRIAL_SETUP_LIMITS,
   STREAK_TIER_LIMITS, STREAK_TIER_SUGGESTION,
+  DECLARED_SETUP_DEFAULT, DECLARED_SETUP_LIMITS, DECLARED_POINT_MULTIPLIER,
   buildStreakTiers, parseStreakTiers, type StreakTier,
 } from "@/lib/exam-trial";
 
@@ -44,6 +45,12 @@ type PTLevel = {
   trialItemsPerCase: number | null;
   /** Mốc phạt sai liên tiếp, lưu JSON. Null = cấp này không phạt liên tiếp. */
   trialStreakTiers: string | null;
+  // Độ gắt riêng của vòng đã khai — null = dùng mặc định trong lib/exam-trial.ts.
+  trialDeclaredPassBonus: number | null;
+  trialDeclaredPassCap: number | null;
+  trialDeclaredCostNear: number | null;
+  trialDeclaredCostFar: number | null;
+  trialDeclaredStreakTiers: string | null;
   isDefault: boolean;
   isActive: boolean;
   phaseAccess: PTLevelPhaseAccess[];
@@ -122,6 +129,11 @@ export function PTLevelsTab() {
     // Bảng mốc phạt sai liên tiếp. Mảng chứ không phải ô số: số mốc do Admin
     // quyết, thêm một mốc không được là thêm một ô.
     trialStreakTiers: [] as StreakTier[],
+    trialDeclaredPassBonus: "",
+    trialDeclaredPassCap: "",
+    trialDeclaredCostNear: "",
+    trialDeclaredCostFar: "",
+    trialDeclaredStreakTiers: [] as StreakTier[],
     isDefault: false,
     phaseIds: [] as string[],
   });
@@ -203,7 +215,7 @@ export function PTLevelsTab() {
 
   function openAdd() {
     setEditingLevel(null);
-    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialStreakTiers: [], isDefault: false, phaseIds: [] });
+    setForm({ name: "", color: "#f97316", retestIntervalDays: 30, monthlyTarget: 38, promoteMinAvgRevenue: 30.4, promoteMinTransform: 1, examNumQuestions: "", examPassingScore: "", examFormat: "FLAT", trialRoundsPerAttempt: "", trialCaseRounds: "", trialCardsPerRound: "", trialItemsPerCase: "", trialStreakTiers: [], trialDeclaredPassBonus: "", trialDeclaredPassCap: "", trialDeclaredCostNear: "", trialDeclaredCostFar: "", trialDeclaredStreakTiers: [], isDefault: false, phaseIds: [] });
     setModalOpen(true);
   }
 
@@ -224,6 +236,11 @@ export function PTLevelsTab() {
       trialCardsPerRound: level.trialCardsPerRound == null ? "" : String(level.trialCardsPerRound),
       trialItemsPerCase: level.trialItemsPerCase == null ? "" : String(level.trialItemsPerCase),
       trialStreakTiers: parseStreakTiers(level.trialStreakTiers),
+      trialDeclaredPassBonus: level.trialDeclaredPassBonus == null ? "" : String(level.trialDeclaredPassBonus),
+      trialDeclaredPassCap: level.trialDeclaredPassCap == null ? "" : String(level.trialDeclaredPassCap),
+      trialDeclaredCostNear: level.trialDeclaredCostNear == null ? "" : String(level.trialDeclaredCostNear),
+      trialDeclaredCostFar: level.trialDeclaredCostFar == null ? "" : String(level.trialDeclaredCostFar),
+      trialDeclaredStreakTiers: parseStreakTiers(level.trialDeclaredStreakTiers),
       isDefault: level.isDefault,
       phaseIds: level.phaseAccess.filter((a) => a.hasAccess).map((a) => a.phaseId),
     });
@@ -255,6 +272,11 @@ export function PTLevelsTab() {
             trialCardsPerRound: form.trialCardsPerRound === "" ? null : Number(form.trialCardsPerRound),
             trialItemsPerCase: form.trialItemsPerCase === "" ? null : Number(form.trialItemsPerCase),
             trialStreakTiers: form.trialStreakTiers,
+            trialDeclaredPassBonus: form.trialDeclaredPassBonus === "" ? null : Number(form.trialDeclaredPassBonus),
+            trialDeclaredPassCap: form.trialDeclaredPassCap === "" ? null : Number(form.trialDeclaredPassCap),
+            trialDeclaredCostNear: form.trialDeclaredCostNear === "" ? null : Number(form.trialDeclaredCostNear),
+            trialDeclaredCostFar: form.trialDeclaredCostFar === "" ? null : Number(form.trialDeclaredCostFar),
+            trialDeclaredStreakTiers: form.trialDeclaredStreakTiers,
             isDefault: form.isDefault,
           }),
         });
@@ -637,6 +659,72 @@ export function PTLevelsTab() {
                       }
                       onChange={(tiers) => setForm((f) => ({ ...f, trialStreakTiers: tiers }))}
                     />
+
+                    {/* ── Vòng đã khai ────────────────────────────────────
+                        Chỗ đắt nhất của cả kỳ thi: trượt vòng khai là rớt,
+                        không bù được bằng vòng nào khác. Nên nó có thang
+                        riêng, đặt tách hẳn khỏi thang chung ở trên. */}
+                    <div className="space-y-3 rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+                      <div className="flex items-center gap-1.5">
+                        <Swords className="h-3.5 w-3.5 text-purple-500" />
+                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-purple-700">
+                          Vòng của tội đã khai
+                        </p>
+                      </div>
+                      <p className="text-[11px] leading-snug text-gray-500">
+                        Điểm vòng khai luôn nhân {DECLARED_POINT_MULTIPLIER} và trượt nó là rớt cả
+                        kỳ — hai điều đó cố định. Bốn ô dưới đặt phần còn lại. Bỏ trống ô nào thì
+                        dùng số mặc định.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          ["trialDeclaredPassBonus", "Ngưỡng đạt +% ", DECLARED_SETUP_DEFAULT.passBonus, "passBonus"],
+                          ["trialDeclaredPassCap", "Trần ngưỡng đạt (%)", DECLARED_SETUP_DEFAULT.passCap, "passCap"],
+                          ["trialDeclaredCostNear", "Lệch một bậc mất", DECLARED_SETUP_DEFAULT.costNear, "costNear"],
+                          ["trialDeclaredCostFar", "Lệch hai bậc mất", DECLARED_SETUP_DEFAULT.costFar, "costFar"],
+                        ] as const).map(([key, label, dflt, limitKey]) => (
+                          <div key={key} className="space-y-1">
+                            <label className="text-[11px] font-semibold text-gray-500">{label}</label>
+                            <input
+                              type="number"
+                              min={DECLARED_SETUP_LIMITS[limitKey].min}
+                              max={DECLARED_SETUP_LIMITS[limitKey].max}
+                              placeholder={`Mặc định ${dflt}`}
+                              value={form[key]}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                              className={inputCls}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] leading-snug text-gray-400">
+                        Ví dụ vòng đặt ngưỡng đạt 60%: khai tội rồi thì phải đạt{" "}
+                        {Math.min(
+                          form.trialDeclaredPassCap === ""
+                            ? DECLARED_SETUP_DEFAULT.passCap
+                            : Number(form.trialDeclaredPassCap),
+                          60 +
+                            (form.trialDeclaredPassBonus === ""
+                              ? DECLARED_SETUP_DEFAULT.passBonus
+                              : Number(form.trialDeclaredPassBonus))
+                        )}
+                        % mới qua vòng đó.
+                      </p>
+
+                      <StreakTierEditor
+                        tiers={form.trialDeclaredStreakTiers}
+                        cardsPerRound={
+                          form.trialCardsPerRound === ""
+                            ? TRIAL_SETUP_DEFAULT.cardsPerRound
+                            : Number(form.trialCardsPerRound)
+                        }
+                        emptyNote="Chưa có mốc riêng — vòng khai dùng chung bảng mốc ở trên."
+                        onChange={(tiers) =>
+                          setForm((f) => ({ ...f, trialDeclaredStreakTiers: tiers }))
+                        }
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -828,11 +916,14 @@ export function PTLevelsTab() {
 function StreakTierEditor({
   tiers,
   cardsPerRound,
+  emptyNote,
   onChange,
 }: {
   tiers: StreakTier[];
   /** Số thẻ một vòng — để cảnh báo mốc nằm ngoài tầm với. */
   cardsPerRound: number;
+  /** Câu hiện khi bảng trống. Bảng của vòng khai trống mang nghĩa khác bảng chung. */
+  emptyNote?: string;
   onChange: (tiers: StreakTier[]) => void;
 }) {
   const [gen, setGen] = useState(STREAK_TIER_SUGGESTION);
@@ -899,7 +990,7 @@ function StreakTierEditor({
       {/* ── Bảng mốc ──────────────────────────────────────────────────────── */}
       {tiers.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-200 bg-white/60 px-3 py-2 text-[11px] font-semibold text-gray-400">
-          Chưa có mốc nào — cấp này không phạt sai liên tiếp.
+          {emptyNote ?? "Chưa có mốc nào — cấp này không phạt sai liên tiếp."}
         </p>
       ) : (
         <div className="space-y-1.5">

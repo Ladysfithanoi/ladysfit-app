@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { TRIAL_SETUP_LIMITS, parseStreakTiers } from "@/lib/exam-trial";
+import { TRIAL_SETUP_LIMITS, DECLARED_SETUP_LIMITS, parseStreakTiers } from "@/lib/exam-trial";
 
 /**
  * ── Đề thi theo cấp độ ───────────────────────────────────────────────────────
@@ -218,4 +218,18 @@ export function trialStreakTiersField(raw: unknown): string | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const tiers = parseStreakTiers(raw);
   return tiers.length === 0 ? null : JSON.stringify(tiers);
+}
+
+/**
+ * Một ô cấu hình VÒNG ĐÃ KHAI do Admin nhập → số hợp lệ, hoặc null.
+ *
+ * Cùng lối với trialField(): rỗng = null = dùng mặc định, số ngoài khoảng thì
+ * kẹp về biên chứ không từ chối cả biểu mẫu.
+ */
+export function declaredField(raw: unknown, key: keyof typeof DECLARED_SETUP_LIMITS): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+  if (!Number.isFinite(n)) return null;
+  const { min, max } = DECLARED_SETUP_LIMITS[key];
+  return Math.max(min, Math.min(max, Math.round(n)));
 }

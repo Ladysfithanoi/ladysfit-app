@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField, trialStreakTiersField } from "@/lib/exam-level";
+import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField, trialStreakTiersField, declaredField } from "@/lib/exam-level";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -27,7 +27,7 @@ export async function GET() {
   const levels = await prisma.pTLevel.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, name: true, color: true, trialStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
+    select: { id: true, name: true, color: true, trialStreakTiers: true, trialDeclaredPassBonus: true, trialDeclaredPassCap: true, trialDeclaredCostNear: true, trialDeclaredCostFar: true, trialDeclaredStreakTiers: true, trialRoundsPerAttempt: true, trialCaseRounds: true, trialCardsPerRound: true, trialItemsPerCase: true, retestIntervalDays: true, monthlyTarget: true, promoteMinAvgRevenue: true, promoteMinTransform: true, examNumQuestions: true, examPassingScore: true, examFormat: true, isDefault: true, isActive: true, order: true },
   });
   return NextResponse.json(levels);
 }
@@ -54,6 +54,12 @@ export async function POST(req: Request) {
     trialItemsPerCase?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
+    /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
+    trialDeclaredPassBonus?: number | null;
+    trialDeclaredPassCap?: number | null;
+    trialDeclaredCostNear?: number | null;
+    trialDeclaredCostFar?: number | null;
+    trialDeclaredStreakTiers?: unknown;
     isDefault?: boolean;
     phaseIds?: string[];
   };
@@ -88,6 +94,12 @@ export async function POST(req: Request) {
       trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound"),
       trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase"),
       trialStreakTiers: trialStreakTiersField(body.trialStreakTiers),
+      // Vòng đã khai: bỏ trống = dùng mặc định (xem declaredSetupFor).
+      trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus"),
+      trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap"),
+      trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear"),
+      trialDeclaredCostFar: declaredField(body.trialDeclaredCostFar, "costFar"),
+      trialDeclaredStreakTiers: trialStreakTiersField(body.trialDeclaredStreakTiers),
       isDefault: body.isDefault ?? false,
       phaseAccess: body.phaseIds?.length
         ? { create: body.phaseIds.map((phaseId) => ({ phaseId, hasAccess: true })) }

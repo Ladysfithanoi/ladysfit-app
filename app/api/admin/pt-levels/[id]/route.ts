@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField, trialStreakTiersField } from "@/lib/exam-level";
+import { normalizeExamNumQuestions, normalizeExamPassingScore , trialField, trialStreakTiersField, declaredField } from "@/lib/exam-level";
 
 export async function PUT(
   req: Request,
@@ -29,6 +29,12 @@ export async function PUT(
     trialItemsPerCase?: number | null;
     /** Bảng mốc phạt sai liên tiếp — mảng [{streak, penalty}], rỗng = tắt. */
     trialStreakTiers?: unknown;
+    /** Độ gắt riêng của vòng đã khai — bỏ trống ô nào thì dùng mặc định. */
+    trialDeclaredPassBonus?: number | null;
+    trialDeclaredPassCap?: number | null;
+    trialDeclaredCostNear?: number | null;
+    trialDeclaredCostFar?: number | null;
+    trialDeclaredStreakTiers?: unknown;
     isDefault?: boolean;
     isActive?: boolean;
   };
@@ -56,6 +62,12 @@ export async function PUT(
       ...(body.trialCardsPerRound !== undefined && { trialCardsPerRound: trialField(body.trialCardsPerRound, "cardsPerRound") }),
       ...(body.trialItemsPerCase !== undefined && { trialItemsPerCase: trialField(body.trialItemsPerCase, "itemsPerCase") }),
       ...(body.trialStreakTiers !== undefined && { trialStreakTiers: trialStreakTiersField(body.trialStreakTiers) }),
+      // Vòng đã khai: gửi lên rỗng = quay về mặc định trong lib/exam-trial.ts.
+      ...(body.trialDeclaredPassBonus !== undefined && { trialDeclaredPassBonus: declaredField(body.trialDeclaredPassBonus, "passBonus") }),
+      ...(body.trialDeclaredPassCap !== undefined && { trialDeclaredPassCap: declaredField(body.trialDeclaredPassCap, "passCap") }),
+      ...(body.trialDeclaredCostNear !== undefined && { trialDeclaredCostNear: declaredField(body.trialDeclaredCostNear, "costNear") }),
+      ...(body.trialDeclaredCostFar !== undefined && { trialDeclaredCostFar: declaredField(body.trialDeclaredCostFar, "costFar") }),
+      ...(body.trialDeclaredStreakTiers !== undefined && { trialDeclaredStreakTiers: trialStreakTiersField(body.trialDeclaredStreakTiers) }),
       ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },

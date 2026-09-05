@@ -6,7 +6,8 @@ import { getExamWindow } from "@/lib/exam-schedule";
 import { parseQuestionIds, sessionDeadline, ALREADY_TAKEN_MESSAGE } from "@/lib/exam-session";
 import { resolveExamLevel } from "@/lib/exam-level";
 import {
-  gradeSortCard, honorAfter, parseStreakTiers, parseTrialState, readSortAnswer,
+  gradeSortCard, honorAfter, honorRulesFor, declaredSetupFor,
+  parseStreakTiers, parseTrialState, readSortAnswer,
   SORT_ZONES, type SortZone,
 } from "@/lib/exam-trial";
 
@@ -60,9 +61,21 @@ export async function POST(req: NextRequest) {
           id: true,
           levelId: true,
           isActive: true,
-          // Mốc phạt sai liên tiếp là của CẤP, mà cạn Thanh danh thì đóng vòng —
-          // nên chỗ chặn thẻ ở dưới phải đọc đúng bảng mốc đang chạy.
-          level: { select: { trialStreakTiers: true } },
+          // Thẻ này thuộc đại tội nào — để biết vòng của nó có phải vòng thí
+          // sinh đã khai không, vì vòng khai chạy thang phạt riêng.
+          sin: true,
+          // Thang phạt là của CẤP, mà cạn Thanh danh thì đóng vòng — nên chỗ
+          // chặn thẻ ở dưới phải đọc đúng bộ luật đang chạy.
+          level: {
+            select: {
+              trialStreakTiers: true,
+              trialDeclaredPassBonus: true,
+              trialDeclaredPassCap: true,
+              trialDeclaredCostNear: true,
+              trialDeclaredCostFar: true,
+              trialDeclaredStreakTiers: true,
+            },
+          },
           sortCards: { select: { id: true, correctZone: true }, orderBy: { order: "asc" } },
         },
       },
@@ -153,8 +166,14 @@ export async function POST(req: NextRequest) {
   const before = servedCards.map((c) =>
     gradeSortCard({ id: c.id, correctZone: c.correctZone }, readSortAnswer(state, card.round.id, c.id))
   );
-  const streakTiers = parseStreakTiers(card.round.level?.trialStreakTiers);
-  if (honorAfter(before, streakTiers) <= 0) {
+  // Vòng của tội đã khai đắt hơn ở từng thẻ — cùng bộ luật mà màn hình đang
+  // chạy và mà computeTrial() sẽ chấm lại lúc nộp.
+  const rules = honorRulesFor({
+    streakTiers: parseStreakTiers(card.round.level?.trialStreakTiers),
+    declared: !!examSession.declaredSin && card.round.sin === examSession.declaredSin,
+    declaredSetup: declaredSetupFor(card.round.level),
+  });
+  if (honorAfter(before, rules) <= 0) {
     return NextResponse.json({ error: "Vòng này đã kết thúc — bạn đã cạn Thanh danh" }, { status: 409 });
   }
 

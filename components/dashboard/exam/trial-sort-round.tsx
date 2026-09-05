@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   SORT_ZONES, SORT_ZONE_LABEL, SORT_VERDICT,
   HONOR_START, honorCost, honorRun, streakPenaltyAt,
-  type HonorStep, type SortZone, type StreakTier,
+  type HonorRules, type HonorStep, type SortZone,
 } from "@/lib/exam-trial";
 
 /**
@@ -60,7 +60,7 @@ export function SortRound({
   cards,
   answers,
   outcomes,
-  streakTiers,
+  rules,
   onAnswer,
   pendingCardId,
   error,
@@ -71,8 +71,12 @@ export function SortRound({
   answers: Record<string, SortZone>;
   /** { cardId: tỉ lệ điểm } do máy chủ trả về sau mỗi lần bấm. */
   outcomes: Record<string, number>;
-  /** Mốc phạt sai liên tiếp của cấp — rỗng = cấp này không bật phạt liên tiếp. */
-  streakTiers: StreakTier[];
+  /**
+   * Luật trừ Thanh danh CỦA VÒNG NÀY: hao mỗi thẻ và bảng mốc phạt liên tiếp.
+   * Vòng của tội đã khai chạy thang riêng, nặng hơn — nên nhận cả bộ chứ không
+   * nhận rời từng số.
+   */
+  rules: HonorRules;
   onAnswer: (cardId: string, zone: SortZone) => void;
   /** Thẻ đang chờ máy chủ trả lời — khoá nút để không bấm hai lần. */
   pendingCardId?: string | null;
@@ -92,9 +96,9 @@ export function SortRound({
           const answered = !!answers[c.id] && ratio !== undefined;
           return { answer: answered ? answers[c.id] : null, ratio: ratio ?? 0 };
         }),
-        streakTiers
+        rules
       ),
-    [cards, answers, outcomes, streakTiers]
+    [cards, answers, outcomes, rules]
   );
   const honor = run.left;
   /** Bước của từng thẻ, tra theo id — để nói rõ thẻ nào ăn thêm bao nhiêu. */
@@ -110,7 +114,7 @@ export function SortRound({
   /** Chuỗi sai đang chạy — con số quyết định thẻ kế tiếp đắt tới đâu. */
   const streak = lastDone ? stepOf(lastDone.id)?.streak ?? 0 : 0;
   /** Sai thêm một thẻ nữa thì mất thêm bao nhiêu — cảnh báo TRƯỚC khi bấm. */
-  const nextStreakPenalty = streakPenaltyAt(streak + 1, streakTiers);
+  const nextStreakPenalty = streakPenaltyAt(streak + 1, rules.tiers);
 
   return (
     <div className="space-y-4">
@@ -132,15 +136,16 @@ export function SortRound({
           />
         </div>
         <p className="mt-2 text-[11px] font-semibold leading-snug text-gray-400">
-          Bấm chọn là khoá, không sửa lại được. Lệch một bậc mất {honorCost(0.5)} Thanh danh, lệch hai
-          bậc mất {honorCost(0)}. Cạn thanh là hỏng cả vòng.
+          Bấm chọn là khoá, không sửa lại được. Lệch một bậc mất{" "}
+          {honorCost(0.5, rules.costNear, rules.costFar)} Thanh danh, lệch hai bậc mất{" "}
+          {honorCost(0, rules.costNear, rules.costFar)}. Cạn thanh là hỏng cả vòng.
         </p>
         {/* Luật phạt liên tiếp phải nói TRƯỚC, không phải để người ta phát hiện
             ra sau khi đã mất. Cấp không bật thì cả khối này biến mất. */}
-        {streakTiers.length > 0 && (
+        {rules.tiers.length > 0 && (
           <p className="mt-1.5 text-[11px] font-semibold leading-snug text-amber-600">
             Sai liền nhau còn bị trừ thêm:{" "}
-            {streakTiers.map((t, i) => (
+            {rules.tiers.map((t, i) => (
               <span key={t.streak}>
                 {i > 0 && " · "}
                 {t.streak} thẻ liền −{t.penalty}
@@ -152,7 +157,7 @@ export function SortRound({
       </div>
 
       {/* ── Chuỗi sai đang chạy ──────────────────────────────────────────── */}
-      {!collapsed && streak > 0 && streakTiers.length > 0 && (
+      {!collapsed && streak > 0 && rules.tiers.length > 0 && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
           <Flame className="h-4 w-4 shrink-0 text-amber-500" />
           <p className="text-xs font-bold text-amber-700">
@@ -274,7 +279,9 @@ function Verdict({ ratio, step }: { ratio: number; step?: HonorStep }) {
   const distance = ratio >= 1 ? 0 : ratio > 0 ? 1 : 2;
   const style = VERDICT_STYLE[distance];
   const Icon = style.icon;
-  const cost = honorCost(ratio);
+  // Hao thật của thẻ lấy từ chính bước đã chạy — vòng khai có mức riêng, tính
+  // lại bằng hai số gốc ở đây là ra một con số khác con số trên thanh.
+  const cost = step?.cost ?? honorCost(ratio);
   const streakPenalty = step?.streakPenalty ?? 0;
   return (
     <div className={cn("flex items-start gap-2.5 rounded-2xl border px-4 py-3", style.box)}>

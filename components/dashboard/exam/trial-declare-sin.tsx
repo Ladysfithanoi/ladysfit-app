@@ -5,8 +5,8 @@ import { Swords, AlertTriangle, Lock, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SIN_LABEL, SIN_DOMAIN, SINS, SIN_SEPHIRAH,
-  DECLARED_POINT_MULTIPLIER, DECLARED_PASS_BONUS,
-  type Sin,
+  DECLARED_POINT_MULTIPLIER, honorCost,
+  type DeclaredSetup, type Sin,
 } from "@/lib/exam-trial";
 import { KabbalahTree } from "./kabbalah-tree";
 
@@ -30,12 +30,15 @@ type SinOption = { sin: Sin; roundName: string | null; available: boolean };
 export function TrialDeclareSin({
   levelName,
   options,
+  declaredSetup,
   mock = false,
   onDeclared,
 }: {
   levelName: string | null;
   /** Đủ 7 tội; `available` cho biết đề của cấp này đã có vòng cho tội đó chưa. */
   options: SinOption[];
+  /** Cái giá của việc khai ở cấp này — phải nói đúng số, vì chọn xong không đổi được. */
+  declaredSetup: DeclaredSetup;
   /** Thi thử của Admin — không có lượt thi để ghi, chỉ chốt ở bộ nhớ trang. */
   mock?: boolean;
   onDeclared: (sin: Sin) => void;
@@ -140,9 +143,18 @@ export function TrialDeclareSin({
           <span>
             Đây không phải chọn phần mình giỏi. Hãy chọn mảng bạn thấy mình{" "}
             <span className="font-extrabold">yếu nhất</span> — vòng đó sẽ khó hơn, điểm nhân{" "}
-            {DECLARED_POINT_MULTIPLIER}, ngưỡng đạt cao hơn {DECLARED_PASS_BONUS}%, và{" "}
+            {DECLARED_POINT_MULTIPLIER}, ngưỡng đạt cao hơn {declaredSetup.passBonus}%, và{" "}
             <span className="font-extrabold">bắt buộc phải qua</span>. Trượt vòng đã khai là
             trượt cả kỳ, dù các vòng khác có tốt tới đâu.
+            {/* Thanh danh đắt hơn thì phải nói ra, vì đó là thứ ăn mòn ngay
+                trong lúc chơi chứ không đợi tới lúc chấm. Cấp nào không đặt
+                nặng hơn thì câu này không hiện. */}
+            {(declaredSetup.costNear > honorCost(0.5) || declaredSetup.costFar > honorCost(0)) && (
+              <>
+                {" "}Ở vòng đó mỗi thẻ sai cũng đắt hơn: lệch một bậc mất{" "}
+                {declaredSetup.costNear} Thanh danh, lệch hai bậc mất {declaredSetup.costFar}.
+              </>
+            )}
           </span>
         </p>
       </div>

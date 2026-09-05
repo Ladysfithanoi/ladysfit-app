@@ -1856,6 +1856,21 @@ model PTLevel {
   /// nhiêu thẻ thì trừ thêm bấy nhiêu. Bỏ trống = không phạt liên tiếp.
   /// Luật đếm và cách cộng dồn: xem lib/exam-trial.ts.
   trialStreakTiers      String?            @db.Text
+  // ── Độ gắt riêng của VÒNG ĐÃ KHAI ────────────────────────────────────────
+  // Vòng của tội thí sinh tự khai là chỗ đắt nhất của bài thi — trượt nó là rớt
+  // cả kỳ — nên nó có thang riêng, không dùng chung với các vòng bốc ngẫu nhiên.
+  // Bỏ trống = dùng số mặc định trong lib/exam-trial.ts. Xem declaredSetupFor().
+  /// Ngưỡng đạt của vòng khai cộng thêm bấy nhiêu % (mặc định 15).
+  trialDeclaredPassBonus  Int?
+  /// Trần ngưỡng đạt của vòng khai (mặc định 95).
+  trialDeclaredPassCap    Int?
+  /// Hao Thanh danh khi lệch một bậc ở vòng khai (mặc định 8).
+  trialDeclaredCostNear   Int?
+  /// Hao Thanh danh khi lệch hai bậc ở vòng khai (mặc định 25).
+  trialDeclaredCostFar    Int?
+  /// Bảng mốc phạt sai liên tiếp riêng cho vòng khai, cùng dạng JSON với
+  /// trialStreakTiers. Bỏ trống = vòng khai dùng chung bảng của cấp.
+  trialDeclaredStreakTiers String?          @db.Text
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
   phaseAccess        PTLevelPhaseAccess[]

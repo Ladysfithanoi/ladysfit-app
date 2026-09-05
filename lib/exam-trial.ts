@@ -344,10 +344,29 @@ export function isCaseRound(type: string): boolean {
   return type === "MEAL" || type === "PROGRAM";
 }
 
+// ── Hao Thanh danh của một thẻ ───────────────────────────────────────────────
+//
+// Ba con số gốc của vòng phân loại thẻ. Vòng lặp chơi mà chúng phục vụ nằm ở
+// phần "Thanh Thanh danh" cuối file; đứng ở đây vì vòng đã khai đặt lại được
+// hai trong ba, và cái đặt lại phải khai báo sau cái nó đặt lại.
+
+export const HONOR_START = 100;
+export const HONOR_COST_NEAR = 8;
+export const HONOR_COST_FAR = 25;
+
+/**
+ * Một thẻ ăn mất bao nhiêu Thanh danh, theo tỉ lệ điểm của thẻ đó.
+ * Vòng đã khai truyền vào mức riêng của nó; vòng thường dùng hai số gốc.
+ */
+export function honorCost(ratio: number, near = HONOR_COST_NEAR, far = HONOR_COST_FAR): number {
+  if (ratio >= 1) return 0;
+  return ratio > 0 ? near : far;
+}
+
 /** Điểm tối đa của vòng đã khai được nhân bấy nhiêu lần. */
 export const DECLARED_POINT_MULTIPLIER = 2;
 
-/** Ngưỡng đạt của vòng đã khai cộng thêm bấy nhiêu %, trần 95%. */
+/** Mặc định: ngưỡng đạt của vòng đã khai cộng thêm bấy nhiêu %, trần 95%. */
 export const DECLARED_PASS_BONUS = 15;
 export const DECLARED_PASS_CAP = 95;
 
@@ -355,10 +374,72 @@ export const DECLARED_PASS_CAP = 95;
 export const DECLARED_TOLERANCE_FACTOR = 0.6;
 export const DECLARED_TOLERANCE_FLOOR = 3;
 
+/**
+ * ĐỘ GẮT RIÊNG CỦA VÒNG ĐÃ KHAI — năm con số Admin chỉnh ở Cài đặt → Cấp độ.
+ *
+ * Điểm ×2 và sai số co lại làm vòng khai khó hơn ở chỗ CHẤM. Năm con số dưới
+ * đây làm nó khó hơn ở chỗ CHƠI và ở cửa ra: mỗi thẻ sai đắt hơn, chuỗi sai bị
+ * phạt theo bảng riêng, và ngưỡng đạt của vòng do Admin định chứ không còn là
+ * hằng số trong mã.
+ *
+ * Vì sao đáng tách riêng: cùng một chuỗi ba thẻ sai, ở vòng thường chỉ mất
+ * điểm, còn ở vòng khai thì cạn thanh là trượt vòng — mà trượt vòng khai là
+ * rớt cả kỳ. Chỗ đắt nhất của bài thi xứng đáng có thang riêng.
+ */
+export type DeclaredSetup = {
+  /** Ngưỡng đạt của vòng khai cộng thêm bấy nhiêu %. */
+  passBonus: number;
+  /** Trần ngưỡng đạt của vòng khai — chặn cộng lên tới mức không ai qua nổi. */
+  passCap: number;
+  /** Hao Thanh danh khi lệch một bậc ở vòng khai. */
+  costNear: number;
+  /** Hao Thanh danh khi lệch hai bậc ở vòng khai. */
+  costFar: number;
+  /** Bảng mốc phạt liên tiếp riêng của vòng khai; RỖNG = dùng chung bảng của cấp. */
+  streakTiers: StreakTier[];
+};
+
+export const DECLARED_SETUP_DEFAULT: DeclaredSetup = {
+  passBonus: DECLARED_PASS_BONUS,
+  passCap: DECLARED_PASS_CAP,
+  costNear: HONOR_COST_NEAR,
+  costFar: HONOR_COST_FAR,
+  streakTiers: [],
+};
+
+export const DECLARED_SETUP_LIMITS = {
+  passBonus: { min: 0, max: 50 },
+  /** Sàn 50: đặt trần thấp hơn thế thì vòng khai dễ hơn vòng thường, vô nghĩa. */
+  passCap: { min: 50, max: 100 },
+  costNear: { min: 0, max: 100 },
+  costFar: { min: 0, max: 100 },
+} as const;
+
+/** Cấu hình vòng khai của một cấp, đã kẹp về khoảng hợp lệ. */
+export function declaredSetupFor(level: {
+  trialDeclaredPassBonus?: number | null;
+  trialDeclaredPassCap?: number | null;
+  trialDeclaredCostNear?: number | null;
+  trialDeclaredCostFar?: number | null;
+  trialDeclaredStreakTiers?: string | null;
+} | null | undefined): DeclaredSetup {
+  const L = DECLARED_SETUP_LIMITS;
+  const clamp = (v: number | null | undefined, d: number, lo: number, hi: number) =>
+    v == null || !Number.isFinite(v) ? d : Math.max(lo, Math.min(hi, Math.round(v)));
+
+  return {
+    passBonus: clamp(level?.trialDeclaredPassBonus, DECLARED_SETUP_DEFAULT.passBonus, L.passBonus.min, L.passBonus.max),
+    passCap: clamp(level?.trialDeclaredPassCap, DECLARED_SETUP_DEFAULT.passCap, L.passCap.min, L.passCap.max),
+    costNear: clamp(level?.trialDeclaredCostNear, DECLARED_SETUP_DEFAULT.costNear, L.costNear.min, L.costNear.max),
+    costFar: clamp(level?.trialDeclaredCostFar, DECLARED_SETUP_DEFAULT.costFar, L.costFar.min, L.costFar.max),
+    streakTiers: parseStreakTiers(level?.trialDeclaredStreakTiers),
+  };
+}
+
 /** Thông số một vòng sau khi đã áp luật "tội tự khai". */
 export function applyDeclaredSin<
   T extends { sin: string | null; maxPoints: number; passPercent: number }
->(round: T, declaredSin: Sin | null) {
+>(round: T, declaredSin: Sin | null, setup: DeclaredSetup = DECLARED_SETUP_DEFAULT) {
   const declared = !!declaredSin && round.sin === declaredSin;
   if (!declared) {
     return { declared, maxPoints: round.maxPoints, passPercent: round.passPercent };
@@ -366,7 +447,7 @@ export function applyDeclaredSin<
   return {
     declared,
     maxPoints: round.maxPoints * DECLARED_POINT_MULTIPLIER,
-    passPercent: Math.min(DECLARED_PASS_CAP, round.passPercent + DECLARED_PASS_BONUS),
+    passPercent: Math.min(setup.passCap, round.passPercent + setup.passBonus),
   };
 }
 
@@ -744,15 +825,9 @@ export function sortPillar(results: SortCardResult[]): Pillar {
 // Ba con số dưới đây là chỗ chỉnh độ gắt. Với vòng 12 thẻ: lệch một bậc cả 12
 // thẻ vẫn sống sót (96 < 100), nhưng BỐN lần lệch hai bậc là cạn.
 
-export const HONOR_START = 100;
-export const HONOR_COST_NEAR = 8;
-export const HONOR_COST_FAR = 25;
-
-/** Một thẻ ăn mất bao nhiêu Thanh danh, theo tỉ lệ điểm của thẻ đó. */
-export function honorCost(ratio: number): number {
-  if (ratio >= 1) return 0;
-  return ratio > 0 ? HONOR_COST_NEAR : HONOR_COST_FAR;
-}
+// Ba con số gốc và honorCost() đã dời lên trên, ngay trước phần "Tội tự khai":
+// vòng đã khai đặt lại được hai trong ba, mà cái đặt lại thì không thể khai báo
+// trước cái nó đặt lại. Xem HONOR_START và DeclaredSetup.
 
 // ── Trừ lũy tiến khi sai liên tiếp ───────────────────────────────────────────
 //
@@ -884,6 +959,49 @@ export function streakPenaltyAt(streak: number, tiers: StreakTier[]): number {
   return streak > top.streak ? top.penalty : 0;
 }
 
+/**
+ * LUẬT TRỪ THANH DANH CỦA MỘT VÒNG — gói cả ba con số vào một chỗ.
+ *
+ * Gói lại vì vòng thường và vòng đã khai giờ có ba con số khác nhau, mà cả
+ * client lẫn server đều phải chạy đúng bộ của vòng đang mở. Truyền rời từng số
+ * thì sớm muộn có chỗ truyền hai số của vòng khai kèm bảng mốc của vòng thường.
+ */
+export type HonorRules = {
+  costNear: number;
+  costFar: number;
+  tiers: StreakTier[];
+};
+
+export const HONOR_RULES_DEFAULT: HonorRules = {
+  costNear: HONOR_COST_NEAR,
+  costFar: HONOR_COST_FAR,
+  tiers: [],
+};
+
+/**
+ * Vòng này chạy luật nào: vòng thường dùng hai số gốc + bảng mốc của cấp; vòng
+ * đã khai dùng bộ riêng của nó.
+ *
+ * Bảng mốc riêng ĐỂ TRỐNG nghĩa là vòng khai dùng chung bảng của cấp, KHÔNG
+ * phải tắt phạt liên tiếp: bỏ trống một ô không bao giờ được làm bài thi dễ đi.
+ */
+export function honorRulesFor(opts: {
+  /** Bảng mốc chung của cấp. */
+  streakTiers: StreakTier[];
+  declared: boolean;
+  declaredSetup: DeclaredSetup;
+}): HonorRules {
+  if (!opts.declared) {
+    return { costNear: HONOR_COST_NEAR, costFar: HONOR_COST_FAR, tiers: opts.streakTiers };
+  }
+  const d = opts.declaredSetup;
+  return {
+    costNear: d.costNear,
+    costFar: d.costFar,
+    tiers: d.streakTiers.length > 0 ? d.streakTiers : opts.streakTiers,
+  };
+}
+
 /** Một thẻ trong mạch Thanh danh — đủ để vẽ lại đúng cái thí sinh đã thấy. */
 export type HonorStep = {
   /** Thẻ chưa bấm: không hao gì, cũng không cắt chuỗi. */
@@ -908,7 +1026,7 @@ export type HonorStep = {
  */
 export function honorRun(
   results: { answer: SortZone | null; ratio: number }[],
-  tiers: StreakTier[] = STREAK_TIERS_DEFAULT,
+  rules: HonorRules = HONOR_RULES_DEFAULT,
 ): { steps: HonorStep[]; left: number } {
   let left = HONOR_START;
   let streak = 0;
@@ -919,9 +1037,9 @@ export function honorRun(
       steps.push({ answered: false, ratio: 0, cost: 0, streak: 0, streakPenalty: 0, left });
       continue;
     }
-    const cost = honorCost(r.ratio);
+    const cost = honorCost(r.ratio, rules.costNear, rules.costFar);
     streak = isStreakMiss(r.ratio) ? streak + 1 : 0;
-    const streakPenalty = streakPenaltyAt(streak, tiers);
+    const streakPenalty = streakPenaltyAt(streak, rules.tiers);
     left = Math.max(0, left - cost - streakPenalty);
     steps.push({ answered: true, ratio: r.ratio, cost, streak, streakPenalty, left });
   }
@@ -938,9 +1056,9 @@ export function honorRun(
  */
 export function honorAfter(
   results: { answer: SortZone | null; ratio: number }[],
-  tiers: StreakTier[] = STREAK_TIERS_DEFAULT,
+  rules: HonorRules = HONOR_RULES_DEFAULT,
 ): number {
-  return honorRun(results, tiers).left;
+  return honorRun(results, rules).left;
 }
 
 /** Câu báo ngay sau khi bấm — nói mức lệch, KHÔNG nói đáp án đúng là gì. */

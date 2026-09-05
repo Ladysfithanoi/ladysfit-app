@@ -29,8 +29,9 @@ import { SortRound, type SortCardView } from "./trial-sort-round";
 import { ProgramRound, type ProgramCaseView } from "./trial-program-round";
 import {
   SIN_LABEL, SORT_ZONE_LABEL, PILLAR_LABEL, SIN_SEPHIRAH, KETHER, CHOKMAH, BINAH, SEPHIROT,
-  honorAfter, parseStreakTiers,
+  honorAfter, honorRulesFor, parseStreakTiers, declaredSetupFor,
   type MealEntry, type SortZone, type Sin, type ProgramEntry, type StreakTier,
+  type DeclaredSetup,
 } from "@/lib/exam-trial";
 import { TrialDeclareSin } from "./trial-declare-sin";
 import { KabbalahTree, KabbalahLegend, type SephirahStatus } from "./kabbalah-tree";
@@ -404,6 +405,8 @@ export function ExamTakePage({
   const [cardOutcomes, setCardOutcomes] = useState<Record<string, number>>({});
   // Mốc phạt sai liên tiếp của cấp — server gửi kèm đề, client chỉ vẽ lại.
   const [streakTiers, setStreakTiers] = useState<StreakTier[]>([]);
+  // Thang riêng của vòng đã khai — nặng hơn ở từng thẻ, do Admin đặt theo cấp.
+  const [declaredSetup, setDeclaredSetup] = useState<DeclaredSetup>(() => declaredSetupFor(null));
   const [pendingCard, setPendingCard] = useState<string | null>(null);
   const [cardError, setCardError] = useState<string | null>(null);
   // Chú giải cây ở màn kết quả: mặc định đóng, vì thứ người ta muốn thấy trước
@@ -491,6 +494,8 @@ export function ExamTakePage({
         setNeedsDeclaration(!!data.needsDeclaration);
         setSinOptions(data.sinOptions ?? []);
         setDeclaredSin(data.declaredSin ?? null);
+        // Đặt trước cửa khai: màn khai tội phải nói đúng cái giá của cấp này.
+        if (data.declaredSetup) setDeclaredSetup(data.declaredSetup as DeclaredSetup);
         if (data.needsDeclaration) return; // chưa khai thì chưa có đề để dựng
         if (Array.isArray(data.rounds) && data.rounds.length > 0) {
           setRounds(data.rounds);
@@ -951,6 +956,18 @@ export function ExamTakePage({
     }
     return r.cards.every((c) => typeof st[c.id] === "string") || roundCollapsed(r);
   };
+  /**
+   * Luật trừ Thanh danh của một vòng: vòng của tội đã khai chạy thang riêng,
+   * nặng hơn ở từng thẻ và có thể có bảng mốc riêng.
+   */
+  function honorRulesOf(r: TrialRound) {
+    return honorRulesFor({
+      streakTiers,
+      declared: !!declaredSin && r.sin === declaredSin,
+      declaredSetup,
+    });
+  }
+
   /** Vòng phân loại đã cạn Thanh danh — tính bằng đúng hàm máy chủ dùng lúc chấm. */
   function roundCollapsed(r: TrialRound) {
     if (r.type !== "SORT") return false;
@@ -963,7 +980,7 @@ export function ExamTakePage({
           const answered = typeof st[c.id] === "string" && cardOutcomes[c.id] !== undefined;
           return { answer: answered ? (st[c.id] as SortZone) : null, ratio: cardOutcomes[c.id] ?? 0 };
         }),
-        streakTiers
+        honorRulesOf(r)
       ) <= 0
     );
   }
@@ -1069,6 +1086,7 @@ export function ExamTakePage({
       <TrialDeclareSin
         levelName={levelName}
         options={sinOptions}
+        declaredSetup={declaredSetup}
         mock={mock}
         onDeclared={(sin) => {
           setLoading(true);
@@ -1378,7 +1396,7 @@ export function ExamTakePage({
                     ) as Record<string, SortZone>
                   }
                   outcomes={cardOutcomes}
-                  streakTiers={streakTiers}
+                  rules={honorRulesOf(currentRound)}
                   pendingCardId={pendingCard}
                   error={cardError}
                   disabled={!!result}

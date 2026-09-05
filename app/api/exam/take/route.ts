@@ -15,7 +15,7 @@ import {
 import { gradePendingSession, parseAnswers } from "@/lib/exam-grading";
 import { resolveExamLevel, questionsForLevel, emptyBankMessage, emptyTrialMessage } from "@/lib/exam-level";
 import { loadTrialForCandidate, gradeTrialAttempt, pickTrialRounds, sortCardOutcomes } from "@/lib/exam-trial-server";
-import { trialSetupFor } from "@/lib/exam-trial";
+import { trialSetupFor, declaredSetupFor } from "@/lib/exam-trial";
 import { parseTrialState, SINS, type Sin } from "@/lib/exam-trial";
 
 // ?mock=1 — Admin thi thử để soi lại đề mình vừa soạn: cùng bộ câu hỏi, cùng
@@ -123,6 +123,11 @@ export async function GET(req: Request) {
         trialCardsPerRound: true,
         trialItemsPerCase: true,
         trialStreakTiers: true,
+        trialDeclaredPassBonus: true,
+        trialDeclaredPassCap: true,
+        trialDeclaredCostNear: true,
+        trialDeclaredCostFar: true,
+        trialDeclaredStreakTiers: true,
       },
     });
     const setup = trialSetupFor(levelSetup);
@@ -188,6 +193,20 @@ export async function GET(req: Request) {
         noPenalty,
         closesAt: window.endAt?.toISOString() ?? null,
         scheduleNote: window.message,
+        // Cái giá của việc khai phải nói ĐÚNG con số của cấp này, ngay ở màn
+        // khai — người ta chọn xong là không đổi lại được nữa.
+        declaredSetup: declaredSetupFor(
+          await prisma.pTLevel.findUnique({
+            where: { id: levelId },
+            select: {
+              trialDeclaredPassBonus: true,
+              trialDeclaredPassCap: true,
+              trialDeclaredCostNear: true,
+              trialDeclaredCostFar: true,
+              trialDeclaredStreakTiers: true,
+            },
+          })
+        ),
       });
     }
 
@@ -277,6 +296,9 @@ export async function GET(req: Request) {
       // Mốc phạt sai liên tiếp của cấp này — thanh Thanh danh trên màn hình phải
       // trừ đúng bằng cái máy chủ sẽ trừ lúc chấm, nên nó phải xuống theo đề.
       streakTiers: setup.streakTiers,
+      // Thang riêng của vòng đã khai — trang làm bài phải biết để vẽ đúng thanh
+      // Thanh danh của vòng đó, và để màn khai tội nói đúng cái giá phải trả.
+      declaredSetup: declaredSetupFor(levelSetup),
       passingScore,
       questions: [],
       closesAt: mock ? null : window.endAt?.toISOString() ?? null,
