@@ -68,10 +68,23 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   // Ngày ký chạy theo ô Doanh thu: có tiền thì giữ/ghi ngày ký, hết tiền thì xoá luôn.
   // Request không đụng tới tiền (popup ghi chú) thì giữ nguyên ngày ký sẵn có.
-  const requestedSignDate = "signDate" in body
+  //
+  // CHỈ ADMIN đặt được ngày ký cụ thể. Ngày này quyết định hợp đồng nằm ở kỳ nào
+  // của Bảng thu (xem transactionDateFor), nên nếu ai cũng gửi lên được thì chỉ
+  // cần lùi vài ngày là một hợp đồng nhảy sang tháng khác. Ô nhập ở giao diện đã
+  // khoá với người khác, nhưng khoá ở trình duyệt không phải là quyền.
+  const rawSignDate = isAdmin && "signDate" in body
     ? (body.signDate ? new Date(String(body.signDate)) : null)
     : lead.signDate;
-  const nextSignDate = (touchesFinance || "signDate" in body)
+  // Ngày ký ở TƯƠNG LAI là không thể có thật — đã từng có 10 hợp đồng như vậy
+  // lọt vào từ hai lô nhập Excel tháng 6/2026. Bỏ qua, giữ giá trị cũ.
+  const requestedSignDate =
+    rawSignDate && !isNaN(rawSignDate.getTime()) && rawSignDate.getTime() <= Date.now()
+      ? rawSignDate
+      : rawSignDate === null
+        ? null
+        : lead.signDate;
+  const nextSignDate = (touchesFinance || (isAdmin && "signDate" in body))
     ? (nextRevenue ? (requestedSignDate ?? new Date()) : null)
     : lead.signDate;
 

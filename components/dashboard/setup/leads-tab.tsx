@@ -1235,15 +1235,39 @@ export function LeadsTab({
                   />
                 </FormRow>
               )}
-              {/* Ngày ký tự động = ngày điền Doanh thu, không cho sửa tay. */}
-              <FormRow label="Ngày ký (tự động)">
-                <input
-                  readOnly
-                  value={form.signDateStr ? fmtDate(form.signDateStr) : ""}
-                  className={cn(inputCls, lockedCls)}
-                  placeholder="Điền Doanh thu để tự ghi nhận ngày ký"
-                  title="Ngày ký được ghi tự động theo ngày điền Doanh thu"
-                />
+              {/* NGÀY KÝ tự ghi theo ngày điền Doanh thu. Chỉ ADMIN sửa lại được.
+                  Ngày này quyết định hợp đồng nằm ở kỳ nào của Bảng thu, nên nó
+                  không phải ô để ai cũng chỉnh — máy chủ chặn lại lần nữa.
+
+                  Admin dùng ô chọn ngày của trình duyệt chứ không gõ tay dd/mm:
+                  chính kiểu gõ tay đó đã sinh ra 43 hợp đồng bị đảo ngày với
+                  tháng trong hai lô nhập Excel tháng 6. */}
+              <FormRow label={isAdmin ? "Ngày ký" : "Ngày ký (tự động)"}>
+                {isAdmin ? (
+                  <>
+                    <input
+                      type="date"
+                      lang="vi"
+                      max={todayISO()}
+                      value={form.signDateStr ?? ""}
+                      onChange={e => setForm(f => ({ ...f, signDateStr: e.target.value }))}
+                      className={inputCls}
+                    />
+                    <p className="mt-1 text-[11px] font-semibold text-gray-400">
+                      Tự ghi theo ngày điền Doanh thu. Bảng thu vẫn bám theo kỳ {month}/{year} của
+                      lead — sửa ngày ký chỉ đổi ngày hiển thị trong kỳ đó, không đẩy tiền sang
+                      tháng khác. Không nhận ngày ở tương lai.
+                    </p>
+                  </>
+                ) : (
+                  <input
+                    readOnly
+                    value={form.signDateStr ? fmtDate(form.signDateStr) : ""}
+                    className={cn(inputCls, lockedCls)}
+                    placeholder="Điền Doanh thu để tự ghi nhận ngày ký"
+                    title="Ngày ký ghi tự động theo ngày điền Doanh thu — chỉ Admin sửa được"
+                  />
+                )}
               </FormRow>
               <FormRow label="Ghi chú">
                 <textarea

@@ -89,7 +89,13 @@ export async function POST(req: Request) {
   if (moneyError) return NextResponse.json({ error: moneyError }, { status: 400 });
 
   // Ngày ký chạy theo ô Doanh thu: có tiền thì có ngày ký, chưa có tiền thì bỏ trống.
-  const resolvedSignDate = revenueNum ? (signDate ? new Date(signDate) : new Date()) : null;
+  // Chỉ Admin được đặt ngày cụ thể, và không nhận ngày ở tương lai — xem PUT.
+  const askedSignDate = session.user.role === "ADMIN" && signDate ? new Date(signDate) : null;
+  const validAsked =
+    askedSignDate && !isNaN(askedSignDate.getTime()) && askedSignDate.getTime() <= Date.now()
+      ? askedSignDate
+      : null;
+  const resolvedSignDate = revenueNum ? (validAsked ?? new Date()) : null;
 
   const lead = await prisma.salesLead.create({
     data: {
