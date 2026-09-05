@@ -60,6 +60,12 @@ function cellNum(v: unknown): number | null {
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
+/** Hôm nay dạng yyyy-mm-dd — mốc để phát hiện ngày ký rơi vào tương lai. */
+const todayISO = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+})();
+
 // Date cell → ISO yyyy-mm-dd (accepts Date object, Excel serial number, dd/mm/yyyy, yyyy-mm-dd).
 function parseDateCell(v: unknown): string {
   if (v === undefined || v === null || v === "") return "";
@@ -183,6 +189,30 @@ export function LeadsImportModal({
             // Bỏ trống = lead của NS đã nghỉ → doanh thu về thẳng phòng tập (hợp lệ).
             if (!isPT && ptName && !base.assignedPTId) {
               return { ...base, rowStatus: "warn", errorMsg: `Sẽ kiểm tra tên \"${ptName}\" khi nhập` };
+            }
+            // NGÀY KÝ PHẢI NẰM TRONG KỲ GHI NHẬN của chính dòng đó.
+            //
+            // Đây là chỗ dữ liệu hỏng đã đi vào thật: hai lô nhập ngày 22-23/06/2026
+            // mang theo 43 hợp đồng bị ĐẢO NGÀY VỚI THÁNG (hợp đồng ký 11/03 thành
+            // 03/11), trong đó 10 dòng có ngày ký rơi vào tương lai. Bảng thu nhóm
+            // theo ngày nên số tiền hiện sang tháng khác, nhìn từ bảng thu thì y
+            // như mất tiền mà không có gì báo.
+            //
+            // Chỉ cảnh báo chứ không chặn: ngày ký lệch kỳ đôi khi có thật (khách
+            // ký cuối tháng trước, ghi nhận sang tháng này). Nhưng người nhập phải
+            // NHÌN THẤY nó trước khi bấm, thay vì phát hiện sau ba tháng.
+            if (base.signDate) {
+              const [sy, sm] = base.signDate.split("-").map(Number);
+              if (sy !== base.year || sm !== base.month) {
+                return {
+                  ...base,
+                  rowStatus: "warn",
+                  errorMsg: `Ngày ký ${base.signDate.split("-").reverse().join("/")} không thuộc kỳ ${base.month}/${base.year} — kiểm tra xem file có bị đảo ngày với tháng không`,
+                };
+              }
+              if (base.signDate > todayISO) {
+                return { ...base, rowStatus: "warn", errorMsg: `Ngày ký ${base.signDate.split("-").reverse().join("/")} nằm ở tương lai` };
+              }
             }
             return base;
           });

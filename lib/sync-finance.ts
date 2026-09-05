@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { PACKAGES } from "@/lib/packages";
+import { transactionDateFor } from "@/lib/finance-period";
 
 type LeadForSync = {
   id: string;
@@ -8,6 +9,10 @@ type LeadForSync = {
   packageRegistered: string | null;
   actualRevenue: number | null;
   signDate: Date | null;
+  /** Kỳ ghi nhận doanh thu của hợp đồng — xem transactionDateFor(). */
+  month: number;
+  year: number;
+  createdAt?: Date | null;
   status: string;
   createdById: string;
   remark: string | null;
@@ -41,7 +46,7 @@ export async function syncLeadToTransaction(lead: LeadForSync): Promise<void> {
   }
 
   const ptName         = lead.assignedPT?.name ?? "PT";
-  const transactionDate = lead.signDate ?? new Date();
+  const transactionDate = transactionDateFor(lead);
   const packages        = splitPackages(lead.packageRegistered);
 
   // ── Single package (or no package): preserve existing row if already created ─
