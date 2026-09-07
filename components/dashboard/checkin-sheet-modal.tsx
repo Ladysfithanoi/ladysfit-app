@@ -34,6 +34,8 @@ type SheetData = {
   contractCode: string | null;
   clientName: string;
   ptName: string;
+  /** FM phụ trách cơ sở — đứng tên ở ô "Đại diện trung tâm". */
+  fmName: string;
   packageName: string;
   totalSessions: number;
   startDate: string | null;
@@ -52,8 +54,11 @@ const PAD = 40;
 const HEADER_H = 200;
 const HEAD_ROW_H = 78;
 const ROW_H = 92;
-const INFO_H = 220;
-const SIGN_H = 300;
+// Khối thông tin hội viên cao 4 dòng × 48 = 192px kể từ mốc +46. INFO_H phải
+// dôi ra kha khá so với con số đó, nếu không tiêu đề ô chữ ký dính ngay dưới
+// dòng "GIÁ TRỊ GÓI TẬP".
+const INFO_H = 340;
+const SIGN_H = 340;
 const H = HEADER_H + HEAD_ROW_H + ROWS_PER_BLOCK * ROW_H + INFO_H + SIGN_H;
 
 const BRAND = "#f15b5c";
@@ -285,6 +290,7 @@ export function CheckinSheetModal({
     // ── Ba ô chữ ký ────────────────────────────────────────────────────────
     const signTop = tableBottom + INFO_H;
     const third = (W - PAD * 2) / 3;
+    const NAME_Y = signTop + 210;
     const titles = ["Chữ ký khách hàng", "Chữ ký HLV", "Đại diện trung tâm"];
     ctx.textAlign = "center";
     titles.forEach((t, k) => {
@@ -296,12 +302,23 @@ export function CheckinSheetModal({
       ctx.fillStyle = "#6b7280";
       ctx.fillText("(Ký, ghi rõ họ tên)", cx, signTop + 34);
     });
-    // Tên sẵn ở hai ô cuối như tờ giấy vẫn ghi.
+
+    // Ô khách hàng dùng lại chính chữ ký khách đã ký lúc check-in — lấy buổi có
+    // chữ ký SỚM NHẤT của lộ trình, để phiếu xuất lần nào cũng ra một bản giống
+    // nhau thay vì đổi theo buổi mới nhất.
+    const clientSig = d.rows.find((r) => r.signatureUrl)?.signatureUrl ?? null;
+    const sigImg = await loadImage(clientSig);
+    if (sigImg) {
+      drawFitted(ctx, sigImg, PAD + 20, signTop + 52, third - 40, 130);
+    }
+
+    // Tên sẵn ở cả ba ô như tờ giấy vẫn ghi.
     ctx.font = "bold 24px system-ui, sans-serif";
     ctx.fillStyle = INK;
-    ctx.fillText(d.ptName, PAD + third + third / 2, signTop + 200);
+    ctx.fillText(d.clientName, PAD + third / 2, NAME_Y);
+    ctx.fillText(d.ptName, PAD + third + third / 2, NAME_Y);
     ctx.fillStyle = BRAND;
-    ctx.fillText("Fitness Manager", PAD + third * 2 + third / 2, signTop + 200);
+    ctx.fillText(d.fmName || "Fitness Manager", PAD + third * 2 + third / 2, NAME_Y);
 
     if (d.rows.length === 0) {
       ctx.font = "italic 24px system-ui, sans-serif";

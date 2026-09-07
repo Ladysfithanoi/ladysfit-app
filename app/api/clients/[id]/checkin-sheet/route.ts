@@ -34,10 +34,25 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const enrollment = await prisma.packageEnrollment.findFirst({
     where: { id: enrollmentId, clientId: params.id },
     include: {
-      client: { select: { fullName: true, assignedPT: { select: { name: true, email: true } } } },
+      client: {
+        select: {
+          fullName: true,
+          branchId: true,
+          assignedPT: { select: { name: true, email: true } },
+        },
+      },
     },
   });
   if (!enrollment) return NextResponse.json({ error: "Không tìm thấy lộ trình" }, { status: 404 });
+
+  // "Đại diện trung tâm" là FM của cơ sở khách đang tập. Cơ sở có nhiều FM thì
+  // lấy người được gán sớm nhất — người phụ trách chính, và là con số ổn định
+  // qua mọi lần xuất phiếu.
+  const fm = await prisma.fMBranchAssignment.findFirst({
+    where: { branchId: enrollment.client.branchId, user: { role: "FM", deletedAt: null } },
+    orderBy: { assignedAt: "asc" },
+    select: { user: { select: { name: true, email: true } } },
+  });
 
   const logs = await prisma.workoutLog.findMany({
     where: { clientId: params.id, packageEnrollmentId: enrollmentId, checkOutAt: { not: null } },
@@ -50,6 +65,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     contractCode: enrollment.contractCode,
     clientName: enrollment.client.fullName,
     ptName: enrollment.client.assignedPT?.name ?? enrollment.client.assignedPT?.email ?? "",
+    fmName: fm?.user.name ?? fm?.user.email ?? "",
     packageName: enrollment.packageName,
     totalSessions: enrollment.sessions,
     startDate: enrollment.startDate?.toISOString() ?? null,
