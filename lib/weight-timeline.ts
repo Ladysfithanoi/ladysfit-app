@@ -82,8 +82,10 @@ export function buildWeightTimeline(
   const idealWeight    = standardWeight * 0.9;
 
   // Chưa điền mục tiêu thì lấy tạm mốc đẹp làm đích, và nói rõ đó là gợi ý.
+  // Khách đã nhẹ hơn cả đích thì đích chính là cân nặng hiện tại — không có
+  // chặng nào để đi, và không chỗ nào nhận được số kg âm.
   const goalIsSuggested = !(targetWeight > 0);
-  const goalWeight      = goalIsSuggested ? idealWeight : targetWeight;
+  const goalWeight      = Math.min(goalIsSuggested ? idealWeight : targetWeight, currentWeight);
 
   // Ranh giới của từng chặng, kẹp trong khoảng [đích, cân nặng hiện tại].
   const clamp = (w: number) => Math.min(Math.max(w, goalWeight), currentWeight);

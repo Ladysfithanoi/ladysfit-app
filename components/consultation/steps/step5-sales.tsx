@@ -517,9 +517,10 @@ export function Step5Sales({
           </div>
         )}
 
-        {/* 3-option selector — hidden in read-only mode */}
-        {!isReadOnly && (
-          <div className="p-5">
+        {/* Ba lộ trình đề xuất — buổi tư vấn đã chốt vẫn hiện, chỉ là không bấm được.
+            Hồ sơ chốt mà chưa kịp chọn gói thì đây là chỗ duy nhất còn thấy được
+            lộ trình hợp với khách, đừng để trắng trơn. */}
+        <div className="p-5">
             <button
               type="button"
               onClick={() => setShowCatalog(true)}
@@ -528,12 +529,19 @@ export function Step5Sales({
             >
               <Package className="w-4 h-4 text-[#f15b5c]" />
               <span className="text-sm font-extrabold text-gray-800 group-hover:text-[#f15b5c] group-hover:underline transition-colors">
-                Chọn lộ trình tập luyện
+                {isReadOnly ? "Lộ trình đề xuất theo chỉ số của khách" : "Chọn lộ trình tập luyện"}
               </span>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#f15b5c] transition-colors" />
             </button>
             <p className="text-xs text-gray-400 mb-4">
-              Ấn một trong 3 lộ trình để chọn cách ghép gói cho khoảng thời gian đó —{" "}
+              {isReadOnly ? (
+                <>
+                  Buổi tư vấn đã chốt nên không sửa được nữa — đây là ba lộ trình hệ thống
+                  đề xuất cho chỉ số của khách.{" "}
+                </>
+              ) : (
+                <>Ấn một trong 3 lộ trình để chọn cách ghép gói cho khoảng thời gian đó — </>
+              )}
               <button
                 type="button"
                 onClick={() => setShowCatalog(true)}
@@ -553,12 +561,16 @@ export function Step5Sales({
                 return (
                   <button
                     key={opt.num}
+                    type="button"
+                    disabled={isReadOnly}
                     onClick={() => setVariantOption(opt)}
                     className={cn(
-                      "text-left rounded-2xl border-2 p-4 transition-all hover:shadow-md",
+                      "text-left rounded-2xl border-2 p-4 transition-all",
+                      !isReadOnly && "hover:shadow-md",
+                      isReadOnly && "cursor-default",
                       isSelected
                         ? `${theme.active} ring-2 ${theme.ring}`
-                        : "border-gray-200 bg-white hover:border-gray-300"
+                        : cn("border-gray-200 bg-white", !isReadOnly && "hover:border-gray-300")
                     )}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -582,15 +594,14 @@ export function Step5Sales({
                 );
               })}
             </div>
-          </div>
-        )}
+        </div>
 
         {/* Package list — revealed after option selection */}
         <div className="p-5">
           {isReadOnly && (
             <div className="flex items-center gap-2 mb-4">
               <Package className="w-4 h-4 text-[#f15b5c]" />
-              <p className="text-sm font-extrabold text-gray-800">Lộ trình được đề xuất</p>
+              <p className="text-sm font-extrabold text-gray-800">Lộ trình đã chốt</p>
             </div>
           )}
 
@@ -600,7 +611,11 @@ export function Step5Sales({
               <p className="text-sm font-semibold text-gray-300">Chọn một lộ trình ở trên để xem các gói tập</p>
             </div>
           ) : packages.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">Không có lộ trình phù hợp với thông tin hiện tại</p>
+            // Không phải "không có lộ trình phù hợp" — ba lộ trình đề xuất vẫn nằm
+            // ngay trên. Chỉ là buổi tư vấn này chốt lại mà chưa chọn gói nào.
+            <p className="text-sm text-gray-400 text-center py-8">
+              Buổi tư vấn này chưa chốt gói nào — xem ba lộ trình đề xuất ở trên.
+            </p>
           ) : (
             <>
               <div className="space-y-3">
