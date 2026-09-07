@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { X, Plus, Clock, ArrowLeft, Lock, Trash2, Check, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice } from "@/lib/packages";
-import { PRICE_TYPE_LABEL, priceRoadmap, quoteTotals } from "@/lib/roadmap-pricing";
+import { priceLineLabel, priceRoadmap, quoteTotals } from "@/lib/roadmap-pricing";
 import {
   ROADMAP_PACKAGES,
   ROADMAP_PHASES,
@@ -340,12 +340,15 @@ function PackagePicker({
  */
 function QuotePanel({
   packageNames,
+  branchName,
   onBack,
 }: {
   packageNames: string[];
+  /** Cơ sở của buổi tư vấn — để xét đợt trợ giá riêng của cơ sở đó. */
+  branchName?: string | null;
   onBack: () => void;
 }) {
-  const lines = priceRoadmap(packageNames);
+  const lines = priceRoadmap(packageNames, { branchName });
   const totals = quoteTotals(lines);
 
   return (
@@ -387,14 +390,16 @@ function QuotePanel({
                 <span
                   className={cn(
                     "mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold",
-                    line.type === "subsidized"
-                      ? "bg-orange-100 text-orange-600"
-                      : line.type === "renewal"
-                        ? "bg-blue-50 text-blue-600"
-                        : "bg-gray-100 text-gray-500"
+                    line.type === "promo"
+                      ? "bg-[#f15b5c] text-white"
+                      : line.type === "subsidized"
+                        ? "bg-orange-100 text-orange-600"
+                        : line.type === "renewal"
+                          ? "bg-blue-50 text-blue-600"
+                          : "bg-gray-100 text-gray-500"
                   )}
                 >
-                  {PRICE_TYPE_LABEL[line.type]}
+                  {priceLineLabel(line)}
                 </span>
               </div>
               <div className="shrink-0 text-right">
@@ -448,6 +453,7 @@ export function RoadmapBuilderModal({
   info,
   picked,
   isReadOnly,
+  branchName,
   onClose,
   onApply,
 }: {
@@ -455,6 +461,8 @@ export function RoadmapBuilderModal({
   /** Lộ trình đang có — dùng làm điểm bắt đầu để sửa tiếp. */
   picked: { packageName: string; phase?: number | null }[];
   isReadOnly: boolean;
+  /** Cơ sở của buổi tư vấn — quyết định đợt trợ giá nào đang áp. */
+  branchName?: string | null;
   onClose: () => void;
   /** Trả về danh sách gói kèm bậc, đã xếp theo thứ tự bậc 1 → 3. */
   onApply: (picks: RoadmapPick[]) => void;
@@ -629,7 +637,7 @@ export function RoadmapBuilderModal({
           )}
 
           {showQuote && flat.length > 0 && (
-            <QuotePanel packageNames={flatNames} onBack={() => setShowQuote(false)} />
+            <QuotePanel packageNames={flatNames} branchName={branchName} onBack={() => setShowQuote(false)} />
           )}
         </div>
       </div>

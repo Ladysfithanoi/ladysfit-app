@@ -7,7 +7,8 @@ import { Check, Package, Clock, ChevronRight, Route, ImageDown, Loader2 } from "
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
-import { priceRoadmap } from "@/lib/roadmap-pricing";
+import { priceRoadmap, priceLineLabel } from "@/lib/roadmap-pricing";
+import { activePromos } from "@/lib/package-promos";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
@@ -155,6 +156,17 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
     { num: 2, label: "Tiêu chuẩn", sublabel: "Vừa phải",  totalDays: sumDays(opt2), packages: opt2 },
     { num: 3, label: "Cơ bản",     sublabel: "Ngắn nhất", totalDays: sumDays(opt3), packages: opt3 },
   ];
+}
+
+/**
+ * Ngày cuối cùng còn áp đợt trợ giá, theo giờ Việt Nam.
+ *
+ * `until` trong lib/package-promos là mốc HẾT hiệu lực (đầu ngày kế tiếp), nên
+ * lùi lại một ngày mới ra ngày khách còn mua được.
+ */
+function fmtPromoEnd(until: string): string {
+  const d = new Date(new Date(until).getTime() - 24 * 3600_000 + 7 * 3600_000);
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
 function detectOptionNum(pkgs: SelectedPkg[]): 1 | 2 | 3 | null {
@@ -394,10 +406,14 @@ export function Step5Sales({
   const phaseRows    = useMemo(() => buildPhaseTable(info, packages.filter((p) => p.isConfirmed)), [packages, info]);
   // Giá tính ở lib/roadmap-pricing — dùng chung với nút Báo giá của bậc thang
   // để hai chỗ không bao giờ báo hai con số khác nhau cho cùng một lộ trình.
+  // Đợt trợ giá riêng của cơ sở (lib/package-promos) phụ thuộc cơ sở + ngày,
+  // nên phải truyền tên cơ sở xuống, không thì bảng giá báo nguyên giá.
+  const branchName   = consultation.branch?.name ?? null;
   const allPricing   = useMemo(
-    () => priceRoadmap(packages.map((p) => p.packageName)),
-    [packages]
+    () => priceRoadmap(packages.map((p) => p.packageName), { branchName }),
+    [packages, branchName]
   );
+  const promos       = useMemo(() => activePromos({ branchName }), [branchName]);
 
   const weightToLose   = (Number(info.currentWeight) || 0) - (Number(info.targetWeight) || 0);
   const initialWeight  = Number(info.currentWeight) || 0;
@@ -562,6 +578,29 @@ export function Step5Sales({
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Đợt trợ giá đang chạy ở cơ sở này — tư vấn viên phải thấy trước khi
+            báo giá, không thì lại đọc nguyên giá cho khách. */}
+        {promos.length > 0 && (
+          <div className="p-5">
+            {promos.map((p) => (
+              <div
+                key={p.name}
+                className="rounded-xl border border-[#f15b5c]/30 bg-[#fff5f5] px-4 py-3"
+              >
+                <p className="text-sm font-extrabold text-[#f15b5c]">🎁 {p.name}</p>
+                <p className="mt-1 text-xs font-semibold text-gray-600">
+                  {Object.entries(p.prices)
+                    .map(([key, price]) => `${key} còn ${formatPrice(price)}`)
+                    .join(" · ")}
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  Áp dụng đến hết {fmtPromoEnd(p.until)} — sau đó giá tự trở về bình thường.
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -775,6 +814,36 @@ export function Step5Sales({
                 <p className="text-lg font-extrabold text-[#f15b5c]">{formatPrice(totalDiscounted)}</p>
               </div>
             </div>
+            {/* Từng gói được áp mức nào — để tư vấn viên đọc đúng số với khách. */}
+            <div className="mt-3 space-y-1.5">
+              {confirmedPricing.map((line, i) => (
+                <div key={`${line.packageName}-${i}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold text-gray-700">{line.packageName}</span>
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap",
+                      line.type === "promo"
+                        ? "bg-[#f15b5c] text-white"
+                        : line.type === "subsidized"
+                          ? "bg-orange-100 text-orange-600"
+                          : line.type === "renewal"
+                            ? "bg-blue-50 text-blue-600"
+                            : "bg-gray-100 text-gray-500"
+                    )}>
+                      {priceLineLabel(line)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    {line.effectivePrice < line.originalPrice && (
+                      <span className="mr-1.5 text-[11px] text-gray-400 line-through">
+                        {formatPrice(line.originalPrice)}
+                      </span>
+                    )}
+                    <span className="font-extrabold text-gray-800">{formatPrice(line.effectivePrice)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
             <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
               * L1, L2 áp dụng giá trợ giá | Loyalfit giữ nguyên giá gốc | Từ hợp đồng thứ 2 giảm 10%
             </p>
@@ -918,6 +987,7 @@ export function Step5Sales({
             phase: p.roadmapPhase,
           }))}
           isReadOnly={isReadOnly}
+          branchName={branchName}
           onClose={() => setShowRoadmapBuilder(false)}
           onApply={applyCustomRoadmap}
         />

@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { fmtDate } from "@/lib/format-date";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { promoPriceFor } from "@/lib/package-promos";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -17,6 +18,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     include: {
       info: true,
       assessment: true,
+      branch: { select: { name: true } },
       packages: { where: { isConfirmed: true }, orderBy: { order: "asc" } },
     },
   });
@@ -126,6 +128,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     const year = new Date().getFullYear();
     const yearStart = new Date(`${year}-01-01`);
     const baseCount = await prisma.packageEnrollment.count({ where: { createdAt: { gte: yearStart } } });
+    // Đợt trợ giá riêng của cơ sở, xét tại thời điểm CHỐT hợp đồng — đó mới là
+    // lúc bán hàng thật sự xảy ra. Xem lib/package-promos; hết hạn thì hợp đồng
+    // sau đó tự quay về giá thường.
+    const promoCtx = { branchName: c.branch.name, at: new Date() };
     await prisma.packageEnrollment.createMany({
       data: c.packages.map((pkg, i) => ({
         clientId: client.id,
@@ -134,7 +140,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         sessions: pkg.sessions,
         sessionsUsed: 0,
         durationDays: pkg.durationDays,
-        price: pkg.discountedPrice ?? pkg.price,
+        price:
+          promoPriceFor(pkg.packageName, promoCtx)?.price
+          ?? pkg.discountedPrice
+          ?? pkg.price,
         contractCode: `HDLDF${year}${String(baseCount + i + 1).padStart(4, "0")}`,
         status: "ACTIVE" as const,
       })),
