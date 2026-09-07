@@ -536,8 +536,8 @@ export function Step5Sales({
             <p className="text-xs text-gray-400 mb-4">
               {isReadOnly ? (
                 <>
-                  Buổi tư vấn đã chốt nên không sửa được nữa — đây là ba lộ trình hệ thống
-                  đề xuất cho chỉ số của khách.{" "}
+                  Buổi tư vấn đã chốt nên không đổi được nữa, nhưng ấn vào một lộ trình vẫn
+                  xem được chi tiết các cách ghép gói bên trong —{" "}
                 </>
               ) : (
                 <>Ấn một trong 3 lộ trình để chọn cách ghép gói cho khoảng thời gian đó — </>
@@ -562,15 +562,12 @@ export function Step5Sales({
                   <button
                     key={opt.num}
                     type="button"
-                    disabled={isReadOnly}
                     onClick={() => setVariantOption(opt)}
                     className={cn(
-                      "text-left rounded-2xl border-2 p-4 transition-all",
-                      !isReadOnly && "hover:shadow-md",
-                      isReadOnly && "cursor-default",
+                      "text-left rounded-2xl border-2 p-4 transition-all hover:shadow-md",
                       isSelected
                         ? `${theme.active} ring-2 ${theme.ring}`
-                        : cn("border-gray-200 bg-white", !isReadOnly && "hover:border-gray-300")
+                        : "border-gray-200 bg-white hover:border-gray-300"
                     )}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -823,6 +820,7 @@ export function Step5Sales({
             packageNames: variantOption.packages.map((p) => p.packageName),
           }}
           phase1Key={phase1Key}
+          isReadOnly={isReadOnly}
           onPick={(names) => selectVariant(variantOption, names)}
           onClose={() => setVariantOption(null)}
         />

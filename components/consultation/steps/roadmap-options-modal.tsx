@@ -30,11 +30,14 @@ export type RoadmapOptionSummary = {
 export function RoadmapOptionsModal({
   option,
   phase1Key,
+  isReadOnly = false,
   onPick,
   onClose,
 }: {
   option: RoadmapOptionSummary;
   phase1Key: string | null;
+  /** Buổi tư vấn đã chốt — vẫn xem được chi tiết từng phương án, chỉ không chọn được. */
+  isReadOnly?: boolean;
   onPick: (packageNames: string[]) => void;
   onClose: () => void;
 }) {
@@ -64,7 +67,9 @@ export function RoadmapOptionsModal({
                 </span>
               </div>
               <p className="mt-0.5 text-xs font-semibold text-gray-400">
-                Chọn cách ghép gói cho khoảng thời gian này — tổng thời lượng giữ nguyên
+                {isReadOnly
+                  ? "Các cách ghép gói cho khoảng thời gian này — buổi tư vấn đã chốt nên chỉ xem"
+                  : "Chọn cách ghép gói cho khoảng thời gian này — tổng thời lượng giữ nguyên"}
               </p>
             </div>
             <button
@@ -84,12 +89,18 @@ export function RoadmapOptionsModal({
                 <button
                   key={v.key}
                   type="button"
+                  disabled={isReadOnly}
                   onClick={() => onPick(v.packageNames)}
                   className={cn(
-                    "w-full rounded-2xl border-2 p-4 text-left transition-all hover:shadow-md",
+                    "w-full rounded-2xl border-2 p-4 text-left transition-all",
+                    isReadOnly && "cursor-default",
+                    !isReadOnly && "hover:shadow-md",
                     v.isDefault
-                      ? "border-[#f15b5c] bg-[#fff5f5] hover:bg-[#ffeeee]"
-                      : "border-gray-200 bg-white hover:border-[#f15b5c]/60 hover:bg-[#fff5f5]/50"
+                      ? cn("border-[#f15b5c] bg-[#fff5f5]", !isReadOnly && "hover:bg-[#ffeeee]")
+                      : cn(
+                          "border-gray-200 bg-white",
+                          !isReadOnly && "hover:border-[#f15b5c]/60 hover:bg-[#fff5f5]/50"
+                        )
                   )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -155,10 +166,12 @@ export function RoadmapOptionsModal({
                     })}
                   </div>
 
-                  <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#f15b5c]">
-                    <Check className="h-3.5 w-3.5" />
-                    Chọn lộ trình này
-                  </span>
+                  {!isReadOnly && (
+                    <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#f15b5c]">
+                      <Check className="h-3.5 w-3.5" />
+                      Chọn lộ trình này
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -176,7 +189,7 @@ export function RoadmapOptionsModal({
               onClick={onClose}
               className="rounded-xl px-4 py-2 text-sm font-bold text-gray-500 transition-colors hover:bg-gray-50"
             >
-              Huỷ
+              {isReadOnly ? "Đóng" : "Huỷ"}
             </button>
           </div>
         </div>
