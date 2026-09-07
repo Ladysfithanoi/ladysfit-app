@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countPackageSession } from "@/lib/workout-session";
-import { findCheckInBlock } from "@/lib/checkin-eligibility";
+import { findCheckInBlock, runningSessionBlock } from "@/lib/checkin-eligibility";
 import { generatePackageProgressNotifications } from "@/lib/package-progress";
 
 // POST /api/clients/[id]/workout-logs/check-in
@@ -44,6 +44,35 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     if (existing) {
       return NextResponse.json({ ...serialize(existing), packageUpdate: null });
+    }
+
+    // MỘT KHÁCH CHỈ CÓ MỘT BUỔI ĐANG CHẠY. Buổi cũ chưa check-out mà mở buổi mới
+    // thì lộ trình bị trừ hai buổi trong khi khách chỉ tập một, và buổi bỏ dở kia
+    // cứ chạy tới mốc 2 tiếng rồi tự huỷ — PT mất buổi dạy mà không hiểu vì sao.
+    // Đóng buổi đang chạy trước, hoặc xoá nó nếu lỡ check-in nhầm.
+    //
+    // Buổi CÙNG session đã được trả về ở nhánh "Resume" bên trên, nên tới đây chỉ
+    // còn trường hợp buổi KHÁC đang dở.
+    const running = await prisma.workoutLog.findFirst({
+      where: { clientId: params.id, status: { in: ["IN_PROGRESS", "AWAITING_CONFIRMATION"] } },
+      select: {
+        id: true,
+        checkInAt: true,
+        session: { select: { sessionName: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (running) {
+      const block = runningSessionBlock({
+        sessionName: running.session?.sessionName,
+        checkInAt: running.checkInAt,
+        ptName: running.createdBy?.name,
+      });
+      return NextResponse.json(
+        { error: block.message, reason: block.reason, runningLogId: running.id },
+        { status: 409 }
+      );
     }
 
     // HẾT BUỔI / HẾT HẠN → không cho bắt đầu buổi mới. Buổi tập chỉ được mở khi

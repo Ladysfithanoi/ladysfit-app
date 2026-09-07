@@ -26,7 +26,13 @@ import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-moda
 import { CheckOutPhotoThumb } from "./checkout-photo";
 import { PhaseSwitchModal } from "./phase-switch-modal";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
-import { findCheckInBlock, type CheckInBlock, type PackageForCheckIn } from "@/lib/checkin-eligibility";
+import {
+  findCheckInBlock,
+  isRunningLog,
+  runningSessionBlock,
+  type CheckInBlock,
+  type PackageForCheckIn,
+} from "@/lib/checkin-eligibility";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -2224,7 +2230,27 @@ export function WorkoutTab({
 
   // Hết buổi hoặc hết hạn thì không cho mở buổi mới. Tính lại mỗi lần render nên
   // ngay khi buổi cuối vừa bị trừ (onPackageUpdated), nút check-in khoá luôn.
-  const checkInBlock = packages ? findCheckInBlock(packages) : null;
+  //
+  // Khách đang có buổi chạy dở cũng không mở được buổi thứ hai. Chặn ở đây là đủ
+  // cho mọi buổi khác: buổi ĐANG chạy không hiện nút check-in mà hiện bảng điều
+  // khiển buổi tập, nên nó không tự khoá chính mình. Server chặn thật ở
+  // POST /workout-logs/check-in.
+  const runningLog = workoutLogs.find(isRunningLog) ?? null;
+  const runningSessionName = runningLog
+    ? programs
+        .flatMap((p) => p.weeks.flatMap((w) => w.sessions))
+        .find((s) => s.id === runningLog.sessionId)?.sessionName ?? null
+    : null;
+
+  const checkInBlock =
+    (runningLog
+      ? runningSessionBlock({
+          sessionName: runningSessionName,
+          checkInAt: runningLog.checkInAt,
+          ptName: runningLog.createdBy?.name,
+        })
+      : null)
+    ?? (packages ? findCheckInBlock(packages) : null);
 
   // Thứ tự giai đoạn từ tên ("Giai đoạn 2: ..." → 2) để biết đâu là giai đoạn trước.
   const phaseOrder = (name: string) => {
