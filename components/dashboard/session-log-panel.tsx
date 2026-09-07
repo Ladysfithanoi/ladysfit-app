@@ -559,6 +559,9 @@ function fmtClock(ms: number): string {
 // check out, which would otherwise let the clock run forever.
 const MAX_SESSION_MINUTES = 120;
 
+// Bắt đầu cảnh báo PT khi chỉ còn ngần này phút trước mốc tự huỷ.
+const CAP_WARN_MINUTES = 20;
+
 export function LiveSessionPanel({
   log,
   sessionName,
@@ -622,6 +625,8 @@ export function LiveSessionPanel({
   const maxMs = MAX_SESSION_MINUTES * 60000;
   const rawElapsedMs = nowMs - checkInMs;
   const overMax = rawElapsedMs >= maxMs;
+  /** Số phút còn lại trước khi buổi tự huỷ — dùng để cảnh báo sớm. */
+  const minutesToCap = Math.max(0, (maxMs - rawElapsedMs) / 60000);
   // Freeze the displayed clock at the 2-hour cap so it never runs past it.
   const elapsedMs = Math.min(rawElapsedMs, maxMs);
   const elapsedMin = elapsedMs / 60000;
@@ -1131,6 +1136,20 @@ export function LiveSessionPanel({
           </button>
         </div>
       </div>
+
+      {/* Cảnh báo trước khi chạm mốc 2 tiếng. Quá mốc là form ký biến mất và buổi
+          bị huỷ — trước đây đồng hồ cứ chạy im lặng tới lúc đó, PT không kịp trở
+          tay. Đây là chỗ duy nhất PT còn cứu được buổi dạy của mình. */}
+      {minutesToCap <= CAP_WARN_MINUTES && (
+        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 border-b border-amber-200">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            <span className="font-bold">Còn {Math.ceil(minutesToCap)} phút để ký check-out.</span>{" "}
+            Quá {MAX_SESSION_MINUTES} phút kể từ check-in là buổi tự huỷ — khách vẫn bị trừ buổi
+            mà bạn không được tính buổi dạy. Ký ngay khi khách tập xong.
+          </p>
+        </div>
+      )}
 
       {collapsed && (
         <div className="px-4 py-2.5 text-xs text-gray-500 flex items-center justify-between gap-2">

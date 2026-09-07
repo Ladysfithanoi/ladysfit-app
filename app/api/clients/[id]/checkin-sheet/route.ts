@@ -55,7 +55,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   });
 
   const logs = await prisma.workoutLog.findMany({
-    where: { clientId: params.id, packageEnrollmentId: enrollmentId, checkOutAt: { not: null } },
+    // Chỉ buổi ĐÃ HOÀN THÀNH mới lên phiếu. Buổi bị huỷ có thể vẫn còn checkOutAt
+    // (PT ký muộn quá mốc 2 tiếng — xem route check-out), mà buổi huỷ thì không
+    // phải buổi dạy hợp lệ, không được nằm trên phụ lục hợp đồng.
+    where: {
+      clientId: params.id,
+      packageEnrollmentId: enrollmentId,
+      status: "COMPLETED",
+      checkOutAt: { not: null },
+    },
     orderBy: { sessionDate: "asc" },
     select: { sessionDate: true, checkOutAt: true, signatureUrl: true, checkOutPhotoUrl: true },
     take: TOTAL_ROWS,

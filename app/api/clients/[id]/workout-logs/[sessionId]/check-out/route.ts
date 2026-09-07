@@ -128,9 +128,27 @@ export async function POST(
     // Void it (keep the record + check-in signature). The package buổi is NOT
     // refunded — the client already signed the check-in, so the deduction stands.
     if (!isAwaiting && elapsedMin >= MAX_SESSION_MINUTES) {
+      // PT có gửi kèm chữ ký + ảnh nghĩa là họ ĐÃ ký thật, chỉ là muộn hơn mốc.
+      // GIỮ LẠI bằng chứng đó thay vì vứt đi: buổi vẫn VOID nên không tự vào
+      // lương, nhưng FM đối soát được và cộng tay bằng "Số buổi PT" nếu buổi dạy
+      // là thật. Vứt đi thì hồ sơ trông y hệt trường hợp PT không ký gì cả —
+      // không ai phân xử được, mà lý do huỷ lại ghi oan là "chưa ký check-out".
+      const lateSig   = (body.signatureUrl ?? "").trim();
+      const latePhoto = (body.checkOutPhotoUrl ?? "").trim();
+      const overBy    = Math.round(elapsedMin - MAX_SESSION_MINUTES);
+
       const voided = await prisma.workoutLog.update({
         where: { id: logId },
-        data: { status: "VOID", voidReason: OVER_CAP_VOID_REASON },
+        data: {
+          status: "VOID",
+          voidReason: lateSig
+            ? `PT ký check-out muộn ${overBy} phút so với mốc ${MAX_SESSION_MINUTES} phút kể từ check-in. `
+              + `Chữ ký và ảnh đã được lưu lại; buổi không tự tính lương, FM đối soát rồi cộng tay nếu buổi dạy là thật.`
+            : OVER_CAP_VOID_REASON,
+          firstInteractionAt,
+          ...(lateSig ? { checkOutAt: now, signatureUrl: lateSig } : {}),
+          ...(latePhoto ? { checkOutPhotoUrl: latePhoto } : {}),
+        },
         include: INCLUDE,
       });
       return NextResponse.json({ ...serializeWorkoutLog(voided), valid: false, autoCancelled: true });
