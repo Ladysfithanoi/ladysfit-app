@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
 import { priceRoadmap, priceLineLabel } from "@/lib/roadmap-pricing";
-import { activePromos } from "@/lib/package-promos";
+import { fmtVnDate, type ActivePromo } from "@/lib/package-promos";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
 import { PackagesCatalogModal } from "./packages-catalog-modal";
@@ -156,17 +156,6 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
     { num: 2, label: "Tiêu chuẩn", sublabel: "Vừa phải",  totalDays: sumDays(opt2), packages: opt2 },
     { num: 3, label: "Cơ bản",     sublabel: "Ngắn nhất", totalDays: sumDays(opt3), packages: opt3 },
   ];
-}
-
-/**
- * Ngày cuối cùng còn áp đợt trợ giá, theo giờ Việt Nam.
- *
- * `until` trong lib/package-promos là mốc HẾT hiệu lực (đầu ngày kế tiếp), nên
- * lùi lại một ngày mới ra ngày khách còn mua được.
- */
-function fmtPromoEnd(until: string): string {
-  const d = new Date(new Date(until).getTime() - 24 * 3600_000 + 7 * 3600_000);
-  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
 function detectOptionNum(pkgs: SelectedPkg[]): 1 | 2 | 3 | null {
@@ -338,6 +327,7 @@ export function Step5Sales({
   onDraft,
   onPrev,
   canSaveAndContinue = true,
+  activePromos = [],
 }: {
   consultation: ConsultationData;
   isReadOnly: boolean;
@@ -345,6 +335,8 @@ export function Step5Sales({
   onPrev: () => void;
   onComplete: () => void;
   canSaveAndContinue?: boolean;
+  /** Đợt trợ giá đang chạy ở cơ sở này, đã lọc sẵn ở server. */
+  activePromos?: ActivePromo[];
 }) {
   const router = useRouter();
   const info         = (consultation.info ?? {}) as Record<string, unknown>;
@@ -406,14 +398,12 @@ export function Step5Sales({
   const phaseRows    = useMemo(() => buildPhaseTable(info, packages.filter((p) => p.isConfirmed)), [packages, info]);
   // Giá tính ở lib/roadmap-pricing — dùng chung với nút Báo giá của bậc thang
   // để hai chỗ không bao giờ báo hai con số khác nhau cho cùng một lộ trình.
-  // Đợt trợ giá riêng của cơ sở (lib/package-promos) phụ thuộc cơ sở + ngày,
-  // nên phải truyền tên cơ sở xuống, không thì bảng giá báo nguyên giá.
-  const branchName   = consultation.branch?.name ?? null;
+  // Đợt trợ giá nằm trong DB nên được lọc sẵn ở server rồi truyền xuống — xem
+  // lib/package-promos-server. Bảng giá chỉ việc áp.
   const allPricing   = useMemo(
-    () => priceRoadmap(packages.map((p) => p.packageName), { branchName }),
-    [packages, branchName]
+    () => priceRoadmap(packages.map((p) => p.packageName), activePromos),
+    [packages, activePromos]
   );
-  const promos       = useMemo(() => activePromos({ branchName }), [branchName]);
 
   const weightToLose   = (Number(info.currentWeight) || 0) - (Number(info.targetWeight) || 0);
   const initialWeight  = Number(info.currentWeight) || 0;
@@ -583,21 +573,21 @@ export function Step5Sales({
 
         {/* Đợt trợ giá đang chạy ở cơ sở này — tư vấn viên phải thấy trước khi
             báo giá, không thì lại đọc nguyên giá cho khách. */}
-        {promos.length > 0 && (
-          <div className="p-5">
-            {promos.map((p) => (
+        {activePromos.length > 0 && (
+          <div className="p-5 space-y-2">
+            {activePromos.map((p) => (
               <div
-                key={p.name}
+                key={p.id}
                 className="rounded-xl border border-[#f15b5c]/30 bg-[#fff5f5] px-4 py-3"
               >
                 <p className="text-sm font-extrabold text-[#f15b5c]">🎁 {p.name}</p>
                 <p className="mt-1 text-xs font-semibold text-gray-600">
-                  {Object.entries(p.prices)
-                    .map(([key, price]) => `${key} còn ${formatPrice(price)}`)
+                  {p.items
+                    .map((it) => `${it.packageName} còn ${formatPrice(it.price)}`)
                     .join(" · ")}
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-400">
-                  Áp dụng đến hết {fmtPromoEnd(p.until)} — sau đó giá tự trở về bình thường.
+                  Áp dụng đến hết {fmtVnDate(p.endsAt)} — sau đó giá tự trở về bình thường.
                 </p>
               </div>
             ))}
@@ -987,7 +977,7 @@ export function Step5Sales({
             phase: p.roadmapPhase,
           }))}
           isReadOnly={isReadOnly}
-          branchName={branchName}
+          activePromos={activePromos}
           onClose={() => setShowRoadmapBuilder(false)}
           onApply={applyCustomRoadmap}
         />

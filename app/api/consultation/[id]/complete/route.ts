@@ -7,6 +7,7 @@ import { fmtDate } from "@/lib/format-date";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { logPTAssignment } from "@/lib/transform-credit";
 import { promoPriceFor } from "@/lib/package-promos";
+import { getActivePromos } from "@/lib/package-promos-server";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -131,7 +132,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     // Đợt trợ giá riêng của cơ sở, xét tại thời điểm CHỐT hợp đồng — đó mới là
     // lúc bán hàng thật sự xảy ra. Xem lib/package-promos; hết hạn thì hợp đồng
     // sau đó tự quay về giá thường.
-    const promoCtx = { branchName: c.branch.name, at: new Date() };
+    const promos = await getActivePromos(c.branchId);
     await prisma.packageEnrollment.createMany({
       data: c.packages.map((pkg, i) => ({
         clientId: client.id,
@@ -141,7 +142,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         sessionsUsed: 0,
         durationDays: pkg.durationDays,
         price:
-          promoPriceFor(pkg.packageName, promoCtx)?.price
+          promoPriceFor(pkg.packageName, promos)?.price
           ?? pkg.discountedPrice
           ?? pkg.price,
         contractCode: `HDLDF${year}${String(baseCount + i + 1).padStart(4, "0")}`,

@@ -26,8 +26,53 @@ model Branch {
   salaryConfigs        SalaryConfig[]
   salaryRecords        SalaryRecord[]
   transactions         Transaction[]
+  packagePromos        PackagePromo[]
 
   @@map("branches")
+}
+
+/// Đợt trợ giá riêng của một cơ sở, có ngày hết hạn.
+///
+/// Khác ba mức giá thường trực ở lib/roadmap-pricing (trợ giá L1/L2, nguyên giá,
+/// tái ký −10%): những mức đó áp cho MỌI cơ sở và không bao giờ hết hạn. Chỗ này
+/// là các đợt bán hàng riêng, tự hết hiệu lực khi qua ngày — không ai phải nhớ
+/// đi tắt thủ công.
+model PackagePromo {
+  id         String   @id @default(cuid())
+  /// Tên đợt, hiện cho tư vấn viên thấy đang áp chương trình nào.
+  name       String
+  /// Nhãn ngắn đứng cạnh giá, vd "Presale −30%".
+  shortLabel String
+  branchId   String
+  /// Thời điểm bắt đầu áp (đầu ngày theo giờ Việt Nam).
+  startsAt   DateTime
+  /// Thời điểm cuối cùng còn áp (cuối ngày cuối cùng, giờ Việt Nam) — tính CẢ mốc này.
+  endsAt     DateTime
+  /// Admin tắt tay mà không cần xoá đợt.
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  items  PackagePromoItem[]
+
+  @@map("package_promos")
+}
+
+/// Giá của một gói trong một đợt trợ giá.
+///
+/// Lưu GIÁ CUỐI khách trả, không lưu phần trăm giảm — để không bao giờ có chuyện
+/// làm tròn ra một con số lạ trên hợp đồng.
+model PackagePromoItem {
+  id          String @id @default(cuid())
+  promoId     String
+  packageName String
+  price       Float
+
+  promo PackagePromo @relation(fields: [promoId], references: [id], onDelete: Cascade)
+
+  @@unique([promoId, packageName])
+  @@map("package_promo_items")
 }
 
 model User {

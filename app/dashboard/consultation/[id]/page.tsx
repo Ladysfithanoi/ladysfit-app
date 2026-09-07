@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ConsultationWizard } from "@/components/consultation/consultation-wizard";
+import { getActivePromos } from "@/lib/package-promos-server";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,9 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
     }
   }
 
-  const [branches, staff, sysConfig] = await Promise.all([
+  // Đợt trợ giá đang chạy ở cơ sở của buổi tư vấn — bảng giá ở bước 5 cần nó,
+  // mà nó nằm trong DB nên phải lấy ở server rồi truyền xuống.
+  const [branches, staff, sysConfig, activePromos] = await Promise.all([
     prisma.branch.findMany({
       where: isFM ? { id: { in: managedBranchIds } } : undefined,
       orderBy: { name: "asc" },
@@ -65,6 +68,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       orderBy: { name: "asc" },
     }),
     prisma.systemConfig.findUnique({ where: { id: "main" } }).catch(() => null),
+    getActivePromos(c.branchId),
   ]);
 
   const { workoutDesignJson, ...cRest } = c;
@@ -83,6 +87,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
       currentUserId={session.user.id}
       userRole={role}
       enableLevelSystem={sysConfig?.enableLevelSystem ?? true}
+      activePromos={activePromos}
     />
   );
 }

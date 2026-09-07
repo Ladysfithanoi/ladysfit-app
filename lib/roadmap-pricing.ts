@@ -1,5 +1,5 @@
 import { PACKAGES } from "@/lib/packages";
-import { promoPriceFor, type PromoContext } from "@/lib/package-promos";
+import { promoPriceFor, type ActivePromo } from "@/lib/package-promos";
 
 /**
  * ── Giá một lộ trình ─────────────────────────────────────────────────────────
@@ -65,13 +65,14 @@ function standardLine(name: string, index: number): PriceLine {
 /**
  * Giá từng gói theo đúng thứ tự chúng nằm trong lộ trình.
  *
- * `ctx` là cơ sở + thời điểm để xét đợt trợ giá. Bỏ trống thì chỉ có giá thường
- * trực — an toàn cho những chỗ chưa biết cơ sở, không bao giờ báo nhầm giá rẻ.
+ * `promos` là các đợt trợ giá ĐANG CHẠY ở cơ sở đó (lọc sẵn ở
+ * lib/package-promos-server). Bỏ trống thì chỉ có giá thường trực — an toàn cho
+ * những chỗ chưa biết cơ sở, không bao giờ báo nhầm giá rẻ.
  */
-export function priceRoadmap(packageNames: string[], ctx?: PromoContext): PriceLine[] {
+export function priceRoadmap(packageNames: string[], promos?: ActivePromo[] | null): PriceLine[] {
   return packageNames.map((name, index) => {
     const line  = standardLine(name, index);
-    const promo = promoPriceFor(name, ctx);
+    const promo = promoPriceFor(name, promos);
 
     // Chỉ đổi khi đợt trợ giá THẬT SỰ rẻ hơn mức thường trực — khách luôn được
     // mức tốt nhất, và một đợt kém hơn giá tái ký không bao giờ làm khách thiệt.

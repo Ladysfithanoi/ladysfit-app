@@ -9,6 +9,7 @@ import { Step2Assessment } from "./steps/step2-assessment";
 import { Step3Workout } from "./steps/step3-workout";
 import { Step4Diet } from "./steps/step4-diet";
 import { Step5Sales } from "./steps/step5-sales";
+import type { ActivePromo } from "@/lib/package-promos";
 
 const STEP_LABELS = [
   "CIF",
@@ -44,6 +45,7 @@ export function ConsultationWizard({
   isFM = false,
   userRole,
   enableLevelSystem = true,
+  activePromos = [],
 }: {
   consultation: ConsultationData;
   branches: Branch[];
@@ -53,6 +55,8 @@ export function ConsultationWizard({
   currentUserId: string;
   userRole?: string;
   enableLevelSystem?: boolean;
+  /** Đợt trợ giá đang chạy ở cơ sở của buổi tư vấn — xem lib/package-promos. */
+  activePromos?: ActivePromo[];
 }) {
   const router = useRouter();
   const [consultation, setConsultation] = useState(initial);
@@ -278,6 +282,7 @@ export function ConsultationWizard({
             onPrev={handlePrev}
             onComplete={() => router.push("/dashboard/consultation")}
             canSaveAndContinue={canSaveAndContinue}
+            activePromos={activePromos}
           />
         )}
       </div>

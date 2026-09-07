@@ -5,6 +5,7 @@ import { X, Plus, Clock, ArrowLeft, Lock, Trash2, Check, Receipt } from "lucide-
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice } from "@/lib/packages";
 import { priceLineLabel, priceRoadmap, quoteTotals } from "@/lib/roadmap-pricing";
+import type { ActivePromo } from "@/lib/package-promos";
 import {
   ROADMAP_PACKAGES,
   ROADMAP_PHASES,
@@ -340,15 +341,15 @@ function PackagePicker({
  */
 function QuotePanel({
   packageNames,
-  branchName,
+  activePromos,
   onBack,
 }: {
   packageNames: string[];
-  /** Cơ sở của buổi tư vấn — để xét đợt trợ giá riêng của cơ sở đó. */
-  branchName?: string | null;
+  /** Đợt trợ giá đang chạy ở cơ sở này, đã lọc sẵn ở server. */
+  activePromos?: ActivePromo[];
   onBack: () => void;
 }) {
-  const lines = priceRoadmap(packageNames, { branchName });
+  const lines = priceRoadmap(packageNames, activePromos);
   const totals = quoteTotals(lines);
 
   return (
@@ -453,7 +454,7 @@ export function RoadmapBuilderModal({
   info,
   picked,
   isReadOnly,
-  branchName,
+  activePromos,
   onClose,
   onApply,
 }: {
@@ -461,8 +462,8 @@ export function RoadmapBuilderModal({
   /** Lộ trình đang có — dùng làm điểm bắt đầu để sửa tiếp. */
   picked: { packageName: string; phase?: number | null }[];
   isReadOnly: boolean;
-  /** Cơ sở của buổi tư vấn — quyết định đợt trợ giá nào đang áp. */
-  branchName?: string | null;
+  /** Đợt trợ giá đang chạy ở cơ sở này, đã lọc sẵn ở server. */
+  activePromos?: ActivePromo[];
   onClose: () => void;
   /** Trả về danh sách gói kèm bậc, đã xếp theo thứ tự bậc 1 → 3. */
   onApply: (picks: RoadmapPick[]) => void;
@@ -637,7 +638,7 @@ export function RoadmapBuilderModal({
           )}
 
           {showQuote && flat.length > 0 && (
-            <QuotePanel packageNames={flatNames} branchName={branchName} onBack={() => setShowQuote(false)} />
+            <QuotePanel packageNames={flatNames} activePromos={activePromos} onBack={() => setShowQuote(false)} />
           )}
         </div>
       </div>
