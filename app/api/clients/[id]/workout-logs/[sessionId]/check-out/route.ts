@@ -128,25 +128,27 @@ export async function POST(
     // Void it (keep the record + check-in signature). The package buổi is NOT
     // refunded — the client already signed the check-in, so the deduction stands.
     if (!isAwaiting && elapsedMin >= MAX_SESSION_MINUTES) {
-      // PT có gửi kèm chữ ký + ảnh nghĩa là họ ĐÃ ký thật, chỉ là muộn hơn mốc.
-      // GIỮ LẠI bằng chứng đó thay vì vứt đi: buổi vẫn VOID nên không tự vào
-      // lương, nhưng FM đối soát được và cộng tay bằng "Số buổi PT" nếu buổi dạy
-      // là thật. Vứt đi thì hồ sơ trông y hệt trường hợp PT không ký gì cả —
-      // không ai phân xử được, mà lý do huỷ lại ghi oan là "chưa ký check-out".
+      // PT có gửi kèm ảnh (hoặc chữ ký ở luồng cũ) nghĩa là họ ĐÃ đóng buổi
+      // thật, chỉ là muộn hơn mốc. GIỮ LẠI bằng chứng đó thay vì vứt đi: buổi
+      // vẫn VOID nên không tự vào lương, nhưng FM đối soát được và cộng tay bằng
+      // "Số buổi PT" nếu buổi dạy là thật. Vứt đi thì hồ sơ trông y hệt trường
+      // hợp PT không làm gì cả — không ai phân xử được.
       const lateSig   = (body.signatureUrl ?? "").trim();
       const latePhoto = (body.checkOutPhotoUrl ?? "").trim();
+      const closedLate = !!latePhoto || !!lateSig;
       const overBy    = Math.round(elapsedMin - MAX_SESSION_MINUTES);
 
       const voided = await prisma.workoutLog.update({
         where: { id: logId },
         data: {
           status: "VOID",
-          voidReason: lateSig
-            ? `PT ký check-out muộn ${overBy} phút so với mốc ${MAX_SESSION_MINUTES} phút kể từ check-in. `
-              + `Chữ ký và ảnh đã được lưu lại; buổi không tự tính lương, FM đối soát rồi cộng tay nếu buổi dạy là thật.`
+          voidReason: closedLate
+            ? `PT đóng buổi muộn ${overBy} phút so với mốc ${MAX_SESSION_MINUTES} phút kể từ check-in. `
+              + `Ảnh/chữ ký đã được lưu lại; buổi không tự tính lương, FM đối soát rồi cộng tay nếu buổi dạy là thật.`
             : OVER_CAP_VOID_REASON,
           firstInteractionAt,
-          ...(lateSig ? { checkOutAt: now, signatureUrl: lateSig } : {}),
+          ...(closedLate ? { checkOutAt: now } : {}),
+          ...(lateSig ? { signatureUrl: lateSig } : {}),
           ...(latePhoto ? { checkOutPhotoUrl: latePhoto } : {}),
         },
         include: INCLUDE,
@@ -192,21 +194,16 @@ export async function POST(
       );
     }
 
-    // ── Complete via the client's check-out signature (proof PT taught) ──
-    // This is what credits the PT for the teaching session (salary). The
-    // package was already advanced at check-in, so it is not touched here.
-    const sig = (body.signatureUrl ?? "").trim();
-    if (!sig) {
-      if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
-        await prisma.workoutLog.update({ where: { id: logId }, data: { firstInteractionAt } });
-      }
-      return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
-    }
-
-    // ── Ảnh PT chụp cùng khách lúc check-out ──
-    // Chữ ký tay ký hộ được, ảnh chụp tại chỗ thì không — đây là rào chống ký
-    // khống. Bỏ qua cho log AWAITING tồn dư (buổi đã xong từ trước, giờ chỉ đối
-    // soát lại — không thể quay ngược thời gian mà chụp).
+    // ── Kết thúc buổi bằng ẢNH PT chụp cùng khách ──
+    //
+    // Khách KHÔNG ký check-out nữa. Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN
+    // của khách (log.checkInSignatureUrl) — khách đã ký một lần lúc bắt đầu là
+    // đủ; bắt ký lần hai lúc mệt nhoài chỉ tổ mất buổi khi khách đã về.
+    //
+    // Bằng chứng đóng buổi giờ là tấm ảnh: chữ ký tay ký hộ được, ảnh chụp tại
+    // chỗ thì không. Đây là thứ ghi công buổi dạy vào lương PT — xem
+    // lib/pt-session-count. Lộ trình đã bị trừ buổi từ lúc check-in nên ở đây
+    // không đụng tới nữa.
     const photo = (body.checkOutPhotoUrl ?? "").trim();
     if (!isAwaiting && !photo) {
       if (firstInteractionAt && firstInteractionAt !== log.firstInteractionAt) {
@@ -216,6 +213,14 @@ export async function POST(
         { error: "Cần ảnh PT chụp cùng khách tại buổi tập để hoàn thành check-out." },
         { status: 400 }
       );
+    }
+
+    // Log AWAITING tồn dư của luồng cũ (khách xác nhận trên app — đã gỡ): buổi
+    // đã xong từ trước, không quay ngược thời gian mà chụp ảnh được, nên đường
+    // lùi duy nhất vẫn là chữ ký tay.
+    const sig = (body.signatureUrl ?? "").trim();
+    if (isAwaiting && !sig) {
+      return NextResponse.json({ error: "Cần chữ ký xác nhận của khách hàng" }, { status: 400 });
     }
 
     // ── Bắt buộc đánh giá buổi tập trước khi ký check-out ──
@@ -256,7 +261,8 @@ export async function POST(
         confirmedAt: now,
         confirmationMethod: "SIGNATURE",
         firstInteractionAt,
-        signatureUrl: sig,
+        // Luồng thường không còn chữ ký check-out; chỉ log AWAITING tồn dư mới ghi.
+        ...(sig ? { signatureUrl: sig } : {}),
         ...(photo ? { checkOutPhotoUrl: photo } : {}),
         packageCounted: true,
         // If we just counted a legacy uncounted log, remember which lộ trình it

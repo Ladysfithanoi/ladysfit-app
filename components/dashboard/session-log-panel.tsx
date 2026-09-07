@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 import { CheckOutPhotoCapture, CheckOutPhotoThumb } from "./checkout-photo";
@@ -604,10 +604,11 @@ export function LiveSessionPanel({
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  // Chỉ còn dùng cho log AWAITING tồn dư của luồng cũ (khách xác nhận trên app,
+  // đã gỡ) — buổi đó không quay ngược thời gian mà chụp ảnh được.
   const [showSig, setShowSig] = useState(false);
-  // Ký check-out xong thì tới bước chụp ảnh cùng khách; giữ tạm chữ ký ở đây để
-  // gửi kèm ảnh trong CÙNG một lần gọi check-out (server đòi đủ cả hai).
-  const [pendingSig, setPendingSig] = useState<string | null>(null);
+  // Hộp chụp ảnh đóng buổi của luồng thường.
+  const [showPhoto, setShowPhoto] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [copyTargetSet, setCopyTargetSet] = useState<number>(SETS.length);
@@ -913,7 +914,7 @@ export function LiveSessionPanel({
         throw new Error(data.error ?? "Có lỗi xảy ra");
       }
       setShowSig(false);
-      setPendingSig(null);
+      setShowPhoto(false);
       if (!data.valid) {
         // Includes the over-cap case (data.autoCancelled): the server voided the
         // session instead of completing it — it won't count for the PT's salary.
@@ -1445,19 +1446,20 @@ export function LiveSessionPanel({
         {surveyComplete ? (
           <div className="pt-1">
             <button
-              onClick={async () => { setError(""); await saveProgress(); setShowSig(true); }}
+              onClick={async () => { setError(""); await saveProgress(); setShowPhoto(true); }}
               disabled={finishing || saving || !canFinish}
-              title="Khách ký check-out để xác nhận PT đã dạy buổi này"
+              title="Chụp ảnh cùng khách để đóng buổi tập"
               className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
               style={{ backgroundColor: "#f15b5c" }}
             >
-              {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
-              Khách ký check-out & kết thúc buổi
+              {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+              Chụp ảnh cùng khách & kết thúc buổi
             </button>
             <p className="text-[11px] text-gray-400 mt-1.5 text-center leading-relaxed">
-              Buổi tập đã được trừ vào lộ trình khi check-in. Khách ký check-out để tính buổi dạy cho PT.
+              Buổi tập đã được trừ vào lộ trình khi khách ký check-in. Khách không phải ký lần nữa —
+              <span className="font-semibold text-gray-500"> một ảnh chụp cùng khách</span> là đủ để tính buổi dạy cho PT.
               <br />
-              Sau khi ký sẽ cần <span className="font-semibold text-gray-500">chụp một ảnh cùng khách</span> — chụp trực tiếp, không chọn được ảnh có sẵn.
+              Ảnh phải chụp trực tiếp, không chọn được ảnh có sẵn.
             </p>
           </div>
         ) : (
@@ -1473,21 +1475,14 @@ export function LiveSessionPanel({
         )}
       </div>
 
-      {/* Ký check-out → chụp ảnh cùng khách → mới gọi check-out. Hai bước chứ
-          không gộp: ảnh chụp tại chỗ là thứ chữ ký tay không thay thế được. */}
-      {showSig && (
-        <SignaturePad
-          saving={false}
-          onCancel={() => setShowSig(false)}
-          onConfirm={(dataUrl) => { setShowSig(false); setPendingSig(dataUrl); }}
-        />
-      )}
-
-      {pendingSig && (
+      {/* Đánh giá xong → chụp ảnh cùng khách → đóng buổi. Khách không ký lần hai:
+          chữ ký check-in đầu buổi đã đánh dấu buổi tập, ảnh chụp tại chỗ là thứ
+          chữ ký tay không thay thế được. */}
+      {showPhoto && (
         <CheckOutPhotoCapture
           saving={finishing}
-          onCancel={() => { if (!finishing) setPendingSig(null); }}
-          onConfirm={(photoUrl) => checkOut("signature", pendingSig, photoUrl)}
+          onCancel={() => { if (!finishing) setShowPhoto(false); }}
+          onConfirm={(photoUrl) => checkOut("signature", "", photoUrl)}
         />
       )}
 
@@ -1858,12 +1853,14 @@ export function WeekLogOverview({
                         )}>
                           {covered ? "Dạy hộ: " : "PT: "}{latest.createdBy.name ?? "—"}
                         </span>
-                        {latest.signatureUrl && (
+                        {/* Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN. Buổi cũ ký
+                            check-out thì vẫn hiện chữ ký đó. */}
+                        {(latest.checkInSignatureUrl || latest.signatureUrl) && (
                           <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
                             Khách đã ký
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={latest.signatureUrl}
+                              src={latest.checkInSignatureUrl || latest.signatureUrl || ""}
                               alt="Chữ ký khách"
                               className="h-8 rounded-md border border-gray-200 bg-white"
                             />
@@ -2173,7 +2170,7 @@ export function SessionLogHistory({
                         </div>
 
                         {/* Check-in/check-out confirmation */}
-                        {(log.signatureUrl || log.checkInAt) && (
+                        {(log.checkInSignatureUrl || log.signatureUrl || log.checkInAt) && (
                           <div className="mt-3 flex flex-wrap items-center gap-3">
                             {log.checkInAt && (
                               <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1">
@@ -2192,16 +2189,18 @@ export function SessionLogHistory({
                                 <Check className="w-3 h-3" /> Khách xác nhận qua app
                               </span>
                             )}
-                            {log.confirmationMethod === "SIGNATURE" && (
+                            {/* Nhãn "ký tại chỗ" chỉ đúng với buổi CÓ chữ ký check-out
+                                (luồng cũ). Buổi thường bây giờ đóng bằng ảnh. */}
+                            {log.confirmationMethod === "SIGNATURE" && log.signatureUrl && (
                               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
                                 <PenLine className="w-3 h-3" /> Ký tại chỗ (dự phòng)
                               </span>
                             )}
-                            {log.signatureUrl ? (
+                            {(log.checkInSignatureUrl || log.signatureUrl) ? (
                               <div className="flex items-center gap-2">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={log.signatureUrl}
+                                  src={log.checkInSignatureUrl || log.signatureUrl || ""}
                                   alt="Chữ ký khách"
                                   className="h-12 rounded-lg border border-gray-200 bg-white"
                                 />

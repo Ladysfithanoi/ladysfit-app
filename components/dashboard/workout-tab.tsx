@@ -187,12 +187,14 @@ function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boo
         {covered ? "Dạy hộ: " : "PT: "}
         {log.createdBy.name ?? "—"}
       </span>
-      {log.signatureUrl ? (
+      {/* Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN của khách. Buổi cũ (còn ký
+          check-out) thì vẫn hiện đúng chữ ký đã lưu của buổi đó. */}
+      {(log.checkInSignatureUrl || log.signatureUrl) ? (
         <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
           Khách đã ký
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={log.signatureUrl}
+            src={log.checkInSignatureUrl || log.signatureUrl || ""}
             alt="Chữ ký khách"
             className="h-9 rounded-md border border-gray-200 bg-white"
           />
@@ -247,12 +249,12 @@ function VoidedSessions({ logs }: { logs: WorkoutLogRow[] }) {
                 <UserCheck className="w-3 h-3" />
                 PT: {l.createdBy.name ?? "—"}
               </span>
-              {l.signatureUrl && (
+              {(l.checkInSignatureUrl || l.signatureUrl) && (
                 <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
                   Khách đã ký
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={l.signatureUrl}
+                    src={l.checkInSignatureUrl || l.signatureUrl || ""}
                     alt="Chữ ký khách"
                     className="h-8 rounded-md border border-gray-200 bg-white"
                   />

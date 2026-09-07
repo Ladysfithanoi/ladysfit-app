@@ -3,16 +3,19 @@ import { prisma } from "@/lib/prisma";
 /**
  * Đếm "Số buổi PT" — buổi dạy được tính lương cho PT.
  *
- * Một buổi chỉ được tính khi ĐÃ CHECK-OUT có chữ ký của khách kèm nhật ký buổi
- * tập, tức là:
+ * Một buổi chỉ được tính khi ĐÃ ĐÓNG BUỔI có bằng chứng kèm nhật ký buổi tập,
+ * tức là:
  *   • status = COMPLETED
- *   • signatureUrl (chữ ký check-out) khác rỗng
+ *   • có ẢNH check-out (checkOutPhotoUrl) — bằng chứng đóng buổi từ nay. Buổi cũ
+ *     ghi bằng chữ ký check-out (signatureUrl) vẫn được tính, nên lịch sử lương
+ *     không đổi khi bỏ chữ ký check-out.
  *   • có nhật ký buổi tập (workout_set_logs)
  *
  * Chỉ lọc theo status COMPLETED là KHÔNG đủ: WorkoutLog.status mặc định là
  * COMPLETED, nên các log tạo qua luồng cũ (POST /api/clients/[id]/workout-logs,
- * không có chữ ký) cũng lọt vào và làm PHỒNG tiền buổi dạy. Chữ ký check-out là
- * bằng chứng duy nhất cho việc PT đã thực sự dạy xong buổi đó.
+ * không có ảnh lẫn chữ ký) cũng lọt vào và làm PHỒNG tiền buổi dạy. Ảnh chụp tại
+ * chỗ là bằng chứng cho việc PT đã thực sự dạy xong buổi đó — chữ ký tay ký hộ
+ * được, ảnh thì không.
  *
  * Buổi được ghi công cho NGƯỜI THỰC SỰ DẠY (wl."createdById" — người ký check-in
  * /check-out), không theo client."assignedPTId", nên buổi dạy hộ ghi công đúng
@@ -68,8 +71,10 @@ export async function getTaughtSessions(
     ) pe_guess ON wl."packageEnrollmentId" IS NULL
     WHERE wl."createdById" = ANY($1::text[])
       AND wl.status = 'COMPLETED'
-      AND wl."signatureUrl" IS NOT NULL
-      AND wl."signatureUrl" <> ''
+      AND (
+        (wl."checkOutPhotoUrl" IS NOT NULL AND wl."checkOutPhotoUrl" <> '')
+        OR (wl."signatureUrl" IS NOT NULL AND wl."signatureUrl" <> '')
+      )
       AND wl."sessionDate" >= $2
       AND wl."sessionDate" <  $3
       AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)
@@ -126,8 +131,10 @@ export async function getEnrollmentTaughtCounts(clientId: string): Promise<Recor
     ) pe_guess ON wl."packageEnrollmentId" IS NULL
     WHERE wl."clientId" = $1
       AND wl.status = 'COMPLETED'
-      AND wl."signatureUrl" IS NOT NULL
-      AND wl."signatureUrl" <> ''
+      AND (
+        (wl."checkOutPhotoUrl" IS NOT NULL AND wl."checkOutPhotoUrl" <> '')
+        OR (wl."signatureUrl" IS NOT NULL AND wl."signatureUrl" <> '')
+      )
       AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)
     GROUP BY 1
     `,

@@ -65,7 +65,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       checkOutAt: { not: null },
     },
     orderBy: { sessionDate: "asc" },
-    select: { sessionDate: true, checkOutAt: true, signatureUrl: true, checkOutPhotoUrl: true },
+    select: {
+      sessionDate: true,
+      checkOutAt: true,
+      // Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN của khách. Khách không ký
+      // check-out nữa; buổi cũ có signatureUrl thì vẫn lấy chữ ký đó cho phiếu.
+      checkInSignatureUrl: true,
+      signatureUrl: true,
+      checkOutPhotoUrl: true,
+    },
     take: TOTAL_ROWS,
   });
 
@@ -82,7 +90,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     rows: logs.map((l) => ({
       date: l.sessionDate.toISOString(),
       checkOutAt: l.checkOutAt?.toISOString() ?? null,
-      signatureUrl: l.signatureUrl,
+      signatureUrl: l.checkInSignatureUrl ?? l.signatureUrl,
       photoUrl: l.checkOutPhotoUrl,
     })),
   });

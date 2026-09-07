@@ -15,6 +15,9 @@ import { fmtDate } from "@/lib/format-date";
  * Cũng vì thế mà không cần thư viện chụp màn hình nào: ảnh chữ ký và ảnh
  * check-out vốn đã là data URL, vẽ thẳng vào canvas được.
  *
+ * Cột "Chữ ký khách hàng" là chữ ký khách ký lúc CHECK-IN. Khách chỉ ký một lần
+ * đầu buổi; thứ đóng buổi là ảnh PT chụp cùng khách ở cột bên cạnh.
+ *
  * Bảng khác tờ giấy hai chỗ:
  *   • "Nhân viên lễ tân" → ẢNH CHECK-OUT của khách. Tờ giấy không làm được, và
  *     đây là bằng chứng buổi tập có thật, thay đúng vai trò chữ ký lễ tân.

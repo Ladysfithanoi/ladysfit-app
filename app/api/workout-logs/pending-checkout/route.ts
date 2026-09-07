@@ -6,7 +6,7 @@ import { MAX_SESSION_MINUTES, voidOverCapSessions } from "@/lib/workout-session"
 
 // GET /api/workout-logs/pending-checkout
 // Sessions that were checked in (client signed in → package deducted) but have
-// run more than 90 minutes WITHOUT a check-out signature — i.e. the PT hasn't
+// run more than 90 minutes WITHOUT being closed out — i.e. the PT hasn't
 // confirmed teaching them yet, so they won't count toward the PT's salary.
 // Surfaced on-demand to the PT who teaches the client and the FM of the branch.
 //
