@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Package, Clock, ChevronRight, Route } from "lucide-react";
+import { Check, Package, Clock, ChevronRight, Route, ImageDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
@@ -353,6 +353,10 @@ export function Step5Sales({
   const [completing, setCompleting]     = useState(false);
   const [completeError, setCompleteError] = useState("");
   const [saving, setSaving]             = useState(false);
+  // Xuất ảnh màn tư vấn để gửi khách.
+  const sheetRef                        = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting]       = useState(false);
+  const [exportError, setExportError]   = useState("");
   const [detailPkg, setDetailPkg]       = useState<string | null>(null);
   const [showCatalog, setShowCatalog]   = useState(false);
   // Bậc thang 3 giai đoạn — tự ghép gói thay vì lấy nguyên một trong 3 option.
@@ -422,6 +426,50 @@ export function Step5Sales({
     setSaving(false);
   }
 
+  /**
+   * Xuất đúng những gì đang hiện trên màn hình tư vấn thành một tấm ảnh để gửi
+   * khách.
+   *
+   * Chụp thẳng từ DOM chứ không dựng lại bản vẽ riêng: dựng lại là sớm muộn bản
+   * xem và bản gửi khách lệch nhau mà không ai biết. Hàng nút thao tác gắn cờ
+   * data-export-hide nên không lọt vào ảnh.
+   *
+   * html2canvas nạp động để gói ~200KB đó không nằm trong bundle của mọi người
+   * chỉ vào xem tư vấn.
+   */
+  async function handleExportImage() {
+    const node = sheetRef.current;
+    if (!node) return;
+    setExporting(true);
+    setExportError("");
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(node, {
+        scale: Math.min(2, window.devicePixelRatio || 1) * 1.5,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+        ignoreElements: (el) => el.hasAttribute("data-export-hide"),
+      });
+
+      const name = String(info.fullName ?? "khach-hang")
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/đ/gi, "d")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase() || "khach-hang";
+
+      const link = document.createElement("a");
+      link.download = `tu-van-lo-trinh-${name}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch {
+      setExportError("Không xuất được ảnh. Thử lại hoặc chụp màn hình thủ công.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleComplete() {
     setCompleting(true);
     setCompleteError("");
@@ -439,7 +487,7 @@ export function Step5Sales({
 
   return (
     <>
-      <div className="divide-y divide-gray-50">
+      <div ref={sheetRef} className="divide-y divide-gray-50 bg-white">
 
         {/* Thời gian cần thiết để hoàn thiện mục tiêu */}
         {timeline !== null && (
@@ -757,11 +805,16 @@ export function Step5Sales({
           </div>
         )}
 
-        {/* Actions */}
-        <div className="p-5 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+        {/* Actions — gắn cờ data-export-hide để hàng nút không lọt vào ảnh xuất ra.
+            Trên mobile các nút xếp dọc và chiếm trọn bề ngang (w-full), chữ không
+            xuống dòng lộn xộn nhờ whitespace-nowrap + text-center. */}
+        <div
+          data-export-hide
+          className="p-5 flex flex-col sm:flex-row sm:flex-wrap justify-end items-stretch sm:items-center gap-3"
+        >
           <button
             onClick={onPrev}
-            className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto"
+            className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto text-center whitespace-nowrap"
           >
             ← Quay lại
           </button>
@@ -770,14 +823,25 @@ export function Step5Sales({
               <button
                 onClick={handleDraft}
                 disabled={saving}
-                className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 w-full sm:w-auto"
+                className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 w-full sm:w-auto text-center whitespace-nowrap"
               >
                 {saving ? "Đang lưu..." : "Lưu nháp"}
               </button>
               <button
+                onClick={handleExportImage}
+                disabled={exporting}
+                title="Xuất đúng những gì đang hiện ở đây thành ảnh để gửi khách"
+                className="py-3 px-5 rounded-xl border border-[#f15b5c]/40 bg-[#fff5f5] text-sm font-bold text-[#f15b5c] hover:bg-[#ffeeee] disabled:opacity-50 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+              >
+                {exporting
+                  ? <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  : <ImageDown className="w-4 h-4 shrink-0" />}
+                {exporting ? "Đang xuất ảnh..." : "Xuất ảnh"}
+              </button>
+              <button
                 onClick={handleComplete}
                 disabled={completing || confirmedPkgs.length === 0 || loyalfitOnly || !canSaveAndContinue}
-                className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto"
+                className="py-3 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 w-full sm:w-auto text-center whitespace-nowrap"
                 style={{ backgroundColor: "#f15b5c" }}
               >
                 {completing ? "Đang xử lý..." : "✓ Hoàn thành tư vấn"}
@@ -785,19 +849,39 @@ export function Step5Sales({
             </>
           )}
           {isReadOnly && (
-            consultation.convertedClientId ? (
-              <Link
-                href={`/dashboard/clients/${consultation.convertedClientId}`}
-                className="py-3 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center justify-center w-full sm:w-auto"
-                style={{ backgroundColor: "#f15b5c" }}
+            <>
+              {/* Buổi đã chốt vẫn xuất được ảnh để gửi lại khách. */}
+              <button
+                onClick={handleExportImage}
+                disabled={exporting}
+                title="Xuất đúng những gì đang hiện ở đây thành ảnh để gửi khách"
+                className="py-3 px-5 rounded-xl border border-[#f15b5c]/40 bg-[#fff5f5] text-sm font-bold text-[#f15b5c] hover:bg-[#ffeeee] disabled:opacity-50 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
               >
-                Xem hồ sơ khách hàng
-              </Link>
-            ) : (
-              <span className="text-xs text-gray-400 italic">Chưa có hồ sơ khách hàng</span>
-            )
+                {exporting
+                  ? <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  : <ImageDown className="w-4 h-4 shrink-0" />}
+                {exporting ? "Đang xuất ảnh..." : "Xuất ảnh"}
+              </button>
+              {consultation.convertedClientId ? (
+                <Link
+                  href={`/dashboard/clients/${consultation.convertedClientId}`}
+                  className="py-3 px-5 rounded-xl text-white text-sm font-bold inline-flex items-center justify-center w-full sm:w-auto whitespace-nowrap"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  Xem hồ sơ khách hàng
+                </Link>
+              ) : (
+                <span className="text-xs text-gray-400 italic self-center">Chưa có hồ sơ khách hàng</span>
+              )}
+            </>
           )}
         </div>
+
+        {exportError && (
+          <div data-export-hide className="px-5 pb-5 -mt-2">
+            <p className="text-xs text-[#f15b5c] font-semibold">{exportError}</p>
+          </div>
+        )}
       </div>
 
       {detailPkg && (
