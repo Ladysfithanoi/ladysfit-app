@@ -61,7 +61,11 @@ export function ConsultationWizard({
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const isReadOnly = consultation.status === "COMPLETED";
+  // Buổi tư vấn chỉ thật sự khoá khi ĐÃ ra được hồ sơ khách hàng. COMPLETED mà
+  // convertedClientId rỗng nghĩa là hồ sơ khách đó đã bị xoá sau này (xem
+  // DELETE /api/clients/[id]) — buổi tư vấn chưa sinh ra gì cả. Khoá nó lại thì
+  // kẹt vĩnh viễn: không chốt được lộ trình, không tạo lại được hồ sơ khách.
+  const isReadOnly = consultation.status === "COMPLETED" && !!consultation.convertedClientId;
   const canSaveAndContinue = ['ADMIN', 'FM', 'PT'].includes(userRole ?? 'PT');
 
   const save = useCallback(async (payload: Record<string, unknown>, nextStep?: number) => {
@@ -134,8 +138,27 @@ export function ConsultationWizard({
               ✓ Hoàn thành
             </span>
           )}
+          {!isReadOnly && consultation.status === "COMPLETED" && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+              Chưa có hồ sơ khách
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Buổi tư vấn đã từng chốt nhưng hồ sơ khách bị xoá — mở lại cho làm tiếp,
+          nói rõ vì sao nó không còn ở trạng thái hoàn thành nữa. */}
+      {!isReadOnly && consultation.status === "COMPLETED" && (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-bold text-amber-800">
+            Buổi tư vấn này chưa có hồ sơ khách hàng
+          </p>
+          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+            Hồ sơ khách sinh ra từ buổi tư vấn này đã bị xoá. Bạn sửa tiếp được như một
+            bản nháp — chốt lộ trình ở bước 5 rồi bấm &ldquo;Hoàn thành tư vấn&rdquo; để tạo lại hồ sơ khách.
+          </p>
+        </div>
+      )}
 
       {/* Step progress bar */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">

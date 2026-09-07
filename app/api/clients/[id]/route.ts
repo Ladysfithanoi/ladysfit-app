@@ -58,9 +58,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     await prisma.$transaction(async (tx) => {
       // Release the FK reference before deleting the client so no constraint blocks us.
       // Consultation.convertedClientId has no onDelete clause — must be nulled manually.
+      //
+      // Trả buổi tư vấn về DRAFT luôn: hồ sơ khách nó sinh ra không còn nữa nên
+      // nó chưa hoàn thành. Để nguyên COMPLETED thì buổi tư vấn thành chỉ-đọc
+      // vĩnh viễn — tư vấn viên không chốt được lộ trình, cũng không tạo lại
+      // được hồ sơ khách, mà không hiểu vì sao.
       await tx.consultation.updateMany({
         where: { convertedClientId: params.id },
-        data: { convertedClientId: null },
+        data: { convertedClientId: null, status: "DRAFT" },
       });
       await tx.client.delete({ where: { id: params.id } });
     });
