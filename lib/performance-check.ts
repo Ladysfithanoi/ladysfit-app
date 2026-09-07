@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { rateForWeight } from "@/lib/weight-timeline";
 
 function getISOWeekKey(date: Date): string {
   const d = new Date(date);
@@ -18,23 +19,25 @@ function getWeekStart(date: Date): Date {
   return d;
 }
 
-const PHASE_THRESHOLDS: Record<string, number> = {
-  "Giai đoạn 1": 1.0,
-  "Giai đoạn 2: Giảm béo": 0.5,
-};
+/**
+ * Những giai đoạn của chương trình tập mà khách CÒN đang giảm cân — chỉ những
+ * giai đoạn này mới xét chậm tiến độ. Giai đoạn duy trì thì không có chỉ tiêu
+ * giảm nên không cảnh báo.
+ */
+const WEIGHT_LOSS_PHASES = new Set(["Giai đoạn 1", "Giai đoạn 2: Giảm béo"]);
 
 async function checkClientProgress(
   clientId: string,
   weightLogs: { date: Date; weight: number }[],
-  phase: string
+  phase: string,
+  height: number
 ): Promise<{
   shouldAlert: boolean;
   avgRate: number;
   expectedRate: number;
   weeksAnalyzed: number;
 } | null> {
-  const expectedRate = PHASE_THRESHOLDS[phase];
-  if (!expectedRate) return null;
+  if (!WEIGHT_LOSS_PHASES.has(phase)) return null;
 
   // Group weight logs by ISO week
   const weeklyData = new Map<string, number[]>();
@@ -65,6 +68,12 @@ async function checkClientProgress(
   }
 
   const avgRate = weeklyRates.reduce((a, b) => a + b, 0) / weeklyRates.length;
+
+  // Chỉ tiêu lấy theo cân nặng MỚI NHẤT so với chiều cao, không theo giai đoạn
+  // của chương trình: khách càng về gần mốc chuẩn thì đòi hỏi càng nhẹ đi.
+  // Quy tắc ở lib/weight-timeline — cùng một nguồn với tư vấn và thực đơn.
+  const latestWeight = weeklyAvgs[weeklyAvgs.length - 1].avg;
+  const expectedRate = parseFloat((rateForWeight(latestWeight, height) * 100).toFixed(2));
 
   void clientId;
   return {
@@ -126,7 +135,8 @@ export async function checkWeeklyProgress() {
         const result = await checkClientProgress(
           client.id,
           client.weightLogs.map((l) => ({ date: l.date, weight: l.weight })),
-          activeProgram.phase
+          activeProgram.phase,
+          client.height
         );
 
         if (result?.shouldAlert) {

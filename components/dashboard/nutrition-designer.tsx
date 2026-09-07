@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Sparkles, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NutritionFoodSearch } from "./nutrition-food-search";
+import { rateForWeight } from "@/lib/weight-timeline";
 
 // ── Nutrition calculation ──────────────────────────────────────────────────
 
@@ -54,7 +55,10 @@ export function calculateNutrition(weight: number, height: number, hasDieted: bo
   let tdee = weight * 22 * pal;
   if (hasDieted) tdee *= 0.9;
 
-  const weightLossPercent = stage === 1 ? 0.01 : stage === 2 ? 0.005 : 0;
+  // Giai đoạn 3 là chặng duy trì nên không tạo thâm hụt. Còn lại thì tốc độ
+  // giảm do MỐC CÂN NẶNG quyết định (1% / 0.75% / 0.5% — xem lib/weight-timeline),
+  // không phải do khách đang ở giai đoạn nào của lộ trình.
+  const weightLossPercent = stage === 3 ? 0 : rateForWeight(weight, height);
   const dailyDeficit = (weight * weightLossPercent * 7700) / 7;
   const der = tdee - dailyDeficit;
 

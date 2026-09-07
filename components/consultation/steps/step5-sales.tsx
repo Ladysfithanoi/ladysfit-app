@@ -6,12 +6,7 @@ import Link from "next/link";
 import { Check, Package, Clock, ChevronRight, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
-import {
-  L1_MIN_MARGIN,
-  L2_MIN_MARGIN,
-  phaseOf,
-  type PhaseNum,
-} from "@/lib/roadmap-phases";
+import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
 import { priceRoadmap } from "@/lib/roadmap-pricing";
 import type { ConsultationData } from "../consultation-wizard";
 import { PackageDetailModal } from "./package-detail-modal";
@@ -21,6 +16,12 @@ import { TransformGallery } from "./transform-gallery";
 import { RoadmapBuilderModal, type RoadmapPick } from "./roadmap-builder-modal";
 import { RoadmapOptionsModal } from "./roadmap-options-modal";
 import { phase1KeyFor } from "@/lib/roadmap-variants";
+import {
+  buildWeightTimeline,
+  projectWeight,
+  rateForWeight,
+  type LossSpeed,
+} from "@/lib/weight-timeline";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,38 +46,6 @@ type RoadmapOption = {
   totalDays: number;
   packages: SelectedPkg[];
 };
-
-// ─── Duration estimator ───────────────────────────────────────────────────────
-// Estimates total days to reach targetWeight using the system's calorie-deficit rates:
-// Stage 1: 1% body weight / week | Stage 2: 0.5% body weight / week
-
-function estimateDaysToGoal(
-  currentWeight: number,
-  targetWeight: number,
-  phase1Key: string | null
-): number {
-  const weightToLose = Math.max(currentWeight - targetWeight, 0);
-  if (weightToLose <= 0) return 0;
-
-  let remaining = weightToLose;
-  let curW = currentWeight;
-  let days = 0;
-
-  if (phase1Key) {
-    const p1Days = phase1Key === "L2" ? 80 : 30;
-    const lostInPhase1 = Math.min(curW * 0.01 * (p1Days / 7), remaining);
-    remaining -= lostInPhase1;
-    curW -= lostInPhase1;
-    days += p1Days;
-  }
-
-  if (remaining > 0) {
-    const kgPerWeek = curW * 0.005;
-    days += Math.ceil(remaining / kgPerWeek) * 7;
-  }
-
-  return days;
-}
 
 // ─── Roadmap builder ──────────────────────────────────────────────────────────
 // Order is always enforced: Stage 1 → Stage 2 → Stage 3 (L5/Loyalfit always last)
@@ -104,6 +73,38 @@ function makePkg(
   };
 }
 
+/** Số gói Giai đoạn 2 tối đa trong chuỗi nền — quá nữa thì không còn thực tế. */
+const MAX_PHASE2 = 4;
+
+/**
+ * Chuỗi gói Giai đoạn 2 phủ sát `days` ngày nhất.
+ *
+ * Luôn trả về ít nhất một gói: khách nhẹ cân không có Giai đoạn 1 thì Giai
+ * đoạn 2 chính là chặng mở đầu lộ trình, không được để trống.
+ */
+function phase2Chain(days: number): string[] {
+  const d3 = PACKAGES.L3.durationDays;
+  const d4 = PACKAGES.L4.durationDays;
+
+  let best: string[] = ["L3"];
+  let bestDiff = Infinity;
+
+  for (let l4 = 0; l4 <= MAX_PHASE2; l4++) {
+    for (let l3 = 0; l3 <= MAX_PHASE2; l3++) {
+      const count = l3 + l4;
+      if (count < 1 || count > MAX_PHASE2) continue;
+      const diff = Math.abs(l4 * d4 + l3 * d3 - days);
+      // Bằng nhau thì ưu tiên chuỗi ít gói hơn cho khách đỡ phải ký nhiều lần.
+      if (diff < bestDiff || (diff === bestDiff && count < best.length)) {
+        best = [...Array(l4).fill("L4"), ...Array(l3).fill("L3")];
+        bestDiff = diff;
+      }
+    }
+  }
+
+  return best;
+}
+
 function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
   const weight       = Number(info.currentWeight) || 0;
   const height       = Number(info.height) || 0;
@@ -111,25 +112,35 @@ function buildRoadmapOptions(info: Record<string, unknown>): RoadmapOption[] {
 
   // Gói Giai đoạn 1 do cân nặng so với chiều cao quyết định — xem
   // lib/roadmap-variants, dùng chung ngưỡng với bộ lọc của bậc thang.
+  // Khách đã ở dưới mốc chuẩn thì không có Giai đoạn 1, nhưng vẫn phải ra đủ
+  // ba lộ trình như mọi khách khác.
   const phase1Key: string | null = phase1KeyFor(weight, height);
 
-  // Stage 3: choose based on estimated journey duration (calorie-deficit science).
-  // Journey >= 365 days → L5 (comprehensive 6-month maintenance for long haul).
-  // Journey < 365 days  → Loyalfit (lighter 3-month maintenance).
-  // Loyalfit requires a prior LDF contract — only eligible when phase1 is present in this roadmap.
-  const hasPhase1 = phase1Key !== null;
-  const estDays   = (weight > 0 && targetWeight > 0)
-    ? estimateDaysToGoal(weight, targetWeight, phase1Key)
-    : 0;
-  const phase3Key = (!hasPhase1 || estDays >= 365) ? "L5" : "Loyalfit";
+  // Thời gian tới mục tiêu tính theo quy tắc 1% / 0.75% / 0.5% ở
+  // lib/weight-timeline — cùng con số mà khách thấy ở thẻ phân tích bên trên.
+  const estDays = buildWeightTimeline(weight, height, targetWeight)?.totalDays ?? 0;
 
-  // Build chain: [Stage1?] → [Stage2 L4] → [Stage2 extra L4 buffers] → [Stage3 — always last]
-  function buildChain(extraL4Count: number): SelectedPkg[] {
+  // Giai đoạn 2 phủ phần đường còn lại sau Giai đoạn 1.
+  const phase1Days = phase1Key ? (PACKAGES[phase1Key]?.durationDays ?? 0) : 0;
+  const base       = phase2Chain(Math.max(estDays - phase1Days, 0));
+
+  // Giai đoạn 3: hành trình dài thì duy trì bằng L5 (180 ngày), ngắn thì
+  // Loyalfit (90 ngày). Loyalfit chỉ đòi có gói đứng trước nó — xem checkPick —
+  // mà chuỗi nào cũng có ít nhất một gói Giai đoạn 2, nên khách nhẹ cân cũng
+  // dùng được thay vì bị đẩy sang L5 sáu tháng.
+  const phase3Key = estDays >= 365 ? "L5" : "Loyalfit";
+
+  // Gói đệm để kéo dài lộ trình lấy đúng gói cuối của chuỗi nền, để bước nhảy
+  // giữa ba option vừa với thể trạng khách chứ không phải lúc nào cũng +180 ngày.
+  const bufferKey = base[base.length - 1];
+
+  // Chuỗi: [Giai đoạn 1?] → [Giai đoạn 2 nền] → [gói đệm] → [Giai đoạn 3 — luôn cuối]
+  function buildChain(extraCount: number): SelectedPkg[] {
     let o = 1;
     const chain: SelectedPkg[] = [];
     if (phase1Key) chain.push(makePkg(phase1Key, o++));
-    chain.push(makePkg("L4", o++));
-    for (let i = 0; i < extraL4Count; i++) chain.push(makePkg("L4", o++, true));
+    for (const name of base) chain.push(makePkg(name, o++));
+    for (let i = 0; i < extraCount; i++) chain.push(makePkg(bufferKey, o++, true));
     chain.push(makePkg(phase3Key, o++));
     return chain;
   }
@@ -168,24 +179,30 @@ type PhaseRow = {
 
 function buildPhaseTable(info: Record<string, unknown>, pkgs: SelectedPkg[]): PhaseRow[] {
   const rows: PhaseRow[] = [];
+  const height = Number(info.height) || 0;
+  const goal   = Number(info.targetWeight) || 0;
   let cur = Number(info.currentWeight) || 0;
 
   for (const pkg of pkgs) {
     const def: PackageDef | undefined = PACKAGES[pkg.packageName];
     if (!def) continue;
-    const rate = def.stage === "1" ? 0.01 : def.stage === "2" ? 0.005 : 0;
-    if (rate === 0) continue;
+    // Giai đoạn 3 là chặng duy trì — không đặt chỉ tiêu giảm cho nó.
+    if (def.stage === "3") continue;
 
-    const kgW  = parseFloat((cur * rate).toFixed(2));
+    // Tốc độ theo mốc cân nặng đầu gói, không theo giai đoạn của gói — quy tắc
+    // ở lib/weight-timeline. Cân nặng cuối gói mô phỏng từng tuần vì khách có
+    // thể rơi qua mốc chuẩn / mốc đẹp ngay giữa gói.
+    const rate  = rateForWeight(cur, height);
+    const kgW   = parseFloat((cur * rate).toFixed(2));
     const weeks = pkg.durationDays / 7;
-    const end   = Math.max(cur - kgW * weeks, Number(info.targetWeight) || 0);
+    const end   = projectWeight(cur, height, weeks, goal);
 
     rows.push({
       pkgName: pkg.packageName,
       startWeight: cur,
       targetWeight: end,
       kgPerWeek: kgW,
-      pctPerWeek: rate * 100,
+      pctPerWeek: parseFloat((rate * 100).toFixed(2)),
       weeksEst: Math.round(weeks),
     });
     cur = end;
@@ -205,6 +222,13 @@ const OPT_THEME: Record<number, { active: string; badge: string; ring: string }>
   1: { active: "border-violet-400 bg-violet-50", badge: "bg-violet-100 text-violet-700", ring: "ring-violet-300" },
   2: { active: "border-[#f15b5c] bg-[#fff5f5]",  badge: "bg-[#f15b5c]/10 text-[#f15b5c]", ring: "ring-[#f15b5c]/30" },
   3: { active: "border-blue-400 bg-blue-50",      badge: "bg-blue-100 text-blue-700",      ring: "ring-blue-300"    },
+};
+
+/** Màu ba cột tốc độ giảm cân — nhanh (nóng) → chậm (nguội). */
+const SPEED_THEME: Record<LossSpeed, { box: string; text: string }> = {
+  fast:   { box: "bg-rose-50 border-rose-200",   text: "text-rose-700"  },
+  medium: { box: "bg-amber-50 border-amber-200", text: "text-amber-700" },
+  slow:   { box: "bg-sky-50 border-sky-200",     text: "text-sky-700"   },
 };
 
 // ─── PackageCard ──────────────────────────────────────────────────────────────
@@ -375,7 +399,13 @@ export function Step5Sales({
   const initialWeight  = Number(info.currentWeight) || 0;
   const transformTarget = initialWeight - 7;
   const infoHeight     = Number(info.height) || 0;
-  const weightDiff     = infoHeight > 0 && initialWeight > 0 ? initialWeight - infoHeight + 100 : null;
+  const infoTarget     = Number(info.targetWeight) || 0;
+  // Quy tắc tốc độ giảm cân (1% / 0.75% / 0.5% theo mốc chiều cao) nằm ở
+  // lib/weight-timeline — đừng tính lại ở đây.
+  const timeline       = useMemo(
+    () => buildWeightTimeline(initialWeight, infoHeight, infoTarget),
+    [initialWeight, infoHeight, infoTarget]
+  );
   // Gói Giai đoạn 1 của khách này — hộp chọn cách ghép gói giữ nguyên gói đó
   // ở mọi phương án, vì nó do thể trạng quyết định chứ không phải do khách chọn.
   const phase1Key = phase1KeyFor(initialWeight, infoHeight);
@@ -411,26 +441,77 @@ export function Step5Sales({
     <>
       <div className="divide-y divide-gray-50">
 
-        {/* Phase 1 analysis */}
-        {weightDiff !== null && (
+        {/* Thời gian cần thiết để hoàn thiện mục tiêu */}
+        {timeline !== null && (
           <div className="p-5">
             <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-              <p className="text-xs font-bold text-blue-500 mb-1">Phân tích chỉ số Giai đoạn 1:</p>
-              <p className="text-sm font-semibold text-blue-800">
-                {initialWeight} − {infoHeight} + 100 = <span className="font-extrabold">{weightDiff.toFixed(1)} kg</span>
-              </p>
-              {weightDiff >= L2_MIN_MARGIN ? (
-                <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                  <Check className="w-3 h-3" /> Đủ điều kiện L2 ✓
-                </span>
-              ) : weightDiff >= L1_MIN_MARGIN ? (
-                <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                  <Check className="w-3 h-3" /> Đủ điều kiện L1 ✓
-                </span>
+              <p className="text-xs font-bold text-blue-500 mb-1">Thời gian cần thiết để hoàn thiện mục tiêu:</p>
+
+              {timeline.totalKg <= 0 ? (
+                <p className="text-sm font-semibold text-blue-800">
+                  Khách đã ở{" "}
+                  <span className="font-extrabold">{timeline.currentWeight.toFixed(1)} kg</span>{" "}
+                  — bằng hoặc thấp hơn mục tiêu, chỉ cần giữ dáng.
+                </p>
               ) : (
-                <span className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold text-blue-600 bg-blue-100 px-2.5 py-1 rounded-full">
-                  ℹ️ Khách hàng phù hợp bắt đầu từ Giai đoạn 2
-                </span>
+                <>
+                  <p className="text-sm font-semibold text-blue-800">
+                    {timeline.currentWeight.toFixed(1)} kg → {timeline.goalWeight.toFixed(1)} kg
+                    {timeline.goalIsSuggested && (
+                      <span className="font-normal text-blue-500"> (mục tiêu gợi ý)</span>
+                    )}
+                    {" · cần giảm "}
+                    <span className="font-extrabold">{timeline.totalKg.toFixed(1)} kg</span>
+                  </p>
+                  <p className="text-sm font-semibold text-blue-800 mt-0.5">
+                    Tổng thời gian:{" "}
+                    <span className="font-extrabold">
+                      {timeline.totalDays} ngày (~{Math.round(timeline.totalDays / 7)} tuần
+                      {timeline.totalDays >= 30 && ` · ~${Math.round(timeline.totalDays / 30)} tháng`})
+                    </span>
+                  </p>
+
+                  {/* Ba cột theo tốc độ giảm cân — quy tắc ở lib/weight-timeline */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+                    {timeline.segments.map((seg) => {
+                      const theme  = SPEED_THEME[seg.speed];
+                      const isUsed = seg.kg > 0;
+                      return (
+                        <div
+                          key={seg.speed}
+                          className={cn(
+                            "rounded-lg border px-3 py-2",
+                            isUsed ? theme.box : "bg-gray-50 border-gray-100 opacity-60"
+                          )}
+                        >
+                          <p className={cn("text-xs font-extrabold", isUsed ? theme.text : "text-gray-400")}>
+                            {seg.label} ({seg.ratePct})
+                          </p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">{seg.range}</p>
+                          {isUsed ? (
+                            <>
+                              <p className={cn("text-sm font-extrabold mt-1.5", theme.text)}>
+                                {seg.days} ngày
+                              </p>
+                              <p className="text-[11px] text-gray-500">
+                                {seg.fromWeight.toFixed(1)} → {seg.toWeight.toFixed(1)} kg · giảm{" "}
+                                {seg.kg.toFixed(1)} kg
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-[11px] text-gray-400 mt-1.5">Không đi qua chặng này</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-[11px] text-blue-500 mt-2">
+                    Mốc chuẩn {timeline.standardWeight.toFixed(1)} kg (Chiều cao − 100) · Mốc đẹp{" "}
+                    {timeline.idealWeight.toFixed(1)} kg (0.9 × mốc chuẩn) — càng gần mốc, tốc độ
+                    giảm an toàn càng chậm.
+                  </p>
+                </>
               )}
             </div>
           </div>
