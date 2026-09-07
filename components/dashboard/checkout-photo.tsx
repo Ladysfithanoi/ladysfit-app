@@ -18,6 +18,57 @@ import { cn } from "@/lib/utils";
 const MAX_EDGE = 900;
 const JPEG_QUALITY = 0.7;
 
+type Facing = "environment" | "user";
+
+const FACING_LABEL: Record<Facing, string> = {
+  environment: "Cam sau",
+  user:        "Cam trước",
+};
+
+// Nhãn camera do máy tự đặt nên mỗi hệ điều hành một kiểu ("Front Camera",
+// "camera2 1, facing front", "Camera trước"...). Bắt theo từ khoá cho rộng.
+const FRONT_RE = /front|user|face|selfie|trước|truoc/i;
+const BACK_RE  = /back|rear|environment|world|sau/i;
+
+/**
+ * Camera ứng với mặt trước / mặt sau, hoặc null khi máy chỉ có một camera.
+ *
+ * Chọn theo deviceId chắc ăn hơn hẳn facingMode: nhiều máy Android coi
+ * facingMode chỉ là "mong muốn" nên trả về đúng camera cũ, bấm đổi mà hình
+ * không đổi.
+ */
+function pickDeviceId(cams: MediaDeviceInfo[], facing: Facing): string | null {
+  if (cams.length < 2) return null;
+  const hit = cams.find((c) => (facing === "user" ? FRONT_RE : BACK_RE).test(c.label));
+  if (hit) return hit.deviceId;
+  // Trình duyệt giấu nhãn (chưa cấp quyền, hoặc chế độ riêng tư): quy ước camera
+  // đầu danh sách là mặt sau, camera cuối là mặt trước.
+  return facing === "user" ? cams[cams.length - 1].deviceId : cams[0].deviceId;
+}
+
+/**
+ * Mở camera theo mặt đã chọn, thử lần lượt từ ràng buộc chặt tới lỏng: đúng
+ * thiết bị → đúng mặt → mặt mong muốn. Máy nào cũng vào được một trong ba.
+ */
+async function openCamera(facing: Facing, cams: MediaDeviceInfo[]): Promise<MediaStream> {
+  const id = pickDeviceId(cams, facing);
+  const tries: MediaStreamConstraints[] = [
+    ...(id ? [{ video: { deviceId: { exact: id } }, audio: false }] : []),
+    { video: { facingMode: { exact: facing } }, audio: false },
+    { video: { facingMode: facing }, audio: false },
+  ];
+
+  let lastErr: unknown;
+  for (const constraints of tries) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 function drawToDataUrl(video: HTMLVideoElement): string | null {
   const w = video.videoWidth;
   const h = video.videoHeight;
@@ -48,7 +99,12 @@ export function CheckOutPhotoCapture({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [facing, setFacing] = useState<"environment" | "user">("environment");
+  // Danh sách camera nằm ở ref chứ không phải state: dùng nó để mở camera, mà
+  // để ở state thì mỗi lần liệt kê xong lại chạy lại effect và mở camera lần nữa.
+  const camsRef = useRef<MediaDeviceInfo[]>([]);
+  const [facing, setFacing] = useState<Facing>("environment");
+  /** Số camera của máy; 0 = chưa liệt kê được (chưa cấp quyền chẳng hạn). */
+  const [camCount, setCamCount] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
@@ -78,10 +134,7 @@ export function CheckOutPhotoCapture({
       // hai khi camera trước còn đang chạy, nên đổi trước/sau sẽ lỗi.
       stop();
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing },
-          audio: false,
-        });
+        const stream = await openCamera(facing, camsRef.current);
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -90,6 +143,16 @@ export function CheckOutPhotoCapture({
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => {});
+        }
+
+        // Nhãn và deviceId chỉ hiện ra sau khi người dùng đã cấp quyền camera,
+        // nên liệt kê sau lần mở đầu tiên — lúc đó mới biết máy có mấy camera
+        // và nút Cam trước / Cam sau có đáng hiện không.
+        if (camsRef.current.length === 0 && navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const cams = devices.filter((d) => d.kind === "videoinput");
+          camsRef.current = cams;
+          if (!cancelled) setCamCount(cams.length);
         }
       } catch {
         if (!cancelled) {
@@ -166,6 +229,29 @@ export function CheckOutPhotoCapture({
             )}
           </div>
 
+          {/* Chọn mặt camera. Ẩn khi đã chụp xong, và khi biết chắc máy chỉ có
+              một camera (máy tính bàn) — bấm cũng không đổi được gì. */}
+          {!shot && camCount !== 1 && (
+            <div className="flex gap-1 rounded-xl border border-gray-200 p-1">
+              {(["environment", "user"] as Facing[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFacing(f)}
+                  disabled={starting}
+                  className={cn(
+                    "flex-1 h-9 rounded-lg text-xs font-bold transition-colors disabled:opacity-50",
+                    facing === f
+                      ? "bg-[#f15b5c] text-white"
+                      : "text-gray-500 hover:bg-gray-50"
+                  )}
+                >
+                  {FACING_LABEL[f]}
+                </button>
+              ))}
+            </div>
+          )}
+
           {error && <p className="text-xs text-[#f15b5c] font-medium leading-relaxed">{error}</p>}
 
           {shot ? (
@@ -192,26 +278,15 @@ export function CheckOutPhotoCapture({
               </button>
             </div>
           ) : (
-            <div className="flex gap-3">
-              <button
-                onClick={capture}
-                disabled={starting || !!error}
-                className="flex-1 h-11 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ backgroundColor: "#f15b5c" }}
-              >
-                <Camera className="w-4 h-4" />
-                Chụp ảnh
-              </button>
-              <button
-                onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
-                disabled={starting}
-                title="Đổi camera trước/sau"
-                className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Đổi
-              </button>
-            </div>
+            <button
+              onClick={capture}
+              disabled={starting || !!error}
+              className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Camera className="w-4 h-4" />
+              Chụp ảnh
+            </button>
           )}
         </div>
       </div>
