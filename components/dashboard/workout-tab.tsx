@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Archive, ArrowRightLeft, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, Lock, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
+import { AlertCircle, AlertTriangle, Archive, ArrowRightLeft, CheckCircle2, ChevronDown, ChevronUp, ClipboardList, Clock, Copy, Dumbbell, Loader2, Lock, Pencil, Plus, Settings2, Trash2, UserCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
@@ -131,6 +131,8 @@ export type WorkoutLogRow = {
   surveyRirFeel?: string | null;
   surveyRecovery?: string | null;
   nextSessionSuggestion?: string | null;
+  /** Vì sao buổi bị huỷ. Chỉ Admin được nhìn thấy — xem VoidedSessions. */
+  voidReason?: string | null;
 };
 
 function fmtDate(iso: string): string {
@@ -202,6 +204,75 @@ function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boo
         src={log.checkOutPhotoUrl}
         label={`Ảnh check-out · ${fmtDate(log.sessionDate)} · PT ${log.createdBy.name ?? "—"}`}
       />
+    </div>
+  );
+}
+
+/**
+ * Những buổi đã bị HUỶ của một buổi tập trong giáo án — CHỈ ADMIN nhìn thấy.
+ *
+ * Buổi huỷ không tính buổi dạy cho PT nhưng khách vẫn bị trừ buổi (đã trừ lúc
+ * check-in). Trước đây toàn bộ giao diện chỉ hiện log COMPLETED nên buổi huỷ
+ * biến mất không dấu vết: PT thấy cuối tháng hụt buổi mà không hiểu vì sao, còn
+ * lý do huỷ thì nằm im trong DB không ai đọc được. Đây là chỗ đọc nó.
+ *
+ * Để riêng cho Admin vì đây là dữ liệu đối soát: quyết định có cộng bù "Số buổi
+ * PT" hay không là việc của Admin, không phải chuyện tranh luận ở màn hình PT.
+ */
+function VoidedSessions({ logs }: { logs: WorkoutLogRow[] }) {
+  if (logs.length === 0) return null;
+  const sorted = [...logs].sort(
+    (a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime()
+  );
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
+      <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1.5">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        {sorted.length} buổi đã huỷ · chỉ Admin thấy
+      </p>
+      <div className="mt-2 space-y-2">
+        {sorted.map((l) => (
+          <div key={l.id} className="rounded-lg bg-white/70 border border-amber-100 px-2.5 py-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs font-bold text-gray-700">{fmtDate(l.sessionDate)}</span>
+              {l.checkInAt && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+                  <Clock className="w-3 h-3" />
+                  {fmtTime(l.checkInAt)}
+                  {l.checkOutAt && ` → ${fmtTime(l.checkOutAt)}`}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                <UserCheck className="w-3 h-3" />
+                PT: {l.createdBy.name ?? "—"}
+              </span>
+              {l.signatureUrl && (
+                <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
+                  Khách đã ký
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={l.signatureUrl}
+                    alt="Chữ ký khách"
+                    className="h-8 rounded-md border border-gray-200 bg-white"
+                  />
+                </span>
+              )}
+              <CheckOutPhotoThumb
+                src={l.checkOutPhotoUrl}
+                label={`Ảnh check-out (buổi đã huỷ) · ${fmtDate(l.sessionDate)}`}
+              />
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-amber-800">
+              {l.voidReason ?? "Không ghi lý do huỷ."}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-amber-700">
+        Khách vẫn bị trừ buổi (đã trừ lúc check-in), PT không được tính buổi dạy. Nếu đối
+        soát thấy buổi dạy là thật, sửa &ldquo;Số buổi PT&rdquo; của lộ trình để cộng bù.
+      </p>
     </div>
   );
 }
@@ -1411,6 +1482,8 @@ function ProgramView({
                   const sessionLogs = workoutLogs.filter((l) => l.sessionId === activeSession.id);
                   // Only completed sessions count toward history / last-session / suggestions.
                   const completedLogs = sessionLogs.filter((l) => l.status === "COMPLETED");
+                  // Buổi đã huỷ — không tính vào lịch sử/gợi ý, chỉ hiện cho Admin đối soát.
+                  const voidedLogs = isAdmin ? sessionLogs.filter((l) => l.status === "VOID") : [];
                   // An active session is one in progress OR waiting for the client to confirm.
                   const inProgressLog = sessionLogs.find(
                     (l) => l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION"
@@ -1583,6 +1656,7 @@ function ProgramView({
                           )}
                           </>
                         )}
+                        <VoidedSessions logs={voidedLogs} />
                       </div>
 
                       {/* History modal */}

@@ -304,6 +304,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
     earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
     confirmationMethod: l.confirmationMethod,
     confirmedAt: l.confirmedAt?.toISOString() ?? null,
+    // Lý do buổi bị huỷ — chỉ Admin nhìn thấy ở giao diện, xem workout-tab.
+    voidReason: l.voidReason,
   }));
 
   return (
