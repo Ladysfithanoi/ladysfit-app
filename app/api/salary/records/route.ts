@@ -292,6 +292,7 @@ function calcShowPay(l1: number, l3: number, resident: number, l0: number) {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "FM") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -323,8 +324,25 @@ export async function POST(req: Request) {
     },
   });
 
+  // Mỗi người CHỈ có một bảng lương mỗi tháng — xem @@unique([userId, month, year])
+  // ở model SalaryRecord. Dòng nào của cơ sở này thì vừa bị xoá ở trên; cái còn
+  // sót lại là bảng lương tháng này của họ ở CƠ SỞ KHÁC.
+  //
+  // Hay gặp nhất: FM quản nhiều cơ sở. FM không có branchId nên màn tạo bảng
+  // lương luôn tự thêm chính người đang bấm vào danh sách; tạo cho cơ sở thứ hai
+  // là đụng đúng dòng của mình đã tạo ở cơ sở thứ nhất. Trước đây create ném
+  // P2002 và cả lượt tạo hỏng — FM chỉ thấy HTTP 500, không ai được tạo dòng nào.
+  // Nay bỏ qua đúng người đó và báo rõ, những người còn lại vẫn được tạo.
+  const clashes = await prisma.salaryRecord.findMany({
+    where: { userId: { in: targetUserIds }, month: body.month, year: body.year },
+    select: { userId: true, user: { select: { name: true, email: true } }, branch: { select: { name: true } } },
+  });
+  const blocked = new Map(
+    clashes.map((c) => [c.userId, { name: c.user.name ?? c.user.email, branchName: c.branch.name }]),
+  );
+
   let created = 0;
-  const skipped = 0;
+  let skipped = 0;
 
   // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
   const stdDays = standardWorkDays(body.month, body.year);
@@ -333,6 +351,10 @@ export async function POST(req: Request) {
   const leaveMap = await sumLeaveDeductionByUser(targetUserIds, body.month, body.year);
 
   for (const entry of body.entries) {
+    if (blocked.has(entry.userId)) {
+      skipped++;
+      continue;
+    }
 
     const config = await prisma.salaryConfig.findFirst({
       where: { userId: entry.userId },
@@ -458,5 +480,18 @@ export async function POST(req: Request) {
     created++;
   }
 
-  return NextResponse.json({ created, skipped });
+  return NextResponse.json({
+    created,
+    skipped,
+    skippedDetails: Array.from(blocked.values()),
+  });
+  } catch (error: unknown) {
+    const e = error as { message?: string; stack?: string; code?: string };
+    console.error("=== Salary POST error ===", e.code, e.message);
+    console.error("Stack:", e.stack);
+    return NextResponse.json(
+      { error: e.message ?? "Không tạo được bảng lương", code: e.code },
+      { status: 500 },
+    );
+  }
 }

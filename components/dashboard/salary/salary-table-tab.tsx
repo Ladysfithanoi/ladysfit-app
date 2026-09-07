@@ -313,8 +313,20 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         showToast("Lỗi: " + (err.error ?? `HTTP ${res.status}`));
         return;
       }
-      const { created, skipped } = await res.json() as { created: number; skipped: number };
-      showToast(`Đã tạo ${created} bảng lương${skipped > 0 ? `, bỏ qua ${skipped} (đã có)` : ""}`);
+      const { created, skipped, skippedDetails } = await res.json() as {
+        created: number;
+        skipped: number;
+        skippedDetails?: { name: string; branchName: string }[];
+      };
+      // Ai bị bỏ qua thì phải nói rõ tên và cơ sở — thường là chính FM đang bấm,
+      // vì mỗi người chỉ có một bảng lương mỗi tháng dù quản nhiều cơ sở.
+      const who = (skippedDetails ?? [])
+        .map(d => `${d.name} đã có bảng lương tháng này ở ${d.branchName}`)
+        .join("; ");
+      showToast(
+        `Đã tạo ${created} bảng lương` +
+        (skipped > 0 ? `, bỏ qua ${skipped}${who ? ` — ${who}` : ""}` : "")
+      );
       setShowGenModal(false);
       fetchRecords();
     } finally { setGenerating(false); }
@@ -383,7 +395,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   function showToast(msg: string) {
     setToast(msg);
-    setTimeout(() => setToast(""), 3000);
+    // Câu dài (báo ai bị bỏ qua, báo lỗi) cần thêm thời gian để đọc hết.
+    setTimeout(() => setToast(""), msg.length > 60 ? 7000 : 3000);
   }
 
   const ptRecords    = records.filter(r => r.user.role === "PT");
@@ -1093,7 +1106,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[90vw] bg-gray-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg">
           {toast}
         </div>
       )}
