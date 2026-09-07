@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
-import { closeFinishedPackages } from "@/lib/package-status";
-import { refreshClientChurnStatus } from "@/lib/client-status";
+import { closeFinishedPackages, reopenExtendedPackages } from "@/lib/package-status";
+import { refreshClientChurnStatus, reactivateClientOnNewPackage } from "@/lib/client-status";
 import { getEnrollmentTaughtCounts, getAdjustmentTotals } from "@/lib/pt-session-count";
 import type { Role } from "@prisma/client";
 
@@ -30,8 +30,12 @@ export default async function ClientPage({ params }: { params: { id: string } })
     },
   };
 
-  // Đóng lộ trình đã hết buổi (hết số buổi khách check-in) hoặc hết hạn trước khi
-  // đọc dữ liệu, để hồ sơ luôn hiện đúng trạng thái mà không phải chờ cron hằng ngày.
+  // Mở lại lộ trình đã hết hạn nhưng nay còn hạn (được gia hạn / bảo lưu thêm
+  // ngày), rồi mới đóng lộ trình đã hết buổi hoặc hết hạn. Làm trước khi đọc dữ
+  // liệu để hồ sơ luôn hiện đúng trạng thái mà không phải chờ cron hằng ngày.
+  const revivedPackages = await reopenExtendedPackages(params.id);
+  if (revivedPackages.length > 0) await reactivateClientOnNewPackage(params.id);
+
   const closedPackages = await closeFinishedPackages(params.id);
   if (closedPackages.completed + closedPackages.expired > 0) {
     await refreshClientChurnStatus(params.id);

@@ -66,3 +66,44 @@ export async function closeFinishedPackages(clientId?: string): Promise<ClosePac
     clientIds: Array.from(touched),
   };
 }
+
+/**
+ * Mở lại lộ trình đã tự hết hạn nhưng nay lại còn hạn.
+ *
+ * FM gia hạn (hoặc bảo lưu thêm ngày, hoặc sửa ngày bắt đầu) cho một gói đã
+ * EXPIRED thì endDate được đẩy ra tương lai — nhưng trạng thái vẫn nằm ở
+ * EXPIRED. Mọi chỗ trừ buổi và chặn check-in đều đòi ACTIVE, nên theo lý thì
+ * khách được ký tiếp mà thực tế vẫn bị chặn vì "đã hết hạn". Chỗ này đưa gói
+ * đó trở lại ACTIVE.
+ *
+ * CHỈ đụng tới EXPIRED: đó là trạng thái duy nhất hệ thống tự đặt vì lý do
+ * THỜI GIAN, nên thời gian đổi thì đảo ngược được. COMPLETED (hết buổi, hoặc
+ * FM chủ động đánh dấu kết thúc sớm) và PAUSED (bảo lưu) là quyết định của
+ * con người — mở lại phải do người dùng bấm, xem closeFinishedPackages.
+ *
+ * Trả về danh sách khách có gói vừa mở lại — cần chạy reactivateClientOnNewPackage
+ * để họ ra khỏi trạng thái "Nghỉ tập".
+ */
+export async function reopenExtendedPackages(clientId?: string): Promise<string[]> {
+  const now = new Date();
+
+  const revived = await prisma.packageEnrollment.findMany({
+    where: {
+      status:  "EXPIRED",
+      endDate: { gt: now },
+      ...(clientId ? { clientId } : {}),
+    },
+    select: { id: true, clientId: true, sessions: true, sessionsUsed: true },
+  });
+
+  // Hết buổi rồi thì thêm bao nhiêu ngày cũng không cứu được — để nguyên.
+  const usable = revived.filter((p) => p.sessionsUsed < p.sessions);
+  if (usable.length === 0) return [];
+
+  await prisma.packageEnrollment.updateMany({
+    where: { id: { in: usable.map((p) => p.id) } },
+    data:  { status: "ACTIVE" },
+  });
+
+  return Array.from(new Set(usable.map((p) => p.clientId)));
+}

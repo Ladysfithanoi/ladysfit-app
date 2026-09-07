@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
-import { refreshClientChurnStatus } from "@/lib/client-status";
-import { closeFinishedPackages } from "@/lib/package-status";
+import { refreshClientChurnStatus, reactivateClientOnNewPackage } from "@/lib/client-status";
+import { closeFinishedPackages, reopenExtendedPackages } from "@/lib/package-status";
 import { captureTrash } from "@/lib/trash";
 
 export async function PUT(
@@ -59,6 +59,12 @@ export async function PUT(
     where: { id: params.packageId },
     data,
   });
+
+  // Gia hạn / bảo lưu thêm ngày cho một gói ĐÃ hết hạn thì endDate lùi ra
+  // tương lai — phải mở lại gói, không thì khách vẫn bị chặn check-in vì trạng
+  // thái còn kẹt ở EXPIRED.
+  const revived = await reopenExtendedPackages(params.id);
+  if (revived.length > 0) await reactivateClientOnNewPackage(params.id);
 
   // Sửa số buổi đã tập / ngày bắt đầu / bảo lưu — gia hạn có thể làm gói vừa hết
   // buổi hoặc vừa hết hạn ngay lúc lưu → đóng gói luôn cho khớp.
