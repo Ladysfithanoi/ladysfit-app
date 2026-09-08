@@ -130,9 +130,48 @@ const PROTEIN_GROUPS: ProteinGroup[] = [
   { id: "vit",     label: "thịt vịt/ngan",     terms: ["vịt", "ngan", "ngỗng", "chim", "bồ câu"] },
   { id: "de",      label: "thịt dê/cừu/thỏ",   terms: ["dê", "cừu", "thỏ"] },
   { id: "trung",   label: "trứng",             terms: ["trứng", "ốp la", "ốp lết"] },
-  { id: "dau",     label: "đậu hũ/đậu nành",   terms: ["đậu hũ", "đậu phụ", "đậu nành", "tàu hũ"] },
+  { id: "dau",     label: "đạm thực vật (đậu hũ, seitan, tempeh)",
+    terms: ["đậu hũ", "đậu phụ", "đậu nành", "tàu hũ", "seitan", "mì căn", "tempeh", "tàu hũ ky", "váng đậu"] },
   { id: "sua",     label: "sữa/whey",          terms: ["sữa", "whey", "phô mai", "phomai"] },
 ];
+
+// ── Chế độ chay ───────────────────────────────────────────────────────────
+//
+// Bật lên thì mọi nhóm đạm từ ĐỘNG VẬT bị xoá khỏi bảng gửi cho AI — không phải
+// chỉ nhắc trong prompt. AI không nhìn thấy thịt bò thì không thể xếp thịt bò
+// vào bữa nào; nhắc suông thì thỉnh thoảng vẫn lọt.
+//
+// Trứng và sữa nằm ngoài danh sách này vì chúng phụ thuộc KIỂU chay khách chọn.
+
+/** Đạm từ xác động vật — chay kiểu nào cũng loại. */
+const ANIMAL_FLESH_GROUPS = ["ga", "bo", "heo", "ca", "haisan", "vit", "de"];
+
+/**
+ * Từ khoá ở ô KHÔNG THÍCH bật chế độ chay.
+ *
+ * So khớp NGUYÊN từ khoá chứ không phải "có chứa": khách ghi "thịt bò" là kiêng
+ * riêng thịt bò, vẫn ăn gà ăn cá bình thường — hiểu thành ăn chay là xoá sạch
+ * database của người ta.
+ */
+const VEG_DISLIKE_KEYWORDS = [
+  "thit", "an thit", "thit ca", "ca thit", "thit dong vat",
+  "do man", "an man", "dong vat", "do dong vat",
+];
+
+/** Từ khoá ở ô THÍCH bật chế độ chay. Gõ ở đây thì không cần ghi gì ở ô kia. */
+const VEG_LIKE_KEYWORDS = [
+  "chay", "an chay", "do chay", "thuan chay", "chay truong",
+  "vegetarian", "vegan", "an vegetarian",
+  "ovo", "ovovegetarian", "ovo vegetarian",
+  "lacto", "lactovegetarian", "lacto vegetarian",
+  "ovolacto", "ovolactovegetarian", "ovo lactovegetarian", "ovo lacto vegetarian",
+  "lactoovovegetarian", "lacto ovo vegetarian",
+];
+
+/** Từ khoá này có phải là một trong các nhãn chế độ chay không (khớp nguyên từ). */
+function isVegKeyword(kw: Keyword, list: string[]): boolean {
+  return list.includes(normalizeVi(kw.text));
+}
 
 // Các nhóm đạm mà tên món chạm tới (một món có thể thuộc nhiều nhóm: "Cơm gà xối mỡ")
 function foodProteinGroups(foodName: string): Set<string> {
@@ -209,16 +248,46 @@ export async function POST(req: Request) {
   const likeKeywords    = splitKeywords(likesStr);
   const dislikeKeywords = splitKeywords(dislikesStr);
 
+  // ── CHẾ ĐỘ CHAY ────────────────────────────────────────────────────────
+  // Bật từ một trong hai phía: ô không thích ghi "ăn thịt", hoặc ô thích ghi
+  // "ovovegetarian"/"chay"... Kiểu chay quyết định trứng và sữa có được giữ hay
+  // không — phần xác động vật thì kiểu nào cũng loại.
+  const vegFromDislikes = dislikeKeywords.some((k) => isVegKeyword(k, VEG_DISLIKE_KEYWORDS));
+  const vegFromLikes    = likeKeywords.some((k) => isVegKeyword(k, VEG_LIKE_KEYWORDS));
+  const vegetarian      = vegFromDislikes || vegFromLikes;
+
+  // "ovo" = trứng, "lacto" = sữa; ghép lại thì có cả hai. Dò trên chuỗi đã bỏ dấu
+  // nên "ovo-lactovegetarian", "ovo lacto vegetarian", "OvoLactoVegetarian" đều nhận.
+  const likesNorm  = normalizeVi(likesStr);
+  const allowEggs  = vegetarian && likesNorm.includes("ovo");
+  const allowDairy = vegetarian && likesNorm.includes("lacto");
+
+  const vegBanIds = vegetarian
+    ? [
+        ...ANIMAL_FLESH_GROUPS,
+        ...(allowEggs ? [] : ["trung"]),
+        ...(allowDairy ? [] : ["sua"]),
+      ]
+    : [];
+
+  // "ovovegetarian" là NHÃN CHẾ ĐỘ ĂN, không phải tên món. Bỏ nó ra khỏi danh
+  // sách từ khoá tìm món, nếu không: nó sẽ bị đem đi khoá nhóm đạm, rồi lọt vào
+  // phần "khách còn ghi ... hãy chọn món gần giống nhất" và AI đi tìm một món
+  // tên là "ovovegetarian". Ô thích chỉ ghi mỗi nhãn chế độ = coi như để trống,
+  // đúng ý "gợi ý tất cả các loại thực phẩm chay".
+  const likeFoodKeywords = likeKeywords.filter((k) => !isVegKeyword(k, VEG_LIKE_KEYWORDS));
+
   // ── Ô KHÔNG THÍCH: loại vô điều kiện ────────────────────────────────────
   // Đã ghi là không thích thì món đó KHÔNG được hiện ra, dù có phải lọc gần
   // hết database. Ngoài khớp theo tên, còn loại theo cả nhóm đạm: khách ghi
-  // "thịt bò" thì Phở bò, Bún bò Huế, Cơm bò lúc lắc cũng biến mất.
+  // "thịt bò" thì Phở bò, Bún bò Huế, Cơm bò lúc lắc cũng biến mất. Chế độ chay
+  // góp thêm nhóm bị cấm vào đúng cái rổ này.
   const banGroups = matchProteinGroups(dislikeKeywords);
-  const banIds = new Set(banGroups.map((g) => g.id));
+  const banIds = new Set([...banGroups.map((g) => g.id), ...vegBanIds]);
 
-  const usableFoods = dislikeKeywords.length
+  const usableFoods = dislikeKeywords.length || banIds.size
     ? dbFoods.filter((f) => {
-        if (matchesAny(f.name, dislikeKeywords)) return false;
+        if (dislikeKeywords.length && matchesAny(f.name, dislikeKeywords)) return false;
         if (!banIds.size) return true;
         return !Array.from(foodProteinGroups(f.name)).some((id) => banIds.has(id));
       })
@@ -235,7 +304,7 @@ export async function POST(req: Request) {
   // Khách nêu nguồn đạm cụ thể → CHỈ giữ nhóm đó, mọi nhóm đạm khác (kể cả
   // trứng/đậu hũ/sữa) bị loại thẳng. AI không nhìn thấy thịt bò thì không thể
   // xếp thịt bò vào bữa nào. Ô sở thích để trống mới hiện đủ database.
-  const lockGroups = matchProteinGroups(likeKeywords);
+  const lockGroups = matchProteinGroups(likeFoodKeywords);
   const lockIds = new Set(lockGroups.map((g) => g.id));
 
   const isLockedMain = (name: string) =>
@@ -261,9 +330,9 @@ export async function POST(req: Request) {
 
   // Khi đã khoá nhóm đạm, MỌI món thuộc nhóm đó đều tính là "món khách thích"
   // — khách gõ "thịt gà" thì "Ức gà nướng sả" cũng phải được coi là món gà.
-  const likedMatches = likeKeywords.length
+  const likedMatches = likeFoodKeywords.length
     ? menuFoods.filter(
-        (f) => matchesAny(f.name, likeKeywords) || (proteinLocked && isLockedMain(f.name))
+        (f) => matchesAny(f.name, likeFoodKeywords) || (proteinLocked && isLockedMain(f.name))
       )
     : [];
 
@@ -280,7 +349,7 @@ export async function POST(req: Request) {
       g.terms.some((t) => matchPhrase(kw.text, kw.accented ? t : normalizeVi(t)))
     );
 
-  const unmatchedLikes = likeKeywords.filter(
+  const unmatchedLikes = likeFoodKeywords.filter(
     (kw) =>
       !menuFoods.some((f) => matchesAny(f.name, [kw])) &&
       !(proteinLocked && coveredByLock(kw))
@@ -308,8 +377,38 @@ export async function POST(req: Request) {
 ${favoriteTable}`
     : "";
 
-  const likesContext = !likesStr
-    ? "Không có yêu cầu đặc biệt — tự động chọn ngẫu nhiên từ database"
+  // Kiểu chay, viết ra thành chữ để dùng lại ở nhiều chỗ trong prompt.
+  const vegStyle = !vegetarian
+    ? ""
+    : allowEggs && allowDairy
+      ? "chay có trứng và sữa (ovo-lacto vegetarian)"
+      : allowEggs
+        ? "chay có trứng (ovo vegetarian)"
+        : allowDairy
+          ? "chay có sữa (lacto vegetarian)"
+          : "chay thuần — không trứng, không sữa";
+
+  const vegExtras = [
+    "đậu hũ", "tempeh", "seitan (mì căn)", "các loại đậu/đỗ", "nấm",
+    "hạt và quả hạch", "rau củ",
+    ...(allowEggs ? ["trứng"] : []),
+    ...(allowDairy ? ["sữa, sữa chua, phô mai"] : []),
+  ].join(", ");
+
+  const vegBlock = vegetarian
+    ? `
+🌱 THỰC ĐƠN CHAY — ${vegStyle.toUpperCase()}
+   - TUYỆT ĐỐI không có thịt, cá, hải sản, và mọi thứ làm từ xác động vật (nước hầm xương, nước mắm, mỡ động vật, gelatin...). Database phía trên đã loại sạch chúng — không được tự thêm lại dưới bất kỳ tên gọi nào.
+   - Nguồn đạm hợp lệ: ${vegExtras}.
+   - ${allowEggs ? "ĐƯỢC dùng trứng." : "KHÔNG dùng trứng, kể cả làm nguyên liệu phụ."}
+   - ${allowDairy ? "ĐƯỢC dùng sữa và chế phẩm từ sữa." : "KHÔNG dùng sữa, sữa chua, phô mai, whey."}
+   - Mỗi bữa vẫn phải đủ đạm: ưu tiên xoay vòng đậu hũ / tempeh / seitan / các loại đậu${allowEggs ? " / trứng" : ""}${allowDairy ? " / sữa" : ""} để không bữa nào bị thiếu protein.`
+    : "";
+
+  const likesContext = likeFoodKeywords.length === 0
+    ? vegetarian
+      ? `Không có món cụ thể nào — hãy dùng THOẢI MÁI mọi thực phẩm ${vegStyle} có trong database phía trên`
+      : "Không có yêu cầu đặc biệt — tự động chọn ngẫu nhiên từ database"
     : likedFoods.length > 0
       ? `BẮT BUỘC dùng các món khách thích (đã đánh dấu ⭐ trong database): ${likedFoods
           .map((f) => f.name)
@@ -330,21 +429,29 @@ ${favoriteTable}`
    - Tạo đa dạng bằng cách đổi PHẦN THỊT (ức, đùi, nguyên con...), CÁCH CHẾ BIẾN (luộc, hấp, nướng, xào, cháo, phở...) và TINH BỘT/RAU ăn kèm — KHÔNG phải bằng cách đổi sang loại thịt khác.`
     : "";
 
+  // Đang ăn chay thì nói thẳng ra ở dòng "kiêng", kể cả khi ô không thích để
+  // trống (khách bật chế độ chay từ ô sở thích bằng "ovovegetarian").
+  const vegDislikeNote = vegetarian
+    ? `Khách ăn ${vegStyle} — đã loại toàn bộ thịt, cá, hải sản${allowEggs ? "" : ", trứng"}${allowDairy ? "" : ", sữa"} khỏi database phía trên. `
+    : "";
+
   const dislikesContext = dislikesStr
-    ? `Tuyệt đối KHÔNG dùng các thực phẩm sau và mọi món có chứa chúng: ${dislikesStr}${
+    ? `${vegDislikeNote}Tuyệt đối KHÔNG dùng các thực phẩm sau và mọi món có chứa chúng: ${dislikesStr}${
         banGroups.length
           ? ` — bao gồm TẤT CẢ món thuộc nhóm ${banGroups
               .map((g) => g.label)
               .join(", ")} (đã bị xoá khỏi database phía trên, không được nhắc tới dưới bất kỳ tên gọi nào)`
           : ""
       }`
-    : "Không có dị ứng — được sử dụng linh hoạt mọi thực phẩm trong database";
+    : vegetarian
+      ? `${vegDislikeNote}Ngoài ra không có dị ứng nào khác`
+      : "Không có dị ứng — được sử dụng linh hoạt mọi thực phẩm trong database";
 
   const systemInstruction = `Cậu là thuật toán xếp hình thực đơn siêu tốc của hệ thống Ladysfit.
 Hãy nhận mục tiêu Calo và tỷ lệ P-C-F từ user, sau đó LỰA CHỌN và KẾT HỢP các thực phẩm phù hợp TỪ MẢNG DỮ LIỆU THỰC PHẨM SUPABASE DƯỚI ĐÂY.
 
 FORMAT DATABASE (Tên|Cal|P|C|F|g_định_lượng|[Loại bữa]|(Mục đích)):
-${foodTable}${favoriteBlock}${lockBlock}
+${foodTable}${favoriteBlock}${vegBlock}${lockBlock}
 
 QUY TẮC BẮT BUỘC:
 1. Tuyệt đối không tự chế món mới nằm ngoài database trên. Chỉ dùng đúng các tên thực phẩm có trong bảng.
@@ -379,7 +486,9 @@ ${
 - Thực phẩm yêu thích: ${proteinLocked ? `KHÁCH CHỈ ĂN ${lockLabels.toUpperCase()} — mọi bữa đều phải có. ` : ""}${likesContext}
 - Thực phẩm kiêng/dị ứng: ${dislikesContext}
 
-BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần tử (${mealsNum} bữa riêng biệt).
+${vegetarian ? `🌱 NHẮC LẠI CHAY (ưu tiên cao nhất): toàn bộ thực đơn phải là ${vegStyle}. Trước khi trả về, tự soát từng bữa — thấy thịt, cá, hải sản${allowEggs ? "" : ", trứng"}${allowDairy ? "" : ", sữa"} thì thay ngay bằng đậu hũ, tempeh, seitan, các loại đậu hoặc nấm.
+
+` : ""}BẮT BUỘC VỀ SỐ BỮA: Mảng JSON PHẢI có ĐÚNG ${mealsNum} phần tử (${mealsNum} bữa riêng biệt).
 Không được gộp bữa, không được bỏ sót bữa cuối. Ưu tiên hoàn thành đủ ${mealsNum} bữa hơn là chi tiết quá kỹ từng bữa.
 Chia đúng ${mealsNum} bữa, tổng macro sai số ≤5%.
 
