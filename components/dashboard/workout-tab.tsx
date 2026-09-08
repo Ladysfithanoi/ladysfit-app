@@ -2189,6 +2189,15 @@ type PackageUpdate = {
   status: string;
 };
 
+/** Buổi đang chạy dở của người đang đăng nhập — GET /api/workout-logs/my-running. */
+type MyRunningLog = {
+  id: string;
+  clientId: string;
+  clientName: string | null;
+  sessionName: string | null;
+  checkInAt: string | null;
+};
+
 export function WorkoutTab({
   clientId,
   programs,
@@ -2228,6 +2237,26 @@ export function WorkoutTab({
   const active = programs.filter((p) => p.status === "ACTIVE");
   const archived = programs.filter((p) => p.status === "ARCHIVED");
 
+  // Buổi đang chạy dở của CHÍNH người đang đăng nhập, ở khách nào cũng tính. Hồ
+  // sơ khách chỉ tải nhật ký của khách này nên không tự nhìn thấy buổi ở khách
+  // khác — phải hỏi server. Hỏi lại mỗi khi danh sách nhật ký đổi (vừa check-out
+  // xong chẳng hạn) để nút mở khoá ngay, khỏi phải tải lại trang.
+  const [myRunning, setMyRunning] = useState<MyRunningLog | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/workout-logs/my-running")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive) setMyRunning((d as MyRunningLog | null) ?? null);
+      })
+      .catch(() => {
+        // Hỏi hụt thì để nút mở: server vẫn chặn thật ở POST check-in.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workoutLogs]);
+
   // Hết buổi hoặc hết hạn thì không cho mở buổi mới. Tính lại mỗi lần render nên
   // ngay khi buổi cuối vừa bị trừ (onPackageUpdated), nút check-in khoá luôn.
   //
@@ -2242,12 +2271,23 @@ export function WorkoutTab({
         .find((s) => s.id === runningLog.sessionId)?.sessionName ?? null
     : null;
 
+  // Buổi dở ở KHÁCH KHÁC do chính mình mở: không ai dạy hai khách cùng lúc được.
+  // Chỉ tính khi nó thuộc khách khác — buổi của khách này đã do runningLog lo.
+  const myRunningElsewhere = myRunning && myRunning.clientId !== clientId ? myRunning : null;
+
   const checkInBlock =
     (runningLog
       ? runningSessionBlock({
           sessionName: runningSessionName,
           checkInAt: runningLog.checkInAt,
           ptName: runningLog.createdBy?.name,
+        })
+      : null)
+    ?? (myRunningElsewhere
+      ? runningSessionBlock({
+          sessionName: myRunningElsewhere.sessionName,
+          checkInAt: myRunningElsewhere.checkInAt,
+          clientName: myRunningElsewhere.clientName,
         })
       : null)
     ?? (packages ? findCheckInBlock(packages) : null);

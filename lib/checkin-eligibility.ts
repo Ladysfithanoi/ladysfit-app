@@ -112,11 +112,16 @@ export function findCheckInBlock(
   };
 }
 
-// ── Một khách chỉ có MỘT buổi đang chạy ─────────────────────────────────────
+// ── Một buổi đang chạy thì không mở được buổi thứ hai ───────────────────────
 //
-// Buổi cũ chưa check-out mà mở buổi mới thì lộ trình bị trừ hai buổi trong khi
-// khách chỉ tập một, và buổi bỏ dở kia cứ chạy tới mốc 2 tiếng rồi tự huỷ — PT
-// mất buổi dạy mà không hiểu vì sao (xem lib/workout-session).
+// Hai luật, cùng một lý do nên viết chung một chỗ:
+//   • MỘT KHÁCH chỉ có một buổi chạy dở. Buổi cũ chưa check-out mà mở buổi mới
+//     thì lộ trình bị trừ hai buổi trong khi khách chỉ tập một, và buổi bỏ dở
+//     kia cứ chạy tới mốc 2 tiếng rồi tự huỷ — PT mất buổi dạy mà không hiểu vì
+//     sao (xem lib/workout-session).
+//   • MỘT NGƯỜI DẠY chỉ mở được một nhật ký. Không ai dạy hai khách cùng lúc
+//     được, nên hai buổi cùng chạy dưới một tài khoản nghĩa là có buổi được ký
+//     khống — đúng thứ mà cặp chữ ký check-in/check-out sinh ra để chặn.
 //
 // Câu thông báo viết một lần ở đây rồi dùng chung cho cả API chặn thật lẫn giao
 // diện khoá nút, để hai bên không bao giờ nói hai kiểu khác nhau.
@@ -136,10 +141,22 @@ export function runningSessionBlock(opts: {
   sessionName?: string | null;
   checkInAt?: Date | string | null;
   ptName?: string | null;
+  /** Có tên khách = buổi dở nằm ở KHÁCH KHÁC, do chính người đang thao tác mở.
+   *  Khi đó câu thông báo nói với người dạy, chứ không nói về khách đang mở hồ sơ. */
+  clientName?: string | null;
 }): CheckInBlock {
   const what = opts.sessionName ? `“${opts.sessionName}”` : "một buổi tập";
   const when = opts.checkInAt ? ` từ ${hhmmVN(opts.checkInAt)}` : "";
-  const who  = opts.ptName ? ` (PT ${opts.ptName})` : "";
+  if (opts.clientName) {
+    return {
+      reason: "SESSION_RUNNING",
+      message:
+        `Bạn đang có buổi tập chạy dở với khách ${opts.clientName}: ${what}${when}. ` +
+        "Mỗi người chỉ mở được một nhật ký tập luyện một lúc — kết thúc buổi đó trước, " +
+        "hoặc xoá nó nếu lỡ check-in nhầm.",
+    };
+  }
+  const who = opts.ptName ? ` (PT ${opts.ptName})` : "";
   return {
     reason: "SESSION_RUNNING",
     message:

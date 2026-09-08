@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { countPackageSession } from "@/lib/workout-session";
+import { countPackageSession, voidOverCapSessions } from "@/lib/workout-session";
 import { findCheckInBlock, runningSessionBlock } from "@/lib/checkin-eligibility";
 import { generatePackageProgressNotifications } from "@/lib/package-progress";
 
@@ -46,6 +46,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ ...serialize(existing), packageUpdate: null });
     }
 
+    // Dọn trước khi chặn: buổi quá 2 tiếng chưa check-out coi như bỏ dở, phải bị
+    // huỷ ngay tại đây chứ không đợi cron. Nếu không, một buổi hôm qua bị quên sẽ
+    // khoá người dạy ở MỌI khách (luật bên dưới) cho tới lần cron kế tiếp.
+    await voidOverCapSessions();
+
     // MỘT KHÁCH CHỈ CÓ MỘT BUỔI ĐANG CHẠY. Buổi cũ chưa check-out mà mở buổi mới
     // thì lộ trình bị trừ hai buổi trong khi khách chỉ tập một, và buổi bỏ dở kia
     // cứ chạy tới mốc 2 tiếng rồi tự huỷ — PT mất buổi dạy mà không hiểu vì sao.
@@ -71,6 +76,45 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       });
       return NextResponse.json(
         { error: block.message, reason: block.reason, runningLogId: running.id },
+        { status: 409 }
+      );
+    }
+
+    // MỘT NGƯỜI DẠY CHỈ MỞ ĐƯỢC MỘT NHẬT KÝ. Luật trên mới chỉ khoá theo khách:
+    // đang dạy khách A vẫn mở được nhật ký cho khách B, mà không ai dạy hai khách
+    // cùng lúc được — hai buổi song song dưới một tài khoản nghĩa là có buổi được
+    // ký khống, đúng thứ cặp chữ ký check-in/check-out sinh ra để chặn.
+    //
+    // Khách này đã được loại ở luật trên nên buổi tìm thấy ở đây chắc chắn nằm ở
+    // KHÁCH KHÁC; vẫn ghi rõ điều kiện để đọc là hiểu ngay.
+    const mine = await prisma.workoutLog.findFirst({
+      where: {
+        createdById: session.user.id,
+        clientId: { not: params.id },
+        status: { in: ["IN_PROGRESS", "AWAITING_CONFIRMATION"] },
+      },
+      select: {
+        id: true,
+        clientId: true,
+        checkInAt: true,
+        client: { select: { fullName: true } },
+        session: { select: { sessionName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (mine) {
+      const block = runningSessionBlock({
+        sessionName: mine.session?.sessionName,
+        checkInAt: mine.checkInAt,
+        clientName: mine.client?.fullName,
+      });
+      return NextResponse.json(
+        {
+          error: block.message,
+          reason: block.reason,
+          runningLogId: mine.id,
+          runningClientId: mine.clientId,
+        },
         { status: 409 }
       );
     }
