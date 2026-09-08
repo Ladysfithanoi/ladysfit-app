@@ -706,20 +706,13 @@ export function Step5Sales({
             </div>
           )}
 
-          {!isReadOnly && selectedOptionNum === null ? (
-            <div className="py-14 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center gap-3">
-              <Package className="w-10 h-10 text-gray-200" />
-              <p className="text-sm font-semibold text-gray-300">Chọn một lộ trình ở trên để xem các gói tập</p>
-            </div>
-          ) : packages.length === 0 ? (
-            // Không phải "không có lộ trình phù hợp" — ba lộ trình đề xuất vẫn nằm
-            // ngay trên. Chỉ là buổi tư vấn này chốt lại mà chưa chọn gói nào.
-            <p className="text-sm text-gray-400 text-center py-8">
-              {isGuest
-                ? "Chưa có gói nào được chọn — xem ba lộ trình đề xuất ở trên."
-                : "Buổi tư vấn này chưa chốt gói nào — xem ba lộ trình đề xuất ở trên."}
-            </p>
-          ) : (
+          {/* Điều kiện bám vào CÓ GÓI HAY KHÔNG, không bám vào selectedOptionNum.
+              Lộ trình tự vẽ ở "Vẽ lộ trình tập" cố ý đặt selectedOptionNum = null
+              (nó không phải một trong 3 mẫu dựng sẵn) — hỏi nhầm biến đó thì vẽ
+              xong lại hiện ô rỗng "Chọn một lộ trình ở trên", trong khi packages
+              đã đầy. Thẻ gói biến mất, chỉ còn mấy dòng chữ ở Tổng đầu tư, và
+              không bấm xem chi tiết gói được nữa. */}
+          {packages.length > 0 ? (
             <>
               <div className="space-y-3">
                 {packages.map((pkg, i) => {
@@ -742,6 +735,21 @@ export function Step5Sales({
                 * Thứ tự: Giai đoạn 1 → Giai đoạn 2 → Giai đoạn 3 | L4 dự phòng đảm bảo thời gian đạt mục tiêu | Loyalfit giữ nguyên giá gốc
               </p>
             </>
+          ) : !isReadOnly ? (
+            <div className="py-14 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center gap-3">
+              <Package className="w-10 h-10 text-gray-200" />
+              <p className="text-sm font-semibold text-gray-300 text-center px-4">
+                Chọn một lộ trình ở trên, hoặc bấm “Vẽ lộ trình tập” để tự ghép gói
+              </p>
+            </div>
+          ) : (
+            // Không phải "không có lộ trình phù hợp" — ba lộ trình đề xuất vẫn nằm
+            // ngay trên. Chỉ là buổi tư vấn này chốt lại mà chưa chọn gói nào.
+            <p className="text-sm text-gray-400 text-center py-8">
+              {isGuest
+                ? "Chưa có gói nào được chọn — xem ba lộ trình đề xuất ở trên."
+                : "Buổi tư vấn này chưa chốt gói nào — xem ba lộ trình đề xuất ở trên."}
+            </p>
           )}
         </div>
 
