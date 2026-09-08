@@ -77,6 +77,35 @@ function draftFrom(p: PromoRow): Draft {
   };
 }
 
+/** Giá hợp lệ = có nhập và lớn hơn 0. Cùng luật với server, chỉ khác là ở đây nói
+ *  ra được TÊN GÓI đang thiếu thay vì để người dùng tự dò. */
+function priceOk(price: string): boolean {
+  return Number(price) > 0;
+}
+
+/**
+ * Vì sao bản nháp này chưa lưu được — trả câu tiếng Việt, hoặc null nếu ổn.
+ *
+ * Đây là bản soi trước cho người dùng, KHÔNG phải chốt chặn: validate() ở
+ * /api/admin/promos mới là luật thật. Chép luật ra đây để nút Lưu nói được lý do
+ * ngay khi còn đang gõ, thay vì bấm xong mới ăn một dòng đỏ chung chung.
+ */
+function draftProblem(d: Draft): string | null {
+  if (!d.name.trim()) return "Chưa có tên đợt trợ giá.";
+  if (!d.shortLabel.trim()) return "Chưa có nhãn ngắn hiện cạnh giá.";
+  if (!d.branchId) return "Chưa chọn cơ sở áp dụng.";
+  if (!d.startDay || !d.endDay) return "Chưa chọn đủ ngày bắt đầu và ngày kết thúc.";
+  if (d.endDay < d.startDay) return "Ngày kết thúc phải từ ngày bắt đầu trở đi.";
+  if (d.items.length === 0) return "Chưa tích gói nào được trợ giá.";
+  const missing = d.items.filter((i) => !priceOk(i.price)).map((i) => i.packageName);
+  if (missing.length > 0) {
+    return missing.length === 1
+      ? `Gói ${missing[0]} đã tích nhưng chưa nhập giá.`
+      : `Các gói ${missing.join(", ")} đã tích nhưng chưa nhập giá.`;
+  }
+  return null;
+}
+
 /** "−30%" so với giá niêm yết, hoặc chuỗi rỗng khi chưa nhập được số. */
 function offLabel(packageName: string, price: string): string {
   const list = PACKAGES[packageName]?.price ?? 0;
@@ -200,7 +229,9 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
       </div>
 
       {/* ── Form thêm / sửa ── */}
-      {draft && (
+      {draft && (() => {
+      const problem = draftProblem(draft);
+      return (
         <div className="mb-5 rounded-2xl border-2 border-[#f15b5c]/30 bg-[#fff9f9] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <p className="text-sm font-extrabold text-gray-800">
@@ -280,7 +311,11 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
                   key={key}
                   className={cn(
                     "rounded-xl border px-3 py-2.5 transition-colors",
-                    item ? "border-[#f15b5c]/40 bg-white" : "border-gray-200 bg-white/60"
+                    !item
+                      ? "border-gray-200 bg-white/60"
+                      : priceOk(item.price)
+                        ? "border-[#f15b5c]/40 bg-white"
+                        : "border-[#f15b5c] bg-[#fff5f5]"
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -298,22 +333,34 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
                     </label>
 
                     {item && (
-                      <div className="flex items-center gap-2 flex-1 min-w-[12rem]">
+                      <div className="flex items-center gap-2 flex-1 min-w-[12rem] flex-wrap">
+                        {/* KHÔNG dùng type="number": gõ "17.500.000" theo thói quen
+                            người Việt thì trình duyệt coi là số không hợp lệ và trả
+                            value = "" — ô vẫn hiện đủ chữ số nhưng bên trong rỗng,
+                            bấm Lưu là ăn "giá phải lớn hơn 0" mà nhìn màn hình
+                            không hiểu vì sao. Ở đây nuốt hết ký tự không phải chữ
+                            số, rồi hiện lại có dấu chấm hàng nghìn. */}
                         <input
-                          type="number"
+                          type="text"
                           inputMode="numeric"
-                          value={item.price}
-                          onChange={(e) => setItemPrice(key, e.target.value)}
-                          placeholder="17500000"
-                          className="h-9 px-3 rounded-lg border border-gray-200 text-sm w-40"
+                          value={item.price ? Number(item.price).toLocaleString("vi-VN") : ""}
+                          onChange={(e) => setItemPrice(key, e.target.value.replace(/[^0-9]/g, ""))}
+                          placeholder="17.500.000"
+                          className={cn(
+                            "h-9 px-3 rounded-lg border text-sm w-40",
+                            priceOk(item.price) ? "border-gray-200" : "border-[#f15b5c] bg-[#fff5f5]"
+                          )}
                         />
                         <span className="text-xs font-semibold text-gray-500">
-                          {Number(item.price) > 0 ? formatPrice(Number(item.price)) : "đ"}
+                          {priceOk(item.price) ? formatPrice(Number(item.price)) : "đ"}
                         </span>
                         {off && (
                           <span className="rounded-full bg-[#f15b5c] px-2 py-0.5 text-[10px] font-bold text-white">
                             {off}
                           </span>
+                        )}
+                        {!priceOk(item.price) && (
+                          <span className="text-[11px] font-bold text-[#f15b5c]">Chưa nhập giá</span>
                         )}
                       </div>
                     )}
@@ -333,12 +380,25 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
             <span className="text-xs font-bold text-gray-600">Bật đợt này</span>
           </label>
 
-          {error && <p className="mt-3 text-xs font-semibold text-[#f15b5c]">{error}</p>}
+          {/* Vướng gì thì nói ngay và nói rõ TÊN GÓI, ngay cạnh nút, cỡ chữ đọc
+              được. Trước đây lý do chỉ hiện sau khi bấm Lưu, bằng một dòng 12px
+              dễ lướt qua — nên "bấm Lưu mà không thấy gì xảy ra". */}
+          {problem && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-bold text-amber-800">Chưa lưu được: {problem}</p>
+            </div>
+          )}
+          {error && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <p className="text-sm font-bold text-[#f15b5c]">{error}</p>
+            </div>
+          )}
 
           <div className="mt-4 flex flex-col sm:flex-row gap-2">
             <button
               onClick={save}
-              disabled={saving}
+              disabled={saving || !!problem}
+              title={problem ?? "Lưu đợt trợ giá"}
               className="h-10 px-5 rounded-xl text-white text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5 w-full sm:w-auto"
               style={{ backgroundColor: "#f15b5c" }}
             >
@@ -354,7 +414,8 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
             </button>
           </div>
         </div>
-      )}
+      );
+      })()}
 
       {/* ── Danh sách ── */}
       {loading ? (
