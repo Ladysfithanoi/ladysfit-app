@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Package, Clock, ChevronRight, Route, ImageDown, Loader2 } from "lucide-react";
+import { Check, Package, Clock, ChevronRight, Route, Share2, Copy, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice, type PackageDef } from "@/lib/packages";
 import { phaseOf, type PhaseNum } from "@/lib/roadmap-phases";
@@ -323,22 +323,31 @@ function PackageCard({
 
 export function Step5Sales({
   consultation,
-  isReadOnly,
+  isReadOnly: isReadOnlyProp,
   onDraft,
   onPrev,
   canSaveAndContinue = true,
   activePromos = [],
+  isGuest = false,
 }: {
   consultation: ConsultationData;
   isReadOnly: boolean;
-  onDraft: (p: Record<string, unknown>) => Promise<void>;
-  onPrev: () => void;
-  onComplete: () => void;
+  /** Không truyền ở chế độ khách xem — khách không có đường ghi nào. */
+  onDraft?: (p: Record<string, unknown>) => Promise<void>;
+  onPrev?: () => void;
+  onComplete?: () => void;
   canSaveAndContinue?: boolean;
   /** Đợt trợ giá đang chạy ở cơ sở này, đã lọc sẵn ở server. */
   activePromos?: ActivePromo[];
+  /** Khách mở bằng link chia sẻ (app/tu-van/[token]). Chỉ xem và duyệt: mở được
+   *  chi tiết gói, ảnh chuyển hoá, các cách ghép gói — nhưng không đổi được lộ
+   *  trình, và cả hàng nút thao tác của tư vấn viên đều không hiện. */
+  isGuest?: boolean;
 }) {
   const router = useRouter();
+  // Khách xem thì luôn chỉ-đọc. Gộp ngay ở đây để phần thân bên dưới chỉ phải nhớ
+  // MỘT lá cờ — thêm chỗ nào quên `|| isGuest` là hở ngay một nút bấm được.
+  const isReadOnly   = isReadOnlyProp || isGuest;
   const info         = (consultation.info ?? {}) as Record<string, unknown>;
   const existingPkgs = consultation.packages as SelectedPkg[];
 
@@ -357,10 +366,11 @@ export function Step5Sales({
   const [completing, setCompleting]     = useState(false);
   const [completeError, setCompleteError] = useState("");
   const [saving, setSaving]             = useState(false);
-  // Xuất ảnh màn tư vấn để gửi khách.
-  const sheetRef                        = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting]       = useState(false);
-  const [exportError, setExportError]   = useState("");
+  // Link cho khách tự mở màn tư vấn lộ trình này.
+  const [sharing, setSharing]           = useState(false);
+  const [shareUrl, setShareUrl]         = useState("");
+  const [shareError, setShareError]     = useState("");
+  const [copied, setCopied]             = useState(false);
   const [detailPkg, setDetailPkg]       = useState<string | null>(null);
   const [showCatalog, setShowCatalog]   = useState(false);
   // Bậc thang 3 giai đoạn — tự ghép gói thay vì lấy nguyên một trong 3 option.
@@ -428,51 +438,58 @@ export function Step5Sales({
 
   async function handleDraft() {
     setSaving(true);
-    await onDraft({ packages });
+    await onDraft?.({ packages });
     setSaving(false);
   }
 
   /**
-   * Xuất đúng những gì đang hiện trên màn hình tư vấn thành một tấm ảnh để gửi
-   * khách.
+   * Cấp link cho khách tự mở màn tư vấn lộ trình này.
    *
-   * Chụp thẳng từ DOM chứ không dựng lại bản vẽ riêng: dựng lại là sớm muộn bản
-   * xem và bản gửi khách lệch nhau mà không ai biết. Hàng nút thao tác gắn cờ
-   * data-export-hide nên không lọt vào ảnh.
+   * Trước đây nút này xuất PNG. Ảnh chết: khách không mở được chi tiết từng gói,
+   * không xem được thư viện ảnh chuyển hoá, không đọc được các cách ghép gói —
+   * mà đó mới là phần thuyết phục. Link mở ĐÚNG trang tư vấn viên đang nhìn, chỉ
+   * khoá phần sửa, nên không còn cảnh bản xem và bản gửi khách lệch nhau.
    *
-   * html2canvas nạp động để gói ~200KB đó không nằm trong bundle của mọi người
-   * chỉ vào xem tư vấn.
+   * Token do server cấp và giữ nguyên qua các lần bấm, nên link gửi hôm trước
+   * không chết. Ghép với origin đang mở để luôn đúng tên miền đang dùng.
    */
-  async function handleExportImage() {
-    const node = sheetRef.current;
-    if (!node) return;
-    setExporting(true);
-    setExportError("");
+  async function handleShare() {
+    setSharing(true);
+    setShareError("");
+    setCopied(false);
     try {
-      const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(node, {
-        scale: Math.min(2, window.devicePixelRatio || 1) * 1.5,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
-        ignoreElements: (el) => el.hasAttribute("data-export-hide"),
-      });
+      const res = await fetch(`/api/consultation/${consultation.id}/share`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Không tạo được link chia sẻ");
 
-      const name = String(info.fullName ?? "khach-hang")
-        .normalize("NFD").replace(/[̀-ͯ]/g, "")
-        .replace(/đ/gi, "d")
-        .replace(/[^a-zA-Z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase() || "khach-hang";
-
-      const link = document.createElement("a");
-      link.download = `tu-van-lo-trinh-${name}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch {
-      setExportError("Không xuất được ảnh. Thử lại hoặc chụp màn hình thủ công.");
+      const url = `${window.location.origin}${data.path}`;
+      setShareUrl(url);
+      await sendLink(url);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : "Không tạo được link chia sẻ");
     } finally {
-      setExporting(false);
+      setSharing(false);
+    }
+  }
+
+  /**
+   * Đưa link ra ngoài theo cách tiện nhất của máy đang dùng: điện thoại thì mở
+   * bảng chia sẻ của hệ điều hành (Zalo, Messenger...), máy tính thì copy sẵn.
+   *
+   * Khách bấm Huỷ ở bảng chia sẻ là AbortError — không phải lỗi, nuốt đi; ô link
+   * vẫn hiện ngay bên dưới nút để copy tay.
+   */
+  async function sendLink(url: string) {
+    const title = `Lộ trình tập luyện${info.fullName ? ` — ${String(info.fullName)}` : ""}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // Không chia sẻ/copy được thì thôi — ô link bên dưới vẫn chọn tay được.
     }
   }
 
@@ -480,7 +497,7 @@ export function Step5Sales({
     setCompleting(true);
     setCompleteError("");
     try {
-      await onDraft({ packages });
+      await onDraft?.({ packages });
       const res  = await fetch(`/api/consultation/${consultation.id}/complete`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
@@ -493,7 +510,7 @@ export function Step5Sales({
 
   return (
     <>
-      <div ref={sheetRef} className="divide-y divide-gray-50 bg-white">
+      <div className="divide-y divide-gray-50 bg-white">
 
         {/* Thời gian cần thiết để hoàn thiện mục tiêu */}
         {timeline !== null && (
@@ -606,12 +623,20 @@ export function Step5Sales({
             >
               <Package className="w-4 h-4 text-[#f15b5c]" />
               <span className="text-sm font-extrabold text-gray-800 group-hover:text-[#f15b5c] group-hover:underline transition-colors">
-                {isReadOnly ? "Lộ trình đề xuất theo chỉ số của khách" : "Chọn lộ trình tập luyện"}
+                {isGuest
+                  ? "Lộ trình đề xuất theo chỉ số của bạn"
+                  : isReadOnly
+                    ? "Lộ trình đề xuất theo chỉ số của khách"
+                    : "Chọn lộ trình tập luyện"}
               </span>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#f15b5c] transition-colors" />
             </button>
             <p className="text-xs text-gray-400 mb-4">
-              {isReadOnly ? (
+              {isGuest ? (
+                <>
+                  Ấn vào một lộ trình để xem chi tiết các cách ghép gói bên trong —{" "}
+                </>
+              ) : isReadOnly ? (
                 <>
                   Buổi tư vấn đã chốt nên không đổi được nữa, nhưng ấn vào một lộ trình vẫn
                   xem được chi tiết các cách ghép gói bên trong —{" "}
@@ -675,7 +700,9 @@ export function Step5Sales({
           {isReadOnly && (
             <div className="flex items-center gap-2 mb-4">
               <Package className="w-4 h-4 text-[#f15b5c]" />
-              <p className="text-sm font-extrabold text-gray-800">Lộ trình đã chốt</p>
+              <p className="text-sm font-extrabold text-gray-800">
+                {isGuest ? "Lộ trình dành cho bạn" : "Lộ trình đã chốt"}
+              </p>
             </div>
           )}
 
@@ -688,7 +715,9 @@ export function Step5Sales({
             // Không phải "không có lộ trình phù hợp" — ba lộ trình đề xuất vẫn nằm
             // ngay trên. Chỉ là buổi tư vấn này chốt lại mà chưa chọn gói nào.
             <p className="text-sm text-gray-400 text-center py-8">
-              Buổi tư vấn này chưa chốt gói nào — xem ba lộ trình đề xuất ở trên.
+              {isGuest
+                ? "Chưa có gói nào được chọn — xem ba lộ trình đề xuất ở trên."
+                : "Buổi tư vấn này chưa chốt gói nào — xem ba lộ trình đề xuất ở trên."}
             </p>
           ) : (
             <>
@@ -864,13 +893,12 @@ export function Step5Sales({
           </div>
         )}
 
-        {/* Actions — gắn cờ data-export-hide để hàng nút không lọt vào ảnh xuất ra.
+        {/* Actions — cả hàng này biến mất ở chế độ khách xem: khách chỉ có đúng
+            màn lộ trình, không có đường quay lại hay lối sang phần khác.
             Trên mobile các nút xếp dọc và chiếm trọn bề ngang (w-full), chữ không
             xuống dòng lộn xộn nhờ whitespace-nowrap + text-center. */}
-        <div
-          data-export-hide
-          className="p-5 flex flex-col sm:flex-row sm:flex-wrap justify-end items-stretch sm:items-center gap-3"
-        >
+        {!isGuest && (
+        <div className="p-5 flex flex-col sm:flex-row sm:flex-wrap justify-end items-stretch sm:items-center gap-3">
           <button
             onClick={onPrev}
             className="py-3 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 w-full sm:w-auto text-center whitespace-nowrap"
@@ -887,15 +915,15 @@ export function Step5Sales({
                 {saving ? "Đang lưu..." : "Lưu nháp"}
               </button>
               <button
-                onClick={handleExportImage}
-                disabled={exporting}
-                title="Xuất đúng những gì đang hiện ở đây thành ảnh để gửi khách"
+                onClick={handleShare}
+                disabled={sharing}
+                title="Tạo link cho khách tự mở đúng màn tư vấn lộ trình này"
                 className="py-3 px-5 rounded-xl border border-[#f15b5c]/40 bg-[#fff5f5] text-sm font-bold text-[#f15b5c] hover:bg-[#ffeeee] disabled:opacity-50 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
               >
-                {exporting
+                {sharing
                   ? <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  : <ImageDown className="w-4 h-4 shrink-0" />}
-                {exporting ? "Đang xuất ảnh..." : "Xuất ảnh"}
+                  : <Share2 className="w-4 h-4 shrink-0" />}
+                {sharing ? "Đang tạo link..." : "Chia sẻ"}
               </button>
               <button
                 onClick={handleComplete}
@@ -909,17 +937,17 @@ export function Step5Sales({
           )}
           {isReadOnly && (
             <>
-              {/* Buổi đã chốt vẫn xuất được ảnh để gửi lại khách. */}
+              {/* Buổi đã chốt vẫn gửi lại link cho khách được. */}
               <button
-                onClick={handleExportImage}
-                disabled={exporting}
-                title="Xuất đúng những gì đang hiện ở đây thành ảnh để gửi khách"
+                onClick={handleShare}
+                disabled={sharing}
+                title="Tạo link cho khách tự mở đúng màn tư vấn lộ trình này"
                 className="py-3 px-5 rounded-xl border border-[#f15b5c]/40 bg-[#fff5f5] text-sm font-bold text-[#f15b5c] hover:bg-[#ffeeee] disabled:opacity-50 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
               >
-                {exporting
+                {sharing
                   ? <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  : <ImageDown className="w-4 h-4 shrink-0" />}
-                {exporting ? "Đang xuất ảnh..." : "Xuất ảnh"}
+                  : <Share2 className="w-4 h-4 shrink-0" />}
+                {sharing ? "Đang tạo link..." : "Chia sẻ"}
               </button>
               {consultation.convertedClientId ? (
                 <Link
@@ -935,10 +963,48 @@ export function Step5Sales({
             </>
           )}
         </div>
+        )}
 
-        {exportError && (
-          <div data-export-hide className="px-5 pb-5 -mt-2">
-            <p className="text-xs text-[#f15b5c] font-semibold">{exportError}</p>
+        {/* Link vừa cấp — hiện hẳn ra để copy tay, vì bảng chia sẻ của hệ điều
+            hành không có trên máy tính và khách có thể bấm Huỷ ở điện thoại. */}
+        {!isGuest && shareUrl && (
+          <div className="px-5 pb-5 -mt-2">
+            <div className="rounded-xl border border-[#f15b5c]/25 bg-[#fff5f5] px-4 py-3">
+              <p className="text-xs font-bold text-[#f15b5c]">
+                Link cho khách xem lộ trình{copied && " — đã copy"}
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="min-w-0 flex-1 rounded-lg border border-[#f15b5c]/20 bg-white px-3 py-2 text-xs text-gray-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl).then(
+                      () => setCopied(true),
+                      () => setCopied(false)
+                    );
+                  }}
+                  className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-[#f15b5c]/30 bg-white px-3 py-2 text-xs font-bold text-[#f15b5c] hover:bg-[#ffeeee]"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {copied ? "Đã copy" : "Copy"}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                Ai có link đều xem được, không cần đăng nhập. Khách chỉ thấy đúng màn
+                tư vấn lộ trình này và không sửa được gì.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {shareError && (
+          <div className="px-5 pb-5 -mt-2">
+            <p className="text-xs text-[#f15b5c] font-semibold">{shareError}</p>
           </div>
         )}
       </div>

@@ -274,6 +274,9 @@ model Consultation {
   branchId          String
   convertedClientId String?
   workoutDesignJson String?            @db.Text
+  /// Link chia sẻ màn Tư vấn lộ trình cho khách xem. NULL = chưa từng chia sẻ;
+  /// sinh ra lần đầu khi bấm Chia sẻ rồi giữ nguyên, gửi lại vẫn là link cũ.
+  shareToken        String?            @unique
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
