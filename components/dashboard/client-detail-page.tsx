@@ -372,8 +372,10 @@ export function ClientDetailPage({
   const [editError, setEditError] = useState("");
   const [editGeneration, setEditGeneration] = useState(0);
   const [accountEmail, setAccountEmail] = useState(client.email ?? "");
-  const [generatedPassword, setGeneratedPassword] = useState("");
+  // Chỉ còn MỘT ô mật khẩu: cái vừa tạo XONG VÀ ĐÃ LƯU. Trước đây có thêm một ô
+  // "đã tạo nhưng chưa lưu" — chính nó đẻ ra bước bấm Lưu thứ hai mà ai cũng quên.
   const [savedPassword, setSavedPassword] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(client.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
@@ -765,6 +767,59 @@ export function ClientDetailPage({
     return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
   }
 
+  /** Cùng luật với EMAIL_RE ở PUT /api/clients/[id]/account — chặn trước khi gọi
+   *  để nút "Tạo" không sinh ra một mật khẩu rồi lưu hụt. */
+  const EMAIL_RE = /^[^s@]+@[^s@]+.[^s@]+$/;
+
+  /** Một đường ghi tài khoản duy nhất, cho cả nút "Tạo" lẫn nút lưu email. */
+  async function putAccount(email: string, password?: string) {
+    const res = await fetch(`/api/clients/${client.id}/account`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: password || undefined }),
+    });
+    if (!res.ok) {
+      // Server may return a non-JSON error page; fall back to a friendly message.
+      let msg = "Không thể lưu tài khoản. Vui lòng thử lại.";
+      try {
+        const data = await res.json();
+        if (data?.error) msg = data.error;
+      } catch { /* response body was not JSON */ }
+      throw new Error(msg);
+    }
+  }
+
+  /**
+   * Tạo mật khẩu VÀ lưu ngay trong một lần bấm.
+   *
+   * Trước đây bấm "Tạo" chỉ hiện mật khẩu trên màn hình, phải bấm tiếp "Lưu tài
+   * khoản" mới thật sự ghi. Ai quên bước hai là đọc cho khách một mật khẩu không
+   * hề tồn tại trong hệ thống — khách đăng nhập không được mà không ai hiểu vì sao.
+   *
+   * Email phải hợp lệ trước: gửi lên mà server từ chối thì mật khẩu vừa sinh cũng
+   * mất, nên chặn ngay ở đây thay vì để lỡ.
+   */
+  async function handleGeneratePassword() {
+    setAccountError("");
+    setAccountSuccess(false);
+    const email = accountEmail.trim();
+    if (!EMAIL_RE.test(email)) {
+      setAccountError("Nhập email hợp lệ trước đã — bấm “Tạo” là mật khẩu được lưu ngay cho khách.");
+      return;
+    }
+    const pw = generatePassword();
+    setPwLoading(true);
+    try {
+      await putAccount(email, pw);
+      setSavedPassword(pw);
+      router.refresh();
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setPwLoading(false);
+    }
+  }
+
   async function handlePkgStartDate(pkgId: string) {
     if (!pkgStartDate || pkgStartDate.length < 10) return;
     const iso = dmyToISO(pkgStartDate);
@@ -1019,28 +1074,15 @@ export function ClientDetailPage({
     }
   }
 
+  /** Nút dưới cùng giờ chỉ còn một việc: lưu email. Mật khẩu đã được nút "Tạo"
+   *  lưu ngay lúc tạo, không đi qua đây nữa. */
   async function handleAccountSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setAccountLoading(true);
     setAccountError("");
     setAccountSuccess(false);
     try {
-      const res = await fetch(`/api/clients/${client.id}/account`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: accountEmail, password: generatedPassword || undefined }),
-      });
-      if (!res.ok) {
-        // Server may return a non-JSON error page; fall back to a friendly message.
-        let msg = "Không thể lưu tài khoản. Vui lòng thử lại.";
-        try {
-          const data = await res.json();
-          if (data?.error) msg = data.error;
-        } catch { /* response body was not JSON */ }
-        throw new Error(msg);
-      }
-      setSavedPassword(generatedPassword);
-      setGeneratedPassword("");
+      await putAccount(accountEmail.trim());
       setAccountSuccess(true);
       router.refresh();
     } catch (err) {
@@ -2613,45 +2655,48 @@ export function ClientDetailPage({
                 <Label className="text-sm font-semibold text-gray-700">Mật khẩu</Label>
                 <Input
                   readOnly
-                  value={generatedPassword}
-                  placeholder="Nhấn 'Tạo' để tạo mật khẩu"
+                  value={savedPassword}
+                  placeholder="Nhấn 'Tạo' để tạo mật khẩu mới"
                   className={cn(inputCls, "bg-gray-50 font-mono tracking-wider")}
                 />
               </div>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setGeneratedPassword(generatePassword())}
-                className="h-11 rounded-xl px-4 text-sm font-semibold shrink-0"
+                disabled={pwLoading || accountLoading}
+                onClick={handleGeneratePassword}
+                className="h-11 rounded-xl px-4 text-sm font-semibold shrink-0 inline-flex items-center gap-1.5"
               >
-                Tạo
+                {pwLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {pwLoading ? "Đang lưu..." : "Tạo"}
               </Button>
             </div>
-            {generatedPassword && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <p className="text-xs font-bold text-amber-700 mb-0.5">Mật khẩu mới — hãy chia sẻ với KH:</p>
-                <p className="text-base font-mono font-extrabold text-amber-900 tracking-widest">{generatedPassword}</p>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Bấm “Tạo” là mật khẩu được lưu ngay cho khách — không cần bấm gì thêm.
+            </p>
+            {savedPassword && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 space-y-1">
+                <p className="text-sm text-green-700 font-semibold">✓ Đã tạo và lưu mật khẩu mới</p>
+                <p className="text-xs text-green-600 font-semibold">Chia sẻ với khách hàng:</p>
+                <p className="text-base font-mono font-extrabold text-green-800 tracking-widest">{savedPassword}</p>
               </div>
             )}
             {accountError && <p className="text-sm text-[#f15b5c] font-medium">{accountError}</p>}
             {accountSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-sm text-green-700 font-semibold">✓ Đã cập nhật tài khoản thành công</p>
-                {savedPassword && (
-                  <>
-                    <p className="text-xs text-green-600 font-semibold">Mật khẩu mới — chia sẻ với khách hàng:</p>
-                    <p className="text-base font-mono font-extrabold text-green-800 tracking-widest">{savedPassword}</p>
-                  </>
-                )}
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-green-700 font-semibold">✓ Đã lưu email khách hàng</p>
               </div>
             )}
+            {/* Chỉ còn lo email — mật khẩu đã lưu xong ở nút "Tạo" bên trên. Đặt
+                tên đúng việc nó làm, để không ai tưởng phải bấm đây thì mật khẩu
+                mới được ghi. */}
             <Button
               type="submit"
-              disabled={accountLoading}
+              disabled={accountLoading || pwLoading}
               className="w-full h-11 rounded-xl font-semibold text-white"
               style={{ backgroundColor: "#f15b5c" }}
             >
-              {accountLoading ? "Đang lưu..." : "Lưu tài khoản"}
+              {accountLoading ? "Đang lưu..." : "Lưu email"}
             </Button>
           </form>
         </div>
