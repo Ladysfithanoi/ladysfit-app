@@ -126,15 +126,58 @@ export function findCheckInBlock(
 // Câu thông báo viết một lần ở đây rồi dùng chung cho cả API chặn thật lẫn giao
 // diện khoá nút, để hai bên không bao giờ nói hai kiểu khác nhau.
 
-/** Buổi chưa đóng: đang tập, hoặc đang chờ khách xác nhận ở luồng cũ. */
-export function isRunningLog(log: { status: string }): boolean {
-  return log.status === "IN_PROGRESS" || log.status === "AWAITING_CONFIRMATION";
+/**
+ * Mốc 2 tiếng: quá đây mà chưa check-out thì buổi coi như bỏ dở, không còn xin
+ * được chữ ký check-out hợp lệ nữa.
+ *
+ * Sống ở đây — module thuần, không đụng Prisma — để cả ba phía dùng CHUNG một
+ * con số: lưới quét tự huỷ (lib/workout-session), luật chặn check-in, và đồng
+ * hồ đếm ngược trong nhật ký tập. Trước đây mỗi chỗ giữ một bản.
+ */
+export const MAX_SESSION_MINUTES = 120;
+
+/** Trạng thái của một buổi chưa đóng: đang tập, hoặc chờ khách xác nhận (luồng cũ). */
+export const RUNNING_LOG_STATUSES = ["IN_PROGRESS", "AWAITING_CONFIRMATION"] as const;
+
+/**
+ * Buổi ĐANG chạy thật: chưa đóng VÀ chưa quá mốc 2 tiếng.
+ *
+ * Vế thứ hai là bắt buộc, không phải cho đẹp. Thiếu nó thì một bản ghi cũ —
+ * chẳng hạn AWAITING_CONFIRMATION còn sót từ luồng "khách xác nhận trên app"
+ * đã bỏ — vĩnh viễn bị coi là đang chạy, khoá người dạy ở MỌI khách và không có
+ * cách nào tự hết. Lưới quét dùng đúng mốc này nên hai bên không thể lệch nhau.
+ */
+export function isRunningLog(
+  log: { status: string; checkInAt?: Date | string | null },
+  now: Date = new Date()
+): boolean {
+  if (!(RUNNING_LOG_STATUSES as readonly string[]).includes(log.status)) return false;
+  const at = toDate(log.checkInAt);
+  if (at == null) return false; // buổi chưa có giờ check-in thì không thể đang chạy
+  return now.getTime() - at.getTime() < MAX_SESSION_MINUTES * 60_000;
 }
 
-/** "08:35" theo giờ Việt Nam. */
-function hhmmVN(v: Date | string): string {
+/** Giờ Việt Nam của một mốc thời gian, dạng [giờ, ngày] để ghép câu. */
+function partsVN(v: Date | string): { hhmm: string; ymd: string; dmy: string } {
   const vn = new Date(new Date(v).getTime() + 7 * 3600_000);
-  return `${String(vn.getUTCHours()).padStart(2, "0")}:${String(vn.getUTCMinutes()).padStart(2, "0")}`;
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return {
+    hhmm: `${p2(vn.getUTCHours())}:${p2(vn.getUTCMinutes())}`,
+    ymd: `${vn.getUTCFullYear()}-${p2(vn.getUTCMonth() + 1)}-${p2(vn.getUTCDate())}`,
+    dmy: `${p2(vn.getUTCDate())}/${p2(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`,
+  };
+}
+
+/**
+ * "08:35" nếu là hôm nay, "09:48 ngày 05/06/2026" nếu không.
+ *
+ * Bỏ ngày đi thì một buổi sót từ tháng trước hiện ra thành "từ 09:48" — đọc lúc
+ * 9h30 sáng nó giống một giờ ở TƯƠNG LAI, và PT không tài nào đoán được chuyện
+ * gì đang xảy ra. Có ngày là nhìn phát biết ngay bản ghi cũ.
+ */
+function whenVN(v: Date | string, now: Date = new Date()): string {
+  const at = partsVN(v);
+  return at.ymd === partsVN(now).ymd ? at.hhmm : `${at.hhmm} ngày ${at.dmy}`;
 }
 
 export function runningSessionBlock(opts: {
@@ -146,7 +189,7 @@ export function runningSessionBlock(opts: {
   clientName?: string | null;
 }): CheckInBlock {
   const what = opts.sessionName ? `“${opts.sessionName}”` : "một buổi tập";
-  const when = opts.checkInAt ? ` từ ${hhmmVN(opts.checkInAt)}` : "";
+  const when = opts.checkInAt ? ` từ ${whenVN(opts.checkInAt)}` : "";
   if (opts.clientName) {
     return {
       reason: "SESSION_RUNNING",

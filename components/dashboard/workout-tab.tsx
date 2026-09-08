@@ -2264,7 +2264,9 @@ export function WorkoutTab({
   // cho mọi buổi khác: buổi ĐANG chạy không hiện nút check-in mà hiện bảng điều
   // khiển buổi tập, nên nó không tự khoá chính mình. Server chặn thật ở
   // POST /workout-logs/check-in.
-  const runningLog = workoutLogs.find(isRunningLog) ?? null;
+  // Bọc trong hàm chứ không truyền thẳng isRunningLog: .find còn đưa cả index và
+  // mảng vào, index sẽ rơi trúng tham số `now` của isRunningLog.
+  const runningLog = workoutLogs.find((l) => isRunningLog(l)) ?? null;
   const runningSessionName = runningLog
     ? programs
         .flatMap((p) => p.weeks.flatMap((w) => w.sessions))

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { refreshClientChurnStatus, isPackageOngoing } from "@/lib/client-status";
+import { MAX_SESSION_MINUTES, RUNNING_LOG_STATUSES } from "@/lib/checkin-eligibility";
 
 export type PackageUpdate = {
   id: string;
@@ -9,17 +10,24 @@ export type PackageUpdate = {
   status: string;
 };
 
-// Hard cap on a single session's length. A session checked in but never checked
-// out within this window is considered abandoned: the PT can no longer get a
-// legitimate check-out signature, so it must NOT count toward the PT's salary.
-export const MAX_SESSION_MINUTES = 120;
+// Mốc 2 tiếng sống ở lib/checkin-eligibility (module thuần) để luật chặn check-in
+// bên giao diện dùng chung đúng con số này. Re-export để các chỗ đang import từ
+// đây không phải đổi.
+export { MAX_SESSION_MINUTES };
 
 // Reason stamped on auto-voided over-cap sessions.
 export const OVER_CAP_VOID_REASON =
   "Quá 2 tiếng chưa ký check-out — tự động huỷ buổi (không hoàn buổi cho khách)";
 
-// Void every IN_PROGRESS session that has run past the 2-hour cap without a
-// check-out. Voiding (not deleting) means:
+// Void every UNCLOSED session that has run past the 2-hour cap without a
+// check-out — cả IN_PROGRESS lẫn AWAITING_CONFIRMATION.
+//
+// AWAITING_CONFIRMATION phải nằm trong lưới này: luồng "khách xác nhận trên app"
+// đã bỏ nên không còn gì đóng chúng lại, mà luật chặn check-in vẫn tính chúng là
+// đang chạy. Bỏ sót là bản ghi từ nhiều tháng trước khoá người dạy ở MỌI khách,
+// vĩnh viễn, không có cách nào tự hết.
+//
+// Voiding (not deleting) means:
 //   • the buổi dạy does NOT count for the PT's salary (only COMPLETED counts);
 //   • the package buổi is NOT refunded — the client already signed the check-in,
 //     so the deduction stands (we deliberately do not call reversePackageSession);
@@ -29,7 +37,7 @@ export const OVER_CAP_VOID_REASON =
 export async function voidOverCapSessions(): Promise<number> {
   const threshold = new Date(Date.now() - MAX_SESSION_MINUTES * 60_000);
   const { count } = await prisma.workoutLog.updateMany({
-    where: { status: "IN_PROGRESS", checkInAt: { lt: threshold } },
+    where: { status: { in: [...RUNNING_LOG_STATUSES] }, checkInAt: { lt: threshold } },
     data: { status: "VOID", voidReason: OVER_CAP_VOID_REASON },
   });
   return count;

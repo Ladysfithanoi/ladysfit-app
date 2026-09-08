@@ -3,7 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countPackageSession, voidOverCapSessions } from "@/lib/workout-session";
-import { findCheckInBlock, runningSessionBlock } from "@/lib/checkin-eligibility";
+import {
+  findCheckInBlock,
+  runningSessionBlock,
+  MAX_SESSION_MINUTES,
+  RUNNING_LOG_STATUSES,
+} from "@/lib/checkin-eligibility";
 import { generatePackageProgressNotifications } from "@/lib/package-progress";
 
 // POST /api/clients/[id]/workout-logs/check-in
@@ -51,6 +56,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // khoá người dạy ở MỌI khách (luật bên dưới) cho tới lần cron kế tiếp.
     await voidOverCapSessions();
 
+    // Mốc 2 tiếng lặp lại ở các truy vấn dưới: lưới quét vừa chạy xong nên về lý
+    // thuyết không còn bản ghi quá hạn nào, nhưng nếu nó lỡ sót một dòng (giờ
+    // check-in rỗng chẳng hạn) thì chặn ở đây vẫn không khoá nhầm ai.
+    const capThreshold = new Date(Date.now() - MAX_SESSION_MINUTES * 60_000);
+
     // MỘT KHÁCH CHỈ CÓ MỘT BUỔI ĐANG CHẠY. Buổi cũ chưa check-out mà mở buổi mới
     // thì lộ trình bị trừ hai buổi trong khi khách chỉ tập một, và buổi bỏ dở kia
     // cứ chạy tới mốc 2 tiếng rồi tự huỷ — PT mất buổi dạy mà không hiểu vì sao.
@@ -59,7 +69,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // Buổi CÙNG session đã được trả về ở nhánh "Resume" bên trên, nên tới đây chỉ
     // còn trường hợp buổi KHÁC đang dở.
     const running = await prisma.workoutLog.findFirst({
-      where: { clientId: params.id, status: { in: ["IN_PROGRESS", "AWAITING_CONFIRMATION"] } },
+      where: {
+        clientId: params.id,
+        status: { in: [...RUNNING_LOG_STATUSES] },
+        checkInAt: { gte: capThreshold },
+      },
       select: {
         id: true,
         checkInAt: true,
@@ -91,7 +105,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       where: {
         createdById: session.user.id,
         clientId: { not: params.id },
-        status: { in: ["IN_PROGRESS", "AWAITING_CONFIRMATION"] },
+        status: { in: [...RUNNING_LOG_STATUSES] },
+        checkInAt: { gte: capThreshold },
       },
       select: {
         id: true,

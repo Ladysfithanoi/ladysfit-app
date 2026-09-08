@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { voidOverCapSessions } from "@/lib/workout-session";
+import { MAX_SESSION_MINUTES, RUNNING_LOG_STATUSES } from "@/lib/checkin-eligibility";
 
 // GET /api/workout-logs/my-running
 // Buổi tập đang chạy dở do CHÍNH người đang đăng nhập mở, nếu có.
@@ -23,7 +24,9 @@ export async function GET() {
   const log = await prisma.workoutLog.findFirst({
     where: {
       createdById: session.user.id,
-      status: { in: ["IN_PROGRESS", "AWAITING_CONFIRMATION"] },
+      status: { in: [...RUNNING_LOG_STATUSES] },
+      // Cùng mốc 2 tiếng với lưới quét — xem isRunningLog.
+      checkInAt: { gte: new Date(Date.now() - MAX_SESSION_MINUTES * 60_000) },
     },
     select: {
       id: true,

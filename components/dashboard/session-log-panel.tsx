@@ -5,6 +5,7 @@ import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, Clipboa
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 import { CheckOutPhotoCapture, CheckOutPhotoThumb } from "./checkout-photo";
+import { MAX_SESSION_MINUTES as CAP_MINUTES } from "@/lib/checkin-eligibility";
 import {
   buildNextSessionSuggestion,
   type SessionSurvey,
@@ -557,7 +558,9 @@ function fmtClock(ms: number): string {
 // Hard cap on a single session's length. Past this the timer stops and the
 // session is auto-cancelled (never counted) — guards against a PT forgetting to
 // check out, which would otherwise let the clock run forever.
-const MAX_SESSION_MINUTES = 120;
+// Mốc 2 tiếng dùng chung với lưới quét tự huỷ và luật chặn check-in — xem
+// lib/checkin-eligibility. Trước đây chỗ này giữ một bản sao riêng.
+const MAX_SESSION_MINUTES = CAP_MINUTES;
 
 // Bắt đầu cảnh báo PT khi chỉ còn ngần này phút trước mốc tự huỷ.
 const CAP_WARN_MINUTES = 20;
