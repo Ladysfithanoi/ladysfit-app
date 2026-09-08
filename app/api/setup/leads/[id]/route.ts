@@ -7,6 +7,7 @@ import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { syncLeadToClient } from "@/lib/sync-lead-to-client";
 import { validateLeadFinance, type LeadFinanceStatus } from "@/lib/lead-pricing";
+import { getActivePromos } from "@/lib/package-promos-server";
 
 /** Các trường quyết định luật tiền — chỉ khi body đụng tới chúng mới kiểm tra lại. */
 const FINANCE_FIELDS = ["status", "source", "packageRegistered", "actualRevenue", "remainingPayment"];
@@ -56,12 +57,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // chỉ gửi { notes } nên không bị chặn bởi dữ liệu tiền cũ chưa chuẩn.
   const touchesFinance = FINANCE_FIELDS.some(f => f in body);
   if (touchesFinance) {
+    // Đợt trợ giá tính theo NGÀY KÝ của lead, không phải hôm nay: sửa lại một hợp
+    // đồng ký hồi đợt presale thì vẫn đối chiếu theo giá của đợt đó, kể cả khi đợt
+    // đã hết hạn. Chưa có ngày ký thì lấy ngày hiện tại.
+    const askedSign = isAdmin && "signDate" in body && body.signDate
+      ? new Date(String(body.signDate))
+      : lead.signDate;
+    const promoAt = askedSign && !isNaN(askedSign.getTime()) ? askedSign : new Date();
+    const promos = await getActivePromos(lead.branchId, promoAt);
+
     const moneyError = validateLeadFinance({
       status: nextStatus,
       source: nextSource,
       packageRegistered: nextPackage,
       actualRevenue: nextRevenue,
       remainingPayment: nextRemaining,
+      promos,
     });
     if (moneyError) return NextResponse.json({ error: moneyError }, { status: 400 });
   }

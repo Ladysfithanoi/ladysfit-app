@@ -12,7 +12,7 @@ import { LeadsImportModal } from "./leads-import-modal";
 import { fmtDate } from "@/lib/format-date";
 import {
   parsePackageList, serializePackageList, computeExpectedRevenue, describeExpected,
-  validateLeadFinance, fieldLocks, POST_L0_SOURCE,
+  validateLeadFinance, fieldLocks, POST_L0_SOURCE, type ActivePromoForLead as ActivePromo,
 } from "@/lib/lead-pricing";
 import { TRIAL_PACKAGE } from "@/lib/packages";
 
@@ -138,6 +138,25 @@ export function LeadsTab({
 
   const [form, setForm] = useState<Partial<SalesLead & { signDateStr: string }>>({});
 
+  // Đợt trợ giá đang chạy ở cơ sở này, tại NGÀY KÝ của lead đang mở. Không có nó
+  // thì bảng giá vẫn đòi nguyên giá: khách mua L3 giá presale 17.5 mà ô Doanh thu
+  // cứ báo "phải là 25 triệu", nút Cập nhật khoá cứng.
+  //
+  // Chạy lại theo ngày ký chứ không phải hôm nay, để sửa một hợp đồng ký hồi đợt
+  // presale vẫn đối chiếu đúng giá đợt đó dù đợt đã hết hạn.
+  const [promos, setPromos] = useState<ActivePromo[]>([]);
+  const promoDay = form.signDateStr || "";
+  useEffect(() => {
+    if (!branchId) { setPromos([]); return; }
+    let alive = true;
+    const qs = new URLSearchParams({ branchId, ...(promoDay ? { at: promoDay } : {}) });
+    fetch(`/api/promos/active?${qs}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (alive) setPromos((d as ActivePromo[]) ?? []); })
+      .catch(() => { /* hỏi hụt thì chỉ còn giá thường trực — server vẫn soát thật */ });
+    return () => { alive = false; };
+  }, [branchId, promoDay]);
+
   const fetchLeads = useCallback(async () => {
     if (!branchId) return;
     setLoading(true);
@@ -195,6 +214,7 @@ export function LeadsTab({
       packageRegistered: form.packageRegistered,
       actualRevenue: form.actualRevenue,
       remainingPayment: form.remainingPayment,
+      promos,
     });
     if (moneyError) { setError(moneyError); return; }
     setSaving(true);
@@ -486,13 +506,14 @@ export function LeadsTab({
   const formPkgs     = parsePackageList(form.packageRegistered);
   const formLocks    = fieldLocks(formStatus);
   const isPostL0     = form.source === POST_L0_SOURCE;
-  const expected     = computeExpectedRevenue(formPkgs, form.source);
+  const expected     = computeExpectedRevenue(formPkgs, form.source, promos);
   const financeError = validateLeadFinance({
     status: formStatus,
     source: form.source,
     packageRegistered: form.packageRegistered,
     actualRevenue: form.actualRevenue,
     remainingPayment: form.remainingPayment,
+    promos,
   });
 
   /** Đổi Tình trạng → dọn sạch những ô vừa bị khoá (kèm Ngày ký nếu hết doanh thu). */

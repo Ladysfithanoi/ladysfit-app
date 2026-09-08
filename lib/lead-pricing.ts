@@ -5,6 +5,10 @@
 // bao giờ lệch luật. Mọi số tiền trong file này tính bằng TRIỆU đồng — đúng đơn vị
 // mà ô "Doanh thu (triệu)" / "Còn thiếu (triệu)" đang lưu vào DB.
 import { PACKAGES, TRIAL_PACKAGE } from "./packages";
+import { promoPriceFor, type ActivePromo } from "./package-promos";
+
+/** Re-export để màn Lead chỉ phải nhập từ một chỗ — luật tiền của Lead ở đây. */
+export type ActivePromoForLead = ActivePromo;
 
 /** Tái ký — L3/L4/L5 được trợ giá 10%. */
 export const RENEW_SOURCE = "Renew";
@@ -99,10 +103,15 @@ export type ExpectedRevenue = {
  * Số tiền đúng của hợp đồng theo Gói tập đăng ký + Phân nguồn.
  * Trả về null khi không thể đối chiếu: chưa chọn gói, hoặc có gói lạ không nằm
  * trong bảng giá (dữ liệu cũ / import tay) — lúc đó chỉ áp các luật khoá ô.
+ *
+ * `promos` là các đợt trợ giá ĐANG CHẠY ở cơ sở của lead, tại NGÀY KÝ của lead
+ * (xem lib/package-promos-server). Bỏ trống thì chỉ có giá thường trực — an toàn
+ * cho những chỗ chưa biết cơ sở, không bao giờ đòi khách một con số rẻ hơn thực tế.
  */
 export function computeExpectedRevenue(
   packages: string[],
   source: string | null | undefined,
+  promos?: ActivePromo[] | null,
 ): ExpectedRevenue | null {
   if (packages.length === 0) return null;
 
@@ -116,13 +125,27 @@ export function computeExpectedRevenue(
     if (listVND == null) return null; // gói lạ → không đối chiếu được
     // Renew: chỉ L3/L4/L5 được trợ giá 10%. Hậu L0 không tính renew.
     const discounted = isRenew && RENEW_DISCOUNT_PACKAGES.includes(pkg);
-    const finalVND = discounted ? Math.round(listVND * (1 - RENEW_DISCOUNT_RATE)) : listVND;
+    let finalVND = discounted ? Math.round(listVND * (1 - RENEW_DISCOUNT_RATE)) : listVND;
+    let note = discounted ? "trợ giá tái ký 10%" : undefined;
+
+    // Đợt trợ giá của cơ sở đè lên mức thường trực khi nó RẺ HƠN — đúng luật mà
+    // bảng giá ở bước Tư vấn lộ trình đang dùng (lib/roadmap-pricing), nên con số
+    // tư vấn viên báo khách và con số Setup doanh số đòi luôn là một.
+    //
+    // Thiếu chỗ này thì khách mua L3 giá presale 17.5 mà ô Doanh thu cứ đòi 25,
+    // nút Cập nhật khoá cứng và không ai ghi nổi hợp đồng đã ký.
+    const promo = promoPriceFor(pkg, promos);
+    if (promo && promo.price < finalVND) {
+      finalVND = promo.price;
+      note = promo.shortLabel;
+    }
+
     totalVND += finalVND;
     lines.push({
       pkg,
       base: listVND / 1_000_000,
       final: finalVND / 1_000_000,
-      note: discounted ? "trợ giá tái ký 10%" : undefined,
+      note,
     });
   }
 
@@ -165,6 +188,8 @@ export type LeadFinanceInput = {
   packageRegistered: string | null | undefined;
   actualRevenue: number | null | undefined;
   remainingPayment: number | null | undefined;
+  /** Đợt trợ giá đang chạy ở cơ sở của lead, tại ngày ký. Bỏ trống = chỉ giá thường trực. */
+  promos?: ActivePromo[] | null;
 };
 
 const filled = (n: number | null | undefined): n is number =>
@@ -214,7 +239,7 @@ export function validateLeadFinance(input: LeadFinanceInput): string | null {
     }
   }
 
-  const expected = computeExpectedRevenue(packages, input.source);
+  const expected = computeExpectedRevenue(packages, input.source, input.promos);
 
   // 3. Luật tiền theo từng tình trạng.
   if (status === "DE") {

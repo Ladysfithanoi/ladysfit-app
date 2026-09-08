@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { validateLeadFinance, type LeadFinanceStatus } from "@/lib/lead-pricing";
+import { getActivePromos } from "@/lib/package-promos-server";
 
 const ALLOWED = ["ADMIN", "FM", "CEO_FITPARTNER", "COO", "PT"];
 
@@ -79,12 +80,20 @@ export async function POST(req: Request) {
   // Doanh thu / Còn thiếu phải khớp bảng giá theo Tình trạng + Phân nguồn.
   const revenueNum   = actualRevenue != null && actualRevenue !== "" ? parseFloat(String(actualRevenue)) : null;
   const remainingNum = remainingPayment != null && remainingPayment !== "" ? parseFloat(String(remainingPayment)) : null;
+  // Đợt trợ giá của cơ sở tại NGÀY KÝ, không phải hôm nay: hợp đồng ký trong đợt
+  // presale phải được đối chiếu theo giá đợt đó. Chưa có ngày ký (chưa có tiền)
+  // thì lấy hôm nay — lúc đó luật tiền cũng chưa soát giá.
+  const askedDate = signDate ? new Date(signDate) : null;
+  const promoAt = askedDate && !isNaN(askedDate.getTime()) ? askedDate : new Date();
+  const promos = await getActivePromos(branchId, promoAt);
+
   const moneyError = validateLeadFinance({
     status: (status || "TAKECARE") as LeadFinanceStatus,
     source: source || null,
     packageRegistered: packageRegistered || null,
     actualRevenue: revenueNum,
     remainingPayment: remainingNum,
+    promos,
   });
   if (moneyError) return NextResponse.json({ error: moneyError }, { status: 400 });
 
