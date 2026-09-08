@@ -376,6 +376,8 @@ export function ClientDetailPage({
   // "đã tạo nhưng chưa lưu" — chính nó đẻ ra bước bấm Lưu thứ hai mà ai cũng quên.
   const [savedPassword, setSavedPassword] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
+  /** Email đang thật sự nằm trong DB — để rời ô mà không đổi gì thì không gọi server. */
+  const [savedEmail, setSavedEmail] = useState(client.email ?? "");
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(client.avatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
@@ -768,8 +770,8 @@ export function ClientDetailPage({
   }
 
   /** Cùng luật với EMAIL_RE ở PUT /api/clients/[id]/account — chặn trước khi gọi
-   *  để nút "Tạo" không sinh ra một mật khẩu rồi lưu hụt. */
-  const EMAIL_RE = /^[^s@]+@[^s@]+.[^s@]+$/;
+   *  để không sinh ra một mật khẩu rồi lưu hụt. */
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountEmail.trim());
 
   /** Một đường ghi tài khoản duy nhất, cho cả nút "Tạo" lẫn nút lưu email. */
   async function putAccount(email: string, password?: string) {
@@ -803,7 +805,7 @@ export function ClientDetailPage({
     setAccountError("");
     setAccountSuccess(false);
     const email = accountEmail.trim();
-    if (!EMAIL_RE.test(email)) {
+    if (!emailOk) {
       setAccountError("Nhập email hợp lệ trước đã — bấm “Tạo” là mật khẩu được lưu ngay cho khách.");
       return;
     }
@@ -811,6 +813,7 @@ export function ClientDetailPage({
     setPwLoading(true);
     try {
       await putAccount(email, pw);
+      setSavedEmail(email);
       setSavedPassword(pw);
       router.refresh();
     } catch (err) {
@@ -1074,15 +1077,29 @@ export function ClientDetailPage({
     }
   }
 
-  /** Nút dưới cùng giờ chỉ còn một việc: lưu email. Mật khẩu đã được nút "Tạo"
-   *  lưu ngay lúc tạo, không đi qua đây nữa. */
-  async function handleAccountSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setAccountLoading(true);
+  /**
+   * Email tự lưu khi rời ô (hoặc bấm Enter). Không còn nút Lưu nào trong mục này:
+   * còn một nút là còn một bước có thể quên, mà quên ở đây nghĩa là khách cầm một
+   * tài khoản không tồn tại.
+   *
+   * Chỉ gọi server khi email THẬT SỰ đổi — rời ô qua lại không đẻ ra một loạt lần
+   * ghi vô nghĩa. Email rỗng thì im lặng bỏ qua: người dùng mới mở ô ra chứ chưa
+   * gõ gì, chưa có gì để mắng.
+   */
+  async function saveEmail() {
+    const email = accountEmail.trim();
+    if (email === savedEmail) return;
+    if (!email) return;
     setAccountError("");
     setAccountSuccess(false);
+    if (!emailOk) {
+      setAccountError("Email không hợp lệ — chưa lưu được.");
+      return;
+    }
+    setAccountLoading(true);
     try {
-      await putAccount(accountEmail.trim());
+      await putAccount(email);
+      setSavedEmail(email);
       setAccountSuccess(true);
       router.refresh();
     } catch (err) {
@@ -2639,13 +2656,19 @@ export function ClientDetailPage({
               </span>
             )}
           </div>
-          <form onSubmit={handleAccountSubmit} className="space-y-3">
+          {/* Không còn nút Lưu nào trong mục này: email lưu khi rời ô, mật khẩu lưu
+              ngay lúc bấm "Tạo". Form giữ lại để bấm Enter trong ô email cũng lưu. */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); void saveEmail(); }}
+            className="space-y-3"
+          >
             <Field label="Email khách hàng *">
               <Input
                 type="email"
                 required
                 value={accountEmail}
                 onChange={(e) => setAccountEmail(e.target.value)}
+                onBlur={() => void saveEmail()}
                 placeholder="khachhang@email.com"
                 className={inputCls}
               />
@@ -2663,8 +2686,9 @@ export function ClientDetailPage({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pwLoading || accountLoading}
+                disabled={pwLoading || accountLoading || !emailOk}
                 onClick={handleGeneratePassword}
+                title={emailOk ? "Tạo mật khẩu mới và lưu ngay" : "Điền email hợp lệ trước đã"}
                 className="h-11 rounded-xl px-4 text-sm font-semibold shrink-0 inline-flex items-center gap-1.5"
               >
                 {pwLoading && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2672,7 +2696,9 @@ export function ClientDetailPage({
               </Button>
             </div>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Bấm “Tạo” là mật khẩu được lưu ngay cho khách — không cần bấm gì thêm.
+              {emailOk
+                ? "Email lưu khi bạn rời khỏi ô, mật khẩu lưu ngay khi bấm “Tạo” — không có nút Lưu, cũng không cần bấm gì thêm."
+                : "Điền email hợp lệ trước đã, rồi mới tạo được mật khẩu. Cả hai đều tự lưu."}
             </p>
             {savedPassword && (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 space-y-1">
@@ -2682,22 +2708,14 @@ export function ClientDetailPage({
               </div>
             )}
             {accountError && <p className="text-sm text-[#f15b5c] font-medium">{accountError}</p>}
-            {accountSuccess && (
+            {accountLoading && (
+              <p className="text-xs text-gray-400 font-semibold">Đang lưu email...</p>
+            )}
+            {accountSuccess && !accountLoading && (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
                 <p className="text-sm text-green-700 font-semibold">✓ Đã lưu email khách hàng</p>
               </div>
             )}
-            {/* Chỉ còn lo email — mật khẩu đã lưu xong ở nút "Tạo" bên trên. Đặt
-                tên đúng việc nó làm, để không ai tưởng phải bấm đây thì mật khẩu
-                mới được ghi. */}
-            <Button
-              type="submit"
-              disabled={accountLoading || pwLoading}
-              className="w-full h-11 rounded-xl font-semibold text-white"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              {accountLoading ? "Đang lưu..." : "Lưu email"}
-            </Button>
           </form>
         </div>
 
