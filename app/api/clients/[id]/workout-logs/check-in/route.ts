@@ -10,6 +10,7 @@ import {
   RUNNING_LOG_STATUSES,
 } from "@/lib/checkin-eligibility";
 import { generatePackageProgressNotifications } from "@/lib/package-progress";
+import { parseWeightInput, recordWeightLog } from "@/lib/weight-log";
 
 // POST /api/clients/[id]/workout-logs/check-in
 // Starts a session: the client signs to confirm they showed up, then we create
@@ -22,11 +23,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { programId, weekId, sessionId, checkInSignatureUrl } = (await req.json()) as {
+    const { programId, weekId, sessionId, checkInSignatureUrl, weightKg } = (await req.json()) as {
       programId?: string;
       weekId?: string;
       sessionId?: string;
       checkInSignatureUrl?: string | null;
+      /** Cân nặng PT cân cho khách ngay lúc check-in. KHÔNG bắt buộc. */
+      weightKg?: number | string | null;
     };
     if (!programId || !weekId || !sessionId) {
       return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -202,6 +205,27 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       });
     }
 
+    // Cân nặng khách cân lúc check-in (nếu PT có điền) — vào thẳng nhật ký cân
+    // nặng, cùng một đường với màn hình "Cập nhật cân nặng", nên biểu đồ, hồ sơ
+    // và cột cân nặng của phiếu check-in đều thấy ngay.
+    //
+    // Ô này không bắt buộc: gõ sai (âm, quá ngưỡng người thật) thì bỏ qua chứ
+    // KHÔNG chặn check-in — chữ ký khách đã ký rồi, không được vứt đi vì một ô
+    // phụ. Giao diện đã chặn số vô lý trước khi gửi.
+    const weight = parseWeightInput(weightKg);
+    if (weight != null) {
+      try {
+        await recordWeightLog({
+          clientId: params.id,
+          date: now,
+          weight,
+          note: "Cân lúc check-in buổi tập",
+        });
+      } catch (e) {
+        console.error("[workout-logs check-in] ghi cân nặng", (e as { message?: string }).message);
+      }
+    }
+
     // Vừa trừ buổi xong thì soát luôn mốc tiến độ (50/70/90% số buổi) để FM thấy
     // ngay trong ngày thay vì đợi cron sáng hôm sau. Chỉ quét đúng khách này nên
     // rất nhẹ. Chờ hẳn thay vì thả trôi vì hàm serverless có thể kết thúc trước
@@ -214,7 +238,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     }
 
-    return NextResponse.json({ ...serialize(log), packageUpdate });
+    return NextResponse.json({ ...serialize(log), packageUpdate, weightLogged: weight });
   } catch (error: unknown) {
     const e = error as { message?: string };
     console.error("[workout-logs check-in]", e.message);

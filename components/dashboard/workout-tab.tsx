@@ -548,6 +548,7 @@ function ProgramView({
   /** Lộ trình của khách — dùng để mở phiếu check-in của buổi vừa ký. */
   packages?: PackageForWorkoutTab[];
 }) {
+  const router = useRouter();
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
     0,
@@ -614,7 +615,12 @@ function ProgramView({
 
   // Check-in requires the client's signature first (proof they showed up). This
   // is also the moment the package is deducted, so the signature is mandatory.
-  async function handleCheckIn(sessionId: string, weekId: string, checkInSignatureUrl: string) {
+  async function handleCheckIn(
+    sessionId: string,
+    weekId: string,
+    checkInSignatureUrl: string,
+    weightKg?: number | null
+  ) {
     // Chốt chặn cuối ở giao diện; server vẫn tự kiểm tra lại (API trả 409).
     if (checkInBlock) {
       setCheckInError(checkInBlock.message);
@@ -628,13 +634,19 @@ function ProgramView({
       const res = await fetch(`/api/clients/${clientId}/workout-logs/check-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ programId: program.id, weekId, sessionId, checkInSignatureUrl }),
+        body: JSON.stringify({ programId: program.id, weekId, sessionId, checkInSignatureUrl, weightKg }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
-      const { packageUpdate, ...log } = data as WorkoutLogRow & { packageUpdate: PackageUpdate | null };
+      const { packageUpdate, weightLogged, ...log } = data as WorkoutLogRow & {
+        packageUpdate: PackageUpdate | null;
+        weightLogged: number | null;
+      };
       setSignCheckIn(null);
       onLogAdded(log as WorkoutLogRow, packageUpdate ?? null);
+      // Cân nặng vừa ghi làm đổi hồ sơ khách (cân hiện tại, biểu đồ, mốc giảm
+      // cân) — những thứ đó do server dựng, phải nạp lại mới thấy số mới.
+      if (weightLogged != null) router.refresh();
     } catch (err) {
       setCheckInError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -1694,7 +1706,10 @@ function ProgramView({
                                 <SignaturePad
                                   saving={checkInSigning}
                                   onCancel={() => { if (!checkInSigning) setSignCheckIn(null); }}
-                                  onConfirm={(dataUrl) => handleCheckIn(signCheckIn.sessionId, signCheckIn.weekId, dataUrl)}
+                                  askWeight
+                                  onConfirm={(dataUrl, weightKg) =>
+                                    handleCheckIn(signCheckIn.sessionId, signCheckIn.weekId, dataUrl, weightKg)
+                                  }
                                 />
                               )}
                             </div>

@@ -384,14 +384,23 @@ export function SignaturePad({
   onConfirm,
   onCancel,
   saving,
+  askWeight = false,
 }: {
-  onConfirm: (dataUrl: string) => void;
+  /** `weightKg` chỉ có khi PT mở ô "+ Cân nặng" và điền số hợp lệ. */
+  onConfirm: (dataUrl: string, weightKg?: number | null) => void;
   onCancel: () => void;
   saving: boolean;
+  /** Hiện ô "+ Cân nặng" — chỉ lúc CHECK-IN, vì đó là lúc khách bước lên cân. */
+  askWeight?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+  // Ô cân nặng gập lại cho tới khi PT bấm "+ Cân nặng": đây là ô KHÔNG bắt buộc,
+  // để nó mở sẵn thì nhìn như một chỗ bắt buộc phải điền mới ký được.
+  const [weightOpen, setWeightOpen] = useState(false);
+  const [weight, setWeight] = useState("");
+  const [weightError, setWeightError] = useState("");
 
   // Size the canvas to its rendered width so coordinates line up 1:1.
   useEffect(() => {
@@ -469,6 +478,48 @@ export function SignaturePad({
           style={{ touchAction: "none" }}
         />
 
+        {askWeight && (
+          <div>
+            {weightOpen ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-600 shrink-0">Cân nặng</span>
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    autoFocus
+                    value={weight}
+                    onChange={(e) => { setWeight(e.target.value); setWeightError(""); }}
+                    placeholder="VD: 62.5"
+                    disabled={saving}
+                    className="w-full h-10 rounded-xl border border-gray-200 pl-3 pr-10 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 disabled:opacity-50"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">kg</span>
+                </div>
+                <button
+                  onClick={() => { setWeightOpen(false); setWeight(""); setWeightError(""); }}
+                  disabled={saving}
+                  className="h-10 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Bỏ
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setWeightOpen(true)}
+                disabled={saving}
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#f15b5c] hover:underline disabled:opacity-50"
+              >
+                + Cân nặng
+              </button>
+            )}
+            <p className={cn("mt-1 text-[11px]", weightError ? "font-semibold text-[#f15b5c]" : "text-gray-400")}>
+              {weightError || "Không bắt buộc — điền thì số cân vào thẳng nhật ký cân nặng của khách."}
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             onClick={clear}
@@ -487,7 +538,21 @@ export function SignaturePad({
           <button
             onClick={() => {
               const canvas = canvasRef.current;
-              if (canvas) onConfirm(canvas.toDataURL("image/png"));
+              if (!canvas) return;
+              // Ô cân nặng bỏ trống thì ký bình thường. Có gõ thì phải là số cân
+              // của người thật — chặn ngay ở đây, đừng để một cú gõ nhầm lặng lẽ
+              // rơi vào nhật ký cân nặng của khách.
+              const raw = askWeight && weightOpen ? weight.trim() : "";
+              if (raw) {
+                const kg = parseFloat(raw.replace(",", "."));
+                if (!Number.isFinite(kg) || kg < 20 || kg > 300) {
+                  setWeightError("Cân nặng phải trong khoảng 20 – 300 kg.");
+                  return;
+                }
+                onConfirm(canvas.toDataURL("image/png"), Math.round(kg * 10) / 10);
+                return;
+              }
+              onConfirm(canvas.toDataURL("image/png"), null);
             }}
             disabled={!hasDrawn || saving}
             className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"

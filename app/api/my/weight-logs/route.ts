@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
+import { recordWeightLog } from "@/lib/weight-log";
 
 export async function GET() {
   const session = await getServerSession(clientAuthOptions);
@@ -25,29 +26,12 @@ export async function POST(req: Request) {
 
   const clientId = session.user.id;
 
-  const log = await prisma.weightLog.create({
-    data: {
-      clientId,
-      date: new Date(date),
-      weight: parseFloat(weight),
-      note: note || null,
-    },
+  const log = await recordWeightLog({
+    clientId,
+    date: new Date(date),
+    weight: parseFloat(weight),
+    note: note || null,
   });
-
-  const [latest, client] = await Promise.all([
-    prisma.weightLog.findFirst({ where: { clientId }, orderBy: { date: "desc" } }),
-    prisma.client.findUnique({ where: { id: clientId }, select: { initialWeight: true, hasTransformed: true } }),
-  ]);
-  if (latest && client) {
-    const lostKg = client.initialWeight - latest.weight;
-    await prisma.client.update({
-      where: { id: clientId },
-      data: {
-        currentWeight: latest.weight,
-        ...(lostKg >= 7 && !client.hasTransformed ? { hasTransformed: true } : {}),
-      },
-    });
-  }
 
   return NextResponse.json(log, { status: 201 });
 }
