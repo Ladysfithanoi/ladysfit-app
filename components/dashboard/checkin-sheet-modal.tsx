@@ -426,17 +426,20 @@ export function CheckinSheetModal({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 px-5 py-4">
+        {/* Trên điện thoại: hai nút chiếm trọn một hàng, câu hướng dẫn xuống hàng
+            riêng bên dưới (order-last + basis-full). Màn rộng thì nó về đúng chỗ
+            cũ, nằm giữa hai nút. Vẫn là MỘT thẻ chữ, không nhân đôi câu chữ. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
           <button
             onClick={download}
             disabled={loading || !!error}
-            className="flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40"
+            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
             style={{ backgroundColor: BRAND }}
           >
             <Download className="h-4 w-4" />
             Tải ảnh phiếu
           </button>
-          <p className="min-w-0 flex-1 text-xs leading-snug text-gray-400">
+          <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
             Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy.
           </p>
           <button
