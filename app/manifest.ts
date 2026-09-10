@@ -8,7 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Ladysfit",
     description:
       "Hệ thống quản lý phòng gym Ladysfit: giáo án, dinh dưỡng, cân nặng và lịch tập.",
-    // "/" tự đưa hội viên về /my, nhân viên về /login (xem app/page.tsx).
+    // "/" mở ra cửa PT: còn phiên thì vào /dashboard, chưa thì /login
+    // (xem app/page.tsx). Hội viên vẫn vào được qua /my/login.
     start_url: "/",
     scope: "/",
     display: "standalone",

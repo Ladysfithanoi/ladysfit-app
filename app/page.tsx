@@ -1,16 +1,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-// Cùng một icon trên màn hình chính phục vụ hai lớp người dùng, nên chỗ mở app
-// phải tự đoán: ai đang giữ cookie hội viên thì vào thẳng cổng hội viên, còn lại
-// về màn đăng nhập nhân viên như trước.
+// Mở app từ icon màn hình chính là vào cửa PT. Ai đang còn phiên đăng nhập thì
+// vào thẳng dashboard, khỏi phải gõ lại mật khẩu mỗi lần mở.
+// Hội viên vẫn dùng app này được, nhưng đi lối riêng /my/login.
 export default function Home() {
-  const useSecureCookies = process.env.NODE_ENV === "production";
-  // Phải trùng tên cookie đặt trong lib/client-auth.ts và middleware.ts.
-  const clientCookie = `${useSecureCookies ? "__Secure-" : ""}my-client-token-v2`;
+  // Phải trùng tên cookie đặt trong lib/auth.ts.
+  const staffCookie =
+    process.env.NODE_ENV === "production"
+      ? "__Secure-next-auth.session-token"
+      : "next-auth.session-token";
 
-  if (cookies().has(clientCookie)) {
-    redirect("/my");
+  if (cookies().has(staffCookie)) {
+    redirect("/dashboard");
   }
 
   redirect("/login");
