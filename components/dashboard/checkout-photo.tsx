@@ -265,7 +265,7 @@ export function CheckOutPhotoCapture({
                 {saving ? (
                   <><Loader2 className="w-4 h-4 animate-spin" />Đang lưu buổi tập...</>
                 ) : (
-                  "Dùng ảnh này & kết thúc buổi"
+                  "Dùng ảnh này"
                 )}
               </button>
               <button

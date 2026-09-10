@@ -24,6 +24,7 @@ import {
 } from "./session-log-panel";
 import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-modal";
 import { CheckOutPhotoThumb } from "./checkout-photo";
+import { CheckinSheetModal } from "./checkin-sheet-modal";
 import { PhaseSwitchModal } from "./phase-switch-modal";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 import {
@@ -159,10 +160,44 @@ function isCoveredLog(log: WorkoutLogRow, assignedPTId?: string | null): boolean
   return !!assignedPTId && !!log.createdBy.id && log.createdBy.id !== assignedPTId;
 }
 
+/** Lộ trình của khách, đủ để mở phiếu check-in (cần id + tên gói) và để chặn
+ *  check-in khi hết buổi/hết hạn. */
+export type PackageForWorkoutTab = PackageForCheckIn & { id: string; packageName: string };
+
+/** Lộ trình mà phiếu check-in của một buổi phải mở: chính lộ trình buổi đó đã trừ.
+ *  Buổi cũ (ghi trước khi hệ thống lưu packageEnrollmentId) không biết mình thuộc
+ *  lộ trình nào — lấy lộ trình mới nhất của khách, vì đó là tờ phiếu đang ký dở. */
+function sheetTargetFor(
+  log: WorkoutLogRow,
+  packages?: PackageForWorkoutTab[]
+): { id: string; name: string } | null {
+  if (log.packageEnrollmentId) {
+    const p = packages?.find((x) => x.id === log.packageEnrollmentId);
+    return { id: log.packageEnrollmentId, name: p?.packageName ?? "lo-trinh" };
+  }
+  const latest = [...(packages ?? [])].sort(
+    (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+  )[0];
+  return latest ? { id: latest.id, name: latest.packageName } : null;
+}
+
 /** Tóm tắt buổi đã tập gần nhất, hiện ngay dưới giáo án: ngày, thời lượng, AI dạy
  *  (đánh dấu rõ nếu là buổi dạy hộ) và chữ ký khách đã ký. Trước đây phải mở modal
  *  "Xem lịch sử" mới thấy được, nên buổi dạy hộ nhìn như chưa từng được lưu. */
-function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boolean }) {
+function LastSessionSummary({
+  log,
+  covered,
+  clientId,
+  packages,
+}: {
+  log: WorkoutLogRow;
+  covered: boolean;
+  clientId: string;
+  packages?: PackageForWorkoutTab[];
+}) {
+  // Tờ phiếu check-in của lộ trình đang mở xem (null = chưa mở).
+  const [sheet, setSheet] = useState<{ id: string; name: string } | null>(null);
+  const sheetTarget = sheetTargetFor(log, packages);
   const minutes =
     log.checkInAt && log.checkOutAt
       ? Math.round((new Date(log.checkOutAt).getTime() - new Date(log.checkInAt).getTime()) / 60000)
@@ -212,6 +247,25 @@ function LastSessionSummary({ log, covered }: { log: WorkoutLogRow; covered: boo
         src={log.checkOutPhotoUrl}
         label={`Ảnh check-out · ${fmtDate(log.sessionDate)} · PT ${log.createdBy.name ?? "—"}`}
       />
+      {/* Ký xong là tờ phiếu có thêm một dòng — mở ngay tại đây để PT soát lại,
+          khỏi phải quay về tab Lộ trình mới xem được. */}
+      {sheetTarget && (
+        <button
+          onClick={() => setSheet(sheetTarget)}
+          className="ml-auto inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-gray-200 bg-white text-[11px] font-bold text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors"
+        >
+          <ClipboardList className="w-3.5 h-3.5" />
+          Phiếu check-in
+        </button>
+      )}
+      {sheet && (
+        <CheckinSheetModal
+          clientId={clientId}
+          enrollmentId={sheet.id}
+          packageName={sheet.name}
+          onClose={() => setSheet(null)}
+        />
+      )}
     </div>
   );
 }
@@ -471,6 +525,7 @@ function ProgramView({
   minSessionMinutes = 30,
   inheritedByExercise = null,
   checkInBlock = null,
+  packages,
 }: {
   program: WorkoutProgram;
   clientId: string;
@@ -490,6 +545,8 @@ function ProgramView({
   inheritedByExercise?: Map<string, SetLogRow> | null;
   /** Khác null = lộ trình đã hết buổi/hết hạn → khoá nút cho khách ký check-in. */
   checkInBlock?: CheckInBlock | null;
+  /** Lộ trình của khách — dùng để mở phiếu check-in của buổi vừa ký. */
+  packages?: PackageForWorkoutTab[];
 }) {
   // Determine initial week index (currentWeek)
   const initialWeekIdx = Math.max(
@@ -1660,7 +1717,12 @@ function ProgramView({
                           {/* Buổi đã tập gần nhất: ai dạy + chữ ký khách, thấy ngay không
                               phải mở modal — buổi dạy hộ mới không bị nhìn như chưa lưu. */}
                           {lastLog && (
-                            <LastSessionSummary log={lastLog} covered={isCoveredLog(lastLog, assignedPTId)} />
+                            <LastSessionSummary
+                              log={lastLog}
+                              covered={isCoveredLog(lastLog, assignedPTId)}
+                              clientId={clientId}
+                              packages={packages}
+                            />
                           )}
                           </>
                         )}
@@ -2226,8 +2288,8 @@ export function WorkoutTab({
   /** FM/Admin được sửa nhãn giai đoạn của chương trình. PT thì không. */
   canBypassPhase?: boolean;
   minSessionMinutes?: number;
-  /** Lộ trình của khách — dùng để chặn check-in khi hết buổi/hết hạn. */
-  packages?: PackageForCheckIn[];
+  /** Lộ trình của khách — chặn check-in khi hết buổi/hết hạn, và mở phiếu check-in. */
+  packages?: PackageForWorkoutTab[];
 }) {
   const router = useRouter();
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLogRow[]>(initialLogs ?? []);
@@ -2435,6 +2497,7 @@ export function WorkoutTab({
           minSessionMinutes={minSessionMinutes}
           inheritedByExercise={inheritedFor(p)}
           checkInBlock={checkInBlock}
+          packages={packages}
         />
       ))}
 
@@ -2466,6 +2529,7 @@ export function WorkoutTab({
                   canBypassPhase={canBypassPhase}
                   minSessionMinutes={minSessionMinutes}
                   checkInBlock={checkInBlock}
+                  packages={packages}
                 />
               ))}
             </div>
