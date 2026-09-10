@@ -17,6 +17,37 @@ import { prisma } from "@/lib/prisma";
 /** Đúng tờ giấy: 2 khối × 25 dòng = 50 buổi. */
 const TOTAL_ROWS = 50;
 
+/** Ngày theo đúng phần ngày của chuỗi ISO — cùng cách phiếu in ra cột "Ngày",
+ *  nên số cân không bao giờ rơi lệch một ngày so với dòng nó đứng cạnh. */
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Cân nặng đi kèm một buổi tập.
+ *
+ * Ưu tiên số cân đo ĐÚNG ngày tập. Không có thì lấy lần cân gần nhất TRƯỚC đó —
+ * đó vẫn là cân nặng đang biết của khách tại buổi ấy — và đánh dấu `measured:
+ * false` để phiếu in nhạt đi, người đọc phân biệt được số đo thật với số mang
+ * theo. Chưa từng cân trước ngày đó thì để trống, không bịa.
+ */
+function weightFor(
+  day: string,
+  logs: { date: Date; weight: number }[]
+): { weight: number | null; measured: boolean } {
+  let sameDay: number | null = null;
+  let carried: number | null = null;
+  for (const l of logs) {
+    const k = ymd(l.date);
+    if (k > day) break;
+    // Cân nhiều lần trong ngày thì lần ghi sau đè lần trước (logs xếp tăng dần).
+    if (k === day) sameDay = l.weight;
+    else carried = l.weight;
+  }
+  if (sameDay != null) return { weight: sameDay, measured: true };
+  return { weight: carried, measured: false };
+}
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,6 +108,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     take: TOTAL_ROWS,
   });
 
+  // Nhật ký cân nặng của khách — nguồn duy nhất cho cột "Cân nặng" của phiếu.
+  const weightLogs = await prisma.weightLog.findMany({
+    where: { clientId: params.id },
+    orderBy: { date: "asc" },
+    select: { date: true, weight: true },
+  });
+
   return NextResponse.json({
     contractCode: enrollment.contractCode,
     clientName: enrollment.client.fullName,
@@ -87,11 +125,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     startDate: enrollment.startDate?.toISOString() ?? null,
     endDate: enrollment.endDate?.toISOString() ?? null,
     price: enrollment.price,
-    rows: logs.map((l) => ({
-      date: l.sessionDate.toISOString(),
-      checkOutAt: l.checkOutAt?.toISOString() ?? null,
-      signatureUrl: l.checkInSignatureUrl ?? l.signatureUrl,
-      photoUrl: l.checkOutPhotoUrl,
-    })),
+    rows: logs.map((l) => {
+      const w = weightFor(ymd(l.sessionDate), weightLogs);
+      return {
+        date: l.sessionDate.toISOString(),
+        checkOutAt: l.checkOutAt?.toISOString() ?? null,
+        signatureUrl: l.checkInSignatureUrl ?? l.signatureUrl,
+        photoUrl: l.checkOutPhotoUrl,
+        weight: w.weight,
+        /** true = cân đúng ngày tập; false = số cân gần nhất trước buổi. */
+        weightMeasured: w.measured,
+      };
+    }),
   });
 }

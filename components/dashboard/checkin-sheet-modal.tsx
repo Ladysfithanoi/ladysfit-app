@@ -21,6 +21,9 @@ import { fmtDate } from "@/lib/format-date";
  * Bảng khác tờ giấy hai chỗ:
  *   • "Nhân viên lễ tân" → ẢNH CHECK-OUT của khách. Tờ giấy không làm được, và
  *     đây là bằng chứng buổi tập có thật, thay đúng vai trò chữ ký lễ tân.
+ *   • Thêm cột "Cân nặng (kg)" cạnh ảnh, lấy từ nhật ký cân nặng của khách. Số
+ *     cân đo đúng ngày tập in đậm màu mực; buổi không cân thì in nhạt số cân
+ *     gần nhất trước đó, để không ai đọc nhầm số mang theo thành số đo thật.
  *   • Không có cột "Chữ ký PT". Hệ thống chưa lưu chữ ký của PT nên cột đó chỉ
  *     ghi được TÊN — ghi tên vào ô đề "chữ ký" là nói sai. Chữ ký HLV nằm ở ô
  *     ký cuối trang, đúng chỗ của nó.
@@ -31,6 +34,10 @@ type SheetRow = {
   checkOutAt: string | null;
   signatureUrl: string | null;
   photoUrl: string | null;
+  /** Cân nặng của khách tại buổi đó. null = trước buổi này khách chưa cân lần nào. */
+  weight: number | null;
+  /** true = cân đúng ngày tập. false = số cân của lần cân gần nhất trước buổi. */
+  weightMeasured: boolean;
 };
 
 type SheetData = {
@@ -50,7 +57,7 @@ type SheetData = {
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
 // Cỡ này in ra A4 vẫn đọc rõ chữ và nhìn được mặt người trong ảnh check-out.
 const ROWS_PER_BLOCK = 25;
-const COL_W = [70, 210, 140, 250, 290]; // STT · Ngày · Giờ · Chữ ký · Ảnh
+const COL_W = [70, 210, 140, 250, 290, 150]; // STT · Ngày · Giờ · Chữ ký · Ảnh · Cân nặng
 const BLOCK_W = COL_W.reduce((a, b) => a + b, 0);
 const W = BLOCK_W * 2;
 const PAD = 40;
@@ -73,6 +80,11 @@ function hhmm(iso: string | null): string {
   if (!iso) return "";
   const vn = new Date(new Date(iso).getTime() + 7 * 3600_000);
   return `${String(vn.getUTCHours()).padStart(2, "0")}:${String(vn.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+/** "62,5" — số cân theo lối viết Việt, bỏ đuôi ",0" cho gọn cột. */
+function fmtKg(kg: number): string {
+  return (Math.round(kg * 10) / 10).toString().replace(".", ",");
 }
 
 /** Nạp một data URL thành ảnh vẽ được. Ảnh hỏng thì trả null, ô để trống. */
@@ -165,7 +177,7 @@ export function CheckinSheetModal({
     ctx.fillText("PHIẾU CHECK-IN BUỔI TẬP", W / 2, 156);
 
     // ── Bảng: 2 khối 25 dòng đặt cạnh nhau ─────────────────────────────────
-    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian", "Chữ ký khách hàng", "Ảnh check-out của khách hàng"];
+    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
     const tableTop = HEADER_H;
 
     // Mốc x của từng cột trong cả hai khối
@@ -213,6 +225,17 @@ export function CheckinSheetModal({
         if (row) {
           ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
           ctx.fillText(hhmm(row.checkOutAt), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
+          if (row.weight != null) {
+            // Số cân mang theo từ lần cân trước in nhạt + nghiêng: nhìn là biết
+            // hôm đó khách không lên cân, chứ không phải cân ra đúng con số này.
+            ctx.font = row.weightMeasured
+              ? "bold 22px system-ui, sans-serif"
+              : "italic 20px system-ui, sans-serif";
+            ctx.fillStyle = row.weightMeasured ? INK : "#9ca3af";
+            ctx.fillText(fmtKg(row.weight), colX[base + 5] + COL_W[5] / 2, y + ROW_H / 2);
+            ctx.font = "21px system-ui, sans-serif";
+            ctx.fillStyle = INK;
+          }
         }
       }
     }
@@ -288,6 +311,17 @@ export function CheckinSheetModal({
       ctx.lineTo(W - PAD, iy + 16);
       ctx.stroke();
       iy += 48;
+    }
+
+    // Chú thích cho cột cân nặng — chỉ ghi khi phiếu thật sự có số cân mang
+    // theo, để tờ nào cũng đúng với chính nó chứ không nói thừa.
+    if (d.rows.some((r) => r.weight != null && !r.weightMeasured)) {
+      ctx.font = "italic 19px system-ui, sans-serif";
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillText(
+        "(*) Cân nặng in nhạt là số cân của lần cân gần nhất trước buổi, không phải số đo trong ngày tập.",
+        PAD, iy + 4
+      );
     }
 
     // ── Ba ô chữ ký ────────────────────────────────────────────────────────
