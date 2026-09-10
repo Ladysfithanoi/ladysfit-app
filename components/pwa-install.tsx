@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Download, Share, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -11,12 +12,17 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-const DISMISS_KEY = "ladysfit-pwa-dismissed-until";
 const DISMISS_DAYS = 14;
 
-function dismissedRecently() {
+// Hai cửa là hai app riêng (xem app/manifest.ts và app/my/manifest.webmanifest),
+// nên nhớ riêng: PT tắt lời mời ở cửa mình không làm câm luôn lời mời bên hội viên.
+function dismissKey(area: "pt" | "my") {
+  return `ladysfit-pwa-dismissed-until:${area}`;
+}
+
+function dismissedRecently(key: string) {
   try {
-    const until = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
+    const until = Number(localStorage.getItem(key) ?? 0);
     return Date.now() < until;
   } catch {
     // Chế độ ẩn danh có thể chặn localStorage — cứ coi như chưa từ chối.
@@ -44,6 +50,9 @@ function isIos() {
  * ở iOS ta hiện hướng dẫn hai bước thay vì nút bấm.
  */
 export function PwaInstall() {
+  const pathname = usePathname();
+  const area: "pt" | "my" = pathname?.startsWith("/my") ? "my" : "pt";
+
   const [prompt, setPrompt] = useState<InstallPromptEvent | null>(null);
   const [showIosHint, setShowIosHint] = useState(false);
 
@@ -54,8 +63,13 @@ export function PwaInstall() {
         // Không đăng ký được thì app vẫn chạy bình thường, chỉ là không cài được.
       });
     }
+  }, []);
 
-    if (isStandalone() || dismissedRecently()) return;
+  useEffect(() => {
+    setPrompt(null);
+    setShowIosHint(false);
+
+    if (isStandalone() || dismissedRecently(dismissKey(area))) return;
 
     const onPrompt = (event: Event) => {
       // Chặn thanh mời mặc định của Chrome để dùng banner của mình.
@@ -68,12 +82,12 @@ export function PwaInstall() {
     if (isIos()) setShowIosHint(true);
 
     return () => window.removeEventListener("beforeinstallprompt", onPrompt);
-  }, []);
+  }, [area]);
 
   const close = () => {
     try {
       localStorage.setItem(
-        DISMISS_KEY,
+        dismissKey(area),
         String(Date.now() + DISMISS_DAYS * 24 * 60 * 60 * 1000)
       );
     } catch {
