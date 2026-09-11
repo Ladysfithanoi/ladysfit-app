@@ -11,7 +11,7 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Ladysfit - Quản lý Phòng Gym",
+  title: "Ladysfit Objective Training System",
   description: "Hệ thống quản lý phòng gym Ladysfit",
   manifest: "/manifest.webmanifest",
   // Cài vào iPhone thì mở toàn màn hình như app, tên dưới icon là "LOTS".
