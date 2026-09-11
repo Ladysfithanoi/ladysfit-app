@@ -68,6 +68,8 @@ type SystemConfig = {
   id: string;
   enableLevelSystem: boolean;
   minSessionMinutes: number;
+  /** Cho FM/PT sửa tay phiếu check-in — xem lib/checkin-sheet.ts. */
+  enableCheckinSheetEdit: boolean;
 };
 
 const PRESET_COLORS = [
@@ -112,6 +114,7 @@ export function PTLevelsTab() {
   const [phases, setPhases] = useState<WorkoutPhase[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [togglingSheetEdit, setTogglingSheetEdit] = useState(false);
   const [toast, setToast] = useState("");
   const [toastType, setToastType] = useState<"success" | "error">("success");
   // Minimum session duration (minutes) editor
@@ -199,6 +202,26 @@ export function PTLevelsTab() {
       showToast(updated.enableLevelSystem ? "Đã bật hệ thống cấp độ" : "Đã tắt hệ thống cấp độ");
     }
     setToggling(false);
+  }
+
+  async function handleToggleSheetEdit() {
+    if (!config) return;
+    setTogglingSheetEdit(true);
+    const res = await fetch("/api/admin/system-config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enableCheckinSheetEdit: !config.enableCheckinSheetEdit }),
+    });
+    if (res.ok) {
+      const updated: SystemConfig = await res.json();
+      setConfig(updated);
+      showToast(
+        updated.enableCheckinSheetEdit
+          ? "Đã bật sửa phiếu check-in"
+          : "Đã tắt sửa phiếu check-in"
+      );
+    }
+    setTogglingSheetEdit(false);
   }
 
   async function handleSaveMinMinutes() {
@@ -424,6 +447,63 @@ export function PTLevelsTab() {
             ) : (
               <span className="text-gray-400">Đang tắt</span>
             )}
+          </p>
+        </div>
+
+        {/* ── Section 1a: Sửa tay phiếu check-in ──
+            Dành cho khách đã tập từ trước khi có app: trên giấy khách đã hết
+            buổi, mà phiếu dựng từ workout_logs thì chỉ có các buổi ghi sau ngày
+            app ra đời. Bật lên là FM/PT điền tay được những buổi cũ.
+            Chữ ký và ảnh check-out KHÔNG sửa được — xem lib/checkin-sheet.ts. */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  config?.enableCheckinSheetEdit ? "bg-green-50" : "bg-gray-100"
+                )}
+              >
+                <Pencil
+                  className={cn(
+                    "w-5 h-5",
+                    config?.enableCheckinSheetEdit ? "text-green-500" : "text-gray-400"
+                  )}
+                />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800">Sửa phiếu check-in</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Khi bật, FM/PT thấy biểu tượng cây bút trên phiếu check-in và sửa được các
+                  thông số — dành cho khách đã tập từ trước khi có app
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleToggleSheetEdit}
+              disabled={togglingSheetEdit}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 disabled:opacity-60 ${
+                config?.enableCheckinSheetEdit ? "bg-green-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  config?.enableCheckinSheetEdit ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="mt-3 text-xs font-semibold">
+            {config?.enableCheckinSheetEdit ? (
+              <span className="text-green-600">✓ Đang bật</span>
+            ) : (
+              <span className="text-gray-400">Đang tắt</span>
+            )}
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
+            Chữ ký khách và ảnh check-out không sửa được — đó là bằng chứng buổi tập có thật.
+            Phần sửa tay chỉ nằm trên tờ phiếu: không đổi số buổi tính lương (sửa ở hồ sơ khách)
+            và không đổi hạn lộ trình.
           </p>
         </div>
 

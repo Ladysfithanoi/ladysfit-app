@@ -126,6 +126,7 @@ model User {
   salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
   salaryRecords         SalaryRecord[]        @relation("UserSalaryRecords")
   ptSessionAdjustments  PTSessionAdjustment[] @relation("PTSessionAdjustments")
+  checkinSheetOverrides CheckinSheetOverride[] @relation("CheckinSheetOverrides")
   transactions          Transaction[]         @relation("TransactionCreator")
   checklistNotifications  ChecklistNotification[]
   measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
@@ -517,6 +518,7 @@ model PackageEnrollment {
   kocContract     KOCContract?
   ptSessionAdjustments PTSessionAdjustment[]
   progressNotifications PackageProgressNotification[]
+  checkinSheetOverride  CheckinSheetOverride?
 
   @@map("package_enrollments")
 }
@@ -1969,9 +1971,46 @@ model SystemConfig {
   // Số ngày giữ dữ liệu trong Thùng rác trước khi tự động xóa vĩnh viễn.
   // 0 = giữ mãi (không tự dọn). Admin chỉnh ngay trong mục Thùng rác.
   trashRetentionDays Int    @default(30)
+  // Cho FM/PT sửa tay phiếu check-in. Mặc định TẮT — xem CheckinSheetOverride.
+  enableCheckinSheetEdit Boolean @default(false)
   updatedAt         DateTime @updatedAt
 
   @@map("system_config")
+}
+
+// Phần sửa tay của PHIẾU CHECK-IN — một lớp phủ đặt LÊN TRÊN dữ liệu thật.
+//
+// Vì sao cần: khách tập từ trước khi có app thì trong máy chỉ còn những buổi ghi
+// sau ngày app ra đời. Trên giấy khách đã hết buổi, còn phiếu in ra thì trống
+// hơn một nửa. Phụ lục hợp đồng phải khớp thực tế, nên FM/PT cần điền tay những
+// buổi cũ và sửa lại các ô ghi sai.
+//
+// LỚP PHỦ, KHÔNG PHẢI SỬA GỐC. Không một ô nào ở đây ghi ngược vào workout_logs
+// hay package_enrollments. Buổi ghi tay không có nhật ký tập, không có chữ ký,
+// không có ảnh — nó KHÔNG phải buổi dạy hợp lệ, nên không được chạm vào "Số buổi
+// PT" (xem lib/pt-session-count) lẫn hạn lộ trình. Sửa số buổi tính lương vẫn đi
+// đúng một đường cũ: PTSessionAdjustment ở hồ sơ khách.
+//
+// Chữ ký và ảnh check-out KHÔNG sửa được, kể cả khi tính năng đang bật. Hai thứ
+// đó là bằng chứng buổi tập có thật — cho sửa là mở đúng cánh cửa mà cặp chữ
+// ký/ảnh sinh ra để đóng.
+model CheckinSheetOverride {
+  id           String @id @default(cuid())
+  enrollmentId String @unique
+  // JSON các ô tiêu đề được sửa tay. Khoá vắng mặt = giữ số gốc của lộ trình.
+  header       String? @db.Text
+  // JSON sửa tay theo từng buổi CÓ THẬT, khoá = workoutLogId.
+  rows         String? @db.Text
+  // JSON các buổi ghi tay (buổi tập trước khi có app) — không chữ ký, không ảnh.
+  extraRows    String? @db.Text
+  updatedById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  enrollment PackageEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  updatedBy  User              @relation("CheckinSheetOverrides", fields: [updatedById], references: [id])
+
+  @@map("checkin_sheet_overrides")
 }
 
 // ── Bài kiểm tra thực hành (rubric do FM/Admin chấm) ──────────────────────────

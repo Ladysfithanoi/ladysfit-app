@@ -10,7 +10,9 @@ export async function GET() {
   }
 
   const config = await prisma.systemConfig.findUnique({ where: { id: "main" } });
-  return NextResponse.json(config ?? { id: "main", enableLevelSystem: true, minSessionMinutes: 30 });
+  return NextResponse.json(
+    config ?? { id: "main", enableLevelSystem: true, minSessionMinutes: 30, enableCheckinSheetEdit: false }
+  );
 }
 
 export async function PUT(req: Request) {
@@ -23,11 +25,20 @@ export async function PUT(req: Request) {
     enableLevelSystem?: boolean;
     minSessionMinutes?: number;
     practicalPassPercent?: number;
+    enableCheckinSheetEdit?: boolean;
   };
 
   // Build a partial update so callers can change either field independently.
-  const update: { enableLevelSystem?: boolean; minSessionMinutes?: number; practicalPassPercent?: number } = {};
+  const update: {
+    enableLevelSystem?: boolean;
+    minSessionMinutes?: number;
+    practicalPassPercent?: number;
+    enableCheckinSheetEdit?: boolean;
+  } = {};
   if (typeof body.enableLevelSystem === "boolean") update.enableLevelSystem = body.enableLevelSystem;
+  if (typeof body.enableCheckinSheetEdit === "boolean") {
+    update.enableCheckinSheetEdit = body.enableCheckinSheetEdit;
+  }
   if (typeof body.minSessionMinutes === "number" && body.minSessionMinutes > 0) {
     update.minSessionMinutes = Math.round(body.minSessionMinutes);
   }
@@ -43,6 +54,7 @@ export async function PUT(req: Request) {
       enableLevelSystem: update.enableLevelSystem ?? true,
       minSessionMinutes: update.minSessionMinutes ?? 30,
       practicalPassPercent: update.practicalPassPercent ?? 70,
+      enableCheckinSheetEdit: update.enableCheckinSheetEdit ?? false,
     },
   });
 

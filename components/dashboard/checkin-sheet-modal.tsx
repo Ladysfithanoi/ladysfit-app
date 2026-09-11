@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Download, Loader2 } from "lucide-react";
+import { X, Download, Loader2, Pencil } from "lucide-react";
 import { fmtDate } from "@/lib/format-date";
+import { CheckinSheetEditor } from "./checkin-sheet-editor";
+import {
+  EMPTY_OVERRIDE,
+  sheetTime,
+  type SheetOverride,
+  type SheetRow,
+} from "@/lib/checkin-sheet";
 
 /**
  * PHIẾU CHECK-IN BUỔI TẬP — bản số của tờ phụ lục hợp đồng đang ký tay.
@@ -29,17 +36,6 @@ import { fmtDate } from "@/lib/format-date";
  *     ký cuối trang, đúng chỗ của nó.
  */
 
-type SheetRow = {
-  date: string;
-  checkOutAt: string | null;
-  signatureUrl: string | null;
-  photoUrl: string | null;
-  /** Cân nặng của khách tại buổi đó. null = trước buổi này khách chưa cân lần nào. */
-  weight: number | null;
-  /** true = cân đúng ngày tập. false = số cân của lần cân gần nhất trước buổi. */
-  weightMeasured: boolean;
-};
-
 type SheetData = {
   contractCode: string | null;
   clientName: string;
@@ -52,6 +48,21 @@ type SheetData = {
   endDate: string | null;
   price: number;
   rows: SheetRow[];
+  /** Số GỐC của lộ trình — trình sửa cần để hiện nút "về số gốc". */
+  original: {
+    contractCode: string | null;
+    clientName: string;
+    ptName: string;
+    fmName: string;
+    totalSessions: number;
+    startDate: string | null;
+    endDate: string | null;
+    price: number;
+  };
+  /** Phần sửa tay đã lưu. */
+  override: SheetOverride;
+  /** Admin đã bật sửa phiếu chưa (Cài đặt → Cấp độ PT). */
+  canEdit: boolean;
 };
 
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
@@ -74,13 +85,6 @@ const H = HEADER_H + HEAD_ROW_H + ROWS_PER_BLOCK * ROW_H + INFO_H + SIGN_H;
 const BRAND = "#f15b5c";
 const LINE = "#e0a0a0";
 const INK = "#1f2937";
-
-/** "08:35" theo giờ VN. */
-function hhmm(iso: string | null): string {
-  if (!iso) return "";
-  const vn = new Date(new Date(iso).getTime() + 7 * 3600_000);
-  return `${String(vn.getUTCHours()).padStart(2, "0")}:${String(vn.getUTCMinutes()).padStart(2, "0")}`;
-}
 
 /** "62,5" — số cân theo lối viết Việt, bỏ đuôi ",0" cho gọn cột. */
 function fmtKg(kg: number): string {
@@ -125,28 +129,60 @@ export function CheckinSheetModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState<SheetData | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async (): Promise<SheetData | null> => {
+    const res = await fetch(`/api/clients/${clientId}/checkin-sheet?enrollmentId=${enrollmentId}`);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? "Không tải được phiếu check-in");
+    return body as SheetData;
+  }, [clientId, enrollmentId]);
 
   // ── Nạp dữ liệu ──────────────────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/clients/${clientId}/checkin-sheet?enrollmentId=${enrollmentId}`);
-        const body = await res.json();
-        if (!alive) return;
-        if (!res.ok) {
-          setError(body.error ?? "Không tải được phiếu check-in");
-          return;
-        }
-        setData(body as SheetData);
-      } catch {
-        if (alive) setError("Có lỗi xảy ra khi tải phiếu");
+        const body = await load();
+        if (alive && body) setData(body);
+      } catch (e) {
+        if (alive) setError((e as Error).message || "Có lỗi xảy ra khi tải phiếu");
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [clientId, enrollmentId]);
+  }, [load]);
+
+  /**
+   * Lưu phần sửa tay rồi NẠP LẠI PHIẾU TỪ SERVER trước khi đóng trình sửa.
+   *
+   * Nạp lại chứ không tự vá dữ liệu đang giữ trên máy: phiếu in ra phải là bản
+   * server dựng — số cân mang theo, thứ tự dòng sau khi đổi ngày, phần bị cắt vì
+   * quá 50 dòng đều do server quyết. Vá ở client thì cái PT nhìn thấy sau khi
+   * lưu có thể khác cái lần sau mở lại, và không ai biết bản nào mới đúng.
+   */
+  async function handleSave(next: SheetOverride) {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/checkin-sheet`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enrollmentId, override: next }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Không lưu được phiếu");
+      const fresh = await load();
+      if (fresh) setData(fresh);
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message || "Có lỗi xảy ra khi lưu phiếu");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // ── Vẽ phiếu ─────────────────────────────────────────────────────────────
   const draw = useCallback(async (d: SheetData) => {
@@ -224,7 +260,7 @@ export function CheckinSheetModal({
         ctx.fillText(String(i + 1 + b * ROWS_PER_BLOCK), colX[base] + COL_W[0] / 2, y + ROW_H / 2);
         if (row) {
           ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
-          ctx.fillText(hhmm(row.checkOutAt), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
+          ctx.fillText(sheetTime(row.checkOutAt), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
           if (row.weight != null) {
             // Số cân mang theo từ lần cân trước in nhạt + nghiêng: nhìn là biết
             // hôm đó khách không lên cân, chứ không phải cân ra đúng con số này.
@@ -364,9 +400,13 @@ export function CheckinSheetModal({
     }
   }, []);
 
+  // Vẽ lại mỗi khi dữ liệu đổi VÀ mỗi khi rời trình sửa. Vế thứ hai là bắt buộc:
+  // canvas bị gỡ khỏi màn hình lúc đang sửa, nên bấm Huỷ mà chỉ trông vào `data`
+  // đổi thì phiếu quay lại là một tấm trắng. Lưu xong thì `data` đã là bản mới
+  // server dựng, nên đúng cái PT vừa sửa hiện ngay trên phiếu.
   useEffect(() => {
-    if (data) draw(data);
-  }, [data, draw]);
+    if (data && !editing) draw(data);
+  }, [data, editing, draw]);
 
   /** Tải chính bản vẽ đang hiện — không dựng lại bằng đường nào khác. */
   function download() {
@@ -389,66 +429,102 @@ export function CheckinSheetModal({
     }, "image/png");
   }
 
-  const doneCount = data?.rows.length ?? 0;
+  const doneCount   = data?.rows.length ?? 0;
+  const manualCount = data?.rows.filter((r) => r.manual).length ?? 0;
+  const appCount    = doneCount - manualCount;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
       <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <div className="min-w-0">
-            <p className="text-base font-extrabold text-gray-900">Phiếu check-in buổi tập</p>
+            <p className="text-base font-extrabold text-gray-900">
+              {editing ? "Sửa phiếu check-in" : "Phiếu check-in buổi tập"}
+            </p>
             <p className="mt-0.5 truncate text-xs font-semibold text-gray-400">
-              {data ? `${data.clientName} · gói ${data.packageName} · ${doneCount} buổi đã check-out` : "Đang tải…"}
+              {data
+                ? `${data.clientName} · gói ${data.packageName} · ${appCount} buổi đã check-out`
+                  + (manualCount > 0 ? ` · ${manualCount} buổi ghi tay` : "")
+                : "Đang tải…"}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label="Đóng"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {/* Cây bút chỉ hiện khi Admin đã bật ở Cài đặt → Cấp độ PT. */}
+            {data?.canEdit && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-[#fff0f0] hover:text-[#f15b5c]"
+                title="Sửa phiếu check-in"
+                aria-label="Sửa phiếu check-in"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              aria-label="Đóng"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
+          {error && (
+            <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-center text-sm font-bold text-red-500">
+              {error}
+            </p>
+          )}
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-24 text-sm font-semibold text-gray-400">
               <Loader2 className="h-4 w-4 animate-spin" />
               Đang dựng phiếu…
             </div>
-          ) : error ? (
-            <p className="py-24 text-center text-sm font-bold text-red-500">{error}</p>
-          ) : (
+          ) : editing && data ? (
+            <CheckinSheetEditor
+              rows={data.rows}
+              original={data.original}
+              override={data.override ?? EMPTY_OVERRIDE}
+              saving={saving}
+              onCancel={() => { setError(""); setEditing(false); }}
+              onSave={handleSave}
+            />
+          ) : data ? (
             <canvas
               ref={canvasRef}
               className="mx-auto block h-auto w-full max-w-full rounded-lg bg-white shadow-sm"
             />
-          )}
+          ) : null}
         </div>
 
         {/* Trên điện thoại: hai nút chiếm trọn một hàng, câu hướng dẫn xuống hàng
             riêng bên dưới (order-last + basis-full). Màn rộng thì nó về đúng chỗ
-            cũ, nằm giữa hai nút. Vẫn là MỘT thẻ chữ, không nhân đôi câu chữ. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
-          <button
-            onClick={download}
-            disabled={loading || !!error}
-            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
-            style={{ backgroundColor: BRAND }}
-          >
-            <Download className="h-4 w-4" />
-            Tải ảnh phiếu
-          </button>
-          <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
-            Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy.
-          </p>
-          <button
-            onClick={onClose}
-            className="h-11 shrink-0 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-          >
-            Đóng
-          </button>
-        </div>
+            cũ, nằm giữa hai nút. Vẫn là MỘT thẻ chữ, không nhân đôi câu chữ.
+            Lúc đang sửa thì ẩn đi: trình sửa có cặp nút Lưu/Huỷ của nó, và tải
+            ảnh khi chưa lưu sẽ ra tờ phiếu cũ chứ không phải cái đang sửa. */}
+        {!editing && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
+            <button
+              onClick={download}
+              disabled={loading || !data}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
+              style={{ backgroundColor: BRAND }}
+            >
+              <Download className="h-4 w-4" />
+              Tải ảnh phiếu
+            </button>
+            <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
+              Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy.
+            </p>
+            <button
+              onClick={onClose}
+              className="h-11 shrink-0 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              Đóng
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

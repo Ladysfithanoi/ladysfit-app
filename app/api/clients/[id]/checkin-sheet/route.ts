@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  SHEET_TOTAL_ROWS,
+  applyRowOverride,
+  manualSheetRow,
+  mergeSheetRows,
+  parseOverride,
+  sanitizeOverride,
+  type SheetRow,
+} from "@/lib/checkin-sheet";
 
 /**
  * Dữ liệu của PHIẾU CHECK-IN BUỔI TẬP — bản số của tờ phụ lục hợp đồng ký tay.
@@ -12,15 +21,14 @@ import { prisma } from "@/lib/prisma";
  * với cái tải về là CÙNG MỘT bản vẽ — không có chuyện xem một đằng tải một nẻo.
  *
  * Mỗi dòng là một buổi ĐÃ CHECK-OUT: chỉ những buổi đó mới là buổi dạy có thật.
+ * Ngoài ra phiếu còn nhận thêm phần SỬA TAY của FM/PT khi Admin bật tính năng —
+ * một lớp phủ đặt lên trên, không đụng tới dữ liệu gốc (xem lib/checkin-sheet).
  */
-
-/** Đúng tờ giấy: 2 khối × 25 dòng = 50 buổi. */
-const TOTAL_ROWS = 50;
 
 /** Ngày theo đúng phần ngày của chuỗi ISO — cùng cách phiếu in ra cột "Ngày",
  *  nên số cân không bao giờ rơi lệch một ngày so với dòng nó đứng cạnh. */
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+function ymd(d: Date | string): string {
+  return (typeof d === "string" ? new Date(d) : d).toISOString().slice(0, 10);
 }
 
 /**
@@ -48,12 +56,23 @@ function weightFor(
   return { weight: carried, measured: false };
 }
 
+/** Ai được mở phiếu. Sửa phiếu thì thêm điều kiện Admin đã bật tính năng. */
+const SHEET_ROLES = ["ADMIN", "FM", "COO", "PT"];
+
+async function checkinSheetEditEnabled(): Promise<boolean> {
+  const config = await prisma.systemConfig.findUnique({
+    where:  { id: "main" },
+    select: { enableCheckinSheetEdit: true },
+  });
+  return config?.enableCheckinSheetEdit === true;
+}
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = session.user.role;
-  if (!["ADMIN", "FM", "COO", "PT"].includes(role)) {
+  if (!SHEET_ROLES.includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -97,6 +116,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     },
     orderBy: { sessionDate: "asc" },
     select: {
+      id: true,
       sessionDate: true,
       checkOutAt: true,
       // Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN của khách. Khách không ký
@@ -105,7 +125,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       signatureUrl: true,
       checkOutPhotoUrl: true,
     },
-    take: TOTAL_ROWS,
+    take: SHEET_TOTAL_ROWS,
   });
 
   // Nhật ký cân nặng của khách — nguồn duy nhất cho cột "Cân nặng" của phiếu.
@@ -115,27 +135,119 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     select: { date: true, weight: true },
   });
 
-  return NextResponse.json({
-    contractCode: enrollment.contractCode,
-    clientName: enrollment.client.fullName,
-    ptName: enrollment.client.assignedPT?.name ?? enrollment.client.assignedPT?.email ?? "",
-    fmName: fm?.user.name ?? fm?.user.email ?? "",
-    packageName: enrollment.packageName,
-    totalSessions: enrollment.sessions,
-    startDate: enrollment.startDate?.toISOString() ?? null,
-    endDate: enrollment.endDate?.toISOString() ?? null,
-    price: enrollment.price,
-    rows: logs.map((l) => {
-      const w = weightFor(ymd(l.sessionDate), weightLogs);
-      return {
+  const stored = await prisma.checkinSheetOverride.findUnique({
+    where:  { enrollmentId },
+    select: { header: true, rows: true, extraRows: true },
+  });
+  const override = parseOverride(stored);
+  const h = override.header;
+
+  // Buổi app ghi, đã áp phần sửa tay. Số cân tính THEO NGÀY CUỐI CÙNG của dòng
+  // (sau khi sửa ngày), nếu không thì sửa ngày xong số cân vẫn bám ngày cũ.
+  const logRows: SheetRow[] = logs.map((l) => {
+    const edited = applyRowOverride(
+      {
+        id: l.id,
         date: l.sessionDate.toISOString(),
         checkOutAt: l.checkOutAt?.toISOString() ?? null,
         signatureUrl: l.checkInSignatureUrl ?? l.signatureUrl,
         photoUrl: l.checkOutPhotoUrl,
-        weight: w.weight,
-        /** true = cân đúng ngày tập; false = số cân gần nhất trước buổi. */
-        weightMeasured: w.measured,
-      };
-    }),
+        weight: null,
+        weightMeasured: false,
+        manual: false,
+      },
+      override.rows[l.id]
+    );
+    if (edited.weight != null) return edited;
+    const w = weightFor(ymd(edited.date), weightLogs);
+    return { ...edited, weight: w.weight, weightMeasured: w.measured };
   });
+
+  // Buổi ghi tay chưa điền cân thì vẫn mang theo số cân gần nhất trước buổi,
+  // cùng một luật với buổi app ghi — phiếu không có hai kiểu cột cân nặng.
+  const manualRows: SheetRow[] = override.extraRows.map((e) => {
+    const row = manualSheetRow(e);
+    if (row.weight != null) return row;
+    const w = weightFor(ymd(row.date), weightLogs);
+    return { ...row, weight: w.weight, weightMeasured: w.measured };
+  });
+
+  const rows = mergeSheetRows([...logRows, ...manualRows]);
+
+  return NextResponse.json({
+    contractCode: h.contractCode ?? enrollment.contractCode,
+    clientName:   h.clientName   ?? enrollment.client.fullName,
+    ptName:       h.ptName       ?? enrollment.client.assignedPT?.name ?? enrollment.client.assignedPT?.email ?? "",
+    fmName:       h.fmName       ?? fm?.user.name ?? fm?.user.email ?? "",
+    packageName:  enrollment.packageName,
+    totalSessions: h.totalSessions ?? enrollment.sessions,
+    startDate: h.startDate !== undefined ? h.startDate : enrollment.startDate?.toISOString() ?? null,
+    endDate:   h.endDate   !== undefined ? h.endDate   : enrollment.endDate?.toISOString()   ?? null,
+    price:     h.price     ?? enrollment.price,
+    rows,
+    /** Giá trị GỐC của lộ trình — trình sửa cần để hiện nút "về số gốc". */
+    original: {
+      contractCode:  enrollment.contractCode,
+      clientName:    enrollment.client.fullName,
+      ptName:        enrollment.client.assignedPT?.name ?? enrollment.client.assignedPT?.email ?? "",
+      fmName:        fm?.user.name ?? fm?.user.email ?? "",
+      totalSessions: enrollment.sessions,
+      startDate:     enrollment.startDate?.toISOString() ?? null,
+      endDate:       enrollment.endDate?.toISOString() ?? null,
+      price:         enrollment.price,
+    },
+    override,
+    canEdit: await checkinSheetEditEnabled(),
+  });
+}
+
+/**
+ * Lưu phần sửa tay. Ghi đè trọn vẹn lớp phủ bằng đúng thứ trình sửa đang hiện —
+ * gộp từng phần thì hai tab mở song song sẽ trộn ra một tờ phiếu không ai từng
+ * nhìn thấy.
+ *
+ * Không đụng workout_logs lẫn package_enrollments: xem lib/checkin-sheet.
+ */
+export async function PUT(req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const role = session.user.role;
+  if (!SHEET_ROLES.includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (!(await checkinSheetEditEnabled())) {
+    return NextResponse.json(
+      { error: "Tính năng sửa phiếu check-in đang tắt. Nhờ Admin bật ở Cài đặt → Cấp độ PT." },
+      { status: 403 }
+    );
+  }
+
+  const body = (await req.json()) as { enrollmentId?: string; override?: unknown };
+  const enrollmentId = body.enrollmentId;
+  if (!enrollmentId) {
+    return NextResponse.json({ error: "Thiếu lộ trình cần sửa" }, { status: 400 });
+  }
+
+  const enrollment = await prisma.packageEnrollment.findFirst({
+    where:  { id: enrollmentId, clientId: params.id },
+    select: { id: true },
+  });
+  if (!enrollment) return NextResponse.json({ error: "Không tìm thấy lộ trình" }, { status: 404 });
+
+  const override = sanitizeOverride(body.override);
+  const data = {
+    header:    JSON.stringify(override.header),
+    rows:      JSON.stringify(override.rows),
+    extraRows: JSON.stringify(override.extraRows),
+    updatedById: session.user.id,
+  };
+
+  await prisma.checkinSheetOverride.upsert({
+    where:  { enrollmentId },
+    update: data,
+    create: { enrollmentId, ...data },
+  });
+
+  return NextResponse.json({ ok: true, override });
 }
