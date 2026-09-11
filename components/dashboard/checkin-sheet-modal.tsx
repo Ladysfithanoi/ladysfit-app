@@ -102,6 +102,67 @@ function loadImage(src: string | null): Promise<HTMLImageElement | null> {
   });
 }
 
+// ── Chữ trên phiếu ──────────────────────────────────────────────────────────
+//
+// Phiếu phải viết bằng NUNITO như cả app, không phải font mặc định của máy.
+// Canvas không ăn theo CSS nên trước đây mỗi lời gọi ctx.font đều ghi cứng
+// "system-ui, sans-serif": tờ phiếu đổi mặt chữ theo máy người xem — Windows ra
+// Segoe UI, máy Mac ra SF Pro — và không máy nào ra đúng mặt chữ của thương hiệu.
+//
+// next/font sinh ra một tên họ chữ băm sẵn (kiểu __Nunito_a1b2c3) và gắn vào
+// biến CSS --font-nunito ở <body>. Đọc thẳng biến đó thay vì viết "Nunito":
+// next/font tự host file chữ chứ không đăng ký tên "Nunito" toàn cục, nên gọi
+// đúng tên gốc lại là chữ KHÔNG có.
+
+const FALLBACK_FONT = "system-ui, sans-serif";
+
+/** Họ chữ thật của phiếu, đọc từ biến CSS mà next/font đặt ở <body>. */
+function sheetFontFamily(): string {
+  if (typeof window === "undefined") return FALLBACK_FONT;
+  const v = getComputedStyle(document.body).getPropertyValue("--font-nunito").trim();
+  return v ? `${v}, ${FALLBACK_FONT}` : FALLBACK_FONT;
+}
+
+/**
+ * Đợi Nunito nạp xong rồi mới vẽ.
+ *
+ * Canvas KHÔNG tự kích hoạt việc tải font: gọi ctx.font với một họ chữ chưa nạp
+ * thì trình duyệt lặng lẽ vẽ bằng font thay thế, không báo lỗi gì. Mở phiếu ngay
+ * lần đầu vào trang là dính đúng cảnh đó. Nạp trước cả ba kiểu đang dùng (thường,
+ * đậm, nghiêng) vì mỗi kiểu là một file riêng.
+ *
+ * Không nạp được thì vẫn vẽ — tờ phiếu bằng font hệ thống còn hơn không có phiếu.
+ */
+async function ensureSheetFont(family: string): Promise<void> {
+  if (family === FALLBACK_FONT || typeof document === "undefined" || !document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load(`400 21px ${family}`),
+      document.fonts.load(`700 21px ${family}`),
+      document.fonts.load(`italic 400 21px ${family}`),
+    ]);
+  } catch {
+    // Bỏ qua: vẽ tiếp bằng thứ đang có.
+  }
+}
+
+/**
+ * Chốt lại họ chữ sau khi đã thử đặt thật vào canvas.
+ *
+ * ctx.font NUỐT LẶNG chuỗi sai: gán một giá trị không phân tích được thì nó giữ
+ * nguyên giá trị cũ và không báo gì, nên cả tờ phiếu sẽ vẽ bằng "10px sans-serif"
+ * mặc định — chữ tí xíu, không ai đoán ra vì sao. Gán thử rồi đọc lại: cỡ chữ
+ * mình vừa yêu cầu còn đó thì chuỗi hợp lệ, không thì quay về font hệ thống.
+ */
+function usableFont(ctx: CanvasRenderingContext2D, family: string): string {
+  const probe = `bold 46px ${family}`;
+  const prev = ctx.font;
+  ctx.font = probe;
+  const ok = ctx.font.includes("46px");
+  ctx.font = prev;
+  return ok ? family : FALLBACK_FONT;
+}
+
 /** Vẽ ảnh vừa khít trong ô, giữ đúng tỉ lệ, căn giữa. */
 function drawFitted(
   ctx: CanvasRenderingContext2D,
@@ -193,6 +254,12 @@ export function CheckinSheetModal({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Nunito phải có sẵn TRƯỚC nét chữ đầu tiên: canvas vẽ bằng thứ đang có tại
+    // đúng lúc gọi ctx.fillText, nạp font sau đó thì bản vẽ không tự sửa lại.
+    const family = sheetFontFamily();
+    await ensureSheetFont(family);
+    const font = usableFont(ctx, family);
+
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = "middle";
@@ -200,15 +267,15 @@ export function CheckinSheetModal({
     // Tiêu đề
     ctx.fillStyle = INK;
     ctx.textAlign = "center";
-    ctx.font = "bold 46px system-ui, sans-serif";
+    ctx.font = `bold 46px ${font}`;
     ctx.fillText("PHỤ LỤC HỢP ĐỒNG SỐ 01", W / 2, 56);
-    ctx.font = "italic 24px system-ui, sans-serif";
+    ctx.font = `italic 24px ${font}`;
     ctx.fillStyle = "#6b7280";
     ctx.fillText(
       `(Đính kèm Hợp đồng huấn luyện viên cá nhân số ${d.contractCode ?? "................"})`,
       W / 2, 104
     );
-    ctx.font = "bold 34px system-ui, sans-serif";
+    ctx.font = `bold 34px ${font}`;
     ctx.fillStyle = INK;
     ctx.fillText("PHIẾU CHECK-IN BUỔI TẬP", W / 2, 156);
 
@@ -225,7 +292,7 @@ export function CheckinSheetModal({
     // Hàng tiêu đề
     ctx.fillStyle = "#fdf2f2";
     ctx.fillRect(0, tableTop, W, HEAD_ROW_H);
-    ctx.font = "bold 19px system-ui, sans-serif";
+    ctx.font = `bold 19px ${font}`;
     ctx.fillStyle = BRAND;
     ctx.textAlign = "center";
     for (let b = 0; b < 2; b++) {
@@ -249,7 +316,7 @@ export function CheckinSheetModal({
 
     // Các dòng
     const bodyTop = tableTop + HEAD_ROW_H;
-    ctx.font = "21px system-ui, sans-serif";
+    ctx.font = `21px ${font}`;
     for (let i = 0; i < ROWS_PER_BLOCK; i++) {
       const y = bodyTop + i * ROW_H;
       for (let b = 0; b < 2; b++) {
@@ -265,11 +332,11 @@ export function CheckinSheetModal({
             // Số cân mang theo từ lần cân trước in nhạt + nghiêng: nhìn là biết
             // hôm đó khách không lên cân, chứ không phải cân ra đúng con số này.
             ctx.font = row.weightMeasured
-              ? "bold 22px system-ui, sans-serif"
-              : "italic 20px system-ui, sans-serif";
+              ? `bold 22px ${font}`
+              : `italic 20px ${font}`;
             ctx.fillStyle = row.weightMeasured ? INK : "#9ca3af";
             ctx.fillText(fmtKg(row.weight), colX[base + 5] + COL_W[5] / 2, y + ROW_H / 2);
-            ctx.font = "21px system-ui, sans-serif";
+            ctx.font = `21px ${font}`;
             ctx.fillStyle = INK;
           }
         }
@@ -334,10 +401,10 @@ export function CheckinSheetModal({
     ctx.textAlign = "left";
     let iy = tableBottom + 46;
     for (const [label, value] of info) {
-      ctx.font = "bold 23px system-ui, sans-serif";
+      ctx.font = `bold 23px ${font}`;
       ctx.fillStyle = INK;
       ctx.fillText(label, PAD, iy);
-      ctx.font = "23px system-ui, sans-serif";
+      ctx.font = `23px ${font}`;
       ctx.fillStyle = "#374151";
       ctx.fillText(value, PAD + 330, iy);
       ctx.strokeStyle = "#d1d5db";
@@ -352,7 +419,7 @@ export function CheckinSheetModal({
     // Chú thích cho cột cân nặng — chỉ ghi khi phiếu thật sự có số cân mang
     // theo, để tờ nào cũng đúng với chính nó chứ không nói thừa.
     if (d.rows.some((r) => r.weight != null && !r.weightMeasured)) {
-      ctx.font = "italic 19px system-ui, sans-serif";
+      ctx.font = `italic 19px ${font}`;
       ctx.fillStyle = "#9ca3af";
       ctx.fillText(
         "(*) Cân nặng in nhạt là số cân của lần cân gần nhất trước buổi, không phải số đo trong ngày tập.",
@@ -368,10 +435,10 @@ export function CheckinSheetModal({
     ctx.textAlign = "center";
     titles.forEach((t, k) => {
       const cx = PAD + third * k + third / 2;
-      ctx.font = "bold 25px system-ui, sans-serif";
+      ctx.font = `bold 25px ${font}`;
       ctx.fillStyle = INK;
       ctx.fillText(t, cx, signTop);
-      ctx.font = "italic 20px system-ui, sans-serif";
+      ctx.font = `italic 20px ${font}`;
       ctx.fillStyle = "#6b7280";
       ctx.fillText("(Ký, ghi rõ họ tên)", cx, signTop + 34);
     });
@@ -386,7 +453,7 @@ export function CheckinSheetModal({
     }
 
     // Tên sẵn ở cả ba ô như tờ giấy vẫn ghi.
-    ctx.font = "bold 24px system-ui, sans-serif";
+    ctx.font = `bold 24px ${font}`;
     ctx.fillStyle = INK;
     ctx.fillText(d.clientName, PAD + third / 2, NAME_Y);
     ctx.fillText(d.ptName, PAD + third + third / 2, NAME_Y);
@@ -394,7 +461,7 @@ export function CheckinSheetModal({
     ctx.fillText(d.fmName || "Fitness Manager", PAD + third * 2 + third / 2, NAME_Y);
 
     if (d.rows.length === 0) {
-      ctx.font = "italic 24px system-ui, sans-serif";
+      ctx.font = `italic 24px ${font}`;
       ctx.fillStyle = "#9ca3af";
       ctx.fillText("Lộ trình này chưa có buổi nào đã check-out.", W / 2, bodyTop + 40);
     }
