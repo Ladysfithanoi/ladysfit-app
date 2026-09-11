@@ -7,6 +7,7 @@ import {
   isoFromSheetDay,
   isoFromSheetTime,
   sheetDay,
+  sheetStartTime,
   sheetTime,
   type SheetOverride,
   type SheetRow,
@@ -52,6 +53,9 @@ type DraftRow = {
   key: string;
   logId: string | null;
   day: string;
+  /** Giờ khách ký check-in. Nằm trong phần giờ của chính mốc "ngày" của dòng. */
+  timeIn: string;
+  /** Giờ đóng buổi. */
   time: string;
   /** Ô cân nặng. Rỗng = dùng số hệ thống tự tính (hiện mờ ở placeholder). */
   weight: string;
@@ -99,6 +103,7 @@ export function CheckinSheetEditor({
         key: r.id,
         logId: r.manual ? null : r.id,
         day: sheetDay(r.date),
+        timeIn: sheetStartTime(r.date),
         time: sheetTime(r.checkOutAt),
         weight: saved != null ? String(saved) : "",
         autoWeight: r.weight,
@@ -134,7 +139,7 @@ export function CheckinSheetEditor({
       ...prev,
       {
         key: newRowId(), logId: null,
-        day: base.toISOString().slice(0, 10), time: "",
+        day: base.toISOString().slice(0, 10), timeIn: "", time: "",
         weight: "", autoWeight: null, hasSignature: false, hasPhoto: false,
       },
     ]);
@@ -181,7 +186,11 @@ export function CheckinSheetEditor({
 
     // Các dòng
     for (const r of draft) {
-      const dateIso = isoFromSheetDay(r.day);
+      // Mốc "ngày" của dòng mang luôn GIỜ VÀO: phiếu in cột "Thời gian (vào – ra)"
+      // từ chính mốc này. Bỏ trống giờ vào thì mốc chỉ còn ngày (T00:00:00.000Z)
+      // và phiếu in mỗi giờ ra — xem isBareDay ở lib/checkin-sheet.
+      const dateIso = (r.timeIn ? isoFromSheetTime(r.day, r.timeIn) : null)
+                   ?? isoFromSheetDay(r.day);
       if (dateIso == null) continue; // không có ngày thì không xếp được vào phiếu
       const timeIso = r.time ? isoFromSheetTime(r.day, r.time) : null;
       const w = r.weight.trim() === "" ? null : Number(r.weight.replace(",", "."));
@@ -300,12 +309,13 @@ export function CheckinSheetEditor({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-xs">
+          <table className="w-full min-w-[660px] border-collapse text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">
                 <th className="w-10 px-1 py-2 text-left">STT</th>
                 <th className="px-1 py-2 text-left">Ngày</th>
-                <th className="w-24 px-1 py-2 text-left">Giờ</th>
+                <th className="w-24 px-1 py-2 text-left">Giờ vào</th>
+                <th className="w-24 px-1 py-2 text-left">Giờ ra</th>
                 <th className="w-28 px-1 py-2 text-left">Cân (kg)</th>
                 <th className="w-24 px-1 py-2 text-center">Ký · Ảnh</th>
                 <th className="w-10 px-1 py-2" />
@@ -320,6 +330,13 @@ export function CheckinSheetEditor({
                       type="date" className={INPUT}
                       value={r.day}
                       onChange={(e) => patchRow(r.key, { day: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <input
+                      type="time" className={INPUT}
+                      value={r.timeIn}
+                      onChange={(e) => patchRow(r.key, { timeIn: e.target.value })}
                     />
                   </td>
                   <td className="px-1 py-1.5">
@@ -367,7 +384,7 @@ export function CheckinSheetEditor({
               ))}
               {draft.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-xs font-semibold text-gray-400">
+                  <td colSpan={7} className="py-8 text-center text-xs font-semibold text-gray-400">
                     Lộ trình này chưa có buổi nào. Bấm “Thêm buổi ghi tay” để điền bù buổi cũ.
                   </td>
                 </tr>
@@ -379,7 +396,8 @@ export function CheckinSheetEditor({
         <p className="mt-3 text-[11px] leading-relaxed text-gray-400">
           Buổi ghi tay không có chữ ký và ảnh — in ra là ô trống, nhìn phân biệt được với buổi
           app ghi. Buổi ghi tay KHÔNG tính vào “Số buổi PT” của bảng lương; muốn sửa số buổi
-          tính lương thì sửa ở hồ sơ khách. Ô cân để trống = dùng số cân gần nhất trước buổi.
+          tính lương thì sửa ở hồ sơ khách. Ô cân để trống = dùng số cân gần nhất trước buổi;
+          ô giờ vào để trống = phiếu chỉ in giờ ra.
         </p>
       </div>
 

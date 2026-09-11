@@ -7,6 +7,7 @@ import { CheckinSheetEditor } from "./checkin-sheet-editor";
 import {
   EMPTY_OVERRIDE,
   ROWS_PER_SHEET,
+  sheetStartTime,
   sheetTime,
   type SheetOverride,
   type SheetRow,
@@ -301,7 +302,7 @@ export function CheckinSheetModal({
     }
 
     // ── Bảng: 2 khối 25 dòng đặt cạnh nhau ─────────────────────────────────
-    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
+    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian (vào – ra)", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
     const tableTop = HEADER_H;
 
     // Mốc x của từng cột trong cả hai khối
@@ -348,7 +349,30 @@ export function CheckinSheetModal({
         ctx.fillText(String(firstRow + i + 1 + b * ROWS_PER_BLOCK), colX[base] + COL_W[0] / 2, y + ROW_H / 2);
         if (row) {
           ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
-          ctx.fillText(sheetTime(row.checkOutAt), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
+
+          // Cột "Thời gian": GIỜ VÀO trên, GIỜ RA dưới.
+          //
+          // Trước đây ô này chỉ in giờ check-out. Khách tập hai buổi trong cùng
+          // một ngày — chuyện thường, 53 trường hợp trên hệ thống — thì phiếu ra
+          // hai dòng cùng ngày, mỗi dòng một con giờ trơ trọi, và người đọc không
+          // có cách nào biết đó là hai buổi thật hay một buổi bị ghi hai lần.
+          // Ghi cả khoảng thời gian thì nhìn phát thấy ngay hai buổi tách bạch,
+          // và cũng đúng nghĩa tiêu đề cột hơn: một mốc đóng buổi không phải là
+          // "thời gian cung cấp dịch vụ".
+          const tIn  = sheetStartTime(row.date);
+          const tOut = sheetTime(row.checkOutAt);
+          const cxTime = colX[base + 2] + COL_W[2] / 2;
+          if (tIn && tOut) {
+            ctx.fillText(tIn, cxTime, y + ROW_H / 2 - 14);
+            ctx.font = `19px ${font}`;
+            ctx.fillStyle = "#6b7280";
+            ctx.fillText(`– ${tOut}`, cxTime, y + ROW_H / 2 + 15);
+            ctx.font = `21px ${font}`;
+            ctx.fillStyle = INK;
+          } else {
+            // Buổi ghi tay chưa điền giờ vào: in mỗi con giờ đang có, không bịa.
+            ctx.fillText(tOut || tIn, cxTime, y + ROW_H / 2);
+          }
           if (row.weight != null) {
             // Số cân mang theo từ lần cân trước in nhạt + nghiêng: nhìn là biết
             // hôm đó khách không lên cân, chứ không phải cân ra đúng con số này.

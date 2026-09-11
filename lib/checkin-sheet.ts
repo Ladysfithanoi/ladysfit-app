@@ -248,6 +248,27 @@ export function isoFromSheetTime(day: string, time: string): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString();
 }
 
+/**
+ * Mốc này chỉ ghi NGÀY, không ghi giờ?
+ *
+ * Ngày của một buổi app ghi chính là lúc khách ký check-in, nên nó luôn mang giờ
+ * phút giây thật. Còn ô ngày của trình sửa (isoFromSheetDay) dựng ra đúng
+ * T00:00:00.000Z — một mốc "chỉ có ngày". Phân biệt bằng chính con số đó: một
+ * lần check-in thật rơi trúng 00:00:00.000 UTC tới từng mili giây là chuyện
+ * không xảy ra.
+ *
+ * Dùng để biết có in được GIỜ BẮT ĐẦU lên phiếu hay không: buổi ghi tay mà FM
+ * chưa điền giờ vào thì in "07:00" là bịa ra một con số không ai cung cấp.
+ */
+export function isBareDay(iso: string): boolean {
+  return iso.endsWith("T00:00:00.000Z");
+}
+
+/** Giờ bắt đầu buổi tập để in lên phiếu. Rỗng khi mốc đó chỉ có ngày. */
+export function sheetStartTime(iso: string): string {
+  return isBareDay(iso) ? "" : sheetTime(iso);
+}
+
 // ── Ghép lớp phủ lên phiếu ──────────────────────────────────────────────────
 
 export type SheetRow = {
