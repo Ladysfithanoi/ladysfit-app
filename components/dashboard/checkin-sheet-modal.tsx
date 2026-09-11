@@ -72,7 +72,7 @@ type SheetData = {
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
 // Cỡ này in ra A4 vẫn đọc rõ chữ và nhìn được mặt người trong ảnh check-out.
 const ROWS_PER_BLOCK = 25;
-const COL_W = [70, 210, 140, 250, 290, 150]; // STT · Ngày · Giờ · Chữ ký · Ảnh · Cân nặng
+const COL_W = [70, 185, 140, 175, 230, 250, 140]; // STT · Ngày · Giờ · HLV · Chữ ký · Ảnh · Cân nặng
 const BLOCK_W = COL_W.reduce((a, b) => a + b, 0);
 const W = BLOCK_W * 2;
 const PAD = 40;
@@ -165,6 +165,44 @@ function usableFont(ctx: CanvasRenderingContext2D, family: string): string {
   const ok = ctx.font.includes("46px");
   ctx.font = prev;
   return ok ? family : FALLBACK_FONT;
+}
+
+/**
+ * Ngắt một chuỗi thành tối đa `maxLines` dòng vừa bề ngang `width`.
+ *
+ * Dòng cuối nếu vẫn dài quá thì cắt bớt và thêm "…" — thà thiếu một chữ còn hơn
+ * để tên HLV tràn sang ô chữ ký của khách.
+ */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+  maxLines: number
+): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width > width && line) {
+      lines.push(line);
+      line = w;
+      if (lines.length === maxLines - 1) continue;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length <= maxLines) {
+    const last = lines[lines.length - 1];
+    if (last && ctx.measureText(last).width > width) {
+      let cut = last;
+      while (cut.length > 1 && ctx.measureText(`${cut}…`).width > width) cut = cut.slice(0, -1);
+      lines[lines.length - 1] = `${cut}…`;
+    }
+    return lines;
+  }
+  return lines.slice(0, maxLines);
 }
 
 /** Vẽ ảnh vừa khít trong ô, giữ đúng tỉ lệ, căn giữa. */
@@ -276,6 +314,7 @@ export function CheckinSheetModal({
     const firstRow = pageIndex * ROWS_PER_SHEET;
     const pageRows = d.rows.slice(firstRow, firstRow + ROWS_PER_SHEET);
 
+
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = "middle";
@@ -302,7 +341,7 @@ export function CheckinSheetModal({
     }
 
     // ── Bảng: 2 khối 25 dòng đặt cạnh nhau ─────────────────────────────────
-    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian (vào – ra)", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
+    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian (vào – ra)", "HLV", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
     const tableTop = HEADER_H;
 
     // Mốc x của từng cột trong cả hai khối
@@ -373,6 +412,19 @@ export function CheckinSheetModal({
             // Buổi ghi tay chưa điền giờ vào: in mỗi con giờ đang có, không bịa.
             ctx.fillText(tOut || tIn, cxTime, y + ROW_H / 2);
           }
+
+          // HLV đã dạy buổi này — HỌ TÊN ĐẦY ĐỦ. Có cột này thì hai dòng cùng
+          // một ngày đọc ra ngay là hai buổi khác nhau, nhất là khi một buổi do
+          // người khác dạy hộ. Tên dài thì xuống dòng cho vừa ô, không cắt bớt
+          // và không tràn sang ô chữ ký bên cạnh.
+          if (row.ptName) {
+            const cxPt = colX[base + 3] + COL_W[3] / 2;
+            ctx.font = `18px ${font}`;
+            const lines = wrapText(ctx, row.ptName, COL_W[3] - 14, 2);
+            const y0 = y + ROW_H / 2 - ((lines.length - 1) * 21) / 2;
+            lines.forEach((ln, k) => ctx.fillText(ln, cxPt, y0 + k * 21));
+            ctx.font = `21px ${font}`;
+          }
           if (row.weight != null) {
             // Số cân mang theo từ lần cân trước in nhạt + nghiêng: nhìn là biết
             // hôm đó khách không lên cân, chứ không phải cân ra đúng con số này.
@@ -380,7 +432,7 @@ export function CheckinSheetModal({
               ? `bold 22px ${font}`
               : `italic 20px ${font}`;
             ctx.fillStyle = row.weightMeasured ? INK : "#9ca3af";
-            ctx.fillText(fmtKg(row.weight), colX[base + 5] + COL_W[5] / 2, y + ROW_H / 2);
+            ctx.fillText(fmtKg(row.weight), colX[base + 6] + COL_W[6] / 2, y + ROW_H / 2);
             ctx.font = `21px ${font}`;
             ctx.fillStyle = INK;
           }
@@ -398,12 +450,12 @@ export function CheckinSheetModal({
         const base = b * COL_W.length;
         jobs.push(
           loadImage(row.signatureUrl).then((img) => {
-            if (img) drawFitted(ctx, img, colX[base + 3] + 8, y + 6, COL_W[3] - 16, ROW_H - 12);
+            if (img) drawFitted(ctx, img, colX[base + 4] + 8, y + 6, COL_W[4] - 16, ROW_H - 12);
           })
         );
         jobs.push(
           loadImage(row.photoUrl).then((img) => {
-            if (img) drawFitted(ctx, img, colX[base + 4] + 8, y + 6, COL_W[4] - 16, ROW_H - 12);
+            if (img) drawFitted(ctx, img, colX[base + 5] + 8, y + 6, COL_W[5] - 16, ROW_H - 12);
           })
         );
       }

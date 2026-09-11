@@ -94,6 +94,8 @@ export type SheetExtraRow = {
   date: string;
   checkOutAt: string | null;
   weight: number | null;
+  /** Tên HLV dạy buổi đó, FM tự điền. Buổi cũ thường không còn ai nhớ nên để rỗng được. */
+  ptName?: string;
 };
 
 export type SheetOverride = {
@@ -180,6 +182,7 @@ export function sanitizeOverride(input: unknown): SheetOverride {
       date: new Date(r.date as string).toISOString(),
       checkOutAt: isIso(r.checkOutAt) ? new Date(r.checkOutAt as string).toISOString() : null,
       weight: w === undefined ? null : w,
+      ptName: cleanName(r.ptName) ?? "",
     });
     if (out.extraRows.length >= MAX_SHEET_ROWS) break;
   }
@@ -283,6 +286,8 @@ export type SheetRow = {
   weightMeasured: boolean;
   /** true = buổi ghi tay. Ô chữ ký và ô ảnh in ra để trống, nhìn là phân biệt được. */
   manual: boolean;
+  /** Họ tên đầy đủ của HLV đã dạy buổi này. Rỗng = không biết. */
+  ptName: string;
 };
 
 /** Buổi ghi tay dựng thành dòng phiếu: ô chữ ký và ô ảnh luôn để trống. */
@@ -291,6 +296,7 @@ export function manualSheetRow(e: SheetExtraRow): SheetRow {
     id: e.id,
     date: e.date,
     checkOutAt: e.checkOutAt,
+    ptName: e.ptName ?? "",
     signatureUrl: null,
     photoUrl: null,
     weight: e.weight,

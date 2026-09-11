@@ -140,11 +140,17 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     checkInSignatureUrl: string | null;
     signatureUrl: string | null;
     checkOutPhotoUrl: string | null;
+    ptName: string | null;
   }[]>(
     `
     SELECT wl.id, wl."sessionDate", wl."checkOutAt",
-           wl."checkInSignatureUrl", wl."signatureUrl", wl."checkOutPhotoUrl"
+           wl."checkInSignatureUrl", wl."signatureUrl", wl."checkOutPhotoUrl",
+           -- NGƯỜI THỰC SỰ DẠY (ký check-in/check-out), không phải PT phụ trách
+           -- khách: buổi dạy hộ phải ghi tên người dạy hộ, cùng một luật với
+           -- cách bảng lương ghi công (xem lib/pt-session-count).
+           COALESCE(NULLIF(u.name, ''), u.email, '') AS "ptName"
     FROM workout_logs wl
+    LEFT JOIN users u ON u.id = wl."createdById"
     ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."clientId" = $1
       AND wl.status = 'COMPLETED'
@@ -178,6 +184,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         weight: null,
         weightMeasured: false,
         manual: false,
+        ptName: l.ptName ?? "",
       },
       override.rows[l.id]
     );
