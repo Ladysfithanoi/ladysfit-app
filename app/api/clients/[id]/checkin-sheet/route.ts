@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  SHEET_TOTAL_ROWS,
+  sheetCapacity,
+  sheetPageCount,
   applyRowOverride,
   manualSheetRow,
   mergeSheetRows,
@@ -105,6 +106,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     select: { user: { select: { name: true, email: true } } },
   });
 
+  const stored = await prisma.checkinSheetOverride.findUnique({
+    where:  { enrollmentId },
+    select: { header: true, rows: true, extraRows: true },
+  });
+  const override = parseOverride(stored);
+
+  // Sức chứa của bộ phiếu bám theo TỔNG SỐ BUỔI ĐANG IN TRÊN PHIẾU — tức là số
+  // đã áp phần sửa tay, không phải số thô của lộ trình. Phiếu ghi "TỔNG SỐ BUỔI
+  // TẬP: 100 buổi" thì phải có đủ 100 ô để ký, đọc lên mới không mâu thuẫn.
+  const totalSessions = override.header.totalSessions ?? enrollment.sessions;
+  const pageCount = sheetPageCount(totalSessions);
+  const capacity  = sheetCapacity(totalSessions);
+
   // Buổi của lộ trình này.
   //
   // Lọc theo lộ trình ĐÃ SUY RA (lib/session-enrollment) chứ không đọc thô
@@ -137,7 +151,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       AND wl."checkOutAt" IS NOT NULL
       AND ${ENROLLMENT_ID} = $2
     ORDER BY wl."sessionDate" ASC
-    LIMIT ${SHEET_TOTAL_ROWS}
+    LIMIT ${capacity}
     `,
     params.id, enrollmentId
   );
@@ -149,11 +163,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     select: { date: true, weight: true },
   });
 
-  const stored = await prisma.checkinSheetOverride.findUnique({
-    where:  { enrollmentId },
-    select: { header: true, rows: true, extraRows: true },
-  });
-  const override = parseOverride(stored);
   const h = override.header;
 
   // Buổi app ghi, đã áp phần sửa tay. Số cân tính THEO NGÀY CUỐI CÙNG của dòng
@@ -186,7 +195,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     return { ...row, weight: w.weight, weightMeasured: w.measured };
   });
 
-  const rows = mergeSheetRows([...logRows, ...manualRows]);
+  const rows = mergeSheetRows([...logRows, ...manualRows], capacity);
 
   return NextResponse.json({
     contractCode: h.contractCode ?? enrollment.contractCode,
@@ -194,7 +203,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     ptName:       h.ptName       ?? enrollment.client.assignedPT?.name ?? enrollment.client.assignedPT?.email ?? "",
     fmName:       h.fmName       ?? fm?.user.name ?? fm?.user.email ?? "",
     packageName:  enrollment.packageName,
-    totalSessions: h.totalSessions ?? enrollment.sessions,
+    totalSessions,
+    /** Số tờ của bộ phiếu — mỗi tờ 50 ô, xem lib/checkin-sheet.ts. */
+    pageCount,
     startDate: h.startDate !== undefined ? h.startDate : enrollment.startDate?.toISOString() ?? null,
     endDate:   h.endDate   !== undefined ? h.endDate   : enrollment.endDate?.toISOString()   ?? null,
     price:     h.price     ?? enrollment.price,

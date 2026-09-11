@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Plus, RotateCcw, Trash2, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  SHEET_TOTAL_ROWS,
   isoFromSheetDay,
   isoFromSheetTime,
   sheetDay,
@@ -41,6 +40,8 @@ type Props = {
   rows: SheetRow[];
   original: Original;
   override: SheetOverride;
+  /** Tổng số ô của cả bộ phiếu — gói 100 buổi là 100 ô, trải trên 2 tờ. */
+  capacity: number;
   saving: boolean;
   onCancel: () => void;
   onSave: (next: SheetOverride) => void;
@@ -76,7 +77,7 @@ function newRowId(): string {
 }
 
 export function CheckinSheetEditor({
-  rows, original, override, saving, onCancel, onSave,
+  rows, original, override, capacity, saving, onCancel, onSave,
 }: Props) {
   const [header, setHeader] = useState(() => ({
     contractCode:  override.header.contractCode  ?? original.contractCode ?? "",
@@ -108,7 +109,7 @@ export function CheckinSheetEditor({
   );
 
   const manualCount = draft.filter((r) => r.logId == null).length;
-  const full = draft.length >= SHEET_TOTAL_ROWS;
+  const full = draft.length >= capacity;
 
   /** Dòng xếp theo ngày, đúng thứ tự sẽ in ra — sửa ngày là thấy nó nhảy chỗ. */
   const ordered = useMemo(
@@ -284,7 +285,7 @@ export function CheckinSheetEditor({
               Các buổi trên phiếu
             </p>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {draft.length}/{SHEET_TOTAL_ROWS} dòng
+              {draft.length}/{capacity} dòng
               {manualCount > 0 && ` · ${manualCount} buổi ghi tay`}
             </p>
           </div>

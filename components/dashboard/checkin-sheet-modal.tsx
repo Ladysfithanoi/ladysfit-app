@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Download, Loader2, Pencil } from "lucide-react";
+import { X, Download, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 import { fmtDate } from "@/lib/format-date";
 import { CheckinSheetEditor } from "./checkin-sheet-editor";
 import {
   EMPTY_OVERRIDE,
+  ROWS_PER_SHEET,
   sheetTime,
   type SheetOverride,
   type SheetRow,
@@ -63,6 +64,8 @@ type SheetData = {
   override: SheetOverride;
   /** Admin đã bật sửa phiếu chưa (Cài đặt → Cấp độ PT). */
   canEdit: boolean;
+  /** Số tờ của bộ phiếu: gói 100 buổi ra 2 tờ, mỗi tờ 50 ô. */
+  pageCount: number;
 };
 
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
@@ -192,6 +195,9 @@ export function CheckinSheetModal({
   const [data, setData] = useState<SheetData | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** Tờ đang xem, đếm từ 0. */
+  const [page, setPage] = useState(0);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async (): Promise<SheetData | null> => {
     const res = await fetch(`/api/clients/${clientId}/checkin-sheet?enrollmentId=${enrollmentId}`);
@@ -246,7 +252,10 @@ export function CheckinSheetModal({
   }
 
   // ── Vẽ phiếu ─────────────────────────────────────────────────────────────
-  const draw = useCallback(async (d: SheetData) => {
+  // Vẽ MỘT tờ của bộ phiếu. Mỗi tờ 50 ô và tự đứng được một mình — đủ tiêu đề,
+  // khối thông tin hội viên và ba ô chữ ký — vì trên giấy mỗi tờ là một tờ ký
+  // riêng. `page` đếm từ 0.
+  const draw = useCallback(async (d: SheetData, pageIndex: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = W;
@@ -260,6 +269,12 @@ export function CheckinSheetModal({
     await ensureSheetFont(family);
     const font = usableFont(ctx, family);
 
+    // Ô đầu tiên của tờ này trong cả bộ: tờ 2 bắt đầu từ ô thứ 51, và STT in ra
+    // phải chạy tiếp 51…100 chứ không quay về 1 — nếu không, hai tờ của cùng một
+    // lộ trình đọc lên như hai lộ trình khác nhau.
+    const firstRow = pageIndex * ROWS_PER_SHEET;
+    const pageRows = d.rows.slice(firstRow, firstRow + ROWS_PER_SHEET);
+
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
     ctx.textBaseline = "middle";
@@ -268,7 +283,7 @@ export function CheckinSheetModal({
     ctx.fillStyle = INK;
     ctx.textAlign = "center";
     ctx.font = `bold 46px ${font}`;
-    ctx.fillText("PHỤ LỤC HỢP ĐỒNG SỐ 01", W / 2, 56);
+    ctx.fillText(`PHỤ LỤC HỢP ĐỒNG SỐ ${String(pageIndex + 1).padStart(2, "0")}`, W / 2, 56);
     ctx.font = `italic 24px ${font}`;
     ctx.fillStyle = "#6b7280";
     ctx.fillText(
@@ -278,6 +293,12 @@ export function CheckinSheetModal({
     ctx.font = `bold 34px ${font}`;
     ctx.fillStyle = INK;
     ctx.fillText("PHIẾU CHECK-IN BUỔI TẬP", W / 2, 156);
+    if (d.pageCount > 1) {
+      ctx.font = `bold 22px ${font}`;
+      ctx.fillStyle = BRAND;
+      ctx.fillText(`Tờ ${pageIndex + 1}/${d.pageCount} · buổi ${firstRow + 1}–${firstRow + ROWS_PER_SHEET}`, W / 2, 186);
+      ctx.fillStyle = INK;
+    }
 
     // ── Bảng: 2 khối 25 dòng đặt cạnh nhau ─────────────────────────────────
     const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
@@ -320,11 +341,11 @@ export function CheckinSheetModal({
     for (let i = 0; i < ROWS_PER_BLOCK; i++) {
       const y = bodyTop + i * ROW_H;
       for (let b = 0; b < 2; b++) {
-        const row = d.rows[i + b * ROWS_PER_BLOCK];
+        const row = pageRows[i + b * ROWS_PER_BLOCK];
         const base = b * COL_W.length;
         ctx.fillStyle = INK;
         ctx.textAlign = "center";
-        ctx.fillText(String(i + 1 + b * ROWS_PER_BLOCK), colX[base] + COL_W[0] / 2, y + ROW_H / 2);
+        ctx.fillText(String(firstRow + i + 1 + b * ROWS_PER_BLOCK), colX[base] + COL_W[0] / 2, y + ROW_H / 2);
         if (row) {
           ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
           ctx.fillText(sheetTime(row.checkOutAt), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
@@ -348,7 +369,7 @@ export function CheckinSheetModal({
     for (let i = 0; i < ROWS_PER_BLOCK; i++) {
       const y = bodyTop + i * ROW_H;
       for (let b = 0; b < 2; b++) {
-        const row = d.rows[i + b * ROWS_PER_BLOCK];
+        const row = pageRows[i + b * ROWS_PER_BLOCK];
         if (!row) continue;
         const base = b * COL_W.length;
         jobs.push(
@@ -418,7 +439,7 @@ export function CheckinSheetModal({
 
     // Chú thích cho cột cân nặng — chỉ ghi khi phiếu thật sự có số cân mang
     // theo, để tờ nào cũng đúng với chính nó chứ không nói thừa.
-    if (d.rows.some((r) => r.weight != null && !r.weightMeasured)) {
+    if (pageRows.some((r) => r.weight != null && !r.weightMeasured)) {
       ctx.font = `italic 19px ${font}`;
       ctx.fillStyle = "#9ca3af";
       ctx.fillText(
@@ -460,40 +481,83 @@ export function CheckinSheetModal({
     ctx.fillStyle = BRAND;
     ctx.fillText(d.fmName || "Fitness Manager", PAD + third * 2 + third / 2, NAME_Y);
 
-    if (d.rows.length === 0) {
+    if (pageRows.length === 0) {
       ctx.font = `italic 24px ${font}`;
       ctx.fillStyle = "#9ca3af";
-      ctx.fillText("Lộ trình này chưa có buổi nào đã check-out.", W / 2, bodyTop + 40);
+      ctx.fillText(
+        pageIndex === 0
+          ? "Lộ trình này chưa có buổi nào đã check-out."
+          : "Tờ này chưa có buổi nào — để ký tiếp khi khách tập sang nửa sau lộ trình.",
+        W / 2, bodyTop + 40
+      );
     }
   }, []);
 
-  // Vẽ lại mỗi khi dữ liệu đổi VÀ mỗi khi rời trình sửa. Vế thứ hai là bắt buộc:
-  // canvas bị gỡ khỏi màn hình lúc đang sửa, nên bấm Huỷ mà chỉ trông vào `data`
-  // đổi thì phiếu quay lại là một tấm trắng. Lưu xong thì `data` đã là bản mới
-  // server dựng, nên đúng cái PT vừa sửa hiện ngay trên phiếu.
+  // Sửa "Tổng số buổi tập" có thể làm bộ phiếu ngắn lại — đang đứng ở tờ 2 mà bộ
+  // rút còn 1 tờ thì phải kéo về, không thì màn hình trống trơn không hiểu vì sao.
+  const pageCount = data?.pageCount ?? 1;
   useEffect(() => {
-    if (data && !editing) draw(data);
-  }, [data, editing, draw]);
+    setPage((p) => Math.min(p, Math.max(0, pageCount - 1)));
+  }, [pageCount]);
 
-  /** Tải chính bản vẽ đang hiện — không dựng lại bằng đường nào khác. */
-  function download() {
+  // Vẽ lại mỗi khi dữ liệu đổi, mỗi khi lật tờ, và mỗi khi rời trình sửa. Vế cuối
+  // là bắt buộc: canvas bị gỡ khỏi màn hình lúc đang sửa, nên bấm Huỷ mà chỉ
+  // trông vào `data` đổi thì phiếu quay lại là một tấm trắng. Lưu xong thì `data`
+  // đã là bản mới server dựng, nên đúng cái PT vừa sửa hiện ngay trên phiếu.
+  useEffect(() => {
+    if (data && !editing) draw(data, page);
+  }, [data, editing, page, draw]);
+
+  /** Tên file, bỏ dấu cho mọi hệ điều hành mở được. */
+  function fileName(d: SheetData, pageIndex: number): string {
+    const safe = d.clientName
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/đ/g, "d").replace(/Đ/g, "D")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const suffix = d.pageCount > 1 ? `-to-${pageIndex + 1}` : "";
+    return `Phieu-check-in-${safe}-${packageName}${suffix}.png`;
+  }
+
+  function saveCanvas(canvas: HTMLCanvasElement, name: string): Promise<void> {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, "image/png");
+    });
+  }
+
+  /**
+   * Tải CẢ BỘ phiếu, mỗi tờ một ảnh.
+   *
+   * Vẽ lần lượt từng tờ lên chính canvas đang hiện rồi lưu ngay — vẫn giữ đúng
+   * luật cũ "cái tải về là cái đang nhìn thấy", chỉ là nhìn thấy lần lượt. Tải
+   * mỗi tờ đang mở thì PT xuất thiếu tờ lúc nào không biết, mà bộ phiếu thiếu
+   * một tờ là phụ lục hợp đồng thiếu một nửa số buổi.
+   *
+   * Xong thì trả canvas về đúng tờ PT đang xem.
+   */
+  async function download() {
     const canvas = canvasRef.current;
-    if (!canvas || !data) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const safe = data.clientName
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .replace(/đ/g, "d").replace(/Đ/g, "D")
-        .replace(/[^a-zA-Z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      a.href = url;
-      a.download = `Phieu-check-in-${safe}-${packageName}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
+    if (!canvas || !data || downloading) return;
+    setDownloading(true);
+    try {
+      for (let p = 0; p < data.pageCount; p++) {
+        await draw(data, p);
+        await saveCanvas(canvas, fileName(data, p));
+      }
+    } finally {
+      if (canvasRef.current) await draw(data, page);
+      setDownloading(false);
+    }
   }
 
   const doneCount   = data?.rows.length ?? 0;
@@ -510,8 +574,9 @@ export function CheckinSheetModal({
             </p>
             <p className="mt-0.5 truncate text-xs font-semibold text-gray-400">
               {data
-                ? `${data.clientName} · gói ${data.packageName} · ${appCount} buổi đã check-out`
+                ? `${data.clientName} · gói ${data.packageName} · ${appCount}/${data.totalSessions} buổi đã check-out`
                   + (manualCount > 0 ? ` · ${manualCount} buổi ghi tay` : "")
+                  + (pageCount > 1 ? ` · ${pageCount} tờ` : "")
                 : "Đang tải…"}
             </p>
           </div>
@@ -553,15 +618,45 @@ export function CheckinSheetModal({
               rows={data.rows}
               original={data.original}
               override={data.override ?? EMPTY_OVERRIDE}
+              capacity={pageCount * ROWS_PER_SHEET}
               saving={saving}
               onCancel={() => { setError(""); setEditing(false); }}
               onSave={handleSave}
             />
           ) : data ? (
-            <canvas
-              ref={canvasRef}
-              className="mx-auto block h-auto w-full max-w-full rounded-lg bg-white shadow-sm"
-            />
+            <>
+              {/* Thanh lật tờ — chỉ hiện khi bộ phiếu có nhiều hơn một tờ. */}
+              {pageCount > 1 && (
+                <div className="mx-auto mb-3 flex max-w-4xl items-center justify-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0 || downloading}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-gray-600"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                    Tờ trước
+                  </button>
+                  <span className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-gray-700 shadow-sm">
+                    Tờ {page + 1}/{pageCount}
+                    <span className="ml-1.5 font-semibold text-gray-400">
+                      buổi {page * ROWS_PER_SHEET + 1}–{(page + 1) * ROWS_PER_SHEET}
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                    disabled={page >= pageCount - 1 || downloading}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:text-gray-600"
+                  >
+                    Tờ sau
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <canvas
+                ref={canvasRef}
+                className="mx-auto block h-auto w-full max-w-full rounded-lg bg-white shadow-sm"
+              />
+            </>
           ) : null}
         </div>
 
@@ -574,19 +669,24 @@ export function CheckinSheetModal({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
             <button
               onClick={download}
-              disabled={loading || !data}
+              disabled={loading || !data || downloading}
               className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
               style={{ backgroundColor: BRAND }}
             >
-              <Download className="h-4 w-4" />
-              Tải ảnh phiếu
+              {downloading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Download className="h-4 w-4" />}
+              {pageCount > 1 ? `Tải cả ${pageCount} tờ` : "Tải ảnh phiếu"}
             </button>
             <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
-              Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy.
+              {pageCount > 1
+                ? `Tải về ${pageCount} ảnh PNG — mỗi tờ một ảnh — để lưu vào hồ sơ lương của buổi dạy.`
+                : "Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy."}
             </p>
             <button
               onClick={onClose}
-              className="h-11 shrink-0 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              disabled={downloading}
+              className="h-11 shrink-0 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
             >
               Đóng
             </button>

@@ -21,8 +21,39 @@
 // dùng CHUNG một bộ luật ở đây, nên hai bên không thể hiểu khác nhau về cùng
 // một tờ phiếu.
 
-/** Đúng tờ giấy: 2 khối × 25 dòng = 50 buổi. */
-export const SHEET_TOTAL_ROWS = 50;
+// ── Một tờ 50 ô, gói dài thì nhiều tờ ───────────────────────────────────────
+//
+// Bản in sẵn của phụ lục có ĐÚNG 50 ô — 2 khối × 25 dòng. Gói dài hơn thì ký
+// nhiều tờ, đó là lý do tiêu đề vốn ghi "PHỤ LỤC HỢP ĐỒNG SỐ 01". Phần lớn gói
+// đang bán vượt trần này (L2 60 buổi, L5 72, L4 100), nên một tờ là không đủ:
+// trước đây buổi thứ 51 trở đi bị cắt lặng lẽ khỏi phiếu.
+//
+// Số tờ đếm theo TỔNG SỐ BUỔI CỦA GÓI, không theo số buổi đã tập: phiếu in dòng
+// "TỔNG SỐ BUỔI TẬP: 100 buổi" thì phải có đủ 100 ô để ký, y như phát đủ 2 tờ
+// giấy ngay từ đầu. Tờ cuối còn ô trống là chuyện bình thường của tờ đang ký dở.
+//
+// Mỗi tờ tự đứng được một mình: đủ tiêu đề, khối thông tin hội viên và ba ô chữ
+// ký — vì trên giấy mỗi tờ là một tờ ký riêng.
+
+/** Số ô của MỘT tờ: 2 khối × 25 dòng. */
+export const ROWS_PER_SHEET = 50;
+
+/** Trần cứng, chặn số buổi gõ nhầm biến phiếu thành mấy trăm tờ. */
+export const MAX_SHEET_PAGES = 10;
+
+/** Số tờ cần cho một gói. Luôn ít nhất một tờ, kể cả gói 0 buổi. */
+export function sheetPageCount(totalSessions: number): number {
+  const n = Number.isFinite(totalSessions) ? Math.ceil(totalSessions / ROWS_PER_SHEET) : 1;
+  return Math.max(1, Math.min(MAX_SHEET_PAGES, n));
+}
+
+/** Tổng số ô của cả bộ phiếu. */
+export function sheetCapacity(totalSessions: number): number {
+  return sheetPageCount(totalSessions) * ROWS_PER_SHEET;
+}
+
+/** Trần tuyệt đối của một bộ phiếu — dùng khi chưa biết gói bao nhiêu buổi. */
+export const MAX_SHEET_ROWS = MAX_SHEET_PAGES * ROWS_PER_SHEET;
 
 /** Ngưỡng cân nặng người thật — chặn số gõ nhầm, cùng mốc với ô cân check-in. */
 const WEIGHT_MIN = 20;
@@ -150,7 +181,7 @@ export function sanitizeOverride(input: unknown): SheetOverride {
       checkOutAt: isIso(r.checkOutAt) ? new Date(r.checkOutAt as string).toISOString() : null,
       weight: w === undefined ? null : w,
     });
-    if (out.extraRows.length >= SHEET_TOTAL_ROWS) break;
+    if (out.extraRows.length >= MAX_SHEET_ROWS) break;
   }
 
   return out;
@@ -248,16 +279,19 @@ export function manualSheetRow(e: SheetExtraRow): SheetRow {
 }
 
 /**
- * Xếp buổi app ghi lẫn buổi ghi tay vào đúng tờ phiếu.
+ * Xếp buổi app ghi lẫn buổi ghi tay vào đúng bộ phiếu.
  *
  * Xếp theo NGÀY chứ không nối đuôi: buổi cũ điền tay phải nằm TRƯỚC buổi app
- * ghi, đúng như khách đã tập. Cắt ở 50 dòng vì tờ giấy chỉ có 50 ô — điền dư
- * thì phần dư không in ra, chứ không đẩy tờ phiếu dài thêm.
+ * ghi, đúng như khách đã tập.
+ *
+ * `capacity` là tổng số ô của cả bộ (sheetCapacity). Dư ra thì phần dư không in
+ * — nhưng nay trần đi theo số buổi của gói, nên gói 100 buổi có đủ 100 ô thay vì
+ * bị cắt ở ô thứ 50 như trước.
  */
-export function mergeSheetRows(rows: SheetRow[]): SheetRow[] {
+export function mergeSheetRows(rows: SheetRow[], capacity: number): SheetRow[] {
   return [...rows]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, SHEET_TOTAL_ROWS);
+    .slice(0, Math.max(ROWS_PER_SHEET, capacity));
 }
 
 /** Áp phần sửa tay lên một buổi app ghi. Chữ ký và ảnh giữ nguyên, luôn luôn. */
