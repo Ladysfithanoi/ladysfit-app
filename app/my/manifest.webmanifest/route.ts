@@ -12,7 +12,7 @@ export const dynamic = "force-static";
 export function GET() {
   const manifest = {
     id: "/my",
-    name: "Ladysfit Objective Training System",
+    name: "Ladysfit Objective Training System — Hội viên",
     short_name: "LOTS",
     description:
       "Giáo án, dinh dưỡng và cân nặng của bạn tại Ladysfit.",
