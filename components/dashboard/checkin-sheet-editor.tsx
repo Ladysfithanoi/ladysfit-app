@@ -55,7 +55,11 @@ type DraftRow = {
   day: string;
   /** Giờ khách ký check-in. Nằm trong phần giờ của chính mốc "ngày" của dòng. */
   timeIn: string;
-  /** Giờ đóng buổi. */
+  /**
+   * Giờ đóng buổi. Phiếu không in ô này nữa (chỉ in giờ vào), nhưng vẫn giữ
+   * nguyên và ghi lại y như cũ khi lưu — bỏ đi là xoá mất dữ liệu FM đã nhập,
+   * mà cột này bật lại lúc nào cũng được.
+   */
   time: string;
   /** Ô cân nặng. Rỗng = dùng số hệ thống tự tính (hiện mờ ở placeholder). */
   weight: string;
@@ -315,13 +319,12 @@ export function CheckinSheetEditor({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-xs">
+          <table className="w-full min-w-[740px] border-collapse text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">
                 <th className="w-10 px-1 py-2 text-left">STT</th>
                 <th className="px-1 py-2 text-left">Ngày</th>
                 <th className="w-24 px-1 py-2 text-left">Giờ vào</th>
-                <th className="w-24 px-1 py-2 text-left">Giờ ra</th>
                 <th className="w-28 px-1 py-2 text-left">Cân (kg)</th>
                 <th className="w-28 px-1 py-2 text-left">HLV</th>
                 <th className="w-24 px-1 py-2 text-center">Ký · Ảnh</th>
@@ -344,13 +347,6 @@ export function CheckinSheetEditor({
                       type="time" className={INPUT}
                       value={r.timeIn}
                       onChange={(e) => patchRow(r.key, { timeIn: e.target.value })}
-                    />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="time" className={INPUT}
-                      value={r.time}
-                      onChange={(e) => patchRow(r.key, { time: e.target.value })}
                     />
                   </td>
                   <td className="px-1 py-1.5">
@@ -407,7 +403,7 @@ export function CheckinSheetEditor({
               ))}
               {draft.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-xs font-semibold text-gray-400">
+                  <td colSpan={7} className="py-8 text-center text-xs font-semibold text-gray-400">
                     Lộ trình này chưa có buổi nào. Bấm “Thêm buổi ghi tay” để điền bù buổi cũ.
                   </td>
                 </tr>
@@ -420,7 +416,7 @@ export function CheckinSheetEditor({
           Buổi ghi tay không có chữ ký và ảnh — in ra là ô trống, nhìn phân biệt được với buổi
           app ghi. Buổi ghi tay KHÔNG tính vào “Số buổi PT” của bảng lương; muốn sửa số buổi
           tính lương thì sửa ở hồ sơ khách. Ô cân để trống = dùng số cân gần nhất trước buổi;
-          ô giờ vào để trống = phiếu chỉ in giờ ra. Phiếu in họ tên đầy đủ của HLV.
+          Phiếu in giờ VÀO và họ tên đầy đủ của HLV.
           Buổi ghi tay thì FM tự điền tên HLV; buổi app ghi lấy đúng người đã ký, không sửa được.
         </p>
       </div>

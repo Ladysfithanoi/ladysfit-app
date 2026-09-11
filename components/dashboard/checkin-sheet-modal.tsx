@@ -8,7 +8,6 @@ import {
   EMPTY_OVERRIDE,
   ROWS_PER_SHEET,
   sheetStartTime,
-  sheetTime,
   type SheetOverride,
   type SheetRow,
 } from "@/lib/checkin-sheet";
@@ -72,7 +71,7 @@ type SheetData = {
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
 // Cỡ này in ra A4 vẫn đọc rõ chữ và nhìn được mặt người trong ảnh check-out.
 const ROWS_PER_BLOCK = 25;
-const COL_W = [70, 185, 140, 175, 230, 250, 140]; // STT · Ngày · Giờ · HLV · Chữ ký · Ảnh · Cân nặng
+const COL_W = [70, 185, 110, 200, 230, 250, 140]; // STT · Ngày · Giờ vào · HLV · Chữ ký · Ảnh · Cân nặng
 const BLOCK_W = COL_W.reduce((a, b) => a + b, 0);
 const W = BLOCK_W * 2;
 const PAD = 40;
@@ -341,7 +340,7 @@ export function CheckinSheetModal({
     }
 
     // ── Bảng: 2 khối 25 dòng đặt cạnh nhau ─────────────────────────────────
-    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Thời gian (vào – ra)", "HLV", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
+    const HEAD = ["STT", "Ngày cung cấp dịch vụ", "Giờ vào", "HLV", "Chữ ký khách hàng", "Ảnh check-out của khách hàng", "Cân nặng (kg)"];
     const tableTop = HEADER_H;
 
     // Mốc x của từng cột trong cả hai khối
@@ -389,29 +388,16 @@ export function CheckinSheetModal({
         if (row) {
           ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
 
-          // Cột "Thời gian": GIỜ VÀO trên, GIỜ RA dưới.
+          // Cột "Giờ vào" — mốc khách ký check-in.
           //
-          // Trước đây ô này chỉ in giờ check-out. Khách tập hai buổi trong cùng
-          // một ngày — chuyện thường, 53 trường hợp trên hệ thống — thì phiếu ra
-          // hai dòng cùng ngày, mỗi dòng một con giờ trơ trọi, và người đọc không
-          // có cách nào biết đó là hai buổi thật hay một buổi bị ghi hai lần.
-          // Ghi cả khoảng thời gian thì nhìn phát thấy ngay hai buổi tách bạch,
-          // và cũng đúng nghĩa tiêu đề cột hơn: một mốc đóng buổi không phải là
-          // "thời gian cung cấp dịch vụ".
-          const tIn  = sheetStartTime(row.date);
-          const tOut = sheetTime(row.checkOutAt);
-          const cxTime = colX[base + 2] + COL_W[2] / 2;
-          if (tIn && tOut) {
-            ctx.fillText(tIn, cxTime, y + ROW_H / 2 - 14);
-            ctx.font = `19px ${font}`;
-            ctx.fillStyle = "#6b7280";
-            ctx.fillText(`– ${tOut}`, cxTime, y + ROW_H / 2 + 15);
-            ctx.font = `21px ${font}`;
-            ctx.fillStyle = INK;
-          } else {
-            // Buổi ghi tay chưa điền giờ vào: in mỗi con giờ đang có, không bịa.
-            ctx.fillText(tOut || tIn, cxTime, y + ROW_H / 2);
-          }
+          // Trước đây ô này in giờ CHECK-OUT. Khách tập hai buổi trong cùng một
+          // ngày — chuyện thường, 53 trường hợp trên hệ thống — thì phiếu ra hai
+          // dòng cùng ngày, mỗi dòng một con giờ trơ trọi, và người đọc không có
+          // cách nào biết đó là hai buổi thật hay một buổi bị ghi hai lần. Nay
+          // cột HLV bên cạnh đã tách bạch hai buổi đó, nên ô này chỉ cần một mốc;
+          // lấy giờ VÀO vì đó là lúc khách ký, đúng nghĩa "giờ cung cấp dịch vụ"
+          // hơn là lúc đóng buổi.
+          ctx.fillText(sheetStartTime(row.date), colX[base + 2] + COL_W[2] / 2, y + ROW_H / 2);
 
           // HLV đã dạy buổi này — HỌ TÊN ĐẦY ĐỦ. Có cột này thì hai dòng cùng
           // một ngày đọc ra ngay là hai buổi khác nhau, nhất là khi một buổi do
