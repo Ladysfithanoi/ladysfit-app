@@ -216,16 +216,20 @@ export function hasAnyEdit(o: SheetOverride): boolean {
 
 // ── Ngày giờ đúng như phiếu in ra ───────────────────────────────────────────
 //
-// Phiếu in cột "Ngày" theo phần ngày của chuỗi ISO, còn cột "Thời gian" theo
-// giờ Việt Nam. Ba hàm dưới đây là cách DUY NHẤT hai bên đọc và ghi hai cột đó,
-// nên ô người dùng gõ vào trình sửa in ra đúng bằng ô họ vừa gõ — chứ không lệch
-// một ngày hay bảy tiếng vì mỗi nơi tự quy đổi một kiểu.
+// Cả cột "Ngày" lẫn cột "Giờ vào" đều đọc theo GIỜ VIỆT NAM. Các hàm dưới đây là
+// cách DUY NHẤT hai bên đọc và ghi hai cột đó, nên ô người dùng gõ vào trình sửa
+// in ra đúng bằng ô họ vừa gõ — chứ không lệch một ngày hay bảy tiếng vì mỗi nơi
+// tự quy đổi một kiểu.
+//
+// Ngày phải quy ra giờ VN chứ không cắt thẳng chuỗi ISO (vốn là giờ UTC): buổi
+// tập 6h sáng — 158 buổi trên hệ thống — có mốc UTC rơi vào HÔM TRƯỚC, cắt chuỗi
+// là phiếu in lùi một ngày, và mọi phép xếp theo ngày cũng lệch theo.
 
 const VN_OFFSET_MS = 7 * 3600_000;
 
-/** Phần ngày (YYYY-MM-DD) đúng như cột "Ngày" của phiếu. */
+/** Ngày (YYYY-MM-DD) theo giờ VN, đúng như cột "Ngày" của phiếu. */
 export function sheetDay(iso: string): string {
-  return iso.slice(0, 10);
+  return new Date(new Date(iso).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /** "08:35" theo giờ VN. Chuỗi rỗng khi không có mốc giờ. */
@@ -235,11 +239,9 @@ export function sheetTime(iso: string | null): string {
   return `${String(vn.getUTCHours()).padStart(2, "0")}:${String(vn.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-/** Ô ngày của trình sửa (YYYY-MM-DD) → mốc ISO cho cột "Ngày". */
+/** Ô ngày của trình sửa (YYYY-MM-DD) → mốc ISO cho cột "Ngày": 00:00 giờ VN. */
 export function isoFromSheetDay(day: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  const t = Date.parse(`${day}T00:00:00.000Z`);
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
+  return isoFromSheetTime(day, "00:00");
 }
 
 /** Ô ngày + ô giờ VN của trình sửa → mốc ISO cho cột "Thời gian". */
@@ -255,16 +257,33 @@ export function isoFromSheetTime(day: string, time: string): string | null {
  * Mốc này chỉ ghi NGÀY, không ghi giờ?
  *
  * Ngày của một buổi app ghi chính là lúc khách ký check-in, nên nó luôn mang giờ
- * phút giây thật. Còn ô ngày của trình sửa (isoFromSheetDay) dựng ra đúng
- * T00:00:00.000Z — một mốc "chỉ có ngày". Phân biệt bằng chính con số đó: một
- * lần check-in thật rơi trúng 00:00:00.000 UTC tới từng mili giây là chuyện
- * không xảy ra.
+ * phút giây thật. Còn ô ngày của trình sửa (isoFromSheetDay) dựng ra đúng nửa
+ * đêm giờ VN — một mốc "chỉ có ngày". Phân biệt bằng chính con số đó: một lần
+ * check-in thật rơi trúng 00:00:00.000 tới từng mili giây là chuyện không xảy ra.
+ *
+ * Vế thứ hai nhận ra những dòng ghi tay LƯU TỪ TRƯỚC, hồi ô ngày còn dựng ra nửa
+ * đêm UTC. Bỏ vế đó đi thì các dòng cũ ấy bỗng in thêm giờ vào "07:00" — một con
+ * số không ai từng nhập.
  *
  * Dùng để biết có in được GIỜ BẮT ĐẦU lên phiếu hay không: buổi ghi tay mà FM
- * chưa điền giờ vào thì in "07:00" là bịa ra một con số không ai cung cấp.
+ * chưa điền giờ vào thì in giờ là bịa ra một con số không ai cung cấp.
  */
 export function isBareDay(iso: string): boolean {
-  return iso.endsWith("T00:00:00.000Z");
+  return iso === isoFromSheetTime(sheetDay(iso), "00:00")
+      || iso.endsWith("T00:00:00.000Z");
+}
+
+/**
+ * Hai ô "ngày" + "giờ vào" của trình sửa → đúng mốc mà dòng đó sẽ được lưu.
+ *
+ * Cũng chính là KHOÁ XẾP THỨ TỰ của dòng: trình sửa xếp bảng theo nó, phiếu in
+ * xếp theo "date" của từng dòng (mergeSheetRows) — cùng một con số, nên thứ tự
+ * nhìn thấy trên màn hình đúng bằng thứ tự in ra giấy.
+ *
+ * null = ô ngày còn trống hoặc gõ dở, chưa xếp được vào phiếu.
+ */
+export function sheetRowDate(day: string, timeIn: string): string | null {
+  return (timeIn ? isoFromSheetTime(day, timeIn) : null) ?? isoFromSheetDay(day);
 }
 
 /** Giờ bắt đầu buổi tập để in lên phiếu. Rỗng khi mốc đó chỉ có ngày. */

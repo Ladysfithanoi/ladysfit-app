@@ -10,6 +10,7 @@ import {
   mergeSheetRows,
   parseOverride,
   sanitizeOverride,
+  sheetDay,
   type SheetRow,
 } from "@/lib/checkin-sheet";
 import { ENROLLMENT_ID, ENROLLMENT_OF_LOG_JOIN } from "@/lib/session-enrollment";
@@ -27,10 +28,10 @@ import { ENROLLMENT_ID, ENROLLMENT_OF_LOG_JOIN } from "@/lib/session-enrollment"
  * một lớp phủ đặt lên trên, không đụng tới dữ liệu gốc (xem lib/checkin-sheet).
  */
 
-/** Ngày theo đúng phần ngày của chuỗi ISO — cùng cách phiếu in ra cột "Ngày",
- *  nên số cân không bao giờ rơi lệch một ngày so với dòng nó đứng cạnh. */
+/** Ngày theo giờ VN — cùng cách phiếu in ra cột "Ngày" (xem sheetDay), nên số
+ *  cân không bao giờ rơi lệch một ngày so với dòng nó đứng cạnh. */
 function ymd(d: Date | string): string {
-  return (typeof d === "string" ? new Date(d) : d).toISOString().slice(0, 10);
+  return sheetDay((typeof d === "string" ? new Date(d) : d).toISOString());
 }
 
 /**

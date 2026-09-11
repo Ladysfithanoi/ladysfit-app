@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, RotateCcw, Trash2, Loader2, Lock } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownWideNarrow, Plus, RotateCcw, Trash2, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   isoFromSheetDay,
   isoFromSheetTime,
   sheetDay,
+  sheetRowDate,
   sheetStartTime,
   sheetTime,
   type SheetOverride,
@@ -86,6 +87,25 @@ function newRowId(): string {
   return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Xếp bảng theo NGÀY tăng dần — buổi app ghi lẫn buổi điền tay chung một hàng.
+ *
+ * Xếp theo đúng mốc mà dòng sẽ được lưu (sheetRowDate), nên thứ tự trên màn hình
+ * đúng bằng thứ tự phiếu in ra: cùng một ngày thì buổi sáng đứng trên buổi chiều.
+ *
+ * Dòng chưa có ngày rơi xuống cuối chứ không biến mất — FM bấm "Thêm buổi ghi
+ * tay" rồi xoá trắng ô ngày thì dòng vẫn nằm đó chờ điền, không bị đẩy lên đầu
+ * bảng như khi so chuỗi rỗng.
+ */
+function sortRowsByDate(rows: DraftRow[]): DraftRow[] {
+  return [...rows].sort((a, b) => {
+    const x = sheetRowDate(a.day, a.timeIn);
+    const y = sheetRowDate(b.day, b.timeIn);
+    if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+    return x.localeCompare(y);
+  });
+}
+
 export function CheckinSheetEditor({
   rows, original, override, capacity, saving, onCancel, onSave,
 }: Props) {
@@ -101,7 +121,7 @@ export function CheckinSheetEditor({
   }));
 
   const [draft, setDraft] = useState<DraftRow[]>(() =>
-    rows.map((r) => {
+    sortRowsByDate(rows.map((r) => {
       const saved = r.manual
         ? override.extraRows.find((e) => e.id === r.id)?.weight
         : override.rows[r.id]?.weight;
@@ -117,17 +137,26 @@ export function CheckinSheetEditor({
         hasSignature: r.signatureUrl != null,
         hasPhoto: r.photoUrl != null,
       };
-    })
+    }))
   );
+
+  /** Lời nhắn thoáng qua sau khi bảng tự xếp lại — giống check-list nhân sự. */
+  const [sortNote, setSortNote] = useState("");
+
+  /**
+   * Xếp lại bảng. Gọi khi RỜI ô ngày/giờ chứ không gọi lúc đang gõ: ô ngày đổi
+   * giá trị theo từng ký tự, xếp ngay thì dòng nhảy đi mất khi người ta mới gõ
+   * được nửa con số.
+   */
+  function resort(note = "") {
+    setDraft((prev) => sortRowsByDate(prev));
+    if (!note) return;
+    setSortNote(note);
+    setTimeout(() => setSortNote(""), 2000);
+  }
 
   const manualCount = draft.filter((r) => r.logId == null).length;
   const full = draft.length >= capacity;
-
-  /** Dòng xếp theo ngày, đúng thứ tự sẽ in ra — sửa ngày là thấy nó nhảy chỗ. */
-  const ordered = useMemo(
-    () => [...draft].sort((a, b) => a.day.localeCompare(b.day)),
-    [draft]
-  );
 
   function patchRow(key: string, patch: Partial<DraftRow>) {
     setDraft((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -142,14 +171,14 @@ export function CheckinSheetEditor({
     );
     const base = earliest ? new Date(`${earliest}T00:00:00.000Z`) : new Date();
     base.setUTCDate(base.getUTCDate() - 1);
-    setDraft((prev) => [
+    setDraft((prev) => sortRowsByDate([
       ...prev,
       {
         key: newRowId(), logId: null,
         day: base.toISOString().slice(0, 10), timeIn: "", time: "",
         weight: "", autoWeight: null, ptName: "", hasSignature: false, hasPhoto: false,
       },
-    ]);
+    ]));
   }
 
   function removeRow(key: string) {
@@ -191,13 +220,12 @@ export function CheckinSheetEditor({
       if (!same) next.header[field] = typed;
     }
 
-    // Các dòng
-    for (const r of draft) {
+    // Các dòng — ghi theo đúng thứ tự đang thấy trên bảng.
+    for (const r of sortRowsByDate(draft)) {
       // Mốc "ngày" của dòng mang luôn GIỜ VÀO: phiếu in cột "Thời gian (vào – ra)"
       // từ chính mốc này. Bỏ trống giờ vào thì mốc chỉ còn ngày (T00:00:00.000Z)
       // và phiếu in mỗi giờ ra — xem isBareDay ở lib/checkin-sheet.
-      const dateIso = (r.timeIn ? isoFromSheetTime(r.day, r.timeIn) : null)
-                   ?? isoFromSheetDay(r.day);
+      const dateIso = sheetRowDate(r.day, r.timeIn);
       if (dateIso == null) continue; // không có ngày thì không xếp được vào phiếu
       const timeIso = r.time ? isoFromSheetTime(r.day, r.time) : null;
       const w = r.weight.trim() === "" ? null : Number(r.weight.replace(",", "."));
@@ -308,14 +336,27 @@ export function CheckinSheetEditor({
               {manualCount > 0 && ` · ${manualCount} buổi ghi tay`}
             </p>
           </div>
-          <button
-            onClick={addRow}
-            disabled={full}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Thêm buổi ghi tay
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {sortNote && (
+              <span className="text-[11px] font-bold text-[#f15b5c]">{sortNote}</span>
+            )}
+            <button
+              onClick={() => resort("Đã xếp theo ngày ↑")}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c]"
+              title="Xếp lại cả bảng theo ngày tăng dần"
+            >
+              <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+              Sắp xếp theo ngày
+            </button>
+            <button
+              onClick={addRow}
+              disabled={full}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c] disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Thêm buổi ghi tay
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -332,7 +373,7 @@ export function CheckinSheetEditor({
               </tr>
             </thead>
             <tbody>
-              {ordered.map((r, idx) => (
+              {draft.map((r, idx) => (
                 <tr key={r.key} className="border-b border-gray-50 last:border-b-0">
                   <td className="px-1 py-1.5 font-bold text-gray-400">{idx + 1}</td>
                   <td className="px-1 py-1.5">
@@ -340,6 +381,7 @@ export function CheckinSheetEditor({
                       type="date" className={INPUT}
                       value={r.day}
                       onChange={(e) => patchRow(r.key, { day: e.target.value })}
+                      onBlur={() => resort()}
                     />
                   </td>
                   <td className="px-1 py-1.5">
@@ -347,6 +389,7 @@ export function CheckinSheetEditor({
                       type="time" className={INPUT}
                       value={r.timeIn}
                       onChange={(e) => patchRow(r.key, { timeIn: e.target.value })}
+                      onBlur={() => resort()}
                     />
                   </td>
                   <td className="px-1 py-1.5">
@@ -416,7 +459,8 @@ export function CheckinSheetEditor({
           Buổi ghi tay không có chữ ký và ảnh — in ra là ô trống, nhìn phân biệt được với buổi
           app ghi. Buổi ghi tay KHÔNG tính vào “Số buổi PT” của bảng lương; muốn sửa số buổi
           tính lương thì sửa ở hồ sơ khách. Ô cân để trống = dùng số cân gần nhất trước buổi;
-          Phiếu in giờ VÀO và họ tên đầy đủ của HLV.
+          Phiếu in giờ VÀO và họ tên đầy đủ của HLV. Bảng luôn tự xếp theo ngày tăng dần —
+          buổi điền tay tự về đúng chỗ giữa các buổi app ghi ngay khi rời ô ngày.
           Buổi ghi tay thì FM tự điền tên HLV; buổi app ghi lấy đúng người đã ký, không sửa được.
         </p>
       </div>

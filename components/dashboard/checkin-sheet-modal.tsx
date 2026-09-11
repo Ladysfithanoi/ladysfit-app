@@ -7,6 +7,7 @@ import { CheckinSheetEditor } from "./checkin-sheet-editor";
 import {
   EMPTY_OVERRIDE,
   ROWS_PER_SHEET,
+  sheetDay,
   sheetStartTime,
   type SheetOverride,
   type SheetRow,
@@ -386,7 +387,7 @@ export function CheckinSheetModal({
         ctx.textAlign = "center";
         ctx.fillText(String(firstRow + i + 1 + b * ROWS_PER_BLOCK), colX[base] + COL_W[0] / 2, y + ROW_H / 2);
         if (row) {
-          ctx.fillText(fmtDate(row.date), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
+          ctx.fillText(fmtDate(sheetDay(row.date)), colX[base + 1] + COL_W[1] / 2, y + ROW_H / 2);
 
           // Cột "Giờ vào" — mốc khách ký check-in.
           //
@@ -473,7 +474,7 @@ export function CheckinSheetModal({
     // ── Thông tin hội viên ─────────────────────────────────────────────────
     const range =
       d.startDate || d.endDate
-        ? `${d.startDate ? fmtDate(d.startDate) : "..."} — ${d.endDate ? fmtDate(d.endDate) : "..."}`
+        ? `${d.startDate ? fmtDate(sheetDay(d.startDate)) : "..."} — ${d.endDate ? fmtDate(sheetDay(d.endDate)) : "..."}`
         : "";
     const info: [string, string][] = [
       ["1. HỌ TÊN HỘI VIÊN:", d.clientName],
