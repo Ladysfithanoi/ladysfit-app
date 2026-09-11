@@ -7,6 +7,7 @@ import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
 import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { formatDays } from "@/lib/work-days";
+import { chargeablePackageSql } from "@/lib/checkin-eligibility";
 import ExcelJS from "exceljs";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
@@ -140,13 +141,15 @@ export async function POST(req: Request) {
 
       // Lộ trình đã có buổi dạy tháng này vẫn hiện kể cả khi gói vừa đóng giữa
       // tháng (hết buổi / hết hạn), để file Excel khớp với tiền buổi dạy thực trả.
+      // Ngoài nhóm đó chỉ lấy gói CÒN CHẠY tính sống — cùng một luật với bảng
+      // trên màn hình, xem chargeablePackageSql.
       const enrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
         `SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName",
                 pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
                 c."fullName"
          FROM package_enrollments pe
          JOIN clients c ON c.id = pe."clientId"
-         WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
+         WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
          ORDER BY c."fullName" ASC, pe."createdAt" ASC`,
         r.userId, Array.from(logCount.keys())
       );

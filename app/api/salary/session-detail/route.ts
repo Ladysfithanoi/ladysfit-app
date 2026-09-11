@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
 import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
 import { canAccessSessionDetail } from "@/lib/salary-access";
+import { chargeablePackageSql } from "@/lib/checkin-eligibility";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -79,8 +80,12 @@ export async function GET(req: Request) {
     // tiền buổi dạy thực trả.
     const taughtEnrollmentIds = Array.from(logCountByEnrollment.keys());
 
-    // Hợp đồng ACTIVE của khách được GÁN cho PT này (hiện luôn cả khi tháng này
-    // chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
+    // Lộ trình CÒN CHẠY của khách được GÁN cho PT này (hiện luôn cả khi tháng
+    // này chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
+    //
+    // "Còn chạy" tính sống bằng chargeablePackageSql, KHÔNG đọc cờ status: gói
+    // đã hết hạn hoặc hết buổi mà lưới quét đêm chưa kịp đóng thì vẫn đang mang
+    // cờ ACTIVE, và phiếu lương sẽ liệt kê khách đã nghỉ như khách đang tập.
     const assignedEnrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
       `
       SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
@@ -88,7 +93,7 @@ export async function GET(req: Request) {
              c."fullName"
       FROM package_enrollments pe
       JOIN clients c ON c.id = pe."clientId"
-      WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
+      WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
       ORDER BY c."fullName" ASC, pe."createdAt" ASC
       `,
       ptId, taughtEnrollmentIds
@@ -108,7 +113,7 @@ export async function GET(req: Request) {
                  c."fullName"
           FROM package_enrollments pe
           JOIN clients c ON c.id = pe."clientId"
-          WHERE (pe.status = 'ACTIVE' OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
+          WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
           ORDER BY c."fullName" ASC, pe."createdAt" ASC
           `,
           substituteClientIds, taughtEnrollmentIds

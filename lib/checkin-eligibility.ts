@@ -41,6 +41,30 @@ export function isChargeablePackage(p: PackageForCheckIn, now: Date = new Date()
   return p.sessionsUsed < p.sessions;
 }
 
+/**
+ * isChargeablePackage viết bằng SQL — cho các truy vấn thô (bảng lương, file
+ * Excel) cần lọc ngay trong câu lệnh thay vì kéo cả bảng về lọc lại ở JS.
+ *
+ * PHẢI nằm cạnh isChargeablePackage và khớp từng vế với nó: đây là MỘT luật
+ * "lộ trình còn chạy", viết hai thứ tiếng, không phải hai luật.
+ *
+ * Vì sao phải tính sống thay vì đọc cờ trạng thái: bảng lương trước đây lọc thô
+ * `status = 'ACTIVE'`, tức là tin vào cờ do lưới quét đêm (closeFinishedPackages)
+ * đặt. Lưới quét lỡ một đêm — hoặc không chạy — là gói đã hết hạn/hết buổi vẫn
+ * kẹt ở ACTIVE và tiếp tục hiện trong phiếu lương như khách đang tập. Thực tế
+ * production có gói quá hạn 273 ngày mà cờ vẫn ACTIVE. Tính tại thời điểm đọc
+ * thì phiếu lương đúng ngay cả khi lưới quét chưa kịp đóng gói.
+ *
+ * endDate NULL = không đặt hạn → vẫn còn hiệu lực, đúng như bản JS.
+ */
+export function chargeablePackageSql(alias = "pe"): string {
+  return `(
+    ${alias}.status = 'ACTIVE'
+    AND (${alias}."endDate" IS NULL OR ${alias}."endDate" >= NOW())
+    AND ${alias}."sessionsUsed" < ${alias}.sessions
+  )`;
+}
+
 function fmtDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
