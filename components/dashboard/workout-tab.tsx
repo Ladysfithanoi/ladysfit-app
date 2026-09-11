@@ -162,23 +162,46 @@ function isCoveredLog(log: WorkoutLogRow, assignedPTId?: string | null): boolean
 
 /** Lộ trình của khách, đủ để mở phiếu check-in (cần id + tên gói) và để chặn
  *  check-in khi hết buổi/hết hạn. */
-export type PackageForWorkoutTab = PackageForCheckIn & { id: string; packageName: string };
+export type PackageForWorkoutTab = PackageForCheckIn & {
+  id: string;
+  packageName: string;
+  /** Cần để chọn đúng lộ trình phủ NGÀY TẬP — xem sheetTargetFor. */
+  startDate?: Date | string | null;
+};
 
-/** Lộ trình mà phiếu check-in của một buổi phải mở: chính lộ trình buổi đó đã trừ.
- *  Buổi cũ (ghi trước khi hệ thống lưu packageEnrollmentId) không biết mình thuộc
- *  lộ trình nào — lấy lộ trình mới nhất của khách, vì đó là tờ phiếu đang ký dở. */
+/**
+ * Lộ trình mà phiếu check-in của một buổi phải mở: chính lộ trình buổi đó đã trừ.
+ *
+ * Chỉ tin log.packageEnrollmentId khi khách VẪN CÒN lộ trình mang id đó. Cột này
+ * không có khoá ngoại sang package_enrollments, nên xoá một gói là mọi buổi đã
+ * dạy trên gói ấy còn trỏ vào một id không còn ai — bấm "Phiếu check-in" ở buổi
+ * đó thì mở ra "Không tìm thấy lộ trình". Không nối được thì suy ra như server:
+ * lộ trình đang chạy tại NGÀY TẬP, hết thì lấy lộ trình mới nhất — đúng luật ở
+ * lib/session-enrollment.ts, để nút này và tờ phiếu không chỉ vào hai nơi khác
+ * nhau.
+ */
 function sheetTargetFor(
   log: WorkoutLogRow,
   packages?: PackageForWorkoutTab[]
 ): { id: string; name: string } | null {
-  if (log.packageEnrollmentId) {
-    const p = packages?.find((x) => x.id === log.packageEnrollmentId);
-    return { id: log.packageEnrollmentId, name: p?.packageName ?? "lo-trinh" };
-  }
-  const latest = [...(packages ?? [])].sort(
-    (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-  )[0];
-  return latest ? { id: latest.id, name: latest.packageName } : null;
+  const charged = log.packageEnrollmentId
+    ? packages?.find((x) => x.id === log.packageEnrollmentId)
+    : undefined;
+  if (charged) return { id: charged.id, name: charged.packageName };
+
+  const day = new Date(log.sessionDate).getTime();
+  const covers = (p: PackageForWorkoutTab) => {
+    const start = p.startDate ? new Date(p.startDate).getTime() : null;
+    if (start == null || start > day) return false;
+    const end = p.endDate ? new Date(p.endDate).getTime() : null;
+    return end == null || end >= day;
+  };
+  const guess = [...(packages ?? [])].sort((a, b) => {
+    const byCover = Number(covers(b)) - Number(covers(a));
+    if (byCover !== 0) return byCover;
+    return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+  })[0];
+  return guess ? { id: guess.id, name: guess.packageName } : null;
 }
 
 /** Tóm tắt buổi đã tập gần nhất, hiện ngay dưới giáo án: ngày, thời lượng, AI dạy

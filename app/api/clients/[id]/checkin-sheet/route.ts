@@ -11,6 +11,7 @@ import {
   sanitizeOverride,
   type SheetRow,
 } from "@/lib/checkin-sheet";
+import { ENROLLMENT_ID, ENROLLMENT_OF_LOG_JOIN } from "@/lib/session-enrollment";
 
 /**
  * Dữ liệu của PHIẾU CHECK-IN BUỔI TẬP — bản số của tờ phụ lục hợp đồng ký tay.
@@ -104,29 +105,42 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     select: { user: { select: { name: true, email: true } } },
   });
 
-  const logs = await prisma.workoutLog.findMany({
-    // Chỉ buổi ĐÃ HOÀN THÀNH mới lên phiếu. Buổi bị huỷ có thể vẫn còn checkOutAt
-    // (PT ký muộn quá mốc 2 tiếng — xem route check-out), mà buổi huỷ thì không
-    // phải buổi dạy hợp lệ, không được nằm trên phụ lục hợp đồng.
-    where: {
-      clientId: params.id,
-      packageEnrollmentId: enrollmentId,
-      status: "COMPLETED",
-      checkOutAt: { not: null },
-    },
-    orderBy: { sessionDate: "asc" },
-    select: {
-      id: true,
-      sessionDate: true,
-      checkOutAt: true,
-      // Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN của khách. Khách không ký
-      // check-out nữa; buổi cũ có signatureUrl thì vẫn lấy chữ ký đó cho phiếu.
-      checkInSignatureUrl: true,
-      signatureUrl: true,
-      checkOutPhotoUrl: true,
-    },
-    take: SHEET_TOTAL_ROWS,
-  });
+  // Buổi của lộ trình này.
+  //
+  // Lọc theo lộ trình ĐÃ SUY RA (lib/session-enrollment) chứ không đọc thô
+  // wl."packageEnrollmentId". Đọc thô thì hai loại buổi rơi mất khỏi phiếu dù
+  // có đủ chữ ký lẫn ảnh: buổi ghi từ trước khi có cột đó, và buổi trỏ vào một
+  // lộ trình đã bị xoá (PT xoá gói nhập nhầm rồi tạo gói mới — buổi đã dạy kẹt
+  // lại ở id cũ). Dùng chung đúng một luật với bảng lương, nên buổi nào được
+  // tính tiền thì buổi đó có mặt trên phiếu.
+  //
+  // Chỉ buổi ĐÃ HOÀN THÀNH mới lên phiếu. Buổi bị huỷ có thể vẫn còn checkOutAt
+  // (PT ký muộn quá mốc 2 tiếng — xem route check-out), mà buổi huỷ thì không
+  // phải buổi dạy hợp lệ, không được nằm trên phụ lục hợp đồng.
+  const logs = await prisma.$queryRawUnsafe<{
+    id: string;
+    sessionDate: Date;
+    checkOutAt: Date | null;
+    // Chữ ký đánh dấu buổi tập là chữ ký CHECK-IN của khách. Khách không ký
+    // check-out nữa; buổi cũ có signatureUrl thì vẫn lấy chữ ký đó cho phiếu.
+    checkInSignatureUrl: string | null;
+    signatureUrl: string | null;
+    checkOutPhotoUrl: string | null;
+  }[]>(
+    `
+    SELECT wl.id, wl."sessionDate", wl."checkOutAt",
+           wl."checkInSignatureUrl", wl."signatureUrl", wl."checkOutPhotoUrl"
+    FROM workout_logs wl
+    ${ENROLLMENT_OF_LOG_JOIN}
+    WHERE wl."clientId" = $1
+      AND wl.status = 'COMPLETED'
+      AND wl."checkOutAt" IS NOT NULL
+      AND ${ENROLLMENT_ID} = $2
+    ORDER BY wl."sessionDate" ASC
+    LIMIT ${SHEET_TOTAL_ROWS}
+    `,
+    params.id, enrollmentId
+  );
 
   // Nhật ký cân nặng của khách — nguồn duy nhất cho cột "Cân nặng" của phiếu.
   const weightLogs = await prisma.weightLog.findMany({

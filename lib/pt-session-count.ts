@@ -1,4 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import {
+  ENROLLMENT_CONTRACT_TYPE,
+  ENROLLMENT_ID,
+  ENROLLMENT_OF_LOG_JOIN,
+  ENROLLMENT_PACKAGE_NAME,
+  TAUGHT_SESSION_WHERE,
+} from "@/lib/session-enrollment";
 
 /**
  * Đếm "Số buổi PT" — buổi dạy được tính lương cho PT.
@@ -25,7 +32,9 @@ import { prisma } from "@/lib/prisma";
  * ghi lúc check-in). Cách cũ lấy gói ACTIVE mới nhất của khách nên sai cả hai
  * chiều: khách đã học xong gói (không còn gói ACTIVE) bị rơi vào nhánh mặc định
  * 100k, còn buổi dạy trên gói L1 cũ mà khách vừa lên gói L3 thì bị trả theo L3.
- * Log cũ chưa có packageEnrollmentId thì suy ra gói đang chạy tại ngày tập.
+ * Buổi chưa nối được vào lộ trình nào còn tồn tại thì suy ra gói đang chạy tại
+ * ngày tập — luật suy ra viết một lần ở lib/session-enrollment.ts, dùng chung
+ * với phiếu check-in nên hai bên không thể thấy hai tập buổi khác nhau.
  */
 
 export type TaughtSessionRow = {
@@ -49,35 +58,15 @@ export async function getTaughtSessions(
     SELECT
       wl."createdById" AS "ptId",
       wl."clientId"    AS "clientId",
-      COALESCE(pe_charged.id, pe_guess.id)                                           AS "enrollmentId",
-      COALESCE(pe_charged."packageName", pe_guess."packageName", '')                 AS "packageName",
-      COALESCE(pe_charged."contractType"::text, pe_guess."contractType", 'NORMAL')   AS "contractType"
+      ${ENROLLMENT_ID}            AS "enrollmentId",
+      ${ENROLLMENT_PACKAGE_NAME}  AS "packageName",
+      ${ENROLLMENT_CONTRACT_TYPE} AS "contractType"
     FROM workout_logs wl
-    -- Gói mà buổi này đã trừ (ghi lúc check-in) — nguồn đúng nhất cho đơn giá.
-    LEFT JOIN package_enrollments pe_charged
-           ON pe_charged.id = wl."packageEnrollmentId"
-    -- Log cũ chưa ghi packageEnrollmentId: lấy gói đang chạy tại ngày tập,
-    -- không có thì lấy gói gần nhất của khách.
-    LEFT JOIN LATERAL (
-      SELECT p.id, p."packageName", p."contractType"::text AS "contractType"
-      FROM package_enrollments p
-      WHERE p."clientId" = wl."clientId"
-      ORDER BY
-        (p."startDate" IS NOT NULL
-         AND p."startDate" <= wl."sessionDate"
-         AND (p."endDate" IS NULL OR p."endDate" >= wl."sessionDate")) DESC,
-        p."createdAt" DESC
-      LIMIT 1
-    ) pe_guess ON wl."packageEnrollmentId" IS NULL
+    ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."createdById" = ANY($1::text[])
-      AND wl.status = 'COMPLETED'
-      AND (
-        (wl."checkOutPhotoUrl" IS NOT NULL AND wl."checkOutPhotoUrl" <> '')
-        OR (wl."signatureUrl" IS NOT NULL AND wl."signatureUrl" <> '')
-      )
       AND wl."sessionDate" >= $2
       AND wl."sessionDate" <  $3
-      AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)
+      AND ${TAUGHT_SESSION_WHERE}
     `,
     ptIds, gte, lt,
   );
@@ -115,27 +104,11 @@ export function countByEnrollment(rows: TaughtSessionRow[]): Map<string, number>
 export async function getEnrollmentTaughtCounts(clientId: string): Promise<Record<string, number>> {
   const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string | null; n: number }[]>(
     `
-    SELECT COALESCE(pe_charged.id, pe_guess.id) AS "enrollmentId", COUNT(*)::int AS n
+    SELECT ${ENROLLMENT_ID} AS "enrollmentId", COUNT(*)::int AS n
     FROM workout_logs wl
-    LEFT JOIN package_enrollments pe_charged ON pe_charged.id = wl."packageEnrollmentId"
-    LEFT JOIN LATERAL (
-      SELECT p.id
-      FROM package_enrollments p
-      WHERE p."clientId" = wl."clientId"
-      ORDER BY
-        (p."startDate" IS NOT NULL
-         AND p."startDate" <= wl."sessionDate"
-         AND (p."endDate" IS NULL OR p."endDate" >= wl."sessionDate")) DESC,
-        p."createdAt" DESC
-      LIMIT 1
-    ) pe_guess ON wl."packageEnrollmentId" IS NULL
+    ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."clientId" = $1
-      AND wl.status = 'COMPLETED'
-      AND (
-        (wl."checkOutPhotoUrl" IS NOT NULL AND wl."checkOutPhotoUrl" <> '')
-        OR (wl."signatureUrl" IS NOT NULL AND wl."signatureUrl" <> '')
-      )
-      AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)
+      AND ${TAUGHT_SESSION_WHERE}
     GROUP BY 1
     `,
     clientId,
