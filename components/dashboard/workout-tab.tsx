@@ -566,6 +566,11 @@ function ProgramView({
   const [showWeekPicker, setShowWeekPicker] = useState(false);
   const [weekSearch, setWeekSearch] = useState("");
 
+  // Tờ phiếu check-in tự mở ngay sau khi PT bấm "Dùng ảnh này" để đóng buổi:
+  // buổi vừa ký xong là tờ phiếu vừa có thêm một dòng, PT soát luôn tại chỗ
+  // thay vì phải tự đi tìm nút "Phiếu check-in". null = không mở.
+  const [autoSheet, setAutoSheet] = useState<{ id: string; name: string } | null>(null);
+
   const [phases, setPhases] = useState<PhaseData[]>([]);
   useEffect(() => {
     fetch("/api/admin/phases")
@@ -1672,7 +1677,17 @@ function ProgramView({
                             prevWeekLogs={effectivePrevWeekLogs}
                             inheritedPrev={inheritedPrev}
                             onUpdated={(log) => onLogUpdated(log)}
-                            onCompleted={(log, pkg) => onLogUpdated(log, pkg)}
+                            onCompleted={(log, pkg, photoCheckOut) => {
+                              onLogUpdated(log, pkg);
+                              // Chỉ đường "chụp ảnh cùng khách" mới bật phiếu.
+                              // Buổi khách tự xác nhận trên app của họ thì PT
+                              // không đứng trước màn hình, mở phiếu vô nghĩa.
+                              if (!photoCheckOut) return;
+                              const target =
+                                sheetTargetFor(log, packages)
+                                ?? (pkg ? { id: pkg.id, name: pkg.packageName } : null);
+                              if (target) setAutoSheet(target);
+                            }}
                             onVoided={(log) => onLogUpdated(log)}
                             onDeleted={(logId) => onLogDeleted(logId)}
                           />
@@ -1793,6 +1808,18 @@ function ProgramView({
         <div className="px-5 pb-4">
           <p className="text-xs text-[#f15b5c] font-medium">{error}</p>
         </div>
+      )}
+
+      {/* Phiếu check-in bật lên ngay sau khi đóng buổi bằng ảnh. Dựng ở gốc
+          component chứ không nằm trong khối buổi đang tập: ký xong là khối đó
+          đổi sang trạng thái khác, modal đặt trong đó sẽ tắt ngay khi vừa hiện. */}
+      {autoSheet && (
+        <CheckinSheetModal
+          clientId={clientId}
+          enrollmentId={autoSheet.id}
+          packageName={autoSheet.name}
+          onClose={() => setAutoSheet(null)}
+        />
       )}
 
       {/* ── Edit Program Metadata Modal ── */}

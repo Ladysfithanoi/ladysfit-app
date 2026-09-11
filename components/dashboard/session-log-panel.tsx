@@ -654,7 +654,14 @@ export function LiveSessionPanel({
   /** Tuần đầu của giai đoạn mới: gợi ý/điền sẵn từ thông số kế thừa của GĐ trước. */
   inheritedPrev?: boolean;
   onUpdated: (log: WorkoutLogRow) => void;
-  onCompleted: (log: WorkoutLogRow, pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
+  /** `photoCheckOut` = buổi vừa đóng bằng ảnh chụp cùng khách ngay tại đây
+   *  (khác với buổi khách tự xác nhận trên app của họ). Nơi gọi dùng nó để mở
+   *  luôn phiếu check-in cho PT soát. */
+  onCompleted: (
+    log: WorkoutLogRow,
+    pkg: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null,
+    photoCheckOut?: boolean
+  ) => void;
   onVoided: (log: WorkoutLogRow) => void;
   onDeleted: (logId: string) => void;
 }) {
@@ -991,7 +998,7 @@ export function LiveSessionPanel({
         // Session now waits for the client to confirm on their own app.
         onUpdated(data as WorkoutLogRow);
       } else {
-        onCompleted(data as WorkoutLogRow, data.packageUpdate ?? null);
+        onCompleted(data as WorkoutLogRow, data.packageUpdate ?? null, !!checkOutPhotoUrl);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
