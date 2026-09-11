@@ -1,6 +1,57 @@
 const GEMINI_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+/**
+ * GEMINI_API_KEY (hoặc GEMINI_API_KEYS) có thể chứa NHIỀU key ngăn cách bằng dấu
+ * phẩy để xoay vòng khi một key dính 429. Mọi chỗ gọi Gemini phải lấy key qua
+ * đây — đọc thẳng process.env.GEMINI_API_KEY rồi nhét vào URL sẽ gửi cả chuỗi
+ * "key1,key2,..." lên Google và nhận lại lỗi 400 API_KEY_INVALID.
+ */
+export function getGeminiKeys(): string[] {
+  const raw = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  return raw
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Một đường duy nhất để gọi Gemini: gặp 503 thì đợi rồi thử lại cùng key, gặp
+ * 429 thì đổi sang key kế tiếp. Ném lỗi nếu chưa cấu hình key nào.
+ */
+export async function callGemini(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any,
+  keys: string[] = getGeminiKeys()
+): Promise<Response> {
+  if (keys.length === 0) throw new Error("GEMINI_API_KEY not set");
+
+  const startIdx = Math.floor(Math.random() * keys.length);
+  let last: Response | null = null;
+
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[(startIdx + attempt) % keys.length];
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`${GEMINI_URL}?key=${encodeURIComponent(key)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.status === 503 && i < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+        continue;
+      }
+      if (res.status === 429) {
+        last = res;
+        break; // đổi key
+      }
+      return res;
+    }
+  }
+
+  return last ?? new Response(null, { status: 429 });
+}
+
 export type MealItem = {
   mealName: string;
   name: string;
@@ -18,13 +69,6 @@ export type FoodScanResult = {
   fat: number;
   carbs: number;
 };
-
-function apiUrl() {
-  const key = process.env.GEMINI_API_KEY;
-  console.log("Gemini API key exists:", !!key);
-  if (!key) throw new Error("GEMINI_API_KEY not set");
-  return `${GEMINI_URL}?key=${key}`;
-}
 
 function parseJsonFromText(text: string, bracket: "[" | "{"): unknown {
   // Method 1: strip markdown code fences, then parse
@@ -99,17 +143,13 @@ TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không th�
   }
 ]`;
 
-  const res = await fetch(apiUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.9,
-        maxOutputTokens: 2048,
-        responseMimeType: "application/json",
-      },
-    }),
+  const res = await callGemini({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.9,
+      maxOutputTokens: 2048,
+      responseMimeType: "application/json",
+    },
   });
 
   if (!res.ok) {
@@ -118,7 +158,6 @@ TRẢ VỀ DUY NHẤT một mảng JSON với format CHÍNH XÁC sau, không th�
   }
 
   const data = await res.json();
-  console.log("Gemini raw response:", JSON.stringify(data).slice(0, 500));
 
   const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
@@ -149,24 +188,20 @@ export async function analyzeFoodImage(
 TRẢ VỀ DUY NHẤT JSON sau, không thêm bất kỳ ký tự hay giải thích nào:
 {"name":"tên món (tiếng Việt)","qty":"khẩu phần ước tính","calories":0,"protein":0,"fat":0,"carbs":0}`;
 
-  const res = await fetch(apiUrl(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mimeType, data: base64Image } },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 512,
-        responseMimeType: "application/json",
+  const res = await callGemini({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64Image } },
+        ],
       },
-    }),
+    ],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 512,
+      responseMimeType: "application/json",
+    },
   });
 
   if (!res.ok) {
@@ -175,7 +210,6 @@ TRẢ VỀ DUY NHẤT JSON sau, không thêm bất kỳ ký tự hay giải thí
   }
 
   const data = await res.json();
-  console.log("Gemini scan response:", JSON.stringify(data).slice(0, 300));
 
   const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   return parseJsonFromText(text, "{") as FoodScanResult;

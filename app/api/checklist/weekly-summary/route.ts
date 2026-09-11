@@ -3,40 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDaysISO, mondayOf, todayVN, weekLabel, VN_DAY_NAMES } from "@/lib/week";
+import { callGemini, getGeminiKeys } from "@/lib/gemini";
 
 // POST /api/checklist/weekly-summary  { weekStart }
 // Đọc toàn bộ check-list 7 ngày của chính người đang đăng nhập rồi nhờ Gemini
 // (dùng chung GEMINI_API_KEY/GEMINI_API_KEYS với phần dinh dưỡng) viết sẵn bản
 // nháp báo cáo tuần. Kết quả trả về để nhân sự sửa lại trước khi lưu/gửi FM.
 
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
 function toUTC(dateStr: string): Date {
   return new Date(dateStr + "T00:00:00.000Z");
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function callGemini(keys: string[], payload: any): Promise<Response> {
-  const startIdx = Math.floor(Math.random() * keys.length);
-  let last: Response | null = null;
-  for (let attempt = 0; attempt < keys.length; attempt++) {
-    const key = keys[(startIdx + attempt) % keys.length];
-    for (let i = 0; i < 3; i++) {
-      const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.status === 503 && i < 2) {
-        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
-        continue;
-      }
-      if (res.status === 429) { last = res; break; }
-      return res;
-    }
-  }
-  return last ?? new Response(null, { status: 429 });
 }
 
 const SECTION_LABELS: [string, string][] = [
@@ -242,20 +217,19 @@ mỗi phần cách nhau một dòng trống, mỗi ý là một gạch đầu d�
 TRẢ VỀ DUY NHẤT một object JSON đúng format sau, không thêm chữ nào khác:
 {"content": "toàn bộ báo cáo, dùng \\n để xuống dòng"}`;
 
-  const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
-  const apiKeys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
+  const apiKeys = getGeminiKeys();
   if (apiKeys.length === 0) {
     return NextResponse.json({ error: "Chưa cấu hình GEMINI_API_KEY" }, { status: 500 });
   }
 
-  const res = await callGemini(apiKeys, {
+  const res = await callGemini({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.4,
       maxOutputTokens: 2048,
       responseMimeType: "application/json",
     },
-  });
+  }, apiKeys);
 
   if (!res.ok) {
     return NextResponse.json(

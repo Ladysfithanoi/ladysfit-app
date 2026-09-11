@@ -1,41 +1,7 @@
 import { NextResponse } from "next/server";
 import { getNutritionActor } from "@/lib/nutrition-auth";
 import { prisma } from "@/lib/prisma";
-
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
-async function callGeminiOnce(
-  apiKey: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any
-): Promise<Response> {
-  for (let i = 0; i < 3; i++) {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.status !== 503 || i === 2) return res;
-    await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
-  }
-  throw new Error("Retry loop exited unexpectedly");
-}
-
-async function callGeminiWithKeyRotation(
-  keys: string[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any
-): Promise<Response> {
-  const startIdx = Math.floor(Math.random() * keys.length);
-  for (let attempt = 0; attempt < keys.length; attempt++) {
-    const key = keys[(startIdx + attempt) % keys.length];
-    const res = await callGeminiOnce(key, payload);
-    if (res.status !== 429) return res;
-    if (attempt < keys.length - 1) continue;
-  }
-  throw new Error("All API keys exhausted");
-}
+import { callGemini, getGeminiKeys } from "@/lib/gemini";
 
 type Keyword = { text: string; accented: boolean };
 
@@ -235,9 +201,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thông tin quá dài" }, { status: 400 });
   }
 
-  const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
-  const apiKeys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
-  if (apiKeys.length === 0) return NextResponse.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
+  const apiKeys = getGeminiKeys();
+  if (apiKeys.length === 0) return NextResponse.json({ error: "Chưa cấu hình GEMINI_API_KEY" }, { status: 500 });
 
   // Lấy toàn bộ database thực phẩm từ Supabase
   const dbFoods = await prisma.food.findMany({ orderBy: { name: "asc" } });
@@ -562,7 +527,7 @@ Trả về DUY NHẤT một mảng JSON có ĐÚNG ${mealsNum} phần tử, mỗ
     generationConfig: genConfig(mealsNum, 0.9),
   };
 
-  const geminiRes = await callGeminiWithKeyRotation(apiKeys, geminiPayload);
+  const geminiRes = await callGemini(geminiPayload, apiKeys);
 
   if (!geminiRes.ok) {
     if (geminiRes.status === 503 || geminiRes.status === 429) {
@@ -666,7 +631,7 @@ BẮT BUỘC: Mảng JSON phải có ĐÚNG ${mealsNum} phần tử (${mealsNum}
       generationConfig: genConfig(mealsNum, 0.6),
     };
     try {
-      const rescueRes = await callGeminiWithKeyRotation(apiKeys, rescuePayload);
+      const rescueRes = await callGemini(rescuePayload, apiKeys);
       if (rescueRes.ok) {
         const rescueData = await rescueRes.json();
         const rescueMeals = parseRaw(rescueData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
@@ -720,11 +685,14 @@ Trả về DUY NHẤT mảng JSON có ĐÚNG ${missing} phần tử — chỉ ${
 Đặt "mealName" tiếp nối đúng thứ tự (ví dụ "Bữa ${meals.length + 1} - Tối").`;
 
     try {
-      const topUpRes = await callGeminiWithKeyRotation(apiKeys, {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts: [{ text: topUpPrompt }] }],
-        generationConfig: genConfig(missing, 0.7),
-      });
+      const topUpRes = await callGemini(
+        {
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: "user", parts: [{ text: topUpPrompt }] }],
+          generationConfig: genConfig(missing, 0.7),
+        },
+        apiKeys
+      );
       if (!topUpRes.ok) break;
       const topUpData = await topUpRes.json();
       const extra = parseRaw(topUpData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");

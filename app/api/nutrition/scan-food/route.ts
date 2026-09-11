@@ -1,31 +1,10 @@
 import { NextResponse } from "next/server";
 import { getNutritionActor } from "@/lib/nutrition-auth";
-
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+import { callGemini, getGeminiKeys } from "@/lib/gemini";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 // ~5 MB base64 ceiling (base64 is ~4/3 the raw size, so 5 MB raw ≈ 6.7 MB base64)
 const MAX_BASE64_LENGTH = 7_000_000;
-
-async function callGeminiWithRetry(
-  url: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any,
-  maxRetries = 3
-): Promise<Response> {
-  for (let i = 0; i < maxRetries; i++) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.status !== 503 || i === maxRetries - 1) return res;
-    await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
-  }
-  // unreachable but satisfies TypeScript
-  throw new Error("Retry loop exited unexpectedly");
-}
 
 export async function POST(req: Request) {
   // Dùng chung cho dashboard lẫn cổng khách — khách tự soạn thực đơn được.
@@ -54,8 +33,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Image too large (max 5 MB)" }, { status: 400 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set" }, { status: 500 });
+  // Key lấy qua lib/gemini — biến môi trường có thể chứa nhiều key ngăn bởi dấu phẩy.
+  const apiKeys = getGeminiKeys();
+  if (apiKeys.length === 0) {
+    return NextResponse.json({ error: "Chưa cấu hình GEMINI_API_KEY" }, { status: 500 });
+  }
 
   const prompt = `Phân tích ảnh món ăn, ước tính dinh dưỡng.
 TRẢ VỀ DUY NHẤT một JSON object với format:
@@ -77,14 +59,18 @@ Không thêm bất kỳ text nào khác.`;
     },
   };
 
-  const geminiRes = await callGeminiWithRetry(`${GEMINI_URL}?key=${apiKey}`, payload);
+  const geminiRes = await callGemini(payload, apiKeys);
 
   if (!geminiRes.ok) {
     if (geminiRes.status === 503) {
       return NextResponse.json({ error: "AI đang bận, vui lòng thử lại sau vài giây 🔄" }, { status: 503 });
     }
-    const errText = await geminiRes.text();
-    return NextResponse.json({ error: `Gemini error ${geminiRes.status}: ${errText}` }, { status: 500 });
+    if (geminiRes.status === 429) {
+      return NextResponse.json({ error: "AI đang quá tải, thử lại sau ít phút" }, { status: 429 });
+    }
+    // Lỗi cấu hình (key sai, hết hạn…) chỉ ghi log — khách không cần thấy JSON của Google.
+    console.error("Gemini scan-food error", geminiRes.status, await geminiRes.text());
+    return NextResponse.json({ error: "Quét ảnh thất bại, vui lòng thử lại" }, { status: 502 });
   }
 
   const data = await geminiRes.json();
