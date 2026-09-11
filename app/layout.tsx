@@ -14,10 +14,10 @@ export const metadata: Metadata = {
   title: "Ladysfit - Quản lý Phòng Gym",
   description: "Hệ thống quản lý phòng gym Ladysfit",
   manifest: "/manifest.webmanifest",
-  // Cài vào iPhone thì mở toàn màn hình như app, tên dưới icon là "Ladysfit".
+  // Cài vào iPhone thì mở toàn màn hình như app, tên dưới icon là "LOTS".
   appleWebApp: {
     capable: true,
-    title: "Ladysfit",
+    title: "LOTS",
     statusBarStyle: "default",
   },
   icons: {

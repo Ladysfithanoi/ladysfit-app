@@ -13,7 +13,7 @@ export function GET() {
   const manifest = {
     id: "/my",
     name: "Ladysfit — Trang của tôi",
-    short_name: "Ladysfit",
+    short_name: "LOTS",
     description:
       "Giáo án, dinh dưỡng và cân nặng của bạn tại Ladysfit.",
     start_url: "/my",

@@ -11,7 +11,7 @@ export function GET() {
   const manifest = {
     id: "/",
     name: "Ladysfit — Quản lý Phòng Gym",
-    short_name: "Ladysfit",
+    short_name: "LOTS",
     description:
       "Hệ thống quản lý phòng gym Ladysfit: giáo án, dinh dưỡng, cân nặng và lịch tập.",
     // "/" mở ra cửa PT: còn phiên thì vào /dashboard, chưa thì /login
