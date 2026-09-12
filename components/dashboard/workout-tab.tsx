@@ -792,6 +792,12 @@ function ProgramView({
         .filter((x): x is { i: number; log: WorkoutLogRow } => !!x.log && isCoveredLog(x.log, assignedPTId))
     : [];
   const todaySessionIdx = nextSessionIndex(currentWeekData, workoutLogs);
+  // Ô buổi đã có người ký check-in thì không xoá được — xoá nó là cuốn theo cả chữ
+  // ký và ảnh check-out (cascade). Khoá nút ngay tại đây cho PT khỏi bấm vào rồi
+  // mới nhận lỗi; server vẫn là chốt chặn thật.
+  const activeSessionLogCount = currentWeekData?.sessions[activeSessionIdx]
+    ? workoutLogs.filter((l) => l.sessionId === currentWeekData.sessions[activeSessionIdx].id).length
+    : 0;
   const editSelectedPhase = phases.find((p) => p.id === editPhaseId) ?? null;
   const editSessionTypeOptions = editSelectedPhase?.sessionTypes ?? [];
 
@@ -1541,8 +1547,13 @@ function ProgramView({
                 {!editMode && !isReadOnly && currentWeekData.sessions.length > 1 && (
                   <button
                     onClick={() => { setConfirmDeleteSession(true); setDeleteSessionError(""); }}
-                    title="Xóa buổi đang chọn khỏi tuần này"
-                    className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                    disabled={activeSessionLogCount > 0}
+                    title={
+                      activeSessionLogCount > 0
+                        ? "Khách đã ký check-in buổi này — xoá nhật ký của buổi trước thì mới xoá được ô buổi"
+                        : "Xóa buổi đang chọn khỏi tuần này"
+                    }
+                    className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300 disabled:hover:bg-transparent"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Xóa buổi</span>
@@ -2060,12 +2071,13 @@ function ProgramView({
                 <p className="text-sm font-extrabold text-gray-900">
                   Xóa {sessionLabel(activeSessionIdx)}?
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">Hành động này không thể hoàn tác</p>
+                <p className="text-xs text-gray-500 mt-0.5">Khôi phục được trong Thùng rác</p>
               </div>
             </div>
             <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-              Buổi tập này (cùng các bài tập và nhật ký đã ghi của nó trong Tuần {currentWeekData.weekNumber}) sẽ bị xóa.
-              Các buổi đã hoàn thành sẽ được <span className="font-bold text-red-600">trừ khỏi số buổi đã tính</span>.
+              Ô buổi này và các bài tập trong nó sẽ bị xoá khỏi Tuần {currentWeekData.weekNumber}.
+              Khách <span className="font-bold">chưa ký check-in</span> buổi này, nên không có nhật ký, chữ ký
+              hay ảnh nào mất đi.
             </p>
             {deleteSessionError && <p className="text-xs text-red-500 font-medium">{deleteSessionError}</p>}
             <div className="flex gap-3">
