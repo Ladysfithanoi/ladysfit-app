@@ -18,29 +18,31 @@
  * Chạy lại lần hai thì không còn món nào để thêm.
  */
 import { PrismaClient } from "@prisma/client";
-import { COOKED_RICE_FOODS } from "../lib/foods-cooked-rice";
+import { COOKED_RICE_FOODS, MISSING_GRAIN_BASES } from "../lib/foods-cooked-rice";
 
 const prisma = new PrismaClient({ log: ["error"] });
 const apply = process.argv.includes("--apply");
 
 async function main() {
-  const names = COOKED_RICE_FOODS.map((f) => f.name);
+  // Cơm nấu chín, kèm các nguyên liệu nền mà kho còn thiếu hẳn (quinoa, yến mạch).
+  const wanted = [...COOKED_RICE_FOODS, ...MISSING_GRAIN_BASES];
+  const names = wanted.map((f) => f.name);
   const existing = await prisma.food.findMany({
     where:  { name: { in: names } },
     select: { name: true },
   });
   const taken = existing.map((e) => e.name);
 
-  const toAdd = COOKED_RICE_FOODS.filter((f) => !taken.includes(f.name));
+  const toAdd = wanted.filter((f) => !taken.includes(f.name));
 
-  console.log(`Món cơm nấu chín trong danh sách : ${COOKED_RICE_FOODS.length}`);
+  console.log(`Món trong danh sách              : ${wanted.length}`);
   console.log(`Đã có sẵn trong kho              : ${taken.length}`);
   console.log(`Sẽ thêm                          : ${toAdd.length}\n`);
 
   for (const f of toAdd) {
     console.log(
       `  ${f.name.padEnd(42)} ${String(f.calories).padStart(4)} kcal · ` +
-      `P ${f.protein} · C ${f.carbs} · F ${f.fat}  / ${f.weight_g}g  (${f.category})`
+      `P ${f.protein} · C ${f.carbs} · F ${f.fat}  / ${f.weight_g}g  (${f.category ?? "nguyên liệu"})`
     );
   }
   if (taken.length > 0) console.log(`\n  (bỏ qua vì đã có: ${taken.join(", ")})`);

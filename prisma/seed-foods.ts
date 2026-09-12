@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { FOODS } from "../lib/foods-data";
-import { COOKED_RICE_FOODS } from "../lib/foods-cooked-rice";
+import { COOKED_RICE_FOODS, MISSING_GRAIN_BASES } from "../lib/foods-cooked-rice";
 
 const prisma = new PrismaClient();
 
@@ -53,8 +53,10 @@ const PREPARED_MEALS = [
   // Bổ sung thêm Cá ngừ đóng hộp
   { name: 'Cá ngừ đóng hộp', calories: 116, protein: 26, fat: 1, carbs: 0, weight_g: 100, meal_type: 'Bữa trưa', category: 'Giảm mỡ' },
 
-  // Cơm ĐÃ NẤU CHÍN — bảng VTN_FCT_2007 chỉ có gạo sống, xem lib/foods-cooked-rice.
+  // Cơm ĐÃ NẤU CHÍN + nguyên liệu nền bảng VTN_FCT_2007 không có (quinoa, yến
+  // mạch) — xem lib/foods-cooked-rice.
   ...COOKED_RICE_FOODS,
+  ...MISSING_GRAIN_BASES,
 ];
 
 async function main() {
