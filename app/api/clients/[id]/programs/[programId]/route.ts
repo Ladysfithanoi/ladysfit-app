@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
 import { sessionIdsWithLogs } from "@/lib/workout-session";
+import { isValidWorkoutType, workoutTypeForPhase } from "@/lib/workout-structure";
 import { captureTrash } from "@/lib/trash";
 
 const fullProgramInclude = {
@@ -62,7 +63,7 @@ export async function PATCH(
 
   const existing = await prisma.workoutProgram.findUnique({
     where: { id: params.programId, clientId: params.id },
-    select: { phase: true, phaseId: true },
+    select: { phase: true, phaseId: true, workoutType: true },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -100,6 +101,28 @@ export async function PATCH(
     }
   }
 
+  // ── Giai đoạn và loại tập phải khớp nhau ──────────────────────────────────
+  //
+  // "Loại hình tập" là KHOÁ CẤU TRÚC: nó chọn tên buổi và bộ chuyển động dựng ra.
+  // Đổi giai đoạn mà giữ nguyên loại tập cũ là đẻ ra giáo án LAI — đúng thứ đã xảy
+  // ra với một khách: giáo án ghi "Giai đoạn 1" nhưng loại tập còn kẹt "Skinny Fat"
+  // của Giai đoạn 2, nên buổi tập dựng theo cấu trúc Giai đoạn 2 trong khi ô chọn
+  // bài tập tra kho theo Giai đoạn 1 và không ra bài nào.
+  //
+  // Chặn ở server chứ không chỉ ở giao diện, để mọi đường gọi vào đây đều sạch.
+  const nextPhase = body.phase ?? existing.phase;
+  const nextType = body.workoutType !== undefined ? body.workoutType : existing.workoutType;
+  let normalizedType: string | null | undefined = body.workoutType;
+  if (!isValidWorkoutType(nextPhase, nextType)) {
+    const phaseRow = body.phaseId
+      ? await prisma.workoutPhase.findUnique({
+          where: { id: body.phaseId },
+          select: { templateKey: true },
+        })
+      : null;
+    normalizedType = workoutTypeForPhase(nextPhase, phaseRow?.templateKey);
+  }
+
   // Update program metadata fields
   await prisma.workoutProgram.update({
     where: { id: params.programId, clientId: params.id },
@@ -110,7 +133,7 @@ export async function PATCH(
       ...(body.phaseId !== undefined ? { phaseId: body.phaseId } : {}),
       ...(body.sessionsPerWeek !== undefined ? { sessionsPerWeek: body.sessionsPerWeek } : {}),
       ...(body.currentWeek !== undefined ? { currentWeek: body.currentWeek } : {}),
-      ...(body.workoutType !== undefined ? { workoutType: body.workoutType } : {}),
+      ...(normalizedType !== undefined ? { workoutType: normalizedType } : {}),
       ...(body.manualPhaseOverride !== undefined ? { manualPhaseOverride: body.manualPhaseOverride } : {}),
     },
   });

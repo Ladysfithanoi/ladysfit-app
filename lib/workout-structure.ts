@@ -1,6 +1,6 @@
 export { SESSION_TYPES } from "./workout-constants";
 export type { SessionTypeConfig } from "./workout-constants";
-import { SESSION_TYPES } from "./workout-constants";
+import { SESSION_TYPES, type SessionTypeConfig } from "./workout-constants";
 
 export const SESSIONS_PER_WEEK_OPTIONS = [2, 3, 4, 5] as const;
 
@@ -301,12 +301,41 @@ export function getPhaseLabel(phaseValue: string): string {
   return PHASE_OPTIONS.find((p) => p.value === phaseValue)?.label ?? phaseValue;
 }
 
+/**
+ * Tên buổi của một giai đoạn, tra theo cả hai cách giai đoạn được ghi lại.
+ *
+ * Cùng một giai đoạn nằm trong DB dưới hai hình dạng, tuỳ thời điểm nó được tạo:
+ *   • `phase` đã mang sẵn loại tập — "Giai đoạn 2: Skinny Fat", `workoutType`
+ *     lặp lại "Skinny Fat" hoặc bỏ trống.
+ *   • `phase` chỉ có tên gốc — "Giai đoạn 2", loại tập nằm ở `workoutType`.
+ * Giai đoạn 1 thì không có loại tập nào cả, nên `workoutType` của nó có thể là
+ * "Giai đoạn 1", rỗng, hoặc một chuỗi PT tự gõ vào ô "Loại hình tập".
+ *
+ * Ghép thẳng `${phase}: ${workoutType}` chỉ đúng với đúng một trong các hình
+ * dạng đó, còn lại ra khoá không có thật ("Giai đoạn 2: Skinny Fat: Skinny Fat",
+ * "Giai đoạn 1: ") và trả về DANH SÁCH RỖNG — nghĩa là ô chọn tên buổi không còn
+ * lựa chọn nào, và chỗ dựng giáo án tự động rơi về mặc định "Tạ 1". Trên hệ thống
+ * có 252/488 giáo án rơi vào cảnh này.
+ *
+ * Nên thử lần lượt: chính `phase` (đã mang sẵn loại tập) → tên gốc ghép loại tập
+ * → tên gốc trơn (giai đoạn không có loại tập). Loại tập gõ sai không còn xoá sạch
+ * danh sách tên buổi nữa; giai đoạn vẫn quyết định.
+ */
+function sessionTypeConfigFor(phase: string, workoutType: string): SessionTypeConfig | null {
+  const base = basePhase(phase);
+  const type = (workoutType ?? "").trim();
+  const keys = [phase, type ? `${base}: ${type}` : "", base];
+  for (const key of keys) {
+    if (key && SESSION_TYPES[key]) return SESSION_TYPES[key];
+  }
+  return null;
+}
+
 export function getSessionTypeOptions(
   phase: string,
   workoutType: string
 ): { value: string; label: string }[] {
-  const key = workoutType === phase ? phase : `${phase}: ${workoutType}`;
-  const config = SESSION_TYPES[key];
+  const config = sessionTypeConfigFor(phase, workoutType);
   if (!config) return [];
   return config.types.map((t, i) => ({
     value: t,
@@ -326,6 +355,40 @@ export function getSlotsForSessionType(sessionType: string, workoutType?: string
     }
   }
   return SESSION_TYPE_MOVEMENT_TEMPLATES[sessionType] ?? [];
+}
+
+/**
+ * Loại tập ("Loại hình tập") được phép của một giai đoạn.
+ *
+ * Đây là KHOÁ CẤU TRÚC chứ không phải nhãn tự do: nó quyết định tên buổi và bộ
+ * chuyển động dựng ra. Giai đoạn 1 không có loại tập nào, nên gắn "Skinny Fat"
+ * (vốn của Giai đoạn 2) vào một giáo án Giai đoạn 1 sẽ ra một giáo án LAI —
+ * cấu trúc buổi theo Giai đoạn 2 còn kho bài tập tra theo Giai đoạn 1, và ô
+ * chọn bài tập không còn bài nào để chọn.
+ */
+export function validWorkoutTypes(phase: string): string[] {
+  const base = basePhase(phase);
+  // Giai đoạn đã mang sẵn loại tập trong tên thì chỉ đúng loại đó.
+  const embedded = phase.includes(":") ? phase.split(":").slice(1).join(":").trim() : "";
+  if (embedded) return [embedded, base];
+  const subTypes = (WORKOUT_TYPE_OPTIONS[base] ?? []).map((o) => o.dbValue);
+  return subTypes.length > 0 ? [...subTypes, base] : [base];
+}
+
+/** Bỏ trống luôn hợp lệ — nghĩa là "giai đoạn này không có loại tập". */
+export function isValidWorkoutType(phase: string, workoutType: string | null | undefined): boolean {
+  const type = (workoutType ?? "").trim();
+  if (type === "") return true;
+  return validWorkoutTypes(phase).includes(type);
+}
+
+/** Loại tập ĐÚNG của một giai đoạn — dùng khi giá trị đang lưu không hợp lệ. */
+export function workoutTypeForPhase(phase: string, templateKey?: string | null): string | null {
+  const key = (templateKey ?? "").trim();
+  if (key) return key;
+  const embedded = phase.includes(":") ? phase.split(":").slice(1).join(":").trim() : "";
+  if (embedded) return embedded;
+  return WORKOUT_TYPE_OPTIONS[basePhase(phase)]?.[0]?.dbValue ?? null;
 }
 
 /** Extract base phase name (e.g. "Giai đoạn 2: Skinny Fat" → "Giai đoạn 2") */

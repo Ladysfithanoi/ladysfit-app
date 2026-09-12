@@ -6,8 +6,11 @@ import { AlertCircle, AlertTriangle, Archive, ArrowRightLeft, CheckCircle2, Chev
 import { cn } from "@/lib/utils";
 import {
   MOVEMENT_BASE_CODES,
+  WORKOUT_TYPE_OPTIONS,
   getSlotsForSessionType,
   basePhase,
+  isValidWorkoutType,
+  workoutTypeForPhase,
 } from "@/lib/workout-structure";
 import {
   LiveSessionPanel,
@@ -837,7 +840,21 @@ function ProgramView({
     setShowPhaseChange(false);
   }
 
+  /**
+   * Rời chế độ sửa khi bấm sang tuần khác — bỏ luôn bản nháp, y như bấm Huỷ.
+   *
+   * Trước đây bản nháp được giữ lại, mà enterEditMode cứ thấy nháp còn khớp (cùng
+   * giáo án, cùng tuần, cùng số buổi) là dựng lại từ nháp. Không có gì trên màn
+   * hình nói rằng đang có nháp treo, nên một lần sửa dở từ lâu cứ đè lên dữ liệu
+   * thật mỗi lần mở lại tuần đó — PT sửa buổi tập, bấm sang tuần khác rồi quay lại
+   * thì thấy giáo án "tự quay về" cấu trúc cũ.
+   *
+   * Nháp vẫn làm đúng việc nó sinh ra: cứu lần sửa đang dở khi tải lại trang hay
+   * máy sập — hai trường hợp đó không đi qua đây.
+   */
   function exitEditModeOnly() {
+    clearWorkoutDraft();
+    setIsDirty(false);
     setEditMode(false);
     setDraftSessions([]);
     setShowPhaseChange(false);
@@ -999,8 +1016,15 @@ function ProgramView({
       // FM/Admin đổi giai đoạn ngay trong giáo án → lưu lại vào CT. Đổi tại chỗ:
       // không lưu trữ CT nào (khép giai đoạn là nút "Chuyển giai đoạn"). PT không
       // có ô này.
+      // Ghi lại giai đoạn khi ô giai đoạn đổi, HOẶC khi loại tập đang lưu không
+      // khớp với giai đoạn. Vế thứ hai là bắt buộc: một giáo án có thể mang đúng
+      // giai đoạn ("Giai đoạn 1") mà loại tập kẹt lại "Skinny Fat" của Giai đoạn 2
+      // — không có vế này thì mở ra sửa kiểu gì cũng không chữa được, vì ô giai
+      // đoạn có đổi đâu mà lưu.
       const phaseChanged = canEditPhase && editPhaseId !== (program.phaseId ?? "");
-      if (phaseChanged && editSelectedPhase) {
+      const typeMismatch =
+        editSelectedPhase != null && !isValidWorkoutType(editSelectedPhase.name, program.workoutType);
+      if ((phaseChanged || typeMismatch) && editSelectedPhase) {
         await fetch(`/api/clients/${clientId}/programs/${program.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -1121,6 +1145,20 @@ function ProgramView({
       setProgSaving(false);
     }
   }
+
+  // "Loại hình tập" là KHOÁ CẤU TRÚC — nó chọn tên buổi và bộ chuyển động dựng
+  // ra — nên chỉ được nhận đúng các loại của giai đoạn đang chọn. Trước đây ô này
+  // là một ô gõ tự do ("VD: Giảm mỡ, Tăng cơ, Phục hồi..."), và đó là đường mà
+  // "Skinny Fat" của Giai đoạn 2 lọt vào một giáo án Giai đoạn 1.
+  const progFormPhaseName =
+    phases.find((p) => p.id === progForm.phaseId)?.name ?? program.phase;
+  const workoutTypeChoices = WORKOUT_TYPE_OPTIONS[basePhase(progFormPhaseName)] ?? [];
+  // Giá trị cũ không nằm trong danh sách vẫn hiện ra, có đánh dấu — để người dùng
+  // thấy nó sai và tự chọn lại, thay vì bị âm thầm thay mất.
+  const staleWorkoutType =
+    progForm.workoutType && !workoutTypeChoices.some((o) => o.dbValue === progForm.workoutType)
+      ? progForm.workoutType
+      : "";
 
   // If program has no weeks (legacy), show legacy sessions
   const hasWeeks = program.weeks.length > 0;
@@ -1867,7 +1905,18 @@ function ProgramView({
                   <>
                     <select
                       value={progForm.phaseId}
-                      onChange={(e) => setProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                      onChange={(e) => {
+                        const next = phases.find((p) => p.id === e.target.value);
+                        setProgForm((f) => ({
+                          ...f,
+                          phaseId: e.target.value,
+                          // Loại tập đi theo giai đoạn mới. Giữ lại loại cũ là cách
+                          // giáo án lai ra đời.
+                          workoutType: next
+                            ? workoutTypeForPhase(next.name, next.templateKey) ?? ""
+                            : "",
+                        }));
+                      }}
                       className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                     >
                       <option value="">— Chọn giai đoạn —</option>
@@ -1928,13 +1977,38 @@ function ProgramView({
               {/* Workout type */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-600">Loại hình tập</label>
-                <input
-                  type="text"
-                  placeholder="VD: Giảm mỡ, Tăng cơ, Phục hồi..."
-                  value={progForm.workoutType}
-                  onChange={(e) => setProgForm((f) => ({ ...f, workoutType: e.target.value }))}
-                  className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                />
+                {workoutTypeChoices.length === 0 ? (
+                  <>
+                    <div className="w-full h-10 rounded-xl border border-gray-200 bg-gray-50 px-3 flex items-center text-sm text-gray-400">
+                      Không có
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      {basePhase(progFormPhaseName)} không chia loại hình tập.
+                    </p>
+                  </>
+                ) : (
+                  <select
+                    value={progForm.workoutType}
+                    onChange={(e) => setProgForm((f) => ({ ...f, workoutType: e.target.value }))}
+                    className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                  >
+                    <option value="">— Chọn loại hình tập —</option>
+                    {workoutTypeChoices.map((o) => (
+                      <option key={o.dbValue} value={o.dbValue}>{o.label}</option>
+                    ))}
+                    {staleWorkoutType && (
+                      <option value={staleWorkoutType}>
+                        {staleWorkoutType} — không thuộc {basePhase(progFormPhaseName)}
+                      </option>
+                    )}
+                  </select>
+                )}
+                {staleWorkoutType && (
+                  <p className="text-[11px] font-semibold text-[#f15b5c]">
+                    “{staleWorkoutType}” không phải loại hình tập của {basePhase(progFormPhaseName)}. Chọn lại
+                    cho đúng, nếu không giáo án sẽ dựng buổi theo một giai đoạn khác.
+                  </p>
+                )}
               </div>
 
               {/* Notes */}
