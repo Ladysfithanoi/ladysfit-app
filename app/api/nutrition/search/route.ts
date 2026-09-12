@@ -11,9 +11,17 @@ export async function GET(req: Request) {
   const query = searchParams.get("q") || "";
   if (!query.trim()) return NextResponse.json([]);
 
+  // Khớp TỪNG CHỮ, không khớp nguyên cụm.
+  //
+  // Khớp nguyên cụm thì gõ "cơm lứt" ra rỗng, trong khi kho có "Cơm gạo lứt (chén)"
+  // — người dùng gọi món theo cách nói của mình chứ không thuộc lòng tên trong kho.
+  // Tách chữ rồi bắt buộc có đủ, nên thứ tự gõ thế nào cũng ra và gõ thêm chữ thì
+  // kết quả hẹp lại chứ không mất sạch.
+  const words = query.trim().split(/[ 	]+/).filter(Boolean).slice(0, 6);
+
   const foods = await prisma.food.findMany({
-    where: { name: { contains: query, mode: "insensitive" } },
-    take: 20,
+    where: { AND: words.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })) },
+    take: 30,
     orderBy: { name: "asc" },
   });
 

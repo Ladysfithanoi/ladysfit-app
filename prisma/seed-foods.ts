@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { FOODS } from "../lib/foods-data";
+import { COOKED_RICE_FOODS } from "../lib/foods-cooked-rice";
 
 const prisma = new PrismaClient();
 
@@ -51,6 +52,9 @@ const PREPARED_MEALS = [
   { name: 'Thịt heo kho trứng (1 phần)', calories: 320, protein: 26, fat: 20, carbs: 8, weight_g: 250, meal_type: 'Bữa tối', category: 'Tăng cơ' },
   // Bổ sung thêm Cá ngừ đóng hộp
   { name: 'Cá ngừ đóng hộp', calories: 116, protein: 26, fat: 1, carbs: 0, weight_g: 100, meal_type: 'Bữa trưa', category: 'Giảm mỡ' },
+
+  // Cơm ĐÃ NẤU CHÍN — bảng VTN_FCT_2007 chỉ có gạo sống, xem lib/foods-cooked-rice.
+  ...COOKED_RICE_FOODS,
 ];
 
 async function main() {
