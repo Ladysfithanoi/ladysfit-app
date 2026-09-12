@@ -120,6 +120,27 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const pageCount = sheetPageCount(totalSessions);
   const capacity  = sheetCapacity(totalSessions);
 
+  // ── Phiếu bắt đầu từ NGÀY BẮT ĐẦU của lộ trình ─────────────────────────────
+  //
+  // Phiếu check-in là phụ lục của MỘT hợp đồng, nên nó không được chứa buổi tập
+  // diễn ra trước ngày hợp đồng đó bắt đầu — buổi ấy thuộc về lộ trình trước.
+  //
+  // Chuyện này xảy ra thật: cột wl."packageEnrollmentId" ghi lộ trình bị TRỪ BUỔI
+  // lúc check-in, mà lộ trình bị trừ là "gói cũ nhất còn trừ được buổi" chứ không
+  // phải gói đang chạy tại ngày tập. Khách còn gói cũ dở dang thì buổi tháng 6 vẫn
+  // bị gắn vào gói mở tháng 7, và phiếu của gói tháng 7 in ra từ tận tháng 6.
+  //
+  // So theo NGÀY GIỜ VIỆT NAM ở cả hai vế, đúng cách phiếu in cột "Ngày" (sheetDay
+  // ở lib/checkin-sheet). So thẳng mốc UTC thì buổi 6h sáng đúng ngày khai giảng
+  // có mốc rơi vào hôm trước và bị loại oan.
+  //
+  // Chỉ chặn buổi DO APP GHI. Dòng FM tự điền tay không đụng tới: tính năng đó
+  // sinh ra để điền bù buổi cũ, ngày nào là do FM chủ động gõ vào, âm thầm giấu đi
+  // là xoá mất công người ta vừa nhập mà không nói một lời.
+  const VN_DATE = `AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'`;
+  const SINCE_START = `($3::timestamptz IS NULL
+       OR (wl."sessionDate" ${VN_DATE})::date >= ($3::timestamptz ${VN_DATE})::date)`;
+
   // Buổi của lộ trình này.
   //
   // Lọc theo lộ trình ĐÃ SUY RA (lib/session-enrollment) chứ không đọc thô
@@ -157,11 +178,35 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       AND wl.status = 'COMPLETED'
       AND wl."checkOutAt" IS NOT NULL
       AND ${ENROLLMENT_ID} = $2
+      AND ${SINCE_START}
     ORDER BY wl."sessionDate" ASC
     LIMIT ${capacity}
     `,
-    params.id, enrollmentId
+    params.id, enrollmentId, enrollment.startDate
   );
+
+  // Buổi bị loại vì nằm trước ngày bắt đầu — đếm để nói thẳng trên màn hình, chứ
+  // không để phiếu ngắn đi một cách khó hiểu. Con số này thường là 0; khác 0 thì
+  // hoặc ngày bắt đầu gõ sai, hoặc những buổi kia thuộc về lộ trình trước.
+  const excludedBeforeStart = enrollment.startDate
+    ? Number(
+        (
+          await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+            `
+        SELECT COUNT(*) AS n
+        FROM workout_logs wl
+        ${ENROLLMENT_OF_LOG_JOIN}
+        WHERE wl."clientId" = $1
+          AND wl.status = 'COMPLETED'
+          AND wl."checkOutAt" IS NOT NULL
+          AND ${ENROLLMENT_ID} = $2
+          AND NOT ${SINCE_START}
+        `,
+            params.id, enrollmentId, enrollment.startDate
+          )
+        )[0]?.n ?? 0
+      )
+    : 0;
 
   // Nhật ký cân nặng của khách — nguồn duy nhất cho cột "Cân nặng" của phiếu.
   const weightLogs = await prisma.weightLog.findMany({
@@ -218,6 +263,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     endDate:   h.endDate   !== undefined ? h.endDate   : enrollment.endDate?.toISOString()   ?? null,
     price:     h.price     ?? enrollment.price,
     rows,
+    /** Buổi do app ghi bị loại vì diễn ra trước ngày bắt đầu lộ trình. */
+    excludedBeforeStart,
     /** Giá trị GỐC của lộ trình — trình sửa cần để hiện nút "về số gốc". */
     original: {
       contractCode:  enrollment.contractCode,

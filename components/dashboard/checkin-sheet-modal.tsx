@@ -67,6 +67,8 @@ type SheetData = {
   canEdit: boolean;
   /** Số tờ của bộ phiếu: gói 100 buổi ra 2 tờ, mỗi tờ 50 ô. */
   pageCount: number;
+  /** Buổi do app ghi đã bị loại vì diễn ra TRƯỚC ngày bắt đầu lộ trình. */
+  excludedBeforeStart: number;
 };
 
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
@@ -642,6 +644,14 @@ export function CheckinSheetModal({
                   + (pageCount > 1 ? ` · ${pageCount} tờ` : "")
                 : "Đang tải…"}
             </p>
+            {/* Phiếu ngắn đi thì phải nói vì sao, không để người đọc tự đoán. */}
+            {data != null && data.excludedBeforeStart > 0 && (
+              <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-600">
+                {data.excludedBeforeStart} buổi diễn ra trước ngày bắt đầu lộ trình
+                {data.startDate ? ` (${fmtDate(sheetDay(data.startDate))})` : ""} nên không lên phiếu này —
+                chúng thuộc về lộ trình trước. Nếu ngày bắt đầu ghi sai thì sửa lại ở hồ sơ khách.
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {/* Cây bút chỉ hiện khi Admin đã bật ở Cài đặt → Cấp độ PT. */}
