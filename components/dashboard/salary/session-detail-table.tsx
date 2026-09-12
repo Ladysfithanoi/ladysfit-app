@@ -36,6 +36,10 @@ type SessionRow = {
   sessionsUsed: number;
   sessionsRemaining: number;
   sessionsThisMonth: number;
+  /** Trong đó: buổi do app ghi. */
+  sessionsFromLogs: number;
+  /** Và: phần Admin/FM cộng/trừ tay cho tháng này. */
+  sessionsAdjusted: number;
   valuePerSession: number;
   totalValue: number;
   contractType: "NORMAL" | "KOC" | "KOL";
@@ -68,6 +72,41 @@ function SubstituteBadge() {
 }
 const TH = "px-3 py-2 text-left font-bold text-gray-400 text-[10px] uppercase tracking-wide whitespace-nowrap border-r border-gray-100 last:border-r-0";
 const TD = "px-3 py-2.5 border-r border-gray-50 last:border-r-0";
+
+/**
+ * Ô "Số buổi" của tháng, có tách phần chỉnh tay.
+ *
+ * Con số này hay bị đem so với phiếu check-in của khách rồi thấy lệch. Lệch là
+ * đúng: buổi Admin/FM chỉnh tay cố ý không lên phiếu, và ngược lại dòng ghi tay
+ * trên phiếu cố ý không lên bảng lương. Nói thẳng ra ngay tại ô số thì không ai
+ * phải đi hỏi con số thứ tư từ đâu ra nữa.
+ */
+function SessionCount({ row }: { row: SessionRow }) {
+  if (row.sessionsThisMonth <= 0 && row.sessionsAdjusted === 0) {
+    return <span className="text-gray-400">—</span>;
+  }
+  const adj = row.sessionsAdjusted;
+  return (
+    <span
+      className="inline-flex flex-col items-center leading-tight"
+      title={
+        adj === 0
+          ? `${row.sessionsFromLogs} buổi app ghi`
+          : `${row.sessionsFromLogs} buổi app ghi ${adj > 0 ? "+" : "−"} ${Math.abs(adj)} buổi Admin/FM chỉnh tay`
+          + " · buổi chỉnh tay không hiện trên phiếu check-in của khách"
+      }
+    >
+      <span className={row.sessionsThisMonth > 0 ? "text-gray-800" : "text-gray-400"}>
+        {row.sessionsThisMonth > 0 ? row.sessionsThisMonth : "—"}
+      </span>
+      {adj !== 0 && (
+        <span className="mt-0.5 rounded px-1 text-[10px] font-bold text-amber-700 bg-amber-50">
+          {row.sessionsFromLogs} {adj > 0 ? "+" : "−"} {Math.abs(adj)} tay
+        </span>
+      )}
+    </span>
+  );
+}
 
 // ── Main component ─────────────────────────────────────────────────────────
 
@@ -439,8 +478,8 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       <td className={cn(TD, "text-center font-semibold whitespace-nowrap", row.sessionsRemaining <= 5 ? "text-red-500" : "text-gray-600")}>
         {row.sessionsRemaining}
       </td>
-      <td className={cn(TD, "text-center font-bold whitespace-nowrap", row.sessionsThisMonth > 0 ? "text-gray-800" : "text-gray-400")}>
-        {row.sessionsThisMonth > 0 ? row.sessionsThisMonth : "—"}
+      <td className={cn(TD, "text-center font-bold whitespace-nowrap")}>
+        <SessionCount row={row} />
       </td>
       <td className={cn(TD, "text-gray-600 whitespace-nowrap")}>{vnd(row.valuePerSession)}</td>
       <td className={cn(TD, "font-semibold whitespace-nowrap", row.totalValue > 0 ? "text-gray-800" : "text-gray-400")}>
@@ -486,8 +525,8 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">KOC</span>
       </td>
       <td className={cn(TD, "text-center text-gray-600")}>{koc?.totalSessions ?? 0} / 60</td>
-      <td className={cn(TD, "text-center font-bold", row.sessionsThisMonth > 0 ? "text-gray-800" : "text-gray-400")}>
-        {row.sessionsThisMonth > 0 ? row.sessionsThisMonth : "—"}
+      <td className={cn(TD, "text-center font-bold")}>
+        <SessionCount row={row} />
       </td>
       <td className={cn(TD, "text-gray-600 whitespace-nowrap")}>
         {koc ? `${koc.startWeight}kg` : "—"}
@@ -536,8 +575,8 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       <td className={TD}>
         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">KOL</span>
       </td>
-      <td className={cn(TD, "text-center font-bold", row.sessionsThisMonth > 0 ? "text-gray-800" : "text-gray-400")}>
-        {row.sessionsThisMonth > 0 ? row.sessionsThisMonth : "—"}
+      <td className={cn(TD, "text-center font-bold")}>
+        <SessionCount row={row} />
       </td>
       <td className={cn(TD, "text-blue-700 font-semibold whitespace-nowrap")}>60,000đ</td>
       <td className={cn(TD, "font-semibold whitespace-nowrap", row.totalValue > 0 ? "text-blue-700" : "text-gray-400")}>

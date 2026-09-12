@@ -70,15 +70,36 @@ export async function GET(req: Request) {
     // Gộp theo lộ trình: một khách có thể có gói cũ vừa hết + gói mới, gộp theo
     // khách sẽ gán cùng số buổi cho cả hai dòng và cộng trùng "Tổng giá trị".
     const logCountByEnrollment = countByEnrollment(taughtRows);
-    // Cộng phần Admin/FM chỉnh tay "Số buổi PT" đã ghi nhận vào tháng này.
+
+    // Phần Admin/FM CHỈNH TAY "Số buổi PT" cho tháng này, giữ RIÊNG chứ không trộn
+    // thẳng vào số buổi app ghi.
+    //
+    // Trộn vào rồi trả về đúng một con số là cách bảng lương thành ra không đọc
+    // được: phiếu check-in của khách in 3 buổi mà bảng lương ghi 4, không chỗ nào
+    // nói con số thứ tư từ đâu ra. Hai con số này ĐO HAI THỨ KHÁC NHAU và lệch nhau
+    // là chuyện bình thường — phiếu là phụ lục hợp đồng của khách, bảng lương là
+    // công dạy của PT, và buổi chỉnh tay cố ý không lên phiếu (xem lib/checkin-sheet)
+    // y như dòng ghi tay trên phiếu cố ý không lên bảng lương. Cái thiếu không phải
+    // là một luật chung, mà là câu giải thích. Hệ thống đang có 783 buổi chỉnh tay,
+    // nên thiếu câu đó là 783 lần có người phải đi hỏi.
+    const adjustByEnrollment = new Map<string, number>();
     for (const adj of await getSessionAdjustments([ptId], month, year)) {
-      const next = (logCountByEnrollment.get(adj.enrollmentId) ?? 0) + adj.delta;
-      logCountByEnrollment.set(adj.enrollmentId, Math.max(0, next));
+      adjustByEnrollment.set(
+        adj.enrollmentId,
+        (adjustByEnrollment.get(adj.enrollmentId) ?? 0) + adj.delta
+      );
     }
+
+    // Số cuối cùng để trả tiền = buổi app ghi + phần chỉnh tay, không âm.
+    const totalByEnrollment = new Map<string, number>();
+    logCountByEnrollment.forEach((n, id) => totalByEnrollment.set(id, n));
+    adjustByEnrollment.forEach((delta, id) => {
+      totalByEnrollment.set(id, Math.max(0, (logCountByEnrollment.get(id) ?? 0) + delta));
+    });
     // Lộ trình đã có buổi dạy tháng này phải hiện ra kể cả khi gói vừa đóng
     // (hết buổi / hết hạn) giữa tháng — nếu không, bảng chi tiết sẽ lệch với
     // tiền buổi dạy thực trả.
-    const taughtEnrollmentIds = Array.from(logCountByEnrollment.keys());
+    const taughtEnrollmentIds = Array.from(totalByEnrollment.keys());
 
     // Lộ trình CÒN CHẠY của khách được GÁN cho PT này (hiện luôn cả khi tháng
     // này chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
@@ -161,7 +182,10 @@ export async function GET(req: Request) {
 
     const rows = allEnrollments.map((e, idx) => {
       const photo = photoByEnrollment.get(e.id);
-      const sessionsThisMonth = logCountByEnrollment.get(e.id) ?? 0;
+      const sessionsThisMonth = totalByEnrollment.get(e.id) ?? 0;
+      // Tách đôi để bảng nói được "4 = 3 app ghi + 1 chỉnh tay".
+      const sessionsFromLogs = logCountByEnrollment.get(e.id) ?? 0;
+      const sessionsAdjusted = adjustByEnrollment.get(e.id) ?? 0;
       const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
 
       const base = {
@@ -176,6 +200,10 @@ export async function GET(req: Request) {
         sessionsUsed: Number(e.sessionsUsed),
         sessionsRemaining: Number(e.sessions) - Number(e.sessionsUsed),
         sessionsThisMonth,
+        /** Trong đó: buổi do app ghi (có check-out, ảnh/chữ ký, nhật ký set). */
+        sessionsFromLogs,
+        /** Và: phần Admin/FM cộng/trừ tay cho tháng này. 0 = không ai chỉnh. */
+        sessionsAdjusted,
         contractType,
         photo: photo ? {
           id: photo.id,
