@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { refreshClientChurnStatus, isPackageOngoing } from "@/lib/client-status";
-import { MAX_SESSION_MINUTES, RUNNING_LOG_STATUSES } from "@/lib/checkin-eligibility";
+import { refreshClientChurnStatus } from "@/lib/client-status";
+import {
+  isChargeablePackage,
+  MAX_SESSION_MINUTES,
+  RUNNING_LOG_STATUSES,
+} from "@/lib/checkin-eligibility";
 
 export type PackageUpdate = {
   id: string;
@@ -65,17 +69,14 @@ export async function sessionIdsWithLogs(sessionIds: string[]): Promise<Set<stri
 // Called at CHECK-IN — the client's check-in signature is the proof they showed
 // up, so the package advances even if the PT never completes the check-out.
 //
-// WHICH lộ trình is charged follows the gym's rule for a client holding several
-// gói (e.g. they renewed before finishing the old one). A gói is chargeable only
-// when it is BOTH còn hạn AND còn buổi:
-//   • còn hạn  = đang ACTIVE và chưa quá endDate (endDate null = không đặt hạn →
-//     coi như còn hạn). Dùng đúng định nghĩa isPackageOngoing như dashboard, nên
-//     một gói ACTIVE đã quá hạn (dù còn buổi) sẽ KHÔNG bị trừ.
-//   • còn buổi = sessionsUsed < sessions. Gói đã hết buổi (dù còn hạn) cũng không
-//     bị trừ.
-// Trong các gói hợp lệ, trừ gói CÒN HẠN CŨ NHẤT trước (oldest createdAt) — dùng
-// xong gói cũ rồi mới sang gói mới. Nếu không có gói hợp lệ nào thì không trừ
-// (trả null) — buổi vẫn được ghi nhận nhưng không trừ vào lộ trình nào.
+// WHICH lộ trình is charged: đúng MỘT luật với chỗ chặn check-in —
+// isChargeablePackage ở lib/checkin-eligibility (ACTIVE + đã có ngày bắt đầu +
+// còn hạn + còn buổi). Hai nơi này phải trả lời giống hệt nhau, nếu không thì
+// PT được cho khách ký check-in rồi buổi lại không trừ vào lộ trình nào: khách
+// tập không mất buổi mà PT vẫn được tính lương.
+//
+// Trong các gói hợp lệ, trừ gói CŨ NHẤT trước (oldest createdAt) — dùng xong gói
+// cũ rồi mới sang gói mới. Nếu không có gói hợp lệ nào thì không trừ (trả null).
 export async function countPackageSession(clientId: string): Promise<PackageUpdate | null> {
   const now = new Date();
   const candidates = await prisma.packageEnrollment.findMany({
@@ -83,9 +84,8 @@ export async function countPackageSession(clientId: string): Promise<PackageUpda
     orderBy: { createdAt: "asc" }, // oldest → newest
   });
 
-  // Oldest gói that is còn hạn AND còn buổi.
-  const activePackage =
-    candidates.find((p) => isPackageOngoing(p, now) && p.sessionsUsed < p.sessions) ?? null;
+  // Gói hợp lệ CŨ NHẤT — xem isChargeablePackage.
+  const activePackage = candidates.find((p) => isChargeablePackage(p, now)) ?? null;
   if (!activePackage) return null;
 
   const newSessionsUsed = activePackage.sessionsUsed + 1;

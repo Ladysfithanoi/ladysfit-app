@@ -42,6 +42,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const {
     packageName, packageStage, sessions, durationDays, price, notes,
     contractCode: providedCode, contractType, startWeight, startWeightConfirmed,
+    startDate,
   } = body;
 
   // Không bắt buộc giá: gói tài trợ (KOC, KOL, Cư dân) có price = 0, và nói chung
@@ -49,6 +50,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!packageName || !sessions || !durationDays) {
     return NextResponse.json({ error: "Thiếu thông tin gói tập" }, { status: 400 });
   }
+
+  // NGÀY BẮT ĐẦU LÀ BẮT BUỘC.
+  //
+  // Gói không ngày là gói không bao giờ hết hạn, và nó nằm lại mãi ở đầu hàng
+  // "gói cũ nhất còn hạn" nên nuốt hết buổi của khách kể cả sau khi họ đã mua lộ
+  // trình mới (xem isChargeablePackage). Chặn ngay từ lúc tạo thì không còn gói
+  // nào rơi vào cảnh đó nữa — trước đây form thêm gói thậm chí không hỏi ngày,
+  // nên 84 gói đang chạy trên hệ thống không có ngày bắt đầu.
+  const start = startDate ? new Date(startDate) : null;
+  if (start == null || Number.isNaN(start.getTime())) {
+    return NextResponse.json(
+      { error: "Phải chọn ngày bắt đầu lộ trình thì mới tạo được gói tập" },
+      { status: 400 }
+    );
+  }
+
+  // Ngày hết hạn suy ra từ ngày bắt đầu, đúng công thức của PUT sửa gói: hai bên
+  // lệch nhau thì lần sửa đầu tiên sẽ âm thầm đổi hạn của gói.
+  const end = new Date(start);
+  end.setDate(end.getDate() + Number(durationDays));
 
   const resolvedContractType: string = contractType === "KOC" || packageName === "KOC" ? "KOC"
     : contractType === "KOL" ? "KOL"
@@ -71,13 +92,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     `
     INSERT INTO package_enrollments
       (id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
-       "durationDays", "reservedDays", "extensionDays", price, "contractType", status, notes, "createdAt")
+       "startDate", "endDate", "durationDays", "reservedDays", "extensionDays", price,
+       "contractType", status, notes, "createdAt")
     VALUES
-      (gen_random_uuid()::text, $1, $2, $3, $4, $5, 0, $6, 0, 0, $7, $8::"ContractType", 'ACTIVE', $9, NOW())
+      (gen_random_uuid()::text, $1, $2, $3, $4, $5, 0, $6, $7, $8, 0, 0, $9,
+       $10::"ContractType", 'ACTIVE', $11, NOW())
     RETURNING id
     `,
     params.id, contractCode, packageName, packageStage ?? "", sessions,
-    durationDays, price ?? 0, resolvedContractType, notes || null
+    start, end, durationDays, price ?? 0, resolvedContractType, notes || null
   );
 
   const enrollmentId = pkgId[0].id;

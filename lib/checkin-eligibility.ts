@@ -13,12 +13,20 @@ export type PackageForCheckIn = {
   status: string;
   sessions: number;
   sessionsUsed: number;
+  /**
+   * Ngày bắt đầu lộ trình. CHƯA ĐIỀN = gói chưa được đưa vào chạy, không trừ
+   * buổi — xem isChargeablePackage.
+   */
+  startDate: Date | string | null;
   endDate: Date | string | null;
   /** Có thì dùng để chọn lộ trình MỚI NHẤT khi viết lý do từ chối. */
   createdAt?: Date | string | null;
+  /** Có thì gọi đúng tên gói trong câu từ chối, FM biết ngay phải sửa gói nào. */
+  packageName?: string | null;
 };
 
 export type CheckInBlockReason =
+  | "NO_START_DATE"   // lộ trình chưa điền ngày bắt đầu
   | "NO_PACKAGE"      // chưa có lộ trình nào, hoặc mọi lộ trình đã đóng
   | "OUT_OF_SESSIONS" // đã tập hết buổi
   | "EXPIRED"         // đã quá hạn
@@ -33,9 +41,21 @@ function toDate(v: Date | string | null | undefined): Date | null {
   return v instanceof Date ? v : new Date(v);
 }
 
-/** Gói còn trừ được buổi: ACTIVE + còn hạn (endDate null = không đặt hạn) + còn buổi. */
+/**
+ * Gói còn trừ được buổi: ACTIVE + ĐÃ CÓ NGÀY BẮT ĐẦU + còn hạn (endDate null =
+ * không đặt hạn) + còn buổi.
+ *
+ * Ngày bắt đầu là vế bắt buộc, không phải ô cho đẹp. Gói chưa điền ngày là gói
+ * chưa đưa vào chạy — chưa ai chốt lộ trình này bắt đầu từ bao giờ, nên nó cũng
+ * không có ngày hết hạn, tức là KHÔNG BAO GIỜ tự đóng. Một gói như vậy nằm lại
+ * mãi trong danh sách "còn hạn cũ nhất" và nuốt hết buổi của khách, kể cả sau
+ * khi họ đã mua lộ trình mới: khách Lò Quế Hằng tập tiếp trên gói Loyalfit mua
+ * ngày 28/07/2026 mà 30 buổi vẫn bị trừ vào gói L2 cũ không ngày, còn gói mới
+ * đứng nguyên 0/36.
+ */
 export function isChargeablePackage(p: PackageForCheckIn, now: Date = new Date()): boolean {
   if (p.status !== "ACTIVE") return false;
+  if (toDate(p.startDate) == null) return false;
   const end = toDate(p.endDate);
   if (end != null && end < now) return false;
   return p.sessionsUsed < p.sessions;
@@ -60,6 +80,7 @@ export function isChargeablePackage(p: PackageForCheckIn, now: Date = new Date()
 export function chargeablePackageSql(alias = "pe"): string {
   return `(
     ${alias}.status = 'ACTIVE'
+    AND ${alias}."startDate" IS NOT NULL
     AND (${alias}."endDate" IS NULL OR ${alias}."endDate" >= NOW())
     AND ${alias}."sessionsUsed" < ${alias}.sessions
   )`;
@@ -83,6 +104,23 @@ export function findCheckInBlock(
   if (packages.some((p) => isChargeablePackage(p, now))) return null;
   if (packages.length === 0) {
     return { reason: "NO_PACKAGE", message: "Không thể check-in: khách chưa có lộ trình nào." + TAIL };
+  }
+
+  // Gói chỉ vướng đúng MỘT chuyện — chưa điền ngày bắt đầu — thì nói thẳng ra và
+  // nói trước mọi lý do khác: đây là thứ FM sửa xong trong mười giây ngay trên hồ
+  // sơ khách, khác hẳn "hết buổi / hết hạn" vốn đòi khách mua gói mới. Câu TAIL
+  // ("mua lộ trình mới") ở đây là chỉ sai đường nên không dùng.
+  const missingStart = packages.find(
+    (p) => p.status === "ACTIVE" && p.sessionsUsed < p.sessions && toDate(p.startDate) == null
+  );
+  if (missingStart) {
+    const name = missingStart.packageName ? ` “${missingStart.packageName}”` : "";
+    return {
+      reason: "NO_START_DATE",
+      message:
+        `Không thể check-in: lộ trình${name} chưa có ngày bắt đầu nên không trừ được buổi. ` +
+        "Vào hồ sơ khách → mục Gói tập, điền Ngày bắt đầu cho lộ trình rồi check-in lại.",
+    };
   }
 
   // Gói mới nhất; không có createdAt thì giữ nguyên thứ tự đầu vào.

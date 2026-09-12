@@ -164,6 +164,12 @@ function dmyToISO(dmy: string): string {
   return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
+/** Hôm nay dạng dd/mm/yyyy — cùng kiểu gõ với ô "Ngày BĐ" của gói đã tạo. */
+function todayDmy(): string {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
 function maskDate(value: string): string {
   let clean = value.replace(/\D/g, "");
   if (clean.length > 8) clean = clean.slice(0, 8);
@@ -411,6 +417,9 @@ export function ClientDetailPage({
   const [pkgExtensionInputs, setPkgExtensionInputs] = useState<Record<string, string>>({});
   const [savingReservedExtId, setSavingReservedExtId] = useState<string | null>(null);
   const [addPkgContractCode, setAddPkgContractCode] = useState("");
+  // Ngày bắt đầu lộ trình — BẮT BUỘC. Mặc định hôm nay vì gói thêm tay gần như
+  // luôn là gói khách bắt đầu ngay; FM lùi ngày lại khi điền bù hợp đồng cũ.
+  const [addPkgStartDate, setAddPkgStartDate] = useState(() => todayDmy());
   const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL">("NORMAL");
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
@@ -1001,6 +1010,11 @@ export function ClientDetailPage({
 
   async function handleAddPackage() {
     if (!addPkgName) return;
+    const startIso = dmyToISO(addPkgStartDate);
+    if (!startIso || Number.isNaN(new Date(startIso).getTime())) {
+      setAddPkgError("Phải điền ngày bắt đầu lộ trình (dd/mm/yyyy) thì mới tạo được gói tập");
+      return;
+    }
     const isKOCPkg = addPkgName === "KOC";
     const isKOLPkg = addPkgName === "KOL";
     // For KOL, the dropdown value is "KOL" but the actual package is addKolSponsoredPkg
@@ -1021,6 +1035,7 @@ export function ClientDetailPage({
           durationDays: def.durationDays,
           price: (isKOCPkg || isKOLPkg) ? 0 : (def.discountedPrice ?? def.price),
           contractCode: addPkgContractCode || undefined,
+          startDate: startIso,
           contractType: resolvedContractType,
           startWeight: resolvedContractType === "KOC" ? parseFloat(addPkgStartWeight) || undefined : undefined,
           startWeightConfirmed: resolvedContractType === "KOC" ? addPkgFMConfirmed : undefined,
@@ -1048,6 +1063,7 @@ export function ClientDetailPage({
       }]);
       setAddPkgName("");
       setAddPkgContractCode("");
+      setAddPkgStartDate(todayDmy());
       setAddPkgContractType("NORMAL");
       setAddPkgStartWeight("");
       setAddPkgFMConfirmed(false);
@@ -3140,6 +3156,23 @@ export function ClientDetailPage({
             )}
 
             <div className="space-y-1">
+              <Label className="text-xs font-semibold text-gray-600">
+                Ngày bắt đầu <span className="text-[#f15b5c]">*</span>
+              </Label>
+              <input
+                type="text"
+                placeholder="dd/mm/yyyy"
+                maxLength={10}
+                value={addPkgStartDate}
+                onChange={(e) => setAddPkgStartDate(maskDate(e.target.value))}
+                className="w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+              />
+              <p className="text-[11px] text-gray-400">
+                Bắt buộc. Lộ trình chưa có ngày bắt đầu thì không trừ được buổi và khách sẽ bị
+                chặn check-in.
+              </p>
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs font-semibold text-gray-600">Mã hợp đồng</Label>
               <input
                 type="text"
@@ -3152,7 +3185,7 @@ export function ClientDetailPage({
             {addPkgError && <p className="text-sm text-[#f15b5c]">{addPkgError}</p>}
             <Button
               type="button"
-              disabled={!addPkgName || addPkgLoading || (addPkgName === "KOC" && !addPkgStartWeight) || (addPkgName === "KOL" && !addKolSponsoredPkg)}
+              disabled={!addPkgName || addPkgStartDate.length < 10 || addPkgLoading || (addPkgName === "KOC" && !addPkgStartWeight) || (addPkgName === "KOL" && !addKolSponsoredPkg)}
               onClick={handleAddPackage}
               className="w-full h-10 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
               style={{ backgroundColor: "#f15b5c" }}

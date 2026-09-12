@@ -165,8 +165,6 @@ function isCoveredLog(log: WorkoutLogRow, assignedPTId?: string | null): boolean
 export type PackageForWorkoutTab = PackageForCheckIn & {
   id: string;
   packageName: string;
-  /** Cần để chọn đúng lộ trình phủ NGÀY TẬP — xem sheetTargetFor. */
-  startDate?: Date | string | null;
 };
 
 /**

@@ -133,6 +133,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     // lúc bán hàng thật sự xảy ra. Xem lib/package-promos; hết hạn thì hợp đồng
     // sau đó tự quay về giá thường.
     const promos = await getActivePromos(c.branchId);
+    // Lộ trình chốt tại buổi tư vấn bắt đầu từ chính hôm chốt. Ngày bắt đầu là
+    // BẮT BUỘC ở mọi đường tạo gói (xem isChargeablePackage): thiếu nó thì gói
+    // không trừ được buổi và khách bị chặn ngay ở lần check-in đầu tiên. FM sửa
+    // lại ngày trong hồ sơ khách nếu khách hẹn bắt đầu muộn hơn.
+    const startedAt = new Date();
     await prisma.packageEnrollment.createMany({
       data: c.packages.map((pkg, i) => ({
         clientId: client.id,
@@ -140,6 +145,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         packageStage: pkg.packageStage,
         sessions: pkg.sessions,
         sessionsUsed: 0,
+        startDate: startedAt,
+        endDate: new Date(startedAt.getTime() + pkg.durationDays * 86_400_000),
         durationDays: pkg.durationDays,
         price:
           promoPriceFor(pkg.packageName, promos)?.price

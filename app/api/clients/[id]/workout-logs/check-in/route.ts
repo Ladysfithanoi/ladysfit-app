@@ -143,7 +143,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // buổi mà PT vẫn được tính lương. Chặn ngay tại đây, trước khi tạo nhật ký.
     const packages = await prisma.packageEnrollment.findMany({
       where: { clientId: params.id },
-      select: { status: true, sessions: true, sessionsUsed: true, endDate: true, createdAt: true },
+      select: {
+        status: true, sessions: true, sessionsUsed: true,
+        startDate: true, endDate: true, createdAt: true, packageName: true,
+      },
     });
     const block = findCheckInBlock(packages);
     if (block) {
