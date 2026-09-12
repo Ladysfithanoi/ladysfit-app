@@ -86,7 +86,17 @@ export type SheetRowOverride = {
   weight?: number | null;
 };
 
-/** Buổi GHI TAY — buổi tập trước khi có app. Không chữ ký, không ảnh. */
+/**
+ * Buổi GHI TAY — buổi tập trước khi có app. Không chữ ký, không ảnh.
+ *
+ * Đây là ĐƯỜNG DUY NHẤT để thêm một buổi bằng tay, và buổi thêm vào đi cả hai
+ * nơi: lên phiếu check-in của khách VÀ vào "Số buổi PT" của bảng lương. Trước
+ * đây có hai đường riêng không nói chuyện với nhau — dòng ghi tay ở đây (có ngày,
+ * có tên HLV) thì không được tính lương, còn ô "Số buổi PT" ở hồ sơ khách lại ghi
+ * một con số trần không ngày không người và chính nó ra tiền. Cái ít thông tin
+ * hơn được trả tiền, cái nhiều thông tin hơn thì không, và hai con số không bao
+ * giờ khớp. Nay chỉ còn đường này.
+ */
 export type SheetExtraRow = {
   /** Khoá do trình sửa sinh, để sửa/xoá đúng dòng qua nhiều lần lưu. */
   id: string;
@@ -94,8 +104,14 @@ export type SheetExtraRow = {
   date: string;
   checkOutAt: string | null;
   weight: number | null;
-  /** Tên HLV dạy buổi đó, FM tự điền. Buổi cũ thường không còn ai nhớ nên để rỗng được. */
+  /** Tên HLV dạy buổi đó — chữ IN RA phiếu. */
   ptName?: string;
+  /**
+   * HLV được TÍNH CÔNG buổi này. Rỗng = không biết ai dạy: dòng vẫn in lên phiếu
+   * nhưng không vào "Số buổi PT" của ai — buổi cũ nhiều khi không còn ai nhớ, và
+   * trả tiền cho một cái tên đoán ra thì tệ hơn là không trả.
+   */
+  ptId?: string;
 };
 
 export type SheetOverride = {
@@ -177,12 +193,16 @@ export function sanitizeOverride(input: unknown): SheetOverride {
     if (id == null || seen.has(id)) continue;
     seen.add(id);
     const w = cleanWeight(r.weight);
+    // ptId là khoá người — chỉ nhận chuỗi id gọn, còn nó có trỏ tới ai thật hay
+    // không thì chỗ lưu phiếu kiểm (route đối chiếu với danh sách HLV chọn được).
+    const ptId = typeof r.ptId === "string" && r.ptId.length > 0 && r.ptId.length <= 64 ? r.ptId : "";
     out.extraRows.push({
       id,
       date: new Date(r.date as string).toISOString(),
       checkOutAt: isIso(r.checkOutAt) ? new Date(r.checkOutAt as string).toISOString() : null,
       weight: w === undefined ? null : w,
       ptName: cleanName(r.ptName) ?? "",
+      ptId,
     });
     if (out.extraRows.length >= MAX_SHEET_ROWS) break;
   }
@@ -307,6 +327,8 @@ export type SheetRow = {
   manual: boolean;
   /** Họ tên đầy đủ của HLV đã dạy buổi này. Rỗng = không biết. */
   ptName: string;
+  /** HLV được tính công (chỉ có ở buổi ghi tay; buổi app ghi bám wl."createdById"). */
+  ptId?: string;
 };
 
 /** Buổi ghi tay dựng thành dòng phiếu: ô chữ ký và ô ảnh luôn để trống. */
@@ -316,6 +338,7 @@ export function manualSheetRow(e: SheetExtraRow): SheetRow {
     date: e.date,
     checkOutAt: e.checkOutAt,
     ptName: e.ptName ?? "",
+    ptId: e.ptId ?? "",
     signatureUrl: null,
     photoUrl: null,
     weight: e.weight,

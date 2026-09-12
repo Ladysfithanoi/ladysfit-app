@@ -39,6 +39,8 @@ type Original = {
 };
 
 type Props = {
+  /** HLV chọn được cho dòng ghi tay. Buổi đó được tính công cho người được chọn. */
+  teachers: { id: string; name: string }[];
   rows: SheetRow[];
   original: Original;
   override: SheetOverride;
@@ -68,6 +70,8 @@ type DraftRow = {
   autoWeight: number | null;
   /** HLV đã dạy. Buổi app ghi thì khoá — người dạy là dữ kiện của chuỗi chữ ký. */
   ptName: string;
+  /** Dòng ghi tay: HLV được TÍNH CÔNG buổi này. Rỗng = không biết ai dạy. */
+  ptId: string;
   hasSignature: boolean;
   hasPhoto: boolean;
 };
@@ -107,7 +111,7 @@ function sortRowsByDate(rows: DraftRow[]): DraftRow[] {
 }
 
 export function CheckinSheetEditor({
-  rows, original, override, capacity, saving, onCancel, onSave,
+  teachers, rows, original, override, capacity, saving, onCancel, onSave,
 }: Props) {
   const [header, setHeader] = useState(() => ({
     contractCode:  override.header.contractCode  ?? original.contractCode ?? "",
@@ -134,6 +138,7 @@ export function CheckinSheetEditor({
         weight: saved != null ? String(saved) : "",
         autoWeight: r.weight,
         ptName: r.ptName,
+        ptId: r.ptId ?? "",
         hasSignature: r.signatureUrl != null,
         hasPhoto: r.photoUrl != null,
       };
@@ -176,7 +181,7 @@ export function CheckinSheetEditor({
       {
         key: newRowId(), logId: null,
         day: base.toISOString().slice(0, 10), timeIn: "", time: "",
-        weight: "", autoWeight: null, ptName: "", hasSignature: false, hasPhoto: false,
+        weight: "", autoWeight: null, ptName: "", ptId: "", hasSignature: false, hasPhoto: false,
       },
     ]));
   }
@@ -234,7 +239,9 @@ export function CheckinSheetEditor({
       if (r.logId == null) {
         next.extraRows.push({
           id: r.key, date: dateIso, checkOutAt: timeIso, weight,
-          ptName: r.ptName.trim(),
+          // Tên in ra phiếu đi theo người được chọn, để hai thứ không bao giờ lệch.
+          ptName: teachers.find((t) => t.id === r.ptId)?.name ?? r.ptName.trim(),
+          ptId: r.ptId,
         });
       } else {
         next.rows[r.logId] = { date: dateIso, checkOutAt: timeIso, weight };
@@ -402,12 +409,23 @@ export function CheckinSheetEditor({
                   </td>
                   <td className="px-1 py-1.5">
                     {r.logId == null ? (
-                      <input
+                      // Dòng ghi tay nay được TÍNH CÔNG cho HLV được chọn, nên ô này
+                      // phải là một con người có thật chứ không còn là chữ gõ tay. Để
+                      // trống vẫn được: buổi cũ nhiều khi không còn ai nhớ ai dạy, dòng
+                      // vẫn in lên phiếu nhưng không vào "Số buổi PT" của ai.
+                      <select
                         className={INPUT}
-                        placeholder="Tên HLV"
-                        value={r.ptName}
-                        onChange={(e) => patchRow(r.key, { ptName: e.target.value })}
-                      />
+                        value={r.ptId}
+                        onChange={(e) => patchRow(r.key, { ptId: e.target.value })}
+                      >
+                        <option value="">— Không rõ —</option>
+                        {teachers.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                        {r.ptId !== "" && !teachers.some((t) => t.id === r.ptId) && (
+                          <option value={r.ptId}>{r.ptName || "HLV không còn trong hệ thống"}</option>
+                        )}
+                      </select>
                     ) : (
                       // Người dạy là dữ kiện của chuỗi chữ ký, không sửa được —
                       // cùng lý do với ô chữ ký và ô ảnh.
@@ -457,11 +475,12 @@ export function CheckinSheetEditor({
 
         <p className="mt-3 text-[11px] leading-relaxed text-gray-400">
           Buổi ghi tay không có chữ ký và ảnh — in ra là ô trống, nhìn phân biệt được với buổi
-          app ghi. Buổi ghi tay KHÔNG tính vào “Số buổi PT” của bảng lương; muốn sửa số buổi
-          tính lương thì sửa ở hồ sơ khách. Ô cân để trống = dùng số cân gần nhất trước buổi;
-          Phiếu in giờ VÀO và họ tên đầy đủ của HLV. Bảng luôn tự xếp theo ngày tăng dần —
+          app ghi. Buổi ghi tay CÓ tính vào “Số buổi PT” của bảng lương: tính cho HLV được chọn
+          ở cột HLV, vào tháng của ngày ghi trên dòng. Để trống ô HLV thì dòng vẫn in lên phiếu
+          nhưng không tính công cho ai. Ô cân để trống = dùng số cân gần nhất trước buổi;
+          phiếu in giờ VÀO và họ tên đầy đủ của HLV. Bảng luôn tự xếp theo ngày tăng dần —
           buổi điền tay tự về đúng chỗ giữa các buổi app ghi ngay khi rời ô ngày.
-          Buổi ghi tay thì FM tự điền tên HLV; buổi app ghi lấy đúng người đã ký, không sửa được.
+          Buổi app ghi lấy đúng người đã ký check-in, không sửa được.
         </p>
       </div>
 

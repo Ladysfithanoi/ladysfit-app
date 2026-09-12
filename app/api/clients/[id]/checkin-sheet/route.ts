@@ -62,6 +62,25 @@ function weightFor(
 /** Ai được mở phiếu. Sửa phiếu thì thêm điều kiện Admin đã bật tính năng. */
 const SHEET_ROLES = ["ADMIN", "FM", "COO", "PT"];
 
+/**
+ * Ai chọn được vào ô HLV của một dòng ghi tay.
+ *
+ * Dòng ghi tay nay được TÍNH CÔNG cho người dạy (xem lib/manual-sheet-sessions),
+ * nên ô đó phải là một con người có thật chứ không còn là chữ gõ tay — cùng lý do
+ * mà "Loại hình tập" phải chọn từ danh sách. Lấy đúng những vai đã từng ký check-in
+ * trên hệ thống: PT, FM và Admin.
+ */
+const TEACHER_ROLES = ["PT", "FM", "ADMIN"];
+
+async function selectableTeachers() {
+  const rows = await prisma.user.findMany({
+    where:  { role: { in: TEACHER_ROLES as never[] }, deletedAt: null },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((u) => ({ id: u.id, name: (u.name ?? "").trim() || u.email || "—" }));
+}
+
 async function checkinSheetEditEnabled(): Promise<boolean> {
   const config = await prisma.systemConfig.findUnique({
     where:  { id: "main" },
@@ -278,6 +297,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     },
     override,
     canEdit: await checkinSheetEditEnabled(),
+    /** Danh sách HLV chọn được cho dòng ghi tay — buổi đó được tính công cho họ. */
+    teachers: await selectableTeachers(),
   });
 }
 
@@ -316,6 +337,15 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   if (!enrollment) return NextResponse.json({ error: "Không tìm thấy lộ trình" }, { status: 404 });
 
   const override = sanitizeOverride(body.override);
+
+  // Dòng ghi tay ra tiền, nên ô HLV phải trỏ tới một người CÓ THẬT. Id lạ thì bỏ
+  // đi chứ không từ chối cả lần lưu — vứt cả bảng 50 dòng vì một ô sai là cách
+  // chắc chắn làm mất công người đang nhập (cùng lẽ với sanitizeOverride).
+  const teacherIds = new Set((await selectableTeachers()).map((t) => t.id));
+  for (const row of override.extraRows) {
+    if (row.ptId && !teacherIds.has(row.ptId)) row.ptId = "";
+  }
+
   const data = {
     header:    JSON.stringify(override.header),
     rows:      JSON.stringify(override.rows),

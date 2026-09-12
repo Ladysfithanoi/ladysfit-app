@@ -395,9 +395,6 @@ export function ClientDetailPage({
   // dùng để tính lương cho PT.
   const [ptSessionsByPackage, setPtSessionsByPackage] =
     useState<Record<string, number>>(initialPTSessions);
-  const [pkgPTInputs, setPkgPTInputs] = useState<Partial<Record<string, string>>>({});
-  const [savingPTId, setSavingPTId] = useState<string | null>(null);
-  const [ptSessionError, setPtSessionError] = useState("");
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [pkgStartDate, setPkgStartDate] = useState("");
   const [pkgUpdateLoading, setPkgUpdateLoading] = useState(false);
@@ -940,38 +937,6 @@ export function ClientDetailPage({
       // silent
     } finally {
       setSavingSessionsId(null);
-    }
-  }
-
-  // Admin/FM sửa "Số buổi PT" của một lộ trình. Số nhập là tổng của cả lộ trình;
-  // server ghi phần chênh vào tháng hiện tại và cộng vào lương tháng đó.
-  async function handleSavePTSessions(pkgId: string) {
-    const val = pkgPTInputs[pkgId];
-    if (val === undefined) return;
-    const num = parseInt(val, 10);
-    if (isNaN(num) || num < 0) return;
-    setSavingPTId(pkgId);
-    setPtSessionError("");
-    try {
-      const res = await fetch(`/api/clients/${client.id}/packages/${pkgId}/pt-sessions`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ptSessions: num }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        setPtSessionError(err.error ?? "Không lưu được số buổi PT");
-        return;
-      }
-      const saved = await res.json() as { ptSessions: number; appliedMonth: number; appliedYear: number };
-      setPtSessionsByPackage((prev) => ({ ...prev, [pkgId]: saved.ptSessions }));
-      setPkgPTInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
-      setToastMsg(`Đã lưu số buổi PT — tính vào lương tháng ${saved.appliedMonth}/${saved.appliedYear} ✓`);
-      setTimeout(() => setToastMsg(null), 4000);
-    } catch {
-      setPtSessionError("Không lưu được số buổi PT");
-    } finally {
-      setSavingPTId(null);
     }
   }
 
@@ -2796,44 +2761,24 @@ export function ClientDetailPage({
                       tự động được ghi vào lương THÁNG HIỆN TẠI. */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-green-600 w-16 flex-shrink-0">Số buổi PT:</span>
-                    {canEditSessions ? (
-                      <div className="flex items-center gap-1 flex-1">
-                        <input
-                          type="number"
-                          min={0}
-                          max={pkg.sessions}
-                          value={pkgPTInputs[pkg.id] ?? (ptSessionsByPackage[pkg.id] ?? 0)}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => setPkgPTInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
-                          className="flex-1 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                        />
-                        <button
-                          onClick={() => handleSavePTSessions(pkg.id)}
-                          disabled={savingPTId === pkg.id}
-                          className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50 whitespace-nowrap"
-                          style={{ backgroundColor: "#f15b5c" }}
-                        >
-                          {savingPTId === pkg.id ? "..." : "Lưu"}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-semibold text-gray-700">
-                        {ptSessionsByPackage[pkg.id] ?? 0}/{pkg.sessions} buổi
-                      </span>
-                    )}
+                    <span className="text-xs font-semibold text-gray-700">
+                      {ptSessionsByPackage[pkg.id] ?? 0}/{pkg.sessions} buổi
+                    </span>
                   </div>
+                  {/* Ô gõ tổng ở đây đã bỏ. Nó ghi một con số trần không ngày không
+                      người dạy: ra tiền nhưng không in được lên phiếu check-in, nên
+                      bảng lương và phiếu của cùng một khách không bao giờ khớp. Nay
+                      thêm buổi bằng tay chỉ còn một đường, và đường đó đi cả hai nơi. */}
                   {canEditSessions ? (
                     <p className="text-[10px] text-gray-400 italic">
-                      * Sửa &ldquo;Số buổi PT&rdquo; sẽ cộng phần chênh vào tiền buổi dạy của
-                      tháng {new Date().getMonth() + 1}/{new Date().getFullYear()}
+                      * Thêm buổi dạy bằng tay ở <span className="font-semibold">Phiếu check-in</span> của lộ
+                      trình → cây bút → &ldquo;Thêm buổi ghi tay&rdquo;, chọn ngày và HLV. Buổi thêm ở đó vào
+                      thẳng số này và in luôn trên phiếu.
                     </p>
                   ) : (
                     <p className="text-[10px] text-gray-400 italic">
-                      * Chỉ Admin và FM có thể chỉnh sửa số buổi
+                      * Chỉ Admin và FM thêm được buổi dạy bằng tay, ở phiếu check-in của lộ trình.
                     </p>
-                  )}
-                  {ptSessionError && (
-                    <p className="text-[10px] text-red-500 font-semibold">{ptSessionError}</p>
                   )}
 
                   {/* Số ngày bảo lưu / gia hạn */}

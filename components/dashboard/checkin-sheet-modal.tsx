@@ -69,6 +69,8 @@ type SheetData = {
   pageCount: number;
   /** Buổi do app ghi đã bị loại vì diễn ra TRƯỚC ngày bắt đầu lộ trình. */
   excludedBeforeStart: number;
+  /** HLV chọn được cho dòng ghi tay — dòng đó được tính công cho người này. */
+  teachers: { id: string; name: string }[];
 };
 
 // ── Kích thước bản vẽ ────────────────────────────────────────────────────────
@@ -688,6 +690,7 @@ export function CheckinSheetModal({
             </div>
           ) : editing && data ? (
             <CheckinSheetEditor
+              teachers={data.teachers ?? []}
               rows={data.rows}
               original={data.original}
               override={data.override ?? EMPTY_OVERRIDE}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getManualSheetSessions } from "@/lib/manual-sheet-sessions";
 import {
   ENROLLMENT_CONTRACT_TYPE,
   ENROLLMENT_ID,
@@ -28,6 +29,14 @@ import {
  * /check-out), không theo client."assignedPTId", nên buổi dạy hộ ghi công đúng
  * người dạy hộ.
  *
+ * BUỔI GHI TAY TRÊN PHIẾU cũng được tính ở đây, cùng một danh sách trả về. Đó là
+ * đường duy nhất để thêm buổi bằng tay, và nó có đủ ngày lẫn người dạy nên tính
+ * được — xem lib/manual-sheet-sessions. Trước đây buổi thêm tay đi bằng một con số
+ * trần (PTSessionAdjustment) không ngày không người: nó ra tiền nhưng không in
+ * được lên phiếu, nên bảng lương và phiếu check-in của cùng một khách không bao
+ * giờ khớp và không chỗ nào giải thích nổi. Bản ghi delta cũ vẫn được cộng vào cho
+ * các tháng đã chốt, nhưng từ nay không sinh thêm.
+ *
  * ĐƠN GIÁ buổi dạy bám theo GÓI MÀ BUỔI ĐÓ ĐÃ TRỪ (wl."packageEnrollmentId",
  * ghi lúc check-in). Cách cũ lấy gói ACTIVE mới nhất của khách nên sai cả hai
  * chiều: khách đã học xong gói (không còn gói ACTIVE) bị rơi vào nhánh mặc định
@@ -53,6 +62,29 @@ export async function getTaughtSessions(
 ): Promise<TaughtSessionRow[]> {
   if (ptIds.length === 0) return [];
 
+  const [logged, manual] = await Promise.all([
+    taughtFromLogs(ptIds, gte, lt),
+    getManualSheetSessions({ ptIds, gte, lt }),
+  ]);
+
+  return [
+    ...logged,
+    ...manual.map((m) => ({
+      ptId:         m.ptId,
+      clientId:     m.clientId,
+      enrollmentId: m.enrollmentId,
+      packageName:  m.packageName,
+      contractType: m.contractType,
+    })),
+  ];
+}
+
+/** Buổi do app ghi — phần đếm thẳng từ workout_logs. */
+function taughtFromLogs(
+  ptIds: string[],
+  gte:   Date,
+  lt:    Date,
+): Promise<TaughtSessionRow[]> {
   return prisma.$queryRawUnsafe<TaughtSessionRow[]>(
     `
     SELECT
@@ -102,6 +134,8 @@ export function countByEnrollment(rows: TaughtSessionRow[]): Map<string, number>
  * Admin/FM sửa tay, nên hai chỗ luôn khớp nhau.
  */
 export async function getEnrollmentTaughtCounts(clientId: string): Promise<Record<string, number>> {
+  const manual = await getManualSheetSessions({ clientId });
+
   const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string | null; n: number }[]>(
     `
     SELECT ${ENROLLMENT_ID} AS "enrollmentId", COUNT(*)::int AS n
@@ -117,6 +151,11 @@ export async function getEnrollmentTaughtCounts(clientId: string): Promise<Recor
   const counts: Record<string, number> = {};
   for (const r of rows) {
     if (r.enrollmentId) counts[r.enrollmentId] = Number(r.n);
+  }
+  // Buổi ghi tay trên phiếu tính chung một rổ — thanh tiến độ ở hồ sơ khách và
+  // bảng lương phải thấy cùng một con số.
+  for (const m of manual) {
+    counts[m.enrollmentId] = (counts[m.enrollmentId] ?? 0) + 1;
   }
   return counts;
 }

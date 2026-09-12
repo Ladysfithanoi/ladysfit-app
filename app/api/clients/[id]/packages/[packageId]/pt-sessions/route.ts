@@ -1,97 +1,38 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getEnrollmentTaughtCounts } from "@/lib/pt-session-count";
 
-// PUT /api/clients/[id]/packages/[packageId]/pt-sessions
+// PUT /api/clients/[id]/packages/[packageId]/pt-sessions — ĐƯỜNG NÀY ĐÃ ĐÓNG.
 //
-// Admin/FM sửa "Số buổi PT" của một lộ trình. Số nhập là TỔNG số buổi PT của cả
-// lộ trình; phần chênh so với số đếm tự động (buổi đã check-out có chữ ký kèm
-// nhật ký buổi tập) được ghi vào THÁNG HIỆN TẠI và cộng vào lương tháng đó.
+// Nó từng ghi "Số buổi PT" bằng một con số trần cho (lộ trình · tháng):
+// PTSessionAdjustment { enrollmentId, ptId, month, year, delta } — không ngày,
+// không buổi, không người dạy cụ thể.
 //
-// Ghi theo (lộ trình · tháng) nên sửa nhiều lần trong cùng tháng chỉ đè lên bản
-// ghi của tháng đó, còn sửa ở tháng sau thì tạo bản ghi mới — tiền không bị dời
-// khỏi tháng đã chốt.
-export async function PUT(
-  req: Request,
-  { params }: { params: { id: string; packageId: string } }
-) {
+// Con số đó RA TIỀN nhưng không in được lên phiếu check-in, vì một dòng trên
+// phiếu cần tối thiểu một NGÀY để in ra ô "Ngày" và để xếp thứ tự. Kết quả là
+// bảng lương và phiếu check-in của cùng một khách không bao giờ khớp, và không
+// chỗ nào giải thích nổi con số chênh — trong khi đường kia (dòng ghi tay trên
+// phiếu) có đủ cả ngày lẫn tên HLV thì lại KHÔNG được tính lương. Cái ít thông
+// tin hơn được trả tiền, cái nhiều thông tin hơn thì không.
+//
+// Nay thêm buổi bằng tay chỉ còn MỘT đường: dòng ghi tay trên phiếu check-in.
+// Nó có ngày và có HLV nên đi được cả hai nơi — lên phiếu của khách và vào
+// "Số buổi PT" của bảng lương (xem lib/manual-sheet-sessions).
+//
+// Giữ lại route để trả về câu chỉ đường: một tab mở từ trước vẫn bấm Lưu được,
+// và im lặng 405 thì người dùng không hiểu chuyện gì. Các bản ghi delta cũ vẫn
+// được cộng vào lương những tháng đã chốt, chỉ không sinh thêm bản mới.
+export async function PUT() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const role = session.user.role;
-  if (role !== "ADMIN" && role !== "FM") {
-    return NextResponse.json({ error: "Chỉ Admin và FM được sửa số buổi PT" }, { status: 403 });
-  }
-
-  const { ptSessions } = (await req.json()) as { ptSessions?: number };
-  const desired = Number(ptSessions);
-  if (!Number.isInteger(desired) || desired < 0) {
-    return NextResponse.json({ error: "Số buổi PT không hợp lệ" }, { status: 400 });
-  }
-
-  const enrollment = await prisma.packageEnrollment.findUnique({
-    where:  { id: params.packageId },
-    select: { id: true, clientId: true, sessions: true, client: { select: { assignedPTId: true, branchId: true } } },
-  });
-  if (!enrollment || enrollment.clientId !== params.id) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (desired > enrollment.sessions) {
-    return NextResponse.json(
-      { error: `Số buổi PT không thể vượt quá ${enrollment.sessions} buổi của gói` },
-      { status: 400 }
-    );
-  }
-
-  // FM chỉ sửa được khách thuộc cơ sở mình quản lý.
-  if (role === "FM") {
-    const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
-    if (!managedBranchIds.includes(enrollment.client.branchId)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-  }
-
-  const now   = new Date();
-  const month = now.getMonth() + 1;
-  const year  = now.getFullYear();
-
-  // Số đang hiển thị = đếm tự động cả lộ trình + mọi lần chỉnh tay trước đó.
-  const autoCount = (await getEnrollmentTaughtCounts(params.id))[params.packageId] ?? 0;
-  const existing  = await prisma.pTSessionAdjustment.findMany({
-    where:  { enrollmentId: params.packageId },
-    select: { month: true, year: true, delta: true },
-  });
-  const priorTotal   = existing.reduce((s, a) => s + a.delta, 0);
-  const thisMonthOld = existing.find(a => a.month === month && a.year === year)?.delta ?? 0;
-
-  // Chênh cần bù, cộng vào phần đã ghi cho tháng này.
-  const newThisMonth = thisMonthOld + (desired - (autoCount + priorTotal));
-
-  if (newThisMonth === 0) {
-    await prisma.pTSessionAdjustment.deleteMany({
-      where: { enrollmentId: params.packageId, month, year },
-    });
-  } else {
-    await prisma.pTSessionAdjustment.upsert({
-      where:  { enrollmentId_month_year: { enrollmentId: params.packageId, month, year } },
-      create: {
-        enrollmentId: params.packageId,
-        ptId:         enrollment.client.assignedPTId,
-        month, year,
-        delta:        newThisMonth,
-        createdById:  session.user.id,
-      },
-      update: { delta: newThisMonth, ptId: enrollment.client.assignedPTId, createdById: session.user.id },
-    });
-  }
-
-  return NextResponse.json({
-    ptSessions:   desired,
-    autoCount,
-    adjustment:   priorTotal - thisMonthOld + newThisMonth,
-    appliedMonth: month,
-    appliedYear:  year,
-  });
+  return NextResponse.json(
+    {
+      error:
+        "Số buổi PT nay ghi bằng buổi ghi tay trên phiếu check-in — mở Phiếu check-in của " +
+        "lộ trình, bấm cây bút, rồi “Thêm buổi ghi tay” và chọn ngày cùng HLV. Buổi thêm ở " +
+        "đó vào thẳng bảng lương và in luôn trên phiếu.",
+    },
+    { status: 410 }
+  );
 }
