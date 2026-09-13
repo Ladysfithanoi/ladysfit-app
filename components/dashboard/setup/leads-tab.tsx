@@ -516,13 +516,18 @@ export function LeadsTab({
     promos,
   });
 
-  /** Đổi Tình trạng → dọn sạch những ô vừa bị khoá (kèm Ngày ký nếu hết doanh thu). */
+  /**
+   * Đổi Tình trạng → dọn sạch những ô vừa bị khoá (kèm Ngày ký nếu hết doanh thu).
+   * Phải là null chứ không phải undefined: undefined bị JSON.stringify bỏ khỏi
+   * request, server không thấy key nên tưởng là cập nhật một phần và giữ lại số
+   * tiền cũ ở ô vừa khoá.
+   */
   function changeStatus(status: LeadStatus) {
     const locks = fieldLocks(status);
     setForm(f => {
       const next = { ...f, status };
-      if (locks.revenue)   { next.actualRevenue = undefined; next.signDateStr = ""; }
-      if (locks.remaining) next.remainingPayment = undefined;
+      if (locks.revenue)   { next.actualRevenue = null; next.signDateStr = ""; }
+      if (locks.remaining) next.remainingPayment = null;
       return next;
     });
   }
@@ -532,7 +537,7 @@ export function LeadsTab({
    * Sửa lại số tiền sau này KHÔNG dời ngày ký đã có — chỉ xoá trắng tiền mới xoá ngày.
    */
   function changeRevenue(raw: string) {
-    const value = raw ? parseFloat(raw) : undefined;
+    const value = raw ? parseFloat(raw) : null;
     setForm(f => ({
       ...f,
       actualRevenue: value,
@@ -1234,7 +1239,7 @@ export function LeadsTab({
                     value={form.remainingPayment ?? ""}
                     disabled={formLocks.remaining}
                     onFocus={(e) => e.target.select()}
-                    onChange={e => setForm(f => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, remainingPayment: e.target.value ? parseFloat(e.target.value) : null }))}
                     className={cn(inputCls, formLocks.remaining && lockedCls)}
                     placeholder={formLocks.remaining ? "—" : "2.0"}
                     title={formLocks.remaining ? "Chỉ tình trạng Đặt cọc mới có khoản còn thiếu" : undefined}
@@ -1250,7 +1255,7 @@ export function LeadsTab({
                     type="number" step="0.1"
                     value={form.fitpartnerRevenue ?? ""}
                     onFocus={(e) => e.target.select()}
-                    onChange={e => setForm(f => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                    onChange={e => setForm(f => ({ ...f, fitpartnerRevenue: e.target.value ? parseFloat(e.target.value) : null }))}
                     className={inputCls}
                     placeholder="5.0"
                   />

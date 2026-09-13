@@ -6,7 +6,7 @@ import { captureTrash } from "@/lib/trash";
 import { syncLeadRevenueToWeeklyActuals } from "@/lib/sync-revenue";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { syncLeadToClient } from "@/lib/sync-lead-to-client";
-import { validateLeadFinance, type LeadFinanceStatus } from "@/lib/lead-pricing";
+import { validateLeadFinance, fieldLocks, type LeadFinanceStatus } from "@/lib/lead-pricing";
 import { getActivePromos } from "@/lib/package-promos-server";
 
 /** Các trường quyết định luật tiền — chỉ khi body đụng tới chúng mới kiểm tra lại. */
@@ -50,12 +50,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const nextStatus    = ("status" in body && body.status ? body.status : lead.status) as LeadFinanceStatus;
   const nextSource    = "source" in body ? (body.source ? String(body.source) : null) : lead.source;
   const nextPackage   = "packageRegistered" in body ? (body.packageRegistered ? String(body.packageRegistered) : null) : lead.packageRegistered;
-  const nextRevenue   = "actualRevenue" in body ? num(body.actualRevenue) : lead.actualRevenue;
-  const nextRemaining = "remainingPayment" in body ? num(body.remainingPayment) : lead.remainingPayment;
+  const rawRevenue    = "actualRevenue" in body ? num(body.actualRevenue) : lead.actualRevenue;
+  const rawRemaining  = "remainingPayment" in body ? num(body.remainingPayment) : lead.remainingPayment;
 
   // Chỉ soát luật tiền khi request thực sự đụng tới chúng — popup ghi chú chăm sóc
   // chỉ gửi { notes } nên không bị chặn bởi dữ liệu tiền cũ chưa chuẩn.
   const touchesFinance = FINANCE_FIELDS.some(f => f in body);
+
+  // Đổi Tình trạng khoá ô nào thì số tiền cũ ở ô đó phải rơi ra theo. Giao diện xoá
+  // ô vừa bị khoá bằng undefined — JSON.stringify bỏ hẳn key — nên nhánh "giữ giá
+  // trị cũ" ở trên sẽ lôi tiền cũ về: lead Đặt cọc còn thiếu 10 triệu, chuyển sang
+  // Thanh toán nốt thì ô Còn thiếu bị khoá, không xoá được bằng tay mà server vẫn
+  // thấy 10 triệu rồi chặn Cập nhật. Request không đụng tới tiền (popup ghi chú)
+  // thì để nguyên — không tự ý dọn dữ liệu cũ sau lưng người dùng.
+  const locks         = fieldLocks(nextStatus);
+  const nextRevenue   = touchesFinance && locks.revenue   ? null : rawRevenue;
+  const nextRemaining = touchesFinance && locks.remaining ? null : rawRemaining;
   if (touchesFinance) {
     // Đợt trợ giá tính theo NGÀY KÝ của lead, không phải hôm nay: sửa lại một hợp
     // đồng ký hồi đợt presale thì vẫn đối chiếu theo giá của đợt đó, kể cả khi đợt
