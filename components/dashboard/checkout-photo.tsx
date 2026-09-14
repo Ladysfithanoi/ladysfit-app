@@ -13,12 +13,26 @@ import { cn } from "@/lib/utils";
 //
 // Ảnh được thu nhỏ và nén thành data URL JPEG trước khi gửi, để cột TEXT trong
 // DB không phình — cùng cách lưu với chữ ký.
+//
+// iPhone/Safari là máy khó tính nhất ở màn này, nên toàn bộ phần mở camera bên
+// dưới viết theo nguyên tắc "không bao giờ treo": mọi bước chờ đều có hạn chót,
+// mọi lần hỏng đều có đường bấm lại. Ba kiểu hỏng đã gặp ngoài phòng tập:
+//   1. getUserMedia không trả về (không lỗi, không stream) khi camera vừa bị
+//      ứng dụng khác chiếm → spinner quay mãi, nút Chụp disable vĩnh viễn.
+//   2. Stream mở được nhưng <video> chưa hề có khung hình → hộp đen im lặng.
+//   3. Khoá màn hình / chuyển sang app khác rồi quay lại: iOS ngắt track camera
+//      (muted rồi ended) và không tự chạy lại → quay lại thấy màn đen.
 
 /** Cạnh dài tối đa của ảnh gửi lên, đủ để FM nhìn rõ mặt mà vẫn nhẹ (~80KB/ảnh). */
 const MAX_EDGE = 900;
 const JPEG_QUALITY = 0.7;
 
+/** Hạn chót cho MỖI kiểu ràng buộc khi xin camera, và cho lần chờ khung hình đầu. */
+const OPEN_TIMEOUT_MS = 6000;
+const FRAME_TIMEOUT_MS = 6000;
+
 type Facing = "environment" | "user";
+type Phase = "starting" | "live" | "error";
 
 const FACING_LABEL: Record<Facing, string> = {
   environment: "Cam sau",
@@ -29,6 +43,37 @@ const FACING_LABEL: Record<Facing, string> = {
 // "camera2 1, facing front", "Camera trước"...). Bắt theo từ khoá cho rộng.
 const FRONT_RE = /front|user|face|selfie|trước|truoc/i;
 const BACK_RE  = /back|rear|environment|world|sau/i;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+const stopStream = (s: MediaStream | null | undefined) => s?.getTracks().forEach((t) => t.stop());
+
+/**
+ * Chạy `p` với hạn chót. Hết giờ thì coi như hỏng và đi tiếp — nhưng nếu sau đó
+ * `p` mới trả về stream thì `onLate` phải tắt nó, không thì đèn camera cứ sáng
+ * và chính nó lại chiếm chỗ của lần mở sau.
+ */
+function withDeadline<T>(p: Promise<T>, ms: number, onLate: (value: T) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      reject(new DOMException("Hết giờ chờ camera", "TimeoutError"));
+    }, ms);
+    p.then(
+      (value) => {
+        if (timedOut) { onLate(value); return; }
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 /**
  * Camera ứng với mặt trước / mặt sau, hoặc null khi máy chỉ có một camera.
@@ -48,7 +93,11 @@ function pickDeviceId(cams: MediaDeviceInfo[], facing: Facing): string | null {
 
 /**
  * Mở camera theo mặt đã chọn, thử lần lượt từ ràng buộc chặt tới lỏng: đúng
- * thiết bị → đúng mặt → mặt mong muốn. Máy nào cũng vào được một trong ba.
+ * thiết bị → đúng mặt → mặt mong muốn → camera nào cũng được. Máy nào cũng vào
+ * được một trong bốn.
+ *
+ * Mỗi lần thử có hạn chót riêng: trên iOS lời gọi có thể không bao giờ trả về,
+ * chờ mãi thì không bao giờ tới được ràng buộc lỏng hơn vốn lại mở được.
  */
 async function openCamera(facing: Facing, cams: MediaDeviceInfo[]): Promise<MediaStream> {
   const id = pickDeviceId(cams, facing);
@@ -56,12 +105,17 @@ async function openCamera(facing: Facing, cams: MediaDeviceInfo[]): Promise<Medi
     ...(id ? [{ video: { deviceId: { exact: id } }, audio: false }] : []),
     { video: { facingMode: { exact: facing } }, audio: false },
     { video: { facingMode: facing }, audio: false },
+    { video: true, audio: false },
   ];
 
   let lastErr: unknown;
   for (const constraints of tries) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints);
+      return await withDeadline(
+        navigator.mediaDevices.getUserMedia(constraints),
+        OPEN_TIMEOUT_MS,
+        stopStream
+      );
     } catch (err) {
       lastErr = err;
     }
@@ -69,10 +123,52 @@ async function openCamera(facing: Facing, cams: MediaDeviceInfo[]): Promise<Medi
   throw lastErr;
 }
 
+/**
+ * Chờ <video> thực sự có khung hình đầu tiên. Stream mở được KHÔNG có nghĩa là
+ * hình đã chạy: iOS hay dừng đúng ở đây, và đó chính là cái hộp đen.
+ */
+function waitForFirstFrame(video: HTMLVideoElement, ms: number): Promise<boolean> {
+  const hasFrame = () => video.videoWidth > 0 && video.readyState >= 2;
+  if (hasFrame()) return Promise.resolve(true);
+
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      clearInterval(poll);
+      video.removeEventListener("loadedmetadata", check);
+      video.removeEventListener("playing", check);
+      resolve(ok);
+    };
+    const check = () => { if (hasFrame()) finish(true); };
+    const timer = setTimeout(() => finish(false), ms);
+    // Có máy không bắn đủ sự kiện, nên vẫn ngó lại theo nhịp cho chắc.
+    const poll = setInterval(check, 150);
+    video.addEventListener("loadedmetadata", check);
+    video.addEventListener("playing", check);
+    check();
+  });
+}
+
+/** Câu hướng dẫn đúng với từng kiểu hỏng — PT đọc là biết phải làm gì ngay tại chỗ. */
+function explainCameraError(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name ?? "";
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return "Trình duyệt đang chặn camera. Trên iPhone: bấm chữ aA ở thanh địa chỉ → Cài đặt trang web → Camera → Cho phép, rồi bấm Thử lại.";
+  if (name === "NotReadableError" || name === "AbortError" || name === "TrackStartError")
+    return "Camera đang bị ứng dụng khác giữ (Camera, Zalo, Messenger, FaceTime...). Đóng hẳn ứng dụng đó rồi bấm Thử lại.";
+  if (name === "NotFoundError" || name === "OverconstrainedError")
+    return "Không tìm thấy camera phù hợp trên máy này. Đổi Cam trước / Cam sau rồi bấm Thử lại.";
+  return "Camera chưa mở được — máy đang bận hoặc trình duyệt treo camera. Bấm Thử lại; nếu vẫn đen thì đóng bớt tab/ứng dụng khác rồi thử lần nữa.";
+}
+
 function drawToDataUrl(video: HTMLVideoElement): string | null {
   const w = video.videoWidth;
   const h = video.videoHeight;
-  if (!w || !h) return null;
+  // readyState < 2 nghĩa là chưa có khung hình nào để vẽ — vẽ ra chỉ được ảnh đen.
+  if (!w || !h || video.readyState < 2) return null;
 
   const scale = Math.min(1, MAX_EDGE / Math.max(w, h));
   const canvas = document.createElement("canvas");
@@ -107,43 +203,74 @@ export function CheckOutPhotoCapture({
   const [camCount, setCamCount] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [starting, setStarting] = useState(true);
+  const [phase, setPhase] = useState<Phase>("starting");
+  /** Tăng lên là mở lại camera từ đầu — nút Thử lại, và lúc quay về từ app khác. */
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const stop = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    stopStream(streamRef.current);
     streamRef.current = null;
+    // Bỏ luôn srcObject: giữ lại một stream đã chết thì iOS vẽ ra đúng một khung
+    // đen, nhìn y hệt lúc camera đang mở dở.
+    if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  // Mở camera mỗi khi đổi mặt trước/sau, và đóng hẳn khi rời màn — không tắt
-  // track thì đèn camera của máy vẫn sáng sau khi đóng hộp thoại.
+  // Mở camera mỗi khi đổi mặt trước/sau hoặc bấm Thử lại, và đóng hẳn khi rời
+  // màn — không tắt track thì đèn camera của máy vẫn sáng sau khi đóng hộp thoại.
   useEffect(() => {
     if (shot) return;
     let cancelled = false;
-    setStarting(true);
+    setPhase("starting");
     setError("");
 
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         if (!cancelled) {
-          setError("Thiết bị/trình duyệt này không mở được camera. Hãy dùng điện thoại của PT để chụp.");
-          setStarting(false);
+          setError(
+            window.isSecureContext === false
+              ? "Trang đang mở qua kết nối không bảo mật (http) nên trình duyệt khoá camera. Hãy mở app bằng địa chỉ https."
+              : "Thiết bị/trình duyệt này không mở được camera. Hãy dùng điện thoại của PT để chụp."
+          );
+          setPhase("error");
         }
         return;
       }
+
       // Tắt luồng cũ TRƯỚC khi xin luồng mới: nhiều máy không mở được camera thứ
-      // hai khi camera trước còn đang chạy, nên đổi trước/sau sẽ lỗi.
+      // hai khi camera trước còn đang chạy, nên đổi trước/sau sẽ lỗi. iOS còn cần
+      // một nhịp nghỉ mới nhả hẳn camera ra.
+      const hadStream = !!streamRef.current;
       stop();
+      if (hadStream) await sleep(150);
+      if (cancelled) return;
+
       try {
         const stream = await openCamera(facing, camsRef.current);
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+          stopStream(stream);
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
+
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          // play() trên iOS có thể bị từ chối (máy vừa khoá màn hình chẳng hạn);
+          // nuốt lỗi ở đây rồi để bước chờ khung hình bên dưới phán quyết.
+          await video.play().catch(() => {});
+          const ok = await waitForFirstFrame(video, FRAME_TIMEOUT_MS);
+          if (cancelled) return;
+          if (!ok) {
+            stop();
+            setError("Camera mở được nhưng chưa lên hình. Bấm Thử lại — nếu vẫn đen, đóng bớt tab/ứng dụng đang dùng camera.");
+            setPhase("error");
+            return;
+          }
         }
+
+        if (!cancelled) setPhase("live");
 
         // Nhãn và deviceId chỉ hiện ra sau khi người dùng đã cấp quyền camera,
         // nên liệt kê sau lần mở đầu tiên — lúc đó mới biết máy có mấy camera
@@ -154,35 +281,77 @@ export function CheckOutPhotoCapture({
           camsRef.current = cams;
           if (!cancelled) setCamCount(cams.length);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError(
-            "Không truy cập được camera. Kiểm tra quyền camera của trình duyệt rồi thử lại — buổi tập cần ảnh chụp cùng khách mới ký check-out được."
-          );
+          stop();
+          setError(explainCameraError(err));
+          setPhase("error");
         }
-      } finally {
-        if (!cancelled) setStarting(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [facing, shot, stop]);
+  }, [facing, shot, attempt, stop]);
 
   useEffect(() => stop, [stop]);
+
+  // iOS ngắt camera khi khoá màn hình / chuyển app / có cuộc gọi: track chuyển
+  // sang muted rồi ended, <video> đứng hình đen và không bao giờ tự chạy lại.
+  // Quay lại màn là mở lại từ đầu.
+  useEffect(() => {
+    if (shot) return;
+
+    const resume = () => {
+      if (document.visibilityState !== "visible") return;
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (!track || track.readyState === "ended" || track.muted) {
+        retry();
+        return;
+      }
+      const video = videoRef.current;
+      if (video?.paused) video.play().catch(retry);
+    };
+
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("focus", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("focus", resume);
+    };
+  }, [shot, retry]);
+
+  // Camera bị máy thu hồi giữa chừng (ứng dụng khác chiếm) — báo lỗi kèm đường
+  // bấm lại, thay vì để PT nhìn hộp đen mà không hiểu chuyện gì đang xảy ra.
+  useEffect(() => {
+    if (phase !== "live" || shot) return;
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+
+    const onEnded = () => {
+      setError("Camera vừa bị ngắt (ứng dụng khác lấy mất, hoặc máy vừa khoá màn hình). Bấm Thử lại.");
+      setPhase("error");
+    };
+    track.addEventListener("ended", onEnded);
+    return () => track.removeEventListener("ended", onEnded);
+  }, [phase, shot]);
 
   function capture() {
     const video = videoRef.current;
     if (!video) return;
     const dataUrl = drawToDataUrl(video);
     if (!dataUrl) {
-      setError("Chưa lấy được khung hình, thử lại sau một giây.");
+      setError("Chưa lấy được khung hình. Bấm Thử lại để mở lại camera rồi chụp.");
       return;
     }
     setShot(dataUrl);
     stop();
   }
+
+  const starting = phase === "starting";
 
   return (
     <div
@@ -221,9 +390,22 @@ export function CheckOutPhotoCapture({
                   className="w-full h-full object-cover"
                 />
                 {starting && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/70">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70">
                     <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-[11px] font-semibold">Đang mở camera...</span>
                   </div>
+                )}
+                {phase === "error" && (
+                  // Hộp đen câm chính là thứ khiến PT đứng chờ vô ích — khi hỏng
+                  // thì luôn có một nút bấm được ngay trên khung hình.
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-white"
+                  >
+                    <RefreshCw className="w-6 h-6" />
+                    <span className="text-xs font-bold">Bấm để mở lại camera</span>
+                  </button>
                 )}
               </>
             )}
@@ -278,15 +460,27 @@ export function CheckOutPhotoCapture({
               </button>
             </div>
           ) : (
-            <button
-              onClick={capture}
-              disabled={starting || !!error}
-              className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              <Camera className="w-4 h-4" />
-              Chụp ảnh
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={capture}
+                disabled={phase !== "live"}
+                className="flex-1 h-11 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                <Camera className="w-4 h-4" />
+                Chụp ảnh
+              </button>
+              {/* Luôn có đường mở lại camera, kể cả khi spinner còn đang quay:
+                  đây là lối thoát duy nhất khi iOS treo giữa chừng. */}
+              <button
+                type="button"
+                onClick={retry}
+                className="h-11 px-4 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Thử lại
+              </button>
+            </div>
           )}
         </div>
       </div>
