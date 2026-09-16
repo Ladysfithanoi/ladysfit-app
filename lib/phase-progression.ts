@@ -187,9 +187,23 @@ export type PhaseVariant = {
  * `restricted` cho biết có đang giới hạn theo cấp độ hay không — chỉ khi đó một
  * bậc rỗng mới bị chặn với lý do "chưa được cấp quyền".
  */
-async function targetablePhasesForActor(
+export type AllowedPhaseRow = { id: string; name: string; templateKey: string; order: number };
+
+/**
+ * Giáo án trong Kho bài tập mà người này được phép dùng — MỘT ĐƯỜNG DUY NHẤT
+ * cho mọi chỗ hỏi "PT cấp này được đụng vào giáo án nào".
+ *
+ * Dùng chung cho: danh sách chuyển giai đoạn, ô "Loại hình tập" trong Thông tin
+ * CT, và khâu kiểm tra lại ở API tạo/sửa chương trình. Trước đây ô "Loại hình
+ * tập" đọc từ một bảng cứng trong lib/workout-structure nên PT cấp nào cũng
+ * thấy đủ 5 giáo án của Giai đoạn 2, kể cả giáo án chưa được cấp quyền.
+ *
+ * `restricted = false` nghĩa là không giới hạn (FM/Admin, hệ thống cấp độ tắt,
+ * hoặc cấp độ chưa cấu hình quyền) — khi đó trả về toàn bộ giai đoạn đang bật.
+ */
+export async function allowedPhasesForActor(
   actor: Actor
-): Promise<{ byOrder: Map<number, PhaseVariant[]>; restricted: boolean }> {
+): Promise<{ phases: AllowedPhaseRow[]; restricted: boolean }> {
   const [phases, sysConfig, user] = await Promise.all([
     prisma.workoutPhase.findMany({
       where: { isActive: true },
@@ -212,13 +226,19 @@ async function targetablePhasesForActor(
   const access = user?.ptLevel?.phaseAccess ?? [];
   const restricted =
     actor.role === "PT" && sysConfig?.enableLevelSystem === true && access.length > 0;
-  const allowedIds = restricted
-    ? new Set(access.filter((a) => a.hasAccess).map((a) => a.phaseId))
-    : null;
+  if (!restricted) return { phases, restricted: false };
+
+  const allowedIds = new Set(access.filter((a) => a.hasAccess).map((a) => a.phaseId));
+  return { phases: phases.filter((p) => allowedIds.has(p.id)), restricted: true };
+}
+
+async function targetablePhasesForActor(
+  actor: Actor
+): Promise<{ byOrder: Map<number, PhaseVariant[]>; restricted: boolean }> {
+  const { phases, restricted } = await allowedPhasesForActor(actor);
 
   const byOrder = new Map<number, PhaseVariant[]>();
   for (const p of phases) {
-    if (allowedIds && !allowedIds.has(p.id)) continue;
     // Ưu tiên số trong tên ("Giai đoạn 2"), rơi về cột order nếu tên không chuẩn.
     const ord = phaseOrderOf(p.name) || p.order;
     if (ord < 1 || ord > MAX_PHASE_ORDER) continue;
@@ -294,6 +314,8 @@ export type PhaseSwitchInfo = {
   currentOrder: number;
   /** Tên giai đoạn đang áp dụng, để hiện đúng nhãn PT đã đặt. */
   currentPhase: string | null;
+  /** Giáo án đang áp dụng (WorkoutPhase.id); null với CT cũ chưa gắn giáo án. */
+  currentPhaseId: string | null;
   /** Số tuần đã hoàn thành ở giai đoạn đang áp dụng. */
   completedWeeks: number;
   /** Số tuần cần có ở giai đoạn đang áp dụng để chuyển lên. */
@@ -321,6 +343,8 @@ export async function evaluatePhaseSwitch(
   const isAdmin = actor.role === "ADMIN";
   const current = Array.from(byOrder.values()).find((p) => p.status === "ACTIVE") ?? null;
   const currentOrder = current ? phaseOrderOf(current.phase) : 0;
+  // Giáo án đang chạy — để loại chính nó khỏi danh sách "đổi sang giáo án khác".
+  const currentPhaseId = current?.phaseId ?? null;
   const requiredWeeks = currentOrder === 1 ? phase1Weeks : PHASE_MIN_COMPLETED_WEEKS;
   const completedWeeks = current
     ? await completedWeeksOfProgram(clientId, current.id, current.sessionsPerWeek)
@@ -331,13 +355,32 @@ export async function evaluatePhaseSwitch(
     const label = `Giai đoạn ${order}`;
     const variants = targetable.byOrder.get(order) ?? [];
     if (order === currentOrder) {
+      // ĐỔI GIÁO ÁN TRONG CÙNG MỘT BẬC.
+      //
+      // Một bậc có nhiều giáo án (GĐ2: Giảm béo / Skinny Fat / Chuyên mông 1…).
+      // Trước đây bậc đang áp dụng bị khoá cứng, nên PT được cấp quyền Chuyên
+      // mông 1 vẫn không có đường nào đưa khách đang tập Giảm béo sang đó: ô
+      // Giai đoạn trong Thông tin CT chỉ FM/Admin sửa được, còn ở đây thì không
+      // có nút nào. Giờ đổi ngang được, miễn là giáo án đích khác giáo án đang
+      // chạy và người bấm được cấp quyền giáo án đó.
+      //
+      // Không có rào số tuần: khách không tiến lên bậc mới, chỉ đổi hướng tập.
+      // CT cũ chưa gắn giáo án (phaseId = null) thì khớp theo tên, để giáo án
+      // khách đang tập không hiện ra như một lựa chọn "đổi sang".
+      const others = variants.filter((v) =>
+        currentPhaseId != null ? v.id !== currentPhaseId : v.name !== current?.phase
+      );
       options.push({
         order,
         label,
         isCurrent: true,
-        allowed: false,
+        allowed: others.length > 0,
+        reason:
+          others.length > 0 || !targetable.restricted
+            ? undefined
+            : `Cấp độ PT của bạn chưa được cấp quyền giáo án nào khác của ${label}.`,
         bypassesWeekGate: false,
-        phases: variants,
+        phases: others,
       });
       continue;
     }
@@ -374,6 +417,7 @@ export async function evaluatePhaseSwitch(
   return {
     currentOrder,
     currentPhase: current?.phase ?? null,
+    currentPhaseId,
     completedWeeks,
     requiredWeeks,
     canBypass,
@@ -403,7 +447,10 @@ export async function switchClientPhase(
   const info = await evaluatePhaseSwitch(clientId, actor);
   const option = info.options.find((o) => o.order === targetOrder);
   if (!option) return { ok: false, error: "Giai đoạn không hợp lệ.", status: 400 };
-  if (option.isCurrent) {
+  // Bậc đang áp dụng vẫn vào được — nhưng chỉ để ĐỔI SANG GIÁO ÁN KHÁC của bậc
+  // đó (option.phases đã loại giáo án đang chạy ra). Hết giáo án khác thì mới là
+  // "khách đang tập ở đây rồi".
+  if (option.isCurrent && option.phases.length === 0) {
     return { ok: false, error: "Khách đang tập ở giai đoạn này rồi.", status: 400 };
   }
   if (!option.allowed) {
@@ -520,7 +567,10 @@ async function createPhaseProgram(
     data: {
       clientId,
       createdById,
-      phase: baseName,
+      // Tên CT lấy đúng tên giáo án đã chọn ("Giai đoạn 2: Chuyên mông 1"), như
+      // các CT khác trong máy. Ghi trống thành "Giai đoạn 2" thì sau khi đổi
+      // giáo án nhìn vào thẻ CT không thấy gì khác trước.
+      phase: dbPhase?.name ?? baseName,
       phaseId,
       workoutType,
       sessionsPerWeek: spw,

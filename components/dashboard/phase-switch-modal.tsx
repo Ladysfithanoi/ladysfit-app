@@ -35,6 +35,7 @@ type PhaseSwitchOption = {
 type PhaseSwitchInfo = {
   currentOrder: number;
   currentPhase: string | null;
+  currentPhaseId: string | null;
   completedWeeks: number;
   requiredWeeks: number;
   canBypass: boolean;
@@ -165,9 +166,12 @@ export function PhaseSwitchModal({
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-gray-800">{o.label}</p>
                       {o.isCurrent && (
-                        <p className="text-xs text-green-700 font-semibold mt-0.5">Đang áp dụng</p>
+                        <p className="text-xs text-green-700 font-semibold mt-0.5">
+                          Đang áp dụng
+                          {o.allowed && ` — đổi được sang ${o.phases.length} giáo án khác`}
+                        </p>
                       )}
-                      {!o.isCurrent && o.reason && (
+                      {o.reason && (
                         <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{o.reason}</p>
                       )}
                       {!o.isCurrent && o.allowed && o.bypassesWeekGate && (
@@ -176,7 +180,11 @@ export function PhaseSwitchModal({
                         </p>
                       )}
                     </div>
-                    {!o.isCurrent && (
+                    {/* Bậc đang áp dụng vẫn có nút, nhưng để ĐỔI GIÁO ÁN trong
+                        chính bậc đó (Giảm béo → Chuyên mông 1…). Server đã loại
+                        giáo án đang chạy khỏi o.phases, nên hết lựa chọn là nút
+                        tự tắt. */}
+                    {(!o.isCurrent || o.allowed) && (
                       <button
                         onClick={() => {
                           setError("");
@@ -188,7 +196,7 @@ export function PhaseSwitchModal({
                         className="flex-shrink-0 h-8 px-3 rounded-xl text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
                         style={{ backgroundColor: "#f15b5c" }}
                       >
-                        Chuyển
+                        {o.isCurrent ? "Đổi giáo án" : "Chuyển"}
                       </button>
                     )}
                   </div>
@@ -208,7 +216,9 @@ export function PhaseSwitchModal({
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <p className="text-sm font-extrabold text-gray-900">
-              Chuyển khách sang {pending.label}?
+              {pending.isCurrent
+                ? `Đổi giáo án trong ${pending.label}?`
+                : `Chuyển khách sang ${pending.label}?`}
             </p>
             {/* Một bậc giai đoạn có nhiều giáo án (GĐ2: Giảm béo, Skinny Fat…).
                 Danh sách này do server trả về và đã lọc theo cấp độ, nên PT chỉ

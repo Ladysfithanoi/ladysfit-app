@@ -1158,7 +1158,17 @@ function ProgramView({
   // "Skinny Fat" của Giai đoạn 2 lọt vào một giáo án Giai đoạn 1.
   const progFormPhaseName =
     phases.find((p) => p.id === progForm.phaseId)?.name ?? program.phase;
-  const workoutTypeChoices = WORKOUT_TYPE_OPTIONS[basePhase(progFormPhaseName)] ?? [];
+  // Danh sách loại hình tập lấy từ KHO BÀI TẬP (`phases`, đã được
+  // /api/admin/phases lọc theo cấp độ PT), không lấy từ bảng cứng
+  // WORKOUT_TYPE_OPTIONS nữa: bảng cứng liệt kê đủ 5 giáo án của Giai đoạn 2 nên
+  // PT cấp nào cũng nhìn thấy Chuyên mông 2 / Cân bằng dù chưa được cấp quyền.
+  // Bảng cứng vẫn là đường lùi cho cơ sở dữ liệu chưa khai giáo án nào.
+  const phasesInBase = phases.filter(
+    (p) => basePhase(p.name) === basePhase(progFormPhaseName) && p.templateKey.trim() !== ""
+  );
+  const workoutTypeChoices = phasesInBase.length > 0
+    ? phasesInBase.map((p) => ({ label: p.templateKey, dbValue: p.templateKey }))
+    : WORKOUT_TYPE_OPTIONS[basePhase(progFormPhaseName)] ?? [];
   // Giá trị cũ không nằm trong danh sách vẫn hiện ra, có đánh dấu — để người dùng
   // thấy nó sai và tự chọn lại, thay vì bị âm thầm thay mất.
   const staleWorkoutType =

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
-import { canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
+import { allowedPhasesForActor, canBypassPhaseGate, phaseOrderOf } from "@/lib/phase-progression";
 import { sessionIdsWithLogs } from "@/lib/workout-session";
 import { isValidWorkoutType, workoutTypeForPhase } from "@/lib/workout-structure";
 import { captureTrash } from "@/lib/trash";
@@ -121,6 +121,24 @@ export async function PATCH(
         })
       : null;
     normalizedType = workoutTypeForPhase(nextPhase, phaseRow?.templateKey);
+  }
+
+  // Loại hình tập cũng là một GIÁO ÁN, nên nó chịu đúng luật phân quyền theo cấp
+  // độ PT như khi chuyển giai đoạn. Ô chọn ở giao diện đã lọc sẵn, nhưng luật
+  // phải nằm ở server: giao diện chỉ là nơi hiển thị.
+  //
+  // Chỉ chặn khi giá trị THAY ĐỔI sang loại chưa được cấp quyền — CT đang mang
+  // sẵn một loại ngoài quyền (do quản lý đặt) thì PT vẫn sửa được số buổi/tuần,
+  // ghi chú… mà không bị chặn oan.
+  if (typeof normalizedType === "string" && normalizedType.trim() !== "" &&
+      normalizedType !== existing.workoutType) {
+    const { phases: allowedPhases, restricted } = await allowedPhasesForActor(session.user);
+    if (restricted && !allowedPhases.some((p) => p.templateKey === normalizedType)) {
+      return NextResponse.json(
+        { error: `Cấp độ PT của bạn chưa được cấp quyền giáo án "${normalizedType}".` },
+        { status: 403 }
+      );
+    }
   }
 
   // Update program metadata fields

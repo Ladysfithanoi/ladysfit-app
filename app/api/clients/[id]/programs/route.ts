@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
+import { allowedPhasesForActor } from "@/lib/phase-progression";
 
 const weekInclude = {
   orderBy: { weekNumber: "asc" as const },
@@ -65,6 +66,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     notes?: string;
     sessions?: SessionInput[];
   };
+
+  // Giáo án được tạo phải nằm trong quyền theo cấp độ PT — cùng luật với ô chọn
+  // giai đoạn ở giao diện (/api/admin/phases đã lọc) và với việc chuyển giai
+  // đoạn. Luật nằm ở server để mọi đường gọi vào đây đều sạch.
+  if (body.phaseId) {
+    const { phases: allowedPhases, restricted } = await allowedPhasesForActor(session.user);
+    if (restricted && !allowedPhases.some((p) => p.id === body.phaseId)) {
+      return NextResponse.json(
+        { error: "Cấp độ PT của bạn chưa được cấp quyền giai đoạn này." },
+        { status: 403 }
+      );
+    }
+  }
 
   const startWeek = body.currentWeek ?? 1;
 
