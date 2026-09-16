@@ -112,15 +112,43 @@ export async function PATCH(
   // Chặn ở server chứ không chỉ ở giao diện, để mọi đường gọi vào đây đều sạch.
   const nextPhase = body.phase ?? existing.phase;
   const nextType = body.workoutType !== undefined ? body.workoutType : existing.workoutType;
+
+  // ── Đổi "Loại hình tập" NGHĨA LÀ đổi giáo án ──────────────────────────────
+  //
+  // Tên giai đoạn mang sẵn giáo án trong nó ("Giai đoạn 2: Giảm béo"), nên loại
+  // hình tập không được phép chỏi với tên đó — validWorkoutTypes chỉ nhận đúng
+  // phần sau dấu hai chấm. Trước đây PATCH chỉ ghi mỗi cột workoutType, nên khi
+  // PT chọn "Chuyên mông 1" cho một CT tên "Giai đoạn 2: Giảm béo", server lặng
+  // lẽ ép ngược về "Giảm béo": bấm Lưu xong màn hình y như cũ, không một lời
+  // báo. Đó chính là "app cứ nhảy về chương trình tập cũ".
+  //
+  // Nay loại hình tập mới sẽ KÉO THEO giai đoạn: tìm giáo án CÙNG BẬC có
+  // templateKey trùng rồi trỏ CT sang đó. Cùng bậc nên đây không phải là chuyển
+  // giai đoạn (việc của POST .../phase-switch) — CT không bị lưu trữ, giáo án đã
+  // soạn và nhật ký giữ nguyên, chỉ đổi hướng tập.
+  let derivedPhase: { id: string; name: string } | null = null;
+  const wantType = (body.workoutType ?? "").trim();
+  if (wantType && !isValidWorkoutType(nextPhase, wantType)) {
+    const sameOrder = phaseOrderOf(nextPhase);
+    const candidates = await prisma.workoutPhase.findMany({
+      where: { isActive: true, templateKey: wantType },
+      select: { id: true, name: true },
+    });
+    derivedPhase = candidates.find((p) => phaseOrderOf(p.name) === sameOrder) ?? null;
+  }
+
+  const effectivePhase = derivedPhase?.name ?? nextPhase;
   let normalizedType: string | null | undefined = body.workoutType;
-  if (!isValidWorkoutType(nextPhase, nextType)) {
+  if (!isValidWorkoutType(effectivePhase, derivedPhase ? wantType : nextType)) {
+    // Không tìm được giáo án nào khớp → giữ luật cũ: ép về loại tập đúng của
+    // giai đoạn, thay vì để lại một giáo án lai.
     const phaseRow = body.phaseId
       ? await prisma.workoutPhase.findUnique({
           where: { id: body.phaseId },
           select: { templateKey: true },
         })
       : null;
-    normalizedType = workoutTypeForPhase(nextPhase, phaseRow?.templateKey);
+    normalizedType = workoutTypeForPhase(effectivePhase, phaseRow?.templateKey);
   }
 
   // Loại hình tập cũng là một GIÁO ÁN, nên nó chịu đúng luật phân quyền theo cấp
@@ -133,7 +161,8 @@ export async function PATCH(
   if (typeof normalizedType === "string" && normalizedType.trim() !== "" &&
       normalizedType !== existing.workoutType) {
     const { phases: allowedPhases, restricted } = await allowedPhasesForActor(session.user);
-    if (restricted && !allowedPhases.some((p) => p.templateKey === normalizedType)) {
+    const okById = derivedPhase ? allowedPhases.some((p) => p.id === derivedPhase!.id) : false;
+    if (restricted && !okById && !allowedPhases.some((p) => p.templateKey === normalizedType)) {
       return NextResponse.json(
         { error: `Cấp độ PT của bạn chưa được cấp quyền giáo án "${normalizedType}".` },
         { status: 403 }
@@ -147,8 +176,8 @@ export async function PATCH(
     data: {
       ...(body.status === "ARCHIVED" || body.status === "ACTIVE" ? { status: body.status } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
-      ...(body.phase !== undefined ? { phase: body.phase } : {}),
-      ...(body.phaseId !== undefined ? { phaseId: body.phaseId } : {}),
+      ...(body.phase !== undefined ? { phase: body.phase } : derivedPhase ? { phase: derivedPhase.name } : {}),
+      ...(body.phaseId !== undefined ? { phaseId: body.phaseId } : derivedPhase ? { phaseId: derivedPhase.id } : {}),
       ...(body.sessionsPerWeek !== undefined ? { sessionsPerWeek: body.sessionsPerWeek } : {}),
       ...(body.currentWeek !== undefined ? { currentWeek: body.currentWeek } : {}),
       ...(normalizedType !== undefined ? { workoutType: normalizedType } : {}),

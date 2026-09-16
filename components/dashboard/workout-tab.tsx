@@ -2030,6 +2030,15 @@ function ProgramView({
                     cho đúng, nếu không giáo án sẽ dựng buổi theo một giai đoạn khác.
                   </p>
                 )}
+                {workoutTypeChoices.length > 0 && (
+                  <p className="text-[11px] text-gray-400">
+                    Đổi loại hình tập là <span className="font-semibold">đổi giáo án</span> của chương trình
+                    này — tên giai đoạn đổi theo, các tuần/buổi thêm mới sau đó dựng theo giáo án mới.{" "}
+                    <span className="font-semibold">Bài tập đã soạn và nhật ký giữ nguyên</span>; muốn dựng
+                    lại buổi theo mẫu của giáo án mới thì dùng{" "}
+                    <span className="font-semibold">Chuyển giai đoạn → Đổi giáo án</span> ở đầu tab.
+                  </p>
+                )}
               </div>
 
               {/* Notes */}
