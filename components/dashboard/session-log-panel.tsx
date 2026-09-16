@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle, Camera } from "lucide-react";
+import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle, Camera, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
 import { CheckOutPhotoCapture, CheckOutPhotoThumb } from "./checkout-photo";
@@ -482,7 +482,7 @@ export function SignaturePad({
           <div>
             {weightOpen ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-600 shrink-0">Cân nặng</span>
+                <span className="inline-flex items-center gap-1 text-sm font-extrabold text-[#f15b5c] shrink-0"><Scale className="w-4 h-4" />Cân nặng</span>
                 <div className="relative flex-1">
                   <input
                     type="number"
@@ -509,12 +509,13 @@ export function SignaturePad({
               <button
                 onClick={() => setWeightOpen(true)}
                 disabled={saving}
-                className="inline-flex items-center gap-1 text-xs font-bold text-[#f15b5c] hover:underline disabled:opacity-50"
+                className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#f15b5c]/50 bg-[#f15b5c]/5 text-sm font-extrabold text-[#f15b5c] hover:bg-[#f15b5c]/10 disabled:opacity-50"
               >
-                + Cân nặng
+                <Scale className="w-4 h-4" />
+                Cập nhật cân nặng hôm nay
               </button>
             )}
-            <p className={cn("mt-1 text-[11px]", weightError ? "font-semibold text-[#f15b5c]" : "text-gray-400")}>
+            <p className={cn("mt-1.5 text-xs font-medium", weightError ? "font-semibold text-[#f15b5c]" : "text-gray-500")}>
               {weightError || "Không bắt buộc — điền thì số cân vào thẳng nhật ký cân nặng của khách."}
             </p>
           </div>
