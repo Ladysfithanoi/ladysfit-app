@@ -30,6 +30,8 @@ type DetailClient = {
   clientId:    string;
   clientName:  string;
   packageName: string;
+  /** Khách chuyển giao trả 50k/buổi bất kể gói — xem lib/packages.sessionPayRate. */
+  contractType?: string;
   sessions:    DetailSession[];
 };
 
@@ -96,7 +98,7 @@ function PTSessionDetailModal({
 
   const totalSessions = data?.clients.reduce((s, c) => s + c.sessions.length, 0) ?? 0;
   const estimatedPay  = data?.clients.reduce(
-    (s, c) => s + c.sessions.length * sessionPayRate(c.packageName),
+    (s, c) => s + c.sessions.length * sessionPayRate(c.packageName, c.contractType),
     0,
   ) ?? 0;
 

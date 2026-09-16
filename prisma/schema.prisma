@@ -564,6 +564,9 @@ enum ContractType {
   NORMAL
   KOC
   KOL
+  // Khách chuyển từ cơ sở Ladysfit khác về — lộ trình như thường, chỉ khác tiền
+  // một buổi dạy của PT: luôn 50.000đ, bất kể gói. Xem lib/packages.ts.
+  TRANSFER
 }
 
 enum KOCContractStatus {
@@ -1653,6 +1656,8 @@ model SalaryRecord {
   showsResident       Int          @default(0)
   // Buổi dạy gói trải nghiệm "L0" (4 buổi / 2 triệu) — 50.000đ/buổi
   showsL0             Int          @default(0)
+  // Buổi dạy khách chuyển giao — 50.000đ/buổi bất kể gói
+  showsTransfer       Int          @default(0)
   // FM: dòng này có hưởng hoa hồng doanh số cả phòng không. Hoa hồng FM tính trên
   // doanh số CẢ PHÒNG nên cơ sở có nhiều FM mà ai cũng hưởng thì phòng trả nhiều
   // lần — người tạo bảng lương chọn ai được hưởng. PT/Admin không dùng cờ này.

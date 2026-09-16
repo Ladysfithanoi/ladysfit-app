@@ -71,8 +71,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const end = new Date(start);
   end.setDate(end.getDate() + Number(durationDays));
 
+  // TRANSFER = khách chuyển từ cơ sở Ladysfit khác về. Lộ trình y hệt khách
+  // thường, chỉ khác đơn giá buổi dạy của PT (50.000đ — xem lib/packages).
+  // KOC/KOL vẫn thắng vì hai loại đó có cách tính hoa hồng riêng.
   const resolvedContractType: string = contractType === "KOC" || packageName === "KOC" ? "KOC"
     : contractType === "KOL" ? "KOL"
+    : contractType === "TRANSFER" ? "TRANSFER"
     : "NORMAL";
 
   if (resolvedContractType === "KOC" && !startWeight) {

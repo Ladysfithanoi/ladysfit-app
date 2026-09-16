@@ -3,13 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
-import {
-  SESSION_PAY_L1_L2_LOYAL,
-  SESSION_PAY_L3_L4_L5,
-  SESSION_PAY_RESIDENT,
-  SESSION_PAY_TRIAL,
-} from "@/lib/packages";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
+import { showPayOf, type ShowBuckets } from "@/lib/session-pay";
+import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumLeaveDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
@@ -187,6 +183,21 @@ export async function GET(req: Request) {
       ? await fetchKOCKOLCommission(r.userId, month, year)
       : { kocCommission: 0, kolCommission: 0 };
 
+    // TIỀN BUỔI DẠY CỦA PT TÍNH LẠI THEO THỜI GIAN THỰC.
+    //
+    // PT dạy xong một buổi (check-in + check-out đầy đủ) là buổi đó đã đủ điều
+    // kiện tính tiền, nên bảng lương phải thấy ngay chứ không đợi FM tạo lại.
+    // Đọc thẳng từ buổi tập qua lib/session-pay — cùng nguồn với màn tạo bảng
+    // lương nên hai chỗ không bao giờ lệch.
+    //
+    // FM GIỮ NGUYÊN NHƯ CŨ: tiền buổi dạy của FM có trần 60 buổi/tháng và do
+    // người tạo bảng lương chốt, tính lại ở đây sẽ phá trần đó. Admin dạy thêm
+    // cũng giữ nguyên con số đã chốt.
+    const liveShows: ShowBuckets | null = role === "PT"
+      ? await liveShowsForUser(r.userId, month, year)
+      : null;
+    const showPay = liveShows ? showPayOf(liveShows) : r.showPay;
+
     // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
     // như đi làm đủ, để FM sửa được ngay mà tổng lương không đổi.
     const rWithDays = r as typeof r & { standardWorkDays?: number; actualWorkDays?: number; leaveDays?: number };
@@ -208,7 +219,7 @@ export async function GET(req: Request) {
       fixedAllowances:  r.fixedAllowances,
       seniorityBonus:   r.seniorityBonus,
       commissionAmount,
-      showPay:          r.showPay,
+      showPay,
       goalBonus:        r.goalBonus,
       googleBonus:      r.googleBonus,
       renewBonus:       r.renewBonus,
@@ -228,6 +239,7 @@ export async function GET(req: Request) {
       Math.abs(r.commissionRate  - commissionRate)   > 0.001 ||
       Math.abs(r.commissionAmount - commissionAmount) > 0.01 ||
       Math.abs(r.totalSalary     - totalSalary)      > 0.01 ||
+      Math.abs(r.showPay         - showPay)          > 0.01 ||
       Math.abs((rWithKOC.kocCommission ?? 0) - kocCommission) > 0.01 ||
       Math.abs((rWithKOC.kolCommission ?? 0) - kolCommission) > 0.01;
 
@@ -239,6 +251,7 @@ export async function GET(req: Request) {
         totalRevenue,
         commissionRate,
         commissionAmount,
+        ...(liveShows ? { ...liveShows, showPay } : {}),
         kocCommission: kocCommission as unknown as never,
         kolCommission: kolCommission as unknown as never,
         standardWorkDays: standardDays as unknown as never,
@@ -271,6 +284,8 @@ type GenEntry = {
   showsL3L4L5:          number;
   showsResident:        number;
   showsL0:              number;
+  /** Buổi dạy khách chuyển giao — 50.000đ/buổi. */
+  showsTransfer?:       number;
   /** FM: có hưởng hoa hồng doanh số cả phòng không (mặc định có). */
   branchCommission?:    boolean;
   clientsAchievedGoal:  number;
@@ -280,16 +295,7 @@ type GenEntry = {
   actualWorkDays?:      number;
 };
 
-/**
- * Tiền buổi dạy: 100k gói L3/L4/L5, 60k gói L1/L2/Loyalfit và gói trải nghiệm
- * L0, 35k gói tài trợ Cư dân.
- */
-function calcShowPay(l1: number, l3: number, resident: number, l0: number) {
-  return l1 * SESSION_PAY_L1_L2_LOYAL
-       + l3 * SESSION_PAY_L3_L4_L5
-       + resident * SESSION_PAY_RESIDENT
-       + l0 * SESSION_PAY_TRIAL;
-}
+
 
 export async function POST(req: Request) {
   try {
@@ -370,7 +376,7 @@ export async function POST(req: Request) {
       const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident, entry.showsL0);
+      const showPay          = showPayOf(entry);
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       // Admin dạy thêm không có lương cứng nên ngày công không ảnh hưởng lương.
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
@@ -383,7 +389,8 @@ export async function POST(req: Request) {
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
-          showsResident: entry.showsResident, showsL0: entry.showsL0, showPay,
+          showsResident: entry.showsResident, showsL0: entry.showsL0,
+          showsTransfer: (entry.showsTransfer ?? 0) as unknown as never, showPay,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
           bhxh: 0, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
@@ -406,16 +413,22 @@ export async function POST(req: Request) {
       const rate             = takesBranchCommission ? fmRate(totalBranchRevenue) : 0;
       const commissionAmount = totalBranchRevenue * rate;
 
-      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất (100k → 60k → 35k)
+      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất
+      // (100k L3+ → 60k L1/L2/L0 → 50k chuyển giao → 35k Cư dân)
+      const entryTransfer = entry.showsTransfer ?? 0;
       const totalShows    = Math.min(
-        entry.showsL1L2Loyal + entry.showsL3L4L5 + entry.showsResident + entry.showsL0,
+        entry.showsL1L2Loyal + entry.showsL3L4L5 + entry.showsResident + entry.showsL0 + entryTransfer,
         60
       );
       const l3Shows       = Math.min(entry.showsL3L4L5, totalShows);
       const l1Shows       = Math.min(entry.showsL1L2Loyal, totalShows - l3Shows);
       const l0Shows       = Math.min(entry.showsL0, totalShows - l3Shows - l1Shows);
-      const residentShows = Math.min(entry.showsResident, totalShows - l3Shows - l1Shows - l0Shows);
-      const showPay       = calcShowPay(l1Shows, l3Shows, residentShows, l0Shows);
+      const transferShows = Math.min(entryTransfer, totalShows - l3Shows - l1Shows - l0Shows);
+      const residentShows = Math.min(entry.showsResident, totalShows - l3Shows - l1Shows - l0Shows - transferShows);
+      const showPay       = showPayOf({
+        showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows,
+        showsResident: residentShows, showsL0: l0Shows, showsTransfer: transferShows,
+      });
 
       const googleBonus = entry.googleReviews * 100_000;
       const renewBonus  = entry.renewContracts * 150_000;
@@ -433,7 +446,7 @@ export async function POST(req: Request) {
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows, showsResident: residentShows,
-          showsL0: l0Shows, showPay,
+          showsL0: l0Shows, showsTransfer: transferShows as unknown as never, showPay,
           branchCommission: takesBranchCommission,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
@@ -451,7 +464,7 @@ export async function POST(req: Request) {
       const seniorityBonus   = Math.min(seniorityYears, 4) * 6_000_000;
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
-      const showPay          = calcShowPay(entry.showsL1L2Loyal, entry.showsL3L4L5, entry.showsResident, entry.showsL0);
+      const showPay          = showPayOf(entry);
       const goalBonus        = entry.clientsAchievedGoal * 100_000;
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       const totalSalary      = computeTotalSalary({
@@ -468,7 +481,8 @@ export async function POST(req: Request) {
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           leaveDays: leaveCount as unknown as never,
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
-          showsResident: entry.showsResident, showsL0: entry.showsL0, showPay,
+          showsResident: entry.showsResident, showsL0: entry.showsL0,
+          showsTransfer: (entry.showsTransfer ?? 0) as unknown as never, showPay,
           goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
           bhxh: 4_960_000, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,

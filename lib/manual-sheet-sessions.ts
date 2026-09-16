@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { parseOverride } from "@/lib/checkin-sheet";
+import type { ContractTypeName } from "@/lib/packages";
 
 // ── Buổi ghi tay trên phiếu, đọc dưới góc nhìn "buổi dạy" ───────────────────
 //
@@ -22,7 +23,7 @@ export type ManualSessionRow = {
   clientId:     string;
   enrollmentId: string;
   packageName:  string;
-  contractType: "NORMAL" | "KOC" | "KOL";
+  contractType: ContractTypeName;
   /** Mốc ISO của buổi — dùng để xếp vào đúng tháng lương. */
   date:         string;
 };
@@ -90,7 +91,7 @@ export async function getManualSheetSessions(filter: Filter = {}): Promise<Manua
         clientId:     enrollment.clientId,
         enrollmentId: enrollment.id,
         packageName:  enrollment.packageName,
-        contractType: enrollment.contractType as "NORMAL" | "KOC" | "KOL",
+        contractType: enrollment.contractType as ContractTypeName,
         date:         row.date,
       });
     }

@@ -42,7 +42,7 @@ type SessionRow = {
   sessionsAdjusted: number;
   valuePerSession: number;
   totalValue: number;
-  contractType: "NORMAL" | "KOC" | "KOL";
+  contractType: "NORMAL" | "KOC" | "KOL" | "TRANSFER";
   koc: KOCData | null;
   photo: PhotoData | null;
 };
@@ -213,7 +213,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
-  const normalRows = rows.filter(r => r.contractType === "NORMAL");
+  const normalRows = rows.filter(r => r.contractType === "NORMAL" || r.contractType === "TRANSFER");
   const kocRows    = rows.filter(r => r.contractType === "KOC");
   const kolRows    = rows.filter(r => r.contractType === "KOL");
 

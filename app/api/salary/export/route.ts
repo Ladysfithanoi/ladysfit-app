@@ -157,7 +157,7 @@ export async function POST(req: Request) {
       const ptName = r.user.name ?? r.user.email;
 
       const rows: SessionRow[] = enrollments.map((e, idx) => {
-        const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
+        const contractType = e.contractType as "NORMAL" | "KOC" | "KOL" | "TRANSFER";
         const sessionsThisMonth = logCount.get(e.id) ?? 0;
 
         let valuePerSession: number | string;
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
           valuePerSession = 60_000;
           totalValue = sessionsThisMonth * 60_000;
         } else {
-          valuePerSession = sessionPayRate(e.packageName);
+          valuePerSession = sessionPayRate(e.packageName, contractType);
           totalValue = sessionsThisMonth * (valuePerSession as number);
         }
 

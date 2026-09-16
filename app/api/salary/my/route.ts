@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sumLeaveDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
+import { showPayOf } from "@/lib/session-pay";
+import { liveShowsForUser } from "@/lib/session-pay-server";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,11 +28,20 @@ export async function GET(req: Request) {
   ]);
 
   // Bảng lương chỉ được tính lại khi FM mở trang Quỹ lương, nên PT tự tích lịch
-  // nghỉ xong sẽ không thấy gì đổi. Đồng bộ luôn phần ngày nghỉ ở đây: trừ đúng
-  // phần lịch nghỉ chênh so với lần tính trước, giữ nguyên số FM sửa tay.
+  // nghỉ xong, hay vừa dạy xong một buổi, sẽ không thấy gì đổi. Đồng bộ ngay ở
+  // đây hai thứ PT tự sinh ra được:
+  //
+  //   • NGÀY NGHỈ — trừ đúng phần lịch nghỉ chênh so với lần tính trước, giữ
+  //     nguyên số FM sửa tay.
+  //   • TIỀN BUỔI DẠY — buổi đã check-in/check-out đầy đủ là đã đủ điều kiện
+  //     tính tiền, nên đọc thẳng từ buổi tập (lib/session-pay), cùng nguồn với
+  //     màn tạo bảng lương của FM nên hai bên luôn thấy một con số.
   if (record && record.standardWorkDays > 0) {
     const leaveCount = (await sumLeaveDeductionByUser([session.user.id], month, year))[session.user.id] ?? 0;
-    if (leaveCount !== record.leaveDays) {
+    const shows   = await liveShowsForUser(session.user.id, month, year);
+    const showPay = showPayOf(shows);
+
+    if (leaveCount !== record.leaveDays || Math.abs(showPay - record.showPay) > 0.01) {
       const actualWorkDays = Math.max(0, Math.min(
         record.actualWorkDays - (leaveCount - record.leaveDays),
         record.standardWorkDays,
@@ -41,7 +52,7 @@ export async function GET(req: Request) {
         fixedAllowances:  record.fixedAllowances,
         seniorityBonus:   record.seniorityBonus,
         commissionAmount: record.commissionAmount,
-        showPay:          record.showPay,
+        showPay,
         goalBonus:        record.goalBonus,
         googleBonus:      record.googleBonus,
         renewBonus:       record.renewBonus,
@@ -55,6 +66,8 @@ export async function GET(req: Request) {
         data:  {
           actualWorkDays,
           leaveDays: leaveCount,
+          ...shows,
+          showPay,
           totalSalary,
           remainingPayment: totalSalary - record.advancePaid,
         },

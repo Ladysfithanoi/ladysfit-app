@@ -133,12 +133,23 @@ export const SESSION_PAY_RESIDENT = 35_000;
 export const SESSION_PAY_TRIAL = 60_000;
 export const SESSION_PAY_L1_L2_LOYAL = 60_000;
 export const SESSION_PAY_L3_L4_L5 = 100_000;
+/** Khách chuyển giao từ cơ sở Ladysfit khác — 50.000đ/buổi, bất kể gói nào. */
+export const SESSION_PAY_TRANSFER = 50_000;
+
+/** Loại hợp đồng của một lộ trình — khớp enum ContractType trong schema. */
+export type ContractTypeName = "NORMAL" | "KOC" | "KOL" | "TRANSFER";
 
 /**
- * Tiền công 1 buổi dạy trả cho PT, theo tên gói của khách được dạy.
+ * Tiền công 1 buổi dạy trả cho PT.
+ *
+ * Bình thường bám theo TÊN GÓI của khách được dạy. Riêng khách CHUYỂN GIAO thì
+ * loại hợp đồng thắng tên gói: luôn 50.000đ — đó là điểm khác duy nhất của
+ * khách chuyển giao so với khách thường.
+ *
  * KOC/KOL không dùng hàm này — hai loại hợp đồng đó có cách tính hoa hồng riêng.
  */
-export function sessionPayRate(packageName: string): number {
+export function sessionPayRate(packageName: string, contractType?: string): number {
+  if (contractType === "TRANSFER") return SESSION_PAY_TRANSFER;
   if (packageName === RESIDENT_PACKAGE) return SESSION_PAY_RESIDENT;
   if (packageName === TRIAL_PACKAGE) return SESSION_PAY_TRIAL;
   return ["L1", "L2", "Loyalfit"].includes(packageName)

@@ -19,6 +19,8 @@ type SalaryRecord = {
   showsL3L4L5:          number;
   showsResident:        number;
   showsL0:              number;
+  /** Buổi dạy khách chuyển giao — 50.000đ/buổi. */
+  showsTransfer:        number;
   showPay:              number;
   goalBonus:            number;
   clientsAchievedGoal:  number;
@@ -85,8 +87,18 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Tiền buổi dạy được tính lại ở server mỗi lần gọi, nên chỉ cần gọi lại là
+  // thấy buổi vừa dạy xong: PT check-out ở tab/màn khác rồi quay lại đây là số
+  // đã mới, không phải bấm tải lại trang.
+  useEffect(() => {
+    function onFocus() { fetchData(); }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchData]);
+
   const totalShows = record
-    ? record.showsL1L2Loyal + record.showsL3L4L5 + (record.showsResident ?? 0) + (record.showsL0 ?? 0)
+    ? record.showsL1L2Loyal + record.showsL3L4L5 + (record.showsResident ?? 0)
+      + (record.showsL0 ?? 0) + (record.showsTransfer ?? 0)
     : 0;
 
   return (
@@ -165,10 +177,15 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
               />
 
               {record.showPay > 0 && (
-                <Row
-                  label={`Tiền buổi dạy (${totalShows} buổi)`}
-                  value={vnd(record.showPay)}
-                />
+                <>
+                  <Row
+                    label={`Tiền buổi dạy (${totalShows} buổi)`}
+                    value={vnd(record.showPay)}
+                  />
+                  <p className="text-[10px] text-gray-400 italic pt-1">
+                    Cập nhật ngay sau mỗi buổi đã check-in / check-out đầy đủ.
+                  </p>
+                </>
               )}
 
               {record.goalBonus > 0 && (

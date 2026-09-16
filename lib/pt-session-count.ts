@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { ContractTypeName } from "@/lib/packages";
 import { getManualSheetSessions } from "@/lib/manual-sheet-sessions";
 import {
   ENROLLMENT_CONTRACT_TYPE,
@@ -52,7 +53,7 @@ export type TaughtSessionRow = {
   /** Lộ trình buổi này thuộc về; null nếu khách chưa từng có lộ trình nào. */
   enrollmentId: string | null;
   packageName:  string;
-  contractType: "NORMAL" | "KOC" | "KOL";
+  contractType: ContractTypeName;
 };
 
 export async function getTaughtSessions(
@@ -171,7 +172,7 @@ export type AdjustmentRow = {
   clientId:     string;
   enrollmentId: string;
   packageName:  string;
-  contractType: "NORMAL" | "KOC" | "KOL";
+  contractType: ContractTypeName;
   delta:        number;
 };
 

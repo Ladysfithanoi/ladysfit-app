@@ -213,7 +213,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       notes: p.notes,
       contractCode: p.contractCode ?? null,
       createdAt: p.createdAt.toISOString(),
-      contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL",
+      contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL" | "TRANSFER",
     };
   });
 

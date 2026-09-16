@@ -186,7 +186,7 @@ export async function GET(req: Request) {
       // Tách đôi để bảng nói được "4 = 3 app ghi + 1 chỉnh tay".
       const sessionsFromLogs = logCountByEnrollment.get(e.id) ?? 0;
       const sessionsAdjusted = adjustByEnrollment.get(e.id) ?? 0;
-      const contractType = e.contractType as "NORMAL" | "KOC" | "KOL";
+      const contractType = e.contractType as "NORMAL" | "KOC" | "KOL" | "TRANSFER";
 
       const base = {
         stt: idx + 1,
@@ -246,7 +246,7 @@ export async function GET(req: Request) {
         };
       }
 
-      const vpSession = sessionPayRate(e.packageName);
+      const vpSession = sessionPayRate(e.packageName, contractType);
       return {
         ...base,
         valuePerSession: vpSession,

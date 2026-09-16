@@ -50,7 +50,7 @@ type PackageEnrollment = {
   reservedDays: number;
   extensionDays: number;
   price: number;
-  contractType: "NORMAL" | "KOC" | "KOL";
+  contractType: "NORMAL" | "KOC" | "KOL" | "TRANSFER";
   status: "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED";
   notes: string | null;
   contractCode: string | null;
@@ -218,8 +218,19 @@ function isFreePackage(pkg: { contractType: string; packageName: string }) {
 function getAvailablePackages(
   intakeWeight: number,
   height: number,
-  existingPackages: PackageEnrollment[]
+  existingPackages: PackageEnrollment[],
+  isTransfer = false,
 ): { names: string[]; note: string; noteOk: boolean } {
+  // Khách chuyển giao: hiện FULL lộ trình, không xét điều kiện cân nặng của
+  // L1/L2 — giai đoạn 1 họ đã đi ở cơ sở Ladysfit cũ rồi.
+  if (isTransfer) {
+    return {
+      names: ["L1", "L2", "L3", "L4", "L5", "Loyalfit", TRIAL_PACKAGE, RESIDENT_PACKAGE, "KOC"],
+      note:  "↪ Khách chuyển giao — chọn được mọi lộ trình. PT nhận 50.000đ/buổi dạy.",
+      noteOk: true,
+    };
+  }
+
   const hasL1orL2 = existingPackages.some((p) => p.packageName === "L1" || p.packageName === "L2");
   const hasAny = existingPackages.length > 0;
 
@@ -417,7 +428,10 @@ export function ClientDetailPage({
   // Ngày bắt đầu lộ trình — BẮT BUỘC. Mặc định hôm nay vì gói thêm tay gần như
   // luôn là gói khách bắt đầu ngay; FM lùi ngày lại khi điền bù hợp đồng cũ.
   const [addPkgStartDate, setAddPkgStartDate] = useState(() => todayDmy());
-  const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL">("NORMAL");
+  const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL" | "TRANSFER">("NORMAL");
+  // Khách chuyển giao từ cơ sở Ladysfit khác: chọn được đủ mọi lộ trình (giai
+  // đoạn 1 họ đã đi ở cơ sở cũ), và PT nhận 50.000đ cho mỗi buổi dạy.
+  const [addPkgTransfer, setAddPkgTransfer] = useState(false);
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
   const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
@@ -986,7 +1000,10 @@ export function ClientDetailPage({
     const pkgKey = isKOLPkg ? addKolSponsoredPkg : addPkgName;
     const def = PACKAGES[pkgKey];
     if (!def) return;
-    const resolvedContractType = isKOCPkg ? "KOC" : isKOLPkg ? "KOL" : addPkgContractType;
+    // Khách chuyển giao chỉ đổi ĐƠN GIÁ BUỔI DẠY; hợp đồng KOC/KOL vẫn có cách
+    // tính hoa hồng riêng nên hai loại đó thắng.
+    const resolvedContractType = isKOCPkg ? "KOC" : isKOLPkg ? "KOL"
+      : addPkgTransfer ? "TRANSFER" : addPkgContractType;
     setAddPkgLoading(true);
     setAddPkgError("");
     try {
@@ -1018,7 +1035,7 @@ export function ClientDetailPage({
         endDate: created.endDate ?? null,
         durationDays: created.durationDays,
         price: created.price,
-        contractType: (created.contractType ?? resolvedContractType) as "NORMAL" | "KOC" | "KOL",
+        contractType: (created.contractType ?? resolvedContractType) as "NORMAL" | "KOC" | "KOL" | "TRANSFER",
         status: created.status,
         notes: created.notes ?? null,
         contractCode: created.contractCode ?? null,
@@ -1030,6 +1047,7 @@ export function ClientDetailPage({
       setAddPkgContractCode("");
       setAddPkgStartDate(todayDmy());
       setAddPkgContractType("NORMAL");
+      setAddPkgTransfer(false);
       setAddPkgStartWeight("");
       setAddPkgFMConfirmed(false);
       setAddKolSponsoredPkg("");
@@ -1565,6 +1583,7 @@ export function ClientDetailPage({
                 {packages.map((pkg) => {
                   const isKOC = pkg.contractType === "KOC" || pkg.packageName === "KOC";
                   const isKOL = pkg.contractType === "KOL";
+                  const isTransfer = pkg.contractType === "TRANSFER";
 
                   // Days remaining for KOC
                   const daysLeft = pkg.endDate
@@ -1621,13 +1640,18 @@ export function ClientDetailPage({
                   return (
                     <div key={pkg.id} className={cn(
                       "flex-1 min-w-[220px] border rounded-xl p-4 bg-gray-50/50",
-                      isKOL ? "border-blue-200 bg-blue-50/20" : "border-gray-100"
+                      isKOL ? "border-blue-200 bg-blue-50/20"
+                        : isTransfer ? "border-indigo-200 bg-indigo-50/20"
+                        : "border-gray-100"
                     )}>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
                           {isKOL && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">KOL</span>
+                          )}
+                          {isTransfer && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Chuyển giao</span>
                           )}
                         </div>
                         <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
@@ -1636,7 +1660,9 @@ export function ClientDetailPage({
                       </div>
                       {isKOL
                         ? <p className="text-[11px] text-blue-600 mb-2">Được tài trợ · 60,000đ/buổi</p>
-                        : <p className="text-xs text-gray-400 mb-2">{pkg.packageStage}</p>
+                        : isTransfer
+                          ? <p className="text-[11px] text-indigo-600 mb-2">{pkg.packageStage} · PT nhận 50,000đ/buổi</p>
+                          : <p className="text-xs text-gray-400 mb-2">{pkg.packageStage}</p>
                       }
                       <PackageProgressBars
                         sessionsUsed={pkg.sessionsUsed}
@@ -2010,6 +2036,9 @@ export function ClientDetailPage({
                               )}
                               {pkg.contractType === "KOL" && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">KOL</span>
+                              )}
+                              {pkg.contractType === "TRANSFER" && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Chuyển giao</span>
                               )}
                             </div>
                             <p className="text-xs text-gray-400 mt-0.5">
@@ -2889,8 +2918,43 @@ export function ClientDetailPage({
           )}
           <div className="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">
             <p className="text-xs font-semibold text-gray-500">Thêm gói tập</p>
+            {/* Khách chuyển giao — bật lên là mở full lộ trình, PT nhận 50k/buổi */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !addPkgTransfer;
+                setAddPkgTransfer(next);
+                // Đổi kiểu khách thì danh sách gói đổi theo — bỏ lựa chọn cũ để
+                // không giữ lại gói không còn nằm trong danh sách.
+                setAddPkgName("");
+                setAddKolSponsoredPkg("");
+                setAddPkgContractType(next ? "TRANSFER" : "NORMAL");
+              }}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                addPkgTransfer
+                  ? "border-indigo-300 bg-indigo-50"
+                  : "border-gray-200 bg-white hover:bg-gray-50",
+              )}
+            >
+              <span className={cn(
+                "w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 text-[10px] font-black text-white",
+                addPkgTransfer ? "bg-indigo-500 border-indigo-500" : "border-gray-300 bg-white",
+              )}>
+                {addPkgTransfer ? "✓" : ""}
+              </span>
+              <span className="flex-1">
+                <span className={cn("block text-xs font-bold", addPkgTransfer ? "text-indigo-700" : "text-gray-600")}>
+                  Khách hàng chuyển giao
+                </span>
+                <span className={cn("block text-[10px]", addPkgTransfer ? "text-indigo-500" : "text-gray-400")}>
+                  Chuyển từ cơ sở Ladysfit khác về — chọn được mọi lộ trình, PT nhận 50.000đ/buổi dạy
+                </span>
+              </span>
+            </button>
+
             {(() => {
-              const { names, note, noteOk } = getAvailablePackages(client.initialWeight, client.height, packages);
+              const { names, note, noteOk } = getAvailablePackages(client.initialWeight, client.height, packages, addPkgTransfer);
               return (
                 <>
                   <p className={cn("text-[11px] font-semibold px-3 py-2 rounded-lg", noteOk ? "text-green-700 bg-green-50" : "text-gray-500 bg-gray-50")}>
@@ -2903,7 +2967,7 @@ export function ClientDetailPage({
                       setAddPkgName(v);
                       if (v === "KOC") setAddPkgContractType("KOC");
                       else if (v === "KOL") setAddPkgContractType("KOL");
-                      else setAddPkgContractType("NORMAL");
+                      else setAddPkgContractType(addPkgTransfer ? "TRANSFER" : "NORMAL");
                       if (v !== "KOL") setAddKolSponsoredPkg("");
                     }}
                     className={selectCls}
@@ -2933,6 +2997,12 @@ export function ClientDetailPage({
                 <p><span className="font-bold">Số buổi:</span> {PACKAGES[addPkgName].sessions}</p>
                 <p><span className="font-bold">Thời hạn:</span> {PACKAGES[addPkgName].durationDays} ngày</p>
                 <p><span className="font-bold">Giá:</span> {formatPrice(PACKAGES[addPkgName].discountedPrice ?? PACKAGES[addPkgName].price)}</p>
+                {addPkgTransfer && (
+                  <p className="text-indigo-700">
+                    <span className="font-bold">Tiền buổi dạy PT:</span> 50,000đ/buổi{" "}
+                    <span className="italic text-indigo-500">(khách chuyển giao)</span>
+                  </p>
+                )}
               </div>
             )}
 
