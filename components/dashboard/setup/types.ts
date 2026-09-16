@@ -74,6 +74,27 @@ export type WeeklyActual = {
   cvTarget: number;
 };
 
+export type ExtraTargetWeek = {
+  weekNumber: number;
+  target: number;
+  actual: number;
+};
+
+/**
+ * Mục tiêu phát sinh — hạng mục nhân sự tự thêm cho riêng một tháng, bên cạnh
+ * bộ Mục tiêu chủ chốt cố định. "Tháng đạt" luôn là tổng thực đạt các tuần,
+ * đúng như mục tiêu chủ chốt.
+ */
+export type ExtraTarget = {
+  id: string;
+  name: string;
+  unit: string | null;
+  isFloat: boolean;
+  order: number;
+  monthTarget: number;
+  weeks: ExtraTargetWeek[];
+};
+
 export type MonthlyTarget = {
   id: string;
   branchId: string;
@@ -89,4 +110,5 @@ export type MonthlyTarget = {
   cvTarget: number;
   user: PTUser;
   weeklyActuals: WeeklyActual[];
+  extraTargets?: ExtraTarget[];
 };

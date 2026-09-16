@@ -42,6 +42,11 @@ export async function GET(req: Request) {
     include: {
       user: { select: { id: true, name: true, email: true, role: true } },
       weeklyActuals: { orderBy: { weekNumber: "asc" } },
+      // Mục tiêu phát sinh — hạng mục nhân sự tự thêm cho tháng này.
+      extraTargets: {
+        include: { weeks: { orderBy: { weekNumber: "asc" } } },
+        orderBy: { order: "asc" },
+      },
     },
     orderBy: { createdAt: "asc" },
   });

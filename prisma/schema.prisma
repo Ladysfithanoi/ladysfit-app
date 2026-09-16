@@ -1439,9 +1439,60 @@ model MonthlyTarget {
   branch        Branch         @relation(fields: [branchId], references: [id])
   user          User           @relation("PTMonthlyTargets", fields: [userId], references: [id])
   weeklyActuals WeeklyActual[]
+  extraTargets  ExtraTarget[]
 
   @@unique([branchId, userId, month, year])
   @@map("monthly_targets")
+}
+
+// ── Mục tiêu phát sinh ──────────────────────────────────────────────────────
+//
+// Bảy hạng mục cố định ở trên (doanh số, FIT, KH hợp tác, Transform, Google, CV,
+// DS Fitpartner) là MỤC TIÊU CHỦ CHỐT: tháng nào cũng có, nên nằm thẳng thành cột.
+//
+// Mục tiêu phát sinh là hạng mục nhân sự tự đặt thêm cho riêng một tháng ("Quay
+// 10 video", "Tổ chức 2 buổi workshop"…). Thêm bao nhiêu cũng được nên phải là
+// bảng riêng, không thể đẻ thêm cột.
+//
+// Cách tính giống hệt mục tiêu chủ chốt để bảng tổng hợp chỉ có MỘT luật: mục
+// tiêu tháng đặt ở đây, mục tiêu và thực đạt từng tuần nằm ở ExtraTargetWeek, và
+// "Tháng đạt" luôn là TỔNG thực đạt các tuần — không có ô nhập thực đạt tháng
+// riêng, để hai con số không bao giờ chỏi nhau.
+model ExtraTarget {
+  id              String   @id @default(cuid())
+  monthlyTargetId String
+  /// Tên hạng mục nhân sự tự đặt.
+  name            String
+  /// Đơn vị hiển thị sau con số ("video", "buổi", "triệu"); bỏ trống cũng được.
+  unit            String?
+  /// true = nhận số lẻ (tiền, giờ); false = đếm nguyên con.
+  isFloat         Boolean  @default(false)
+  /// Thứ tự hiện trong bảng, theo lúc thêm.
+  order           Int      @default(0)
+  monthTarget     Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  monthlyTarget MonthlyTarget     @relation(fields: [monthlyTargetId], references: [id], onDelete: Cascade)
+  weeks         ExtraTargetWeek[]
+
+  @@index([monthlyTargetId])
+  @@map("extra_targets")
+}
+
+model ExtraTargetWeek {
+  id            String   @id @default(cuid())
+  extraTargetId String
+  weekNumber    Int
+  target        Float    @default(0)
+  actual        Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  extraTarget ExtraTarget @relation(fields: [extraTargetId], references: [id], onDelete: Cascade)
+
+  @@unique([extraTargetId, weekNumber])
+  @@map("extra_target_weeks")
 }
 
 model WeeklyActual {

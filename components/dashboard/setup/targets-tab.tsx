@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { MonthlyTarget, PTUser } from "./types";
+import { ExtraTarget, MonthlyTarget, PTUser } from "./types";
 
 type Props = {
   branchId: string;
@@ -30,6 +30,131 @@ const FITPARTNER_KPI = { key: "fitpartnerRevenue", label: "Doanh thu Fitpartner 
 
 function getKpiKeys(isFitpartner: boolean) {
   return isFitpartner ? [BASE_KPI_KEYS[0], FITPARTNER_KPI, ...BASE_KPI_KEYS.slice(1)] : BASE_KPI_KEYS;
+}
+
+// ── Mục tiêu phát sinh ──────────────────────────────────────────────────────
+//
+// Bộ KPI ở trên là MỤC TIÊU CHỦ CHỐT: cố định, tháng nào cũng có. Mục tiêu phát
+// sinh là hạng mục nhân sự tự thêm cho riêng một tháng, thêm bao nhiêu cũng được.
+//
+// Cách tính bám đúng mục tiêu chủ chốt để bảng tổng hợp chỉ có một luật:
+// "Tháng đạt" = TỔNG thực đạt các tuần, % = Tháng đạt / Mục tiêu tháng.
+
+/** Một dòng đang sửa trong form — chưa có id nghĩa là hạng mục mới thêm. */
+type ExtraRow = {
+  id?: string;
+  name: string;
+  unit: string;
+  isFloat: boolean;
+  monthTarget: number;
+  weekTarget: number;
+  weekActual: number;
+};
+
+const EMPTY_EXTRA_ROW: ExtraRow = {
+  name: "", unit: "", isFloat: false, monthTarget: 0, weekTarget: 0, weekActual: 0,
+};
+
+function extraOf(t: MonthlyTarget | null | undefined): ExtraTarget[] {
+  return t?.extraTargets ?? [];
+}
+
+function extraWeekOf(g: ExtraTarget, weekNumber: number) {
+  return g.weeks.find((w) => w.weekNumber === weekNumber);
+}
+
+/** Thực đạt cả tháng của một mục tiêu phát sinh = tổng thực đạt các tuần. */
+function extraMonthActual(g: ExtraTarget): number {
+  return g.weeks.reduce((s, w) => s + (w.actual ?? 0), 0);
+}
+
+function fmtNum(v: number, isFloat: boolean): string {
+  return isFloat ? v.toFixed(1) : String(Math.round(v));
+}
+
+/**
+ * Tên các mục tiêu phát sinh của cả cơ sở, không trùng — mỗi tên thành một cụm
+ * cột trong bảng Tổng hợp. Mỗi người đặt hạng mục khác nhau nên bảng phải lấy
+ * hợp của tất cả; ai không có hạng mục đó thì ô để trống.
+ */
+/** Dòng tiêu đề nhóm trong bảng chỉ số — tách Chủ chốt với Phát sinh. */
+function SectionRow({ label, colSpan, tone }: { label: string; colSpan: number; tone: "core" | "extra" }) {
+  return (
+    <tr className={tone === "core" ? "bg-[#f15b5c]/5" : "bg-indigo-50"}>
+      <td
+        colSpan={colSpan}
+        className={cn(
+          "px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-wider",
+          tone === "core" ? "text-[#f15b5c]" : "text-indigo-600"
+        )}
+      >
+        {label}
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * Các dòng mục tiêu phát sinh trong bảng chi tiết theo tuần — cùng bố cục với
+ * dòng mục tiêu chủ chốt ngay bên trên (MT tháng · từng tuần MT/Đạt · Tháng đạt · %).
+ */
+function ExtraGoalRows({ goals, weeks }: { goals: ExtraTarget[]; weeks: number[] }) {
+  return (
+    <>
+      {goals.map((g) => {
+        const monthActual = extraMonthActual(g);
+        const pct = g.monthTarget > 0 ? Math.round((monthActual / g.monthTarget) * 100) : 0;
+        return (
+          <tr key={g.id} className="border-b border-gray-100 last:border-0 divide-x divide-gray-100 even:bg-[#fafafa]">
+            <td className="px-4 py-2 font-semibold text-gray-700 whitespace-nowrap sticky left-0 z-10 bg-white">
+              {g.name}
+              {g.unit && <span className="ml-1 text-[10px] font-normal text-gray-400">({g.unit})</span>}
+            </td>
+            <td className="px-3 py-2 text-center text-gray-500">{fmtNum(g.monthTarget, g.isFloat)}</td>
+            {weeks.map((w) => {
+              const wk = extraWeekOf(g, w);
+              return (
+                <td key={w} className="px-3 py-2 text-center">
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-[11px] text-gray-400">{fmtNum(wk?.target ?? 0, g.isFloat)}</span>
+                    <span className="font-semibold text-gray-700">{fmtNum(wk?.actual ?? 0, g.isFloat)}</span>
+                  </div>
+                </td>
+              );
+            })}
+            <td className="px-3 py-2 text-center font-bold text-gray-800">{fmtNum(monthActual, g.isFloat)}</td>
+            <td className="px-3 py-2 text-center">
+              <span className={cn("px-2 py-0.5 rounded-full font-bold text-xs", pctColor(pct))}>{pct}%</span>
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * Gộp các hạng mục phát sinh CÙNG TÊN của một người thành một con số. Người dùng
+ * đặt trùng tên hai lần thì cộng lại, thay vì lặng lẽ chỉ lấy dòng đầu.
+ */
+function extraRollup(goals: ExtraTarget[], name: string) {
+  const matched = goals.filter((g) => g.name === name);
+  if (matched.length === 0) return null;
+  return {
+    isFloat: matched.some((g) => g.isFloat),
+    target: matched.reduce((s, g) => s + g.monthTarget, 0),
+    actual: matched.reduce((s, g) => s + extraMonthActual(g), 0),
+  };
+}
+
+function extraNamesOf(targets: MonthlyTarget[]): string[] {
+  const names: string[] = [];
+  for (const t of targets) {
+    for (const g of extraOf(t)) {
+      if (!names.includes(g.name)) names.push(g.name);
+    }
+  }
+  return names;
 }
 
 function pctColor(pct: number) {
@@ -71,6 +196,12 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   const [targetModalWeek, setTargetModalWeek] = useState(1);
   const [targetForm, setTargetForm] = useState<Record<string, number>>({});
   const [weeklyTargetForm, setWeeklyTargetForm] = useState<Record<string, number>>({});
+  // Mục tiêu phát sinh đang sửa trong hộp Đặt mục tiêu — dùng chung cho cả tab
+  // Tháng lẫn tab Tuần: một danh sách hạng mục, tab Tháng điền ô mục tiêu tháng,
+  // tab Tuần điền ô mục tiêu tuần. Thêm hạng mục ở tab nào cũng được.
+  const [extraForm, setExtraForm] = useState<ExtraRow[]>([]);
+  // Mục tiêu phát sinh trong hộp nhập số liệu tuần (mục tiêu + thực đạt).
+  const [weeklyExtraForm, setWeeklyExtraForm] = useState<ExtraRow[]>([]);
 
   // Weekly actuals edit (PT + FM + CEO)
   const [weeklyEdit, setWeeklyEdit] = useState<{ targetId: string; weekNumber: number } | null>(null);
@@ -90,6 +221,30 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
   }, [branchId, month, year]);
 
   useEffect(() => { fetchTargets(); }, [fetchTargets]);
+
+  /** Dựng các dòng mục tiêu phát sinh của một người, kèm số của tuần đang chọn. */
+  function buildExtraRows(userId: string, weekNumber: number): ExtraRow[] {
+    const existing = targets.find((t) => t.userId === userId);
+    return extraOf(existing).map((g) => {
+      const w = extraWeekOf(g, weekNumber);
+      return {
+        id: g.id,
+        name: g.name,
+        unit: g.unit ?? "",
+        isFloat: g.isFloat,
+        monthTarget: g.monthTarget,
+        weekTarget: w?.target ?? 0,
+        weekActual: w?.actual ?? 0,
+      };
+    });
+  }
+
+  /** Đổi tuần trong hộp Đặt mục tiêu: nạp lại ô mục tiêu tuần của các hạng mục
+   *  đã lưu, GIỮ NGUYÊN hạng mục người dùng vừa thêm mà chưa lưu. */
+  function loadExtraWeek(userId: string, weekNumber: number) {
+    const saved = buildExtraRows(userId, weekNumber);
+    setExtraForm((rows) => [...saved, ...rows.filter((r) => !r.id)]);
+  }
 
   function loadWeekTargets(userId: string, weekNumber: number) {
     const existing = targets.find((t) => t.userId === userId);
@@ -121,6 +276,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
       cvTarget: existing?.cvTarget ?? 0,
     });
     loadWeekTargets(userId, 1);
+    setExtraForm(buildExtraRows(userId, 1));
   }
 
   async function saveTargetModal() {
@@ -128,11 +284,18 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
     setSaving(true);
     try {
       if (targetModalTab === "month") {
-        await fetch("/api/setup/targets", {
+        const res = await fetch("/api/setup/targets", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify([{ branchId, userId: targetModalUserId, month, year, ...targetForm }]),
         });
+        // Mục tiêu phát sinh treo vào bản ghi mục tiêu tháng, nên phải có id của
+        // nó trước — lượt PUT ở trên vừa tạo (hoặc cập nhật) và trả về.
+        const saved = await res.json() as Array<{ id: string }>;
+        const monthlyTargetId = saved[0]?.id ?? targets.find((t) => t.userId === targetModalUserId)?.id;
+        if (monthlyTargetId) {
+          await saveExtraTargets(monthlyTargetId, null);
+        }
       } else {
         // Ensure MonthlyTarget exists first (create with 0s if not yet set)
         let monthlyTargetId = targets.find((t) => t.userId === targetModalUserId)?.id;
@@ -162,12 +325,40 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
             ...weeklyTargetForm,
           }),
         });
+        await saveExtraTargets(monthlyTargetId, targetModalWeek);
       }
       setTargetModalUserId(null);
       fetchTargets();
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * Ghi danh sách mục tiêu phát sinh. `weekNumber = null` là đang ở tab Tháng
+   * (gửi mục tiêu tháng); có số tuần là đang ở tab Tuần (gửi mục tiêu tuần, giữ
+   * nguyên mục tiêu tháng đã lưu).
+   *
+   * Luôn gửi ĐỦ danh sách — server xoá những hạng mục không còn trong mảng, đó
+   * cũng chính là đường xoá một mục tiêu phát sinh.
+   */
+  async function saveExtraTargets(monthlyTargetId: string, weekNumber: number | null) {
+    const rows = extraForm.filter((r) => r.name.trim() !== "");
+    await fetch("/api/setup/extra-targets", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        monthlyTargetId,
+        ...(weekNumber ? { weekNumber } : {}),
+        goals: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          unit: r.unit,
+          isFloat: r.isFloat,
+          ...(weekNumber ? { weekTarget: r.weekTarget } : { monthTarget: r.monthTarget }),
+        })),
+      }),
+    });
   }
 
   function openWeeklyEdit(targetId: string, weekNumber: number) {
@@ -192,6 +383,9 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
       cvActual: w?.cvActual ?? 0,
       weeklyTaskNotes: w?.weeklyTaskNotes ?? "",
     });
+    // Mục tiêu phát sinh của tuần này — nhập cả mục tiêu lẫn thực đạt tại đây,
+    // đúng như mục tiêu chủ chốt ngay bên trên.
+    setWeeklyExtraForm(t ? buildExtraRows(t.userId, weekNumber) : []);
     setWeeklyEdit({ targetId, weekNumber });
   }
 
@@ -214,6 +408,26 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         ...weeklyForm,
       }),
     });
+
+    // Mục tiêu phát sinh của tuần — cùng một lượt lưu với mục tiêu chủ chốt.
+    const extraRows = weeklyExtraForm.filter((r) => r.name.trim() !== "");
+    await fetch("/api/setup/extra-targets", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        monthlyTargetId: weeklyEdit.targetId,
+        weekNumber: wNum,
+        goals: extraRows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          unit: r.unit,
+          isFloat: r.isFloat,
+          weekTarget: r.weekTarget,
+          weekActual: r.weekActual,
+        })),
+      }),
+    });
+
     setSaving(false);
     setWeeklyEdit(null);
     fetchTargets();
@@ -236,7 +450,9 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
           </div>
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             <div>
-              <p className="text-xs font-extrabold text-[#f15b5c] uppercase tracking-wide mb-3">Mục tiêu tuần</p>
+              <p className="text-xs font-extrabold text-[#f15b5c] uppercase tracking-wide mb-3">
+                Mục tiêu tuần — Chủ chốt
+              </p>
               <div className="space-y-3">
                 {KPI_KEYS.map((k) => (
                   <div key={k.key}>
@@ -254,7 +470,9 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               </div>
             </div>
             <div className="border-t border-gray-100 pt-5">
-              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-3">Thực đạt</p>
+              <p className="text-xs font-extrabold text-gray-500 uppercase tracking-wide mb-3">
+                Thực đạt — Chủ chốt
+              </p>
               <div className="space-y-3">
                 {KPI_KEYS.map((k) => (
                   <div key={k.key}>
@@ -277,6 +495,75 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* ── Mục tiêu phát sinh của tuần: mục tiêu và thực đạt đi cùng dòng ── */}
+            <div className="border-t border-gray-100 pt-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-extrabold text-indigo-600 uppercase tracking-wide">
+                  Mục tiêu phát sinh
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setWeeklyExtraForm((rows) => [...rows, { ...EMPTY_EXTRA_ROW }])}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700"
+                >
+                  + Thêm hạng mục
+                </button>
+              </div>
+              {weeklyExtraForm.length === 0 ? (
+                <p className="text-xs text-gray-300 italic">Chưa có mục tiêu phát sinh nào cho tháng này.</p>
+              ) : (
+                <div className="space-y-3">
+                  {weeklyExtraForm.map((row, i) => (
+                    <div key={row.id ?? `new-${i}`} className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={row.name}
+                          placeholder="Tên hạng mục"
+                          onChange={(e) => setWeeklyExtraForm((rows) =>
+                            rows.map((r, idx) => (idx === i ? { ...r, name: e.target.value } : r)))}
+                          className="flex-1 h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setWeeklyExtraForm((rows) => rows.filter((_, idx) => idx !== i))}
+                          className="text-gray-300 hover:text-red-400 text-lg leading-none px-1"
+                          title="Xoá hạng mục"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Mục tiêu tuần</label>
+                          <input
+                            type="number"
+                            step={row.isFloat ? "0.1" : "1"}
+                            value={row.weekTarget}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setWeeklyExtraForm((rows) =>
+                              rows.map((r, idx) => (idx === i ? { ...r, weekTarget: parseFloat(e.target.value) || 0 } : r)))}
+                            className="w-full h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Thực đạt</label>
+                          <input
+                            type="number"
+                            step={row.isFloat ? "0.1" : "1"}
+                            value={row.weekActual}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setWeeklyExtraForm((rows) =>
+                              rows.map((r, idx) => (idx === i ? { ...r, weekActual: parseFloat(e.target.value) || 0 } : r)))}
+                            className="w-full h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white mt-1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="px-6 py-4 border-t flex gap-3">
@@ -332,7 +619,10 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     key={w}
                     onClick={() => {
                       setTargetModalWeek(w);
-                      if (targetModalUserId) loadWeekTargets(targetModalUserId, w);
+                      if (targetModalUserId) {
+                        loadWeekTargets(targetModalUserId, w);
+                        loadExtraWeek(targetModalUserId, w);
+                      }
                     }}
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all leading-tight",
@@ -351,6 +641,9 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
           </div>
         )}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <p className="text-xs font-extrabold text-[#f15b5c] uppercase tracking-wide">
+            Mục tiêu chủ chốt
+          </p>
           {KPI_KEYS.map((k) => (
             <div key={k.key}>
               <label className="text-sm font-semibold text-gray-700">{k.label}</label>
@@ -375,6 +668,96 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
               )}
             </div>
           ))}
+
+          {/* ── Mục tiêu phát sinh: thêm bao nhiêu hạng mục cũng được ── */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-extrabold text-indigo-600 uppercase tracking-wide">
+                Mục tiêu phát sinh
+              </p>
+              <button
+                type="button"
+                onClick={() => setExtraForm((rows) => [...rows, { ...EMPTY_EXTRA_ROW }])}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                + Thêm hạng mục
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">
+              {targetModalTab === "month"
+                ? "Hạng mục riêng của tháng này. Thực đạt nhập theo từng tuần, giống mục tiêu chủ chốt."
+                : `Mục tiêu của tuần ${targetModalWeek} cho từng hạng mục phát sinh.`}
+            </p>
+
+            {extraForm.length === 0 ? (
+              <p className="text-xs text-gray-300 italic">
+                Chưa có hạng mục nào — bấm “Thêm hạng mục” để đặt mục tiêu phát sinh.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {extraForm.map((row, i) => (
+                  <div key={row.id ?? `new-${i}`} className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={row.name}
+                        placeholder="Tên hạng mục (VD: Quay 10 video)"
+                        onChange={(e) => setExtraForm((rows) =>
+                          rows.map((r, idx) => (idx === i ? { ...r, name: e.target.value } : r)))}
+                        className="flex-1 h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExtraForm((rows) => rows.filter((_, idx) => idx !== i))}
+                        className="text-gray-300 hover:text-red-400 text-lg leading-none px-1"
+                        title="Xoá hạng mục"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase">
+                          {targetModalTab === "month" ? "Mục tiêu tháng" : `Mục tiêu tuần ${targetModalWeek}`}
+                        </label>
+                        <input
+                          type="number"
+                          step={row.isFloat ? "0.1" : "1"}
+                          value={targetModalTab === "month" ? row.monthTarget : row.weekTarget}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            setExtraForm((rows) => rows.map((r, idx) => (idx === i
+                              ? (targetModalTab === "month" ? { ...r, monthTarget: v } : { ...r, weekTarget: v })
+                              : r)));
+                          }}
+                          className="w-full h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase">Đơn vị</label>
+                        <input
+                          value={row.unit}
+                          placeholder="video, buổi, triệu…"
+                          onChange={(e) => setExtraForm((rows) =>
+                            rows.map((r, idx) => (idx === i ? { ...r, unit: e.target.value } : r)))}
+                          className="w-full h-9 rounded-lg border border-gray-200 px-2.5 text-sm bg-white mt-1"
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-[11px] font-semibold text-gray-500">
+                      <input
+                        type="checkbox"
+                        checked={row.isFloat}
+                        onChange={(e) => setExtraForm((rows) =>
+                          rows.map((r, idx) => (idx === i ? { ...r, isFloat: e.target.checked } : r)))}
+                      />
+                      Cho phép số lẻ (tiền, giờ…)
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="px-6 py-4 border-t flex gap-3">
           <button
@@ -436,6 +819,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                   </tr>
                 </thead>
                 <tbody>
+                  <SectionRow label="Mục tiêu chủ chốt" colSpan={WEEKS.length + 4} tone="core" />
                   {KPI_KEYS.map((k) => {
                     const monthTarget = myTarget[k.targetKey as keyof MonthlyTarget] as number;
                     const weekData = WEEKS.map((w) => {
@@ -470,6 +854,12 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                       </tr>
                     );
                   })}
+                  {extraOf(myTarget).length > 0 && (
+                    <>
+                      <SectionRow label="Mục tiêu phát sinh" colSpan={WEEKS.length + 4} tone="extra" />
+                      <ExtraGoalRows goals={extraOf(myTarget)} weeks={WEEKS} />
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -497,6 +887,9 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         : pt.role === "PT"
       );
   const filteredTargets = targets.filter((t) => filteredPTs.some((pt) => pt.id === t.userId));
+  // Hợp các tên mục tiêu phát sinh của nhóm đang xem — mỗi tên thành một cụm cột
+  // trong bảng Tổng hợp.
+  const extraNames = extraNamesOf(filteredTargets);
 
   if (allPTs.length === 0) {
     return <div className="py-12 text-center text-sm text-gray-300">Chưa có nhân sự nào trong cơ sở này</div>;
@@ -540,6 +933,24 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
           <table className="w-full text-xs">
             <thead>
+              {/* Hàng gộp nhóm: Chủ chốt | Phát sinh */}
+              <tr className="border-b border-gray-200 divide-x divide-gray-200">
+                <th className="px-4 py-1.5 sticky left-0 z-10 bg-[#f5f5f5]" />
+                <th
+                  colSpan={KPI_KEYS.length * 3}
+                  className="px-2 py-1.5 text-center text-[10px] font-extrabold uppercase tracking-wider text-[#f15b5c] bg-[#f15b5c]/5"
+                >
+                  Mục tiêu chủ chốt
+                </th>
+                {extraNames.length > 0 && (
+                  <th
+                    colSpan={extraNames.length * 3}
+                    className="px-2 py-1.5 text-center text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 bg-indigo-50"
+                  >
+                    Mục tiêu phát sinh
+                  </th>
+                )}
+              </tr>
               <tr className="border-b border-gray-200 bg-[#f5f5f5] divide-x divide-gray-200">
                 <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase whitespace-nowrap sticky left-0 z-10 bg-[#f5f5f5]">PT</th>
                 {KPI_KEYS.map((k) => (
@@ -547,6 +958,15 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">{k.shortLabel} MT</th>
                     <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase whitespace-nowrap">{k.shortLabel} ĐẠT</th>
                     <th className="px-2 py-2.5 text-center font-bold text-gray-400 uppercase">%</th>
+                  </Fragment>
+                ))}
+                {/* Mục tiêu phát sinh: mỗi tên hạng mục một cụm cột. Người không
+                    đặt hạng mục đó thì ô để trống. */}
+                {extraNames.map((name) => (
+                  <Fragment key={`x-${name}`}>
+                    <th className="px-2 py-2.5 text-center font-bold text-indigo-400 uppercase whitespace-nowrap">{name} MT</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-indigo-400 uppercase whitespace-nowrap">{name} ĐẠT</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-indigo-400 uppercase">%</th>
                   </Fragment>
                 ))}
               </tr>
@@ -578,6 +998,28 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                         </Fragment>
                       );
                     })}
+                    {extraNames.map((name) => {
+                      const roll = extraRollup(extraOf(t), name);
+                      if (!roll) {
+                        return (
+                          <Fragment key={`x-${name}`}>
+                            <td className="px-2 py-2.5 text-center text-gray-300">—</td>
+                            <td className="px-2 py-2.5 text-center text-gray-300">—</td>
+                            <td className="px-2 py-2.5 text-center text-gray-300">—</td>
+                          </Fragment>
+                        );
+                      }
+                      const pct = roll.target > 0 ? Math.round((roll.actual / roll.target) * 100) : 0;
+                      return (
+                        <Fragment key={`x-${name}`}>
+                          <td className="px-2 py-2.5 text-center text-gray-500">{fmtNum(roll.target, roll.isFloat)}</td>
+                          <td className="px-2 py-2.5 text-center font-semibold text-gray-800">{fmtNum(roll.actual, roll.isFloat)}</td>
+                          <td className="px-2 py-2.5 text-center">
+                            <span className={cn("px-1.5 py-0.5 rounded-full text-xs font-bold", pctColor(pct))}>{pct}%</span>
+                          </td>
+                        </Fragment>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -593,6 +1035,26 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     <Fragment key={k.key}>
                       <td className="px-2 py-2.5 text-center font-bold text-gray-600">{k.isFloat ? totalMT.toFixed(1) : totalMT}</td>
                       <td className="px-2 py-2.5 text-center font-bold text-emerald-700">{k.isFloat ? totalAT.toFixed(1) : totalAT}</td>
+                      <td className="px-2 py-2.5 text-center">
+                        <span className={cn("px-1.5 py-0.5 rounded-full text-xs font-bold", pctColor(pct))}>{pct}%</span>
+                      </td>
+                    </Fragment>
+                  );
+                })}
+                {extraNames.map((name) => {
+                  // Cùng một tên hạng mục ở nhiều người thì cộng lại — đúng cách
+                  // dòng Tổng đang làm với mục tiêu chủ chốt.
+                  const rolls = filteredTargets
+                    .map((t) => extraRollup(extraOf(t), name))
+                    .filter((r): r is NonNullable<typeof r> => !!r);
+                  const isFloat = rolls.some((r) => r.isFloat);
+                  const totalMT = rolls.reduce((s, r) => s + r.target, 0);
+                  const totalAT = rolls.reduce((s, r) => s + r.actual, 0);
+                  const pct = totalMT > 0 ? Math.round((totalAT / totalMT) * 100) : 0;
+                  return (
+                    <Fragment key={`x-${name}`}>
+                      <td className="px-2 py-2.5 text-center font-bold text-gray-600">{fmtNum(totalMT, isFloat)}</td>
+                      <td className="px-2 py-2.5 text-center font-bold text-emerald-700">{fmtNum(totalAT, isFloat)}</td>
                       <td className="px-2 py-2.5 text-center">
                         <span className={cn("px-1.5 py-0.5 rounded-full text-xs font-bold", pctColor(pct))}>{pct}%</span>
                       </td>
@@ -673,6 +1135,7 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                 </tr>
               </thead>
               <tbody>
+                <SectionRow label="Mục tiêu chủ chốt" colSpan={WEEKS.length + 4} tone="core" />
                 {KPI_KEYS.map((k) => {
                   const monthTarget = t[k.targetKey as keyof MonthlyTarget] as number;
                   const weekData = WEEKS.map((w) => {
@@ -707,6 +1170,12 @@ export function TargetsTab({ branchId, branchName, month, year, currentUserId, c
                     </tr>
                   );
                 })}
+                {extraOf(t).length > 0 && (
+                  <>
+                    <SectionRow label="Mục tiêu phát sinh" colSpan={WEEKS.length + 4} tone="extra" />
+                    <ExtraGoalRows goals={extraOf(t)} weeks={WEEKS} />
+                  </>
+                )}
               </tbody>
             </table>
           </div>
