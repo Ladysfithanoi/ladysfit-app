@@ -9,49 +9,10 @@ import {
 import { Ruler, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
+import { MEASUREMENT_FIELDS, buildMeasurementPayload, type BodyMeasurementLog } from "@/lib/body-measurements";
 import { cn } from "@/lib/utils";
 
-export type MeasurementLog = {
-  id:            string;
-  measuredDate:  string;
-  waist:         number | null;
-  belly:         number | null;
-  armSize:       number | null;
-  armFromElbow:  number | null;
-  thighSize:     number | null;
-  thighFromKnee: number | null;
-  calfSize:      number | null;
-  calfFromKnee:  number | null;
-  notes:         string | null;
-  measuredBy:    { id: string; name: string | null } | null;
-};
-
-const FORM_FIELDS: { key: keyof MeasurementLog; label: string; placeholder: string }[] = [
-  { key: "waist",         label: "Eo (cm)",                   placeholder: "70" },
-  { key: "belly",         label: "Bụng (cm)",                 placeholder: "80" },
-  { key: "armSize",       label: "Cánh tay (cm)",             placeholder: "30" },
-  { key: "armFromElbow",  label: "Cánh tay từ khuỷu (cm)",   placeholder: "25" },
-  { key: "thighSize",     label: "Đùi (cm)",                  placeholder: "55" },
-  { key: "thighFromKnee", label: "Đùi từ đầu gối (cm)",      placeholder: "40" },
-  { key: "calfSize",      label: "Bắp chân (cm)",             placeholder: "35" },
-  { key: "calfFromKnee",  label: "Bắp chân từ đầu gối (cm)", placeholder: "30" },
-];
-
-const CHART_METRICS: { key: keyof MeasurementLog; label: string; color: string }[] = [
-  { key: "waist",     label: "Eo",       color: "#f15b5c" },
-  { key: "belly",     label: "Bụng",     color: "#f97316" },
-  { key: "armSize",   label: "Cánh tay", color: "#8b5cf6" },
-  { key: "thighSize", label: "Đùi",      color: "#06b6d4" },
-  { key: "calfSize",  label: "Bắp chân", color: "#10b981" },
-];
-
-const SUMMARY_FIELDS: { key: keyof MeasurementLog; label: string }[] = [
-  { key: "waist",     label: "Vòng eo"   },
-  { key: "belly",     label: "Vòng bụng" },
-  { key: "armSize",   label: "Cánh tay"  },
-  { key: "thighSize", label: "Đùi"       },
-  { key: "calfSize",  label: "Bắp chân"  },
-];
+export type MeasurementLog = BodyMeasurementLog;
 
 function formatDate(iso: string) {
   const [y, m, d] = iso.split("T")[0].split("-");
@@ -75,7 +36,7 @@ function SummaryCards({ logs }: { logs: MeasurementLog[] }) {
   const latest = sorted[sorted.length - 1];
   const first  = sorted[0];
 
-  const filled = SUMMARY_FIELDS.filter((f) => latest[f.key] != null);
+  const filled = MEASUREMENT_FIELDS.filter((f) => latest[f.key] != null);
   if (filled.length === 0) return null;
 
   return (
@@ -89,7 +50,7 @@ function SummaryCards({ logs }: { logs: MeasurementLog[] }) {
           const init = first[f.key] as number | null;
           const diff = init != null ? cur - init : null;
           return (
-            <div key={f.key as string} className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
+            <div key={f.key} className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
               <p className="text-base font-extrabold text-gray-900">{cur} cm</p>
               <p className="text-[10px] font-bold text-gray-400 mt-0.5">{f.label}</p>
               {diff !== null && diff !== 0 && (
@@ -115,7 +76,7 @@ function SummaryCards({ logs }: { logs: MeasurementLog[] }) {
 
 function MeasurementsChart({ logs }: { logs: MeasurementLog[] }) {
   const [active, setActive] = useState<Set<string>>(
-    new Set(CHART_METRICS.map((m) => m.key as string))
+    new Set(MEASUREMENT_FIELDS.map((m) => m.key as string))
   );
 
   const sorted = [...logs].sort(
@@ -124,7 +85,7 @@ function MeasurementsChart({ logs }: { logs: MeasurementLog[] }) {
 
   const chartData = sorted.map((l) => {
     const row: Record<string, unknown> = { date: formatShort(l.measuredDate) };
-    for (const m of CHART_METRICS) row[m.key as string] = l[m.key] ?? undefined;
+    for (const m of MEASUREMENT_FIELDS) row[m.key as string] = l[m.key] ?? undefined;
     return row;
   });
 
@@ -140,7 +101,7 @@ function MeasurementsChart({ logs }: { logs: MeasurementLog[] }) {
     <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm mb-5">
       <p className="text-xs font-bold text-gray-500 mb-3">Biểu đồ số đo</p>
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {CHART_METRICS.map((m) => (
+        {MEASUREMENT_FIELDS.map((m) => (
           <button
             key={m.key as string}
             onClick={() => toggle(m.key as string)}
@@ -162,11 +123,11 @@ function MeasurementsChart({ logs }: { logs: MeasurementLog[] }) {
           <Tooltip
             contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #f3f4f6" }}
             formatter={(val: unknown, name: unknown) => {
-              const m = CHART_METRICS.find((x) => (x.key as string) === name);
+              const m = MEASUREMENT_FIELDS.find((x) => (x.key as string) === name);
               return [`${val} cm`, m?.label ?? String(name)];
             }}
           />
-          {CHART_METRICS.filter((m) => active.has(m.key as string)).map((m) => (
+          {MEASUREMENT_FIELDS.filter((m) => active.has(m.key as string)).map((m) => (
             <Line
               key={m.key as string}
               type="monotone"
@@ -190,17 +151,9 @@ function HistoryTable({ logs }: { logs: MeasurementLog[] }) {
     (a, b) => new Date(b.measuredDate).getTime() - new Date(a.measuredDate).getTime()
   );
 
-  const TABLE_COLS: { key: keyof MeasurementLog; label: string }[] = [
-    { key: "waist",     label: "Eo"       },
-    { key: "belly",     label: "Bụng"     },
-    { key: "armSize",   label: "Cánh tay" },
-    { key: "thighSize", label: "Đùi"      },
-    { key: "calfSize",  label: "Bắp chân" },
-  ];
-
-  function getDiff(colKey: keyof MeasurementLog, idx: number) {
-    const cur  = sorted[idx][colKey] as number | null;
-    const prev = sorted[idx + 1]?.[colKey] as number | null;
+  function getDiff(colKey: (typeof MEASUREMENT_FIELDS)[number]["key"], idx: number) {
+    const cur  = sorted[idx][colKey];
+    const prev = sorted[idx + 1]?.[colKey] ?? null;
     if (cur == null || prev == null) return null;
     return cur - prev;
   }
@@ -213,8 +166,8 @@ function HistoryTable({ logs }: { logs: MeasurementLog[] }) {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="px-4 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Ngày</th>
-              {TABLE_COLS.map((c) => (
-                <th key={c.key as string} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+              {MEASUREMENT_FIELDS.map((c) => (
+                <th key={c.key} className="px-3 py-2.5 text-left font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                   {c.label}
                 </th>
               ))}
@@ -227,11 +180,11 @@ function HistoryTable({ logs }: { logs: MeasurementLog[] }) {
                 <td className="px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
                   {formatDate(log.measuredDate)}
                 </td>
-                {TABLE_COLS.map((col) => {
-                  const val  = log[col.key] as number | null;
+                {MEASUREMENT_FIELDS.map((col) => {
+                  const val  = log[col.key];
                   const diff = getDiff(col.key, idx);
                   return (
-                    <td key={col.key as string} className="px-3 py-3">
+                    <td key={col.key} className="px-3 py-3">
                       {val != null ? (
                         <div className="flex items-center gap-1">
                           <span className="font-semibold text-gray-700">{val}</span>
@@ -291,11 +244,7 @@ export function MeasurementsTab({ initialLogs }: { initialLogs: MeasurementLog[]
     setLoading(true);
     setError("");
     try {
-      const payload: Record<string, unknown> = { measuredDate: date, notes: notes || null };
-      for (const f of FORM_FIELDS) {
-        const v = vals[f.key as string];
-        payload[f.key as string] = v ? parseFloat(v) : null;
-      }
+      const payload = { measuredDate: date, notes: notes || null, ...buildMeasurementPayload(vals) };
       const res = await fetch("/api/my/measurements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -365,15 +314,15 @@ export function MeasurementsTab({ initialLogs }: { initialLogs: MeasurementLog[]
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {FORM_FIELDS.map((f) => (
-              <div key={f.key as string}>
-                <label className="block text-xs font-bold text-gray-700 mb-1">{f.label}</label>
+            {MEASUREMENT_FIELDS.map((f) => (
+              <div key={f.key}>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{f.formLabel}</label>
                 <input
                   type="number"
                   step="0.1"
                   min="0"
-                  value={vals[f.key as string] ?? ""}
-                  onChange={(e) => set(f.key as string, e.target.value)}
+                  value={vals[f.key] ?? ""}
+                  onChange={(e) => set(f.key, e.target.value)}
                   className={inputCls}
                   placeholder={f.placeholder}
                 />

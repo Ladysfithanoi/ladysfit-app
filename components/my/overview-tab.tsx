@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 import { PtRankingSection } from "./pt-ranking-section";
+import { OutsideGymActivity, type PortalActivityLog } from "./outside-gym-activity";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
+import { MEASUREMENT_FIELDS, type BodyMeasurementValues } from "@/lib/body-measurements";
 import { fmtDate } from "@/lib/format-date";
 
 const COMPLAINT_CATEGORIES = [
@@ -18,22 +20,14 @@ const COMPLAINT_CATEGORIES = [
   "Khác",
 ];
 
-type LatestMeasurement = {
-  measuredDate: string;
-  waist:     number | null;
-  belly:     number | null;
-  armSize:   number | null;
-  thighSize: number | null;
-  calfSize:  number | null;
-};
+type LatestMeasurement = BodyMeasurementValues & { measuredDate: string };
 
 type Props = {
   clientName: string;
   initialWeight: number;
   currentWeight: number;
   targetWeight: number;
-  todaySteps: number | null;
-  todayGymMinutes: number | null;
+  activityLogs: PortalActivityLog[];
   latestMeasurement?: LatestMeasurement | null;
 };
 
@@ -49,8 +43,7 @@ export function OverviewTab({
   initialWeight,
   currentWeight,
   targetWeight,
-  todaySteps,
-  todayGymMinutes,
+  activityLogs,
   latestMeasurement,
 }: Props) {
   const router = useRouter();
@@ -190,20 +183,8 @@ export function OverviewTab({
         Cập nhật cân nặng hôm nay
       </button>
 
-      {/* Today activity */}
-      <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
-        <p className="text-sm font-extrabold text-gray-700 mb-3">Vận động hôm nay</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-blue-50 rounded-2xl p-3 text-center">
-            <p className="text-2xl font-black text-blue-600">{todaySteps ?? "—"}</p>
-            <p className="text-xs font-bold text-blue-400 mt-0.5">Bước chân</p>
-          </div>
-          <div className="bg-orange-50 rounded-2xl p-3 text-center">
-            <p className="text-2xl font-black text-orange-500">{todayGymMinutes ?? "—"}</p>
-            <p className="text-xs font-bold text-orange-400 mt-0.5">Phút tập gym</p>
-          </div>
-        </div>
-      </div>
+      {/* Số bước chân mỗi ngày — chuyển từ trang Tập luyện về đây */}
+      <OutsideGymActivity activityLogs={activityLogs} />
 
       {/* Bảng xếp hạng PT */}
       <PtRankingSection />
@@ -224,16 +205,10 @@ export function OverviewTab({
             {fmtDate(latestMeasurement.measuredDate)}
           </p>
           <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Eo", value: latestMeasurement.waist },
-              { label: "Bụng", value: latestMeasurement.belly },
-              { label: "Bắp tay", value: latestMeasurement.armSize },
-              { label: "Bắp đùi", value: latestMeasurement.thighSize },
-              { label: "Bắp chân", value: latestMeasurement.calfSize },
-            ].filter((m) => m.value != null).map((m) => (
-              <div key={m.label} className="bg-purple-50 rounded-xl p-2.5 text-center">
-                <p className="text-sm font-extrabold text-purple-700">{m.value} cm</p>
-                <p className="text-[10px] font-bold text-purple-400">{m.label}</p>
+            {MEASUREMENT_FIELDS.filter((f) => latestMeasurement[f.key] != null).map((f) => (
+              <div key={f.key} className="bg-purple-50 rounded-xl p-2.5 text-center">
+                <p className="text-sm font-extrabold text-purple-700">{latestMeasurement[f.key]} cm</p>
+                <p className="text-[10px] font-bold text-purple-400 leading-tight">{f.label}</p>
               </div>
             ))}
           </div>

@@ -10,13 +10,11 @@ export default async function MyPage() {
   if (!session) redirect("/my/login");
 
   const clientId = session.user.id;
-  const todayStr = new Date().toISOString().split("T")[0];
 
-  const [client, todayActivity, latestMeasurement] = await Promise.all([
+  const [client, activityLogs, latestMeasurement] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId } }),
-    prisma.activityLog.findFirst({
-      where: { clientId, date: { gte: new Date(todayStr), lt: new Date(new Date(todayStr).getTime() + 86400000) } },
-    }),
+    // Số bước chân mỗi ngày sống ở trang này — cần đủ dữ liệu cho biểu đồ tuần.
+    prisma.activityLog.findMany({ where: { clientId }, orderBy: { date: "desc" }, take: 30 }),
     prisma.bodyMeasurementLog.findFirst({
       where: { clientId },
       orderBy: { measuredDate: "desc" },
@@ -32,15 +30,24 @@ export default async function MyPage() {
         initialWeight={client.initialWeight}
         currentWeight={client.currentWeight}
         targetWeight={client.targetWeight}
-        todaySteps={todayActivity?.steps ?? null}
-        todayGymMinutes={todayActivity?.minutesGym ?? null}
+        activityLogs={activityLogs.map((l) => ({
+          id:            l.id,
+          date:          l.date.toISOString(),
+          steps:         l.steps,
+          minutesActive: l.minutesActive,
+          minutesGym:    l.minutesGym,
+          note:          l.note,
+        }))}
         latestMeasurement={latestMeasurement ? {
-          measuredDate: latestMeasurement.measuredDate.toISOString(),
-          waist:        latestMeasurement.waist,
-          belly:        latestMeasurement.belly,
-          armSize:      latestMeasurement.armSize,
-          thighSize:    latestMeasurement.thighSize,
-          calfSize:     latestMeasurement.calfSize,
+          measuredDate:  latestMeasurement.measuredDate.toISOString(),
+          waist:         latestMeasurement.waist,
+          belly:         latestMeasurement.belly,
+          armSize:       latestMeasurement.armSize,
+          armFromElbow:  latestMeasurement.armFromElbow,
+          thighSize:     latestMeasurement.thighSize,
+          thighFromKnee: latestMeasurement.thighFromKnee,
+          calfSize:      latestMeasurement.calfSize,
+          calfFromKnee:  latestMeasurement.calfFromKnee,
         } : null}
       />
     </PortalLayoutClient>

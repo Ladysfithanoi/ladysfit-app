@@ -11,9 +11,8 @@ export default async function ActivityPage() {
 
   const clientId = session.user.id;
 
-  const [client, activityLogs, program, rawWorkoutLogs, rawPending, rawLive] = await Promise.all([
+  const [client, program, rawWorkoutLogs, rawPending, rawLive] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { fullName: true, avatarUrl: true } }),
-    prisma.activityLog.findMany({ where: { clientId }, orderBy: { date: "desc" }, take: 30 }),
     prisma.workoutProgram.findFirst({
       where: { clientId, status: "ACTIVE" },
       include: {
@@ -86,15 +85,6 @@ export default async function ActivityPage() {
     ptName: l.createdBy.name ?? null,
     checkInAt: l.checkInAt?.toISOString() ?? null,
     earlyEndApprovedAt: l.earlyEndApprovedAt?.toISOString() ?? null,
-  }));
-
-  const serializedLogs = activityLogs.map((l) => ({
-    id: l.id,
-    date: l.date.toISOString(),
-    steps: l.steps,
-    minutesActive: l.minutesActive,
-    minutesGym: l.minutesGym,
-    note: l.note,
   }));
 
   // Determine which sessions to show: current week's sessions, or legacy sessions
@@ -186,7 +176,6 @@ export default async function ActivityPage() {
   return (
     <PortalLayoutClient clientName={client.fullName} avatarUrl={client.avatarUrl}>
       <ActivityTab
-        activityLogs={serializedLogs}
         workoutProgram={portalProgram}
         workoutLogs={workoutLogs}
         pendingConfirmations={pendingConfirmations}
