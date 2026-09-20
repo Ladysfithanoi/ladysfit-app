@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Loader2, RefreshCw, X } from "lucide-react";
+import { Camera, Loader2, RefreshCw, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  applyBeauty, releaseBeautyBuffers, DEFAULT_BEAUTY, type FaceLandmarks,
+} from "@/lib/beauty-filter";
+import { loadFaceDetector, type FaceDetector } from "@/lib/face-landmarks";
 
 // ── Ảnh check-out — PT chụp cùng khách khi kết thúc buổi ────────────────────
 //
@@ -33,6 +37,48 @@ const FRAME_TIMEOUT_MS = 6000;
 
 type Facing = "environment" | "user";
 type Phase = "starting" | "live" | "error";
+
+// ── Làm đẹp ────────────────────────────────────────────────────────────────
+//
+// PT tự bật/tắt, và lựa chọn được nhớ trên máy họ. Tắt thì không nạp thư viện
+// nhận diện, không chạy vòng lặp vẽ — luồng chụp y hệt như trước khi có tính
+// năng này, ai không dùng thì không phải trả giá gì.
+//
+// Bật thì PT phải THẤY TRƯỚC mình ra sao rồi mới bấm chụp, nên màn xem trước
+// chạy đúng bộ lọc sẽ dùng cho ảnh lưu lại — chỉ khác độ phân giải.
+
+const BEAUTY_PREF_KEY = "ladysfit_checkout_beauty";
+
+/** Cạnh dài của khung xem trước. Nhỏ hơn ảnh lưu nhiều lần nên chạy mượt. */
+const PREVIEW_EDGE = 480;
+
+/**
+ * Nhận diện khuôn mặt ~9 lần/giây thay vì mỗi khung hình. Trong 110ms mặt người
+ * gần như không dịch chuyển, mắt thường không thấy khác — mà tiết kiệm được
+ * khoảng hai phần ba khối lượng tính toán.
+ */
+const DETECT_INTERVAL_MS = 110;
+
+/** Dưới mức này thì máy không kham nổi xem trước → tự hạ cấp. */
+const MIN_PREVIEW_FPS = 11;
+/** Đo trong bấy nhiêu lâu rồi mới phán quyết, cho máy kịp khởi động. */
+const FPS_WARMUP_MS = 700;
+const FPS_SAMPLE_MS = 2600;
+
+/**
+ * "live"    — xem trước có filter, ảnh chụp ra đúng như đang thấy.
+ * "capture" — máy yếu: xem trước để nguyên, filter áp lúc bấm chụp.
+ * "tone"    — không nạp được thư viện nhận diện: chỉ còn chỉnh sáng.
+ */
+type BeautyMode = "loading" | "live" | "capture" | "tone";
+
+function loadBeautyPref(): boolean {
+  try { return window.localStorage.getItem(BEAUTY_PREF_KEY) === "1"; } catch { return false; }
+}
+
+function saveBeautyPref(on: boolean): void {
+  try { window.localStorage.setItem(BEAUTY_PREF_KEY, on ? "1" : "0"); } catch { /* chế độ ẩn danh */ }
+}
 
 const FACING_LABEL: Record<Facing, string> = {
   environment: "Cam sau",
@@ -164,7 +210,16 @@ function explainCameraError(err: unknown): string {
   return "Camera chưa mở được — máy đang bận hoặc trình duyệt treo camera. Bấm Thử lại; nếu vẫn đen thì đóng bớt tab/ứng dụng khác rồi thử lần nữa.";
 }
 
-function drawToDataUrl(video: HTMLVideoElement): string | null {
+/**
+ * Khung hình hiện tại → data URL JPEG.
+ *
+ * `beauty` bật thì chạy ĐÚNG hàm applyBeauty() mà màn xem trước đang chạy, chỉ
+ * khác độ phân giải — nên cái PT nhìn thấy và cái được lưu là một.
+ */
+function drawToDataUrl(
+  video: HTMLVideoElement,
+  beauty?: { landmarks: FaceLandmarks | null },
+): string | null {
   const w = video.videoWidth;
   const h = video.videoHeight;
   // readyState < 2 nghĩa là chưa có khung hình nào để vẽ — vẽ ra chỉ được ảnh đen.
@@ -174,9 +229,12 @@ function drawToDataUrl(video: HTMLVideoElement): string | null {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  if (beauty) {
+    applyBeauty(ctx, canvas.width, canvas.height, beauty.landmarks, DEFAULT_BEAUTY);
+  }
   return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 }
 
@@ -206,6 +264,50 @@ export function CheckOutPhotoCapture({
   const [phase, setPhase] = useState<Phase>("starting");
   /** Tăng lên là mở lại camera từ đầu — nút Thử lại, và lúc quay về từ app khác. */
   const [attempt, setAttempt] = useState(0);
+
+  // ── Làm đẹp ──────────────────────────────────────────────────────────────
+  const [beautyOn, setBeautyOn] = useState(false);
+  const [beautyMode, setBeautyMode] = useState<BeautyMode>("loading");
+  /** Khung hình gần nhất có thấy khuôn mặt không — để nhắc PT đưa mặt vào khung. */
+  const [faceSeen, setFaceSeen] = useState(true);
+  /** Đang chạy bộ lọc trên ảnh vừa chụp (chế độ máy yếu). */
+  const [processing, setProcessing] = useState(false);
+
+  const beautyCanvasRef = useRef<HTMLCanvasElement>(null);
+  const detectorRef     = useRef<FaceDetector | null>(null);
+  /** Điểm mốc mới nhất; dùng lại cho lúc bấm chụp nên không phải dò thêm lần nữa. */
+  const landmarksRef    = useRef<FaceLandmarks | null>(null);
+
+  // Lựa chọn bật/tắt đọc ở effect chứ không ở useState: component này vẫn được
+  // dựng sẵn ở máy chủ, đụng localStorage lúc dựng là lệch nội dung khi hydrate.
+  useEffect(() => { setBeautyOn(loadBeautyPref()); }, []);
+
+  const toggleBeauty = useCallback(() => {
+    setBeautyOn((on) => {
+      const next = !on;
+      saveBeautyPref(next);
+      if (!next) landmarksRef.current = null;
+      return next;
+    });
+  }, []);
+
+  // Nạp bộ nhận diện khuôn mặt — CHỈ khi PT bật làm đẹp.
+  useEffect(() => {
+    if (!beautyOn) { setBeautyMode("loading"); return; }
+    if (detectorRef.current) { setBeautyMode("live"); return; }
+
+    let cancelled = false;
+    setBeautyMode("loading");
+    loadFaceDetector().then((d) => {
+      if (cancelled) return;
+      detectorRef.current = d;
+      // Không có bộ nhận diện thì không biết má/môi ở đâu — chỉ còn chỉnh sáng.
+      setBeautyMode(d ? "live" : "tone");
+    });
+    return () => { cancelled = true; };
+  }, [beautyOn]);
+
+  useEffect(() => () => { releaseBeautyBuffers(); }, []);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
@@ -339,19 +441,141 @@ export function CheckOutPhotoCapture({
     return () => track.removeEventListener("ended", onEnded);
   }, [phase, shot]);
 
-  function capture() {
+  // ── Vòng lặp xem trước có filter ─────────────────────────────────────────
+  //
+  // Bám đúng vòng đời camera sẵn có: chỉ chạy khi phase === "live", và tự dừng
+  // khi camera chết, khi đổi cam trước/sau, khi bấm Thử lại hay khi đã chụp
+  // xong — vì effect này chạy lại theo đúng những state đó. Quên chỗ này thì PT
+  // nhìn canvas đứng hình mà tưởng máy treo.
+  useEffect(() => {
+    if (!beautyOn || beautyMode !== "live" || phase !== "live" || shot) return;
+
+    let raf = 0;
+    let cancelled = false;
+    let lastDetect = 0;
+    const startedAt = performance.now();
+    let sampleFrom = 0;
+    let frames = 0;
+    let judged = false;
+
+    const loop = () => {
+      if (cancelled) return;
+      raf = requestAnimationFrame(loop);
+
+      const video = videoRef.current;
+      const canvas = beautyCanvasRef.current;
+      if (!video || !canvas) return;
+
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh || video.readyState < 2) return;
+
+      const scale = Math.min(1, PREVIEW_EDGE / Math.max(vw, vh));
+      const w = Math.round(vw * scale);
+      const h = Math.round(vh * scale);
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      ctx.drawImage(video, 0, 0, w, h);
+
+      // Dò trên chính khung xem trước (đã thu nhỏ) chứ không trên video gốc —
+      // rẻ hơn hẳn mà điểm mốc trả về là toạ độ 0..1 nên dùng lại được cho ảnh
+      // chụp ở độ phân giải lớn.
+      const now = performance.now();
+      if (detectorRef.current && now - lastDetect >= DETECT_INTERVAL_MS) {
+        lastDetect = now;
+        const lm = detectorRef.current.detect(canvas, w, h);
+        landmarksRef.current = lm;
+        // Chỉ đụng vào state khi thật sự đổi — setState mỗi khung hình thì cả
+        // cây component vẽ lại 30 lần/giây.
+        setFaceSeen((seen) => (seen === !!lm ? seen : !!lm));
+      }
+
+      applyBeauty(ctx, w, h, landmarksRef.current, DEFAULT_BEAUTY);
+
+      // Đo nhịp vẽ thật của máy này. Bỏ qua lúc mới khởi động vì khung hình đầu
+      // luôn chậm (biên dịch JIT, cấp phát bộ đệm).
+      if (!judged) {
+        if (now - startedAt < FPS_WARMUP_MS) return;
+        if (sampleFrom === 0) { sampleFrom = now; frames = 0; return; }
+        frames++;
+        const elapsed = now - sampleFrom;
+        if (elapsed >= FPS_SAMPLE_MS) {
+          judged = true;
+          const fps = (frames * 1000) / elapsed;
+          if (fps < MIN_PREVIEW_FPS) {
+            // Máy không kham nổi: thà bỏ xem trước còn hơn để PT nhìn hình giật.
+            // Filter vẫn được áp, chỉ là lúc bấm chụp.
+            cancelled = true;
+            cancelAnimationFrame(raf);
+            setBeautyMode("capture");
+          }
+        }
+      }
+    };
+
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [beautyOn, beautyMode, phase, shot]);
+
+  async function capture() {
     const video = videoRef.current;
     if (!video) return;
-    const dataUrl = drawToDataUrl(video);
-    if (!dataUrl) {
-      setError("Chưa lấy được khung hình. Bấm Thử lại để mở lại camera rồi chụp.");
+
+    // Tắt làm đẹp → đúng đường cũ, không đụng gì tới bộ lọc.
+    if (!beautyOn) {
+      const plain = drawToDataUrl(video);
+      if (!plain) {
+        setError("Chưa lấy được khung hình. Bấm Thử lại để mở lại camera rồi chụp.");
+        return;
+      }
+      setShot(plain);
+      stop();
       return;
     }
-    setShot(dataUrl);
-    stop();
+
+    setProcessing(true);
+    try {
+      // Chế độ xem trước trực tiếp đã có sẵn điểm mốc của khung hình vừa rồi.
+      // Chế độ máy yếu thì chưa dò lần nào — dò đúng một lần ngay tại đây.
+      let landmarks = landmarksRef.current;
+      if (!landmarks && detectorRef.current && video.videoWidth > 0) {
+        landmarks = detectorRef.current.detect(video, video.videoWidth, video.videoHeight);
+      }
+      const dataUrl = drawToDataUrl(video, { landmarks });
+      if (!dataUrl) {
+        setError("Chưa lấy được khung hình. Bấm Thử lại để mở lại camera rồi chụp.");
+        return;
+      }
+      setShot(dataUrl);
+      stop();
+    } finally {
+      setProcessing(false);
+    }
   }
 
   const starting = phase === "starting";
+  /** Có đang phủ khung đã lọc lên video không. */
+  const showLivePreview = beautyOn && beautyMode === "live" && phase === "live" && !shot;
+
+  /** Một dòng nói rõ bộ lọc đang ở trạng thái nào — im lặng thì PT không hiểu. */
+  const beautyNote = !beautyOn
+    ? null
+    : beautyMode === "loading"
+      ? "Đang tải bộ làm đẹp..."
+      : beautyMode === "tone"
+        ? "Không tải được bộ nhận diện khuôn mặt (mạng yếu) — ảnh chỉ được chỉnh sáng."
+        : beautyMode === "capture"
+          ? "Máy chưa đủ nhanh để xem trước — bộ lọc sẽ được áp ngay khi bấm chụp."
+          : !faceSeen
+            ? "Chưa thấy khuôn mặt trong khung — đưa mặt vào giữa để đánh má và tô môi."
+            : null;
 
   return (
     <div
@@ -389,6 +613,15 @@ export function CheckOutPhotoCapture({
                   autoPlay
                   className="w-full h-full object-cover"
                 />
+                {/* Khung đã qua bộ lọc phủ kín lên thẻ video. Video vẫn nằm
+                    nguyên dưới và tiếp tục chạy — gỡ nó ra là mất nguồn khung
+                    hình. Cùng tỉ lệ và cùng object-cover nên hai lớp trùng khít. */}
+                {showLivePreview && (
+                  <canvas
+                    ref={beautyCanvasRef}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
                 {starting && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70">
                     <Loader2 className="w-6 h-6 animate-spin" />
@@ -434,6 +667,38 @@ export function CheckOutPhotoCapture({
             </div>
           )}
 
+          {/* Công tắc làm đẹp. Ẩn khi đã chụp xong: ảnh đã chốt, gạt lúc này
+              không đổi được gì — muốn khác thì bấm Chụp lại. */}
+          {!shot && (
+            <div className="rounded-xl border border-gray-200 p-1">
+              <button
+                type="button"
+                onClick={toggleBeauty}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Sparkles className={cn("w-4 h-4 shrink-0", beautyOn ? "text-violet-500" : "text-gray-300")} />
+                <span className="flex-1 text-left">
+                  <span className="block text-xs font-bold text-gray-700">Làm đẹp</span>
+                  <span className="block text-[10px] text-gray-400 leading-snug">
+                    Mịn da, chỉnh sáng, đánh má, hồng môi
+                  </span>
+                </span>
+                <span className={cn(
+                  "w-10 h-6 rounded-full p-0.5 shrink-0 transition-colors",
+                  beautyOn ? "bg-violet-500" : "bg-gray-200",
+                )}>
+                  <span className={cn(
+                    "block w-5 h-5 rounded-full bg-white shadow-sm transition-transform",
+                    beautyOn && "translate-x-4",
+                  )} />
+                </span>
+              </button>
+              {beautyNote && (
+                <p className="px-2.5 pb-1.5 text-[10px] text-gray-400 leading-relaxed">{beautyNote}</p>
+              )}
+            </div>
+          )}
+
           {error && <p className="text-xs text-[#f15b5c] font-medium leading-relaxed">{error}</p>}
 
           {shot ? (
@@ -463,12 +728,15 @@ export function CheckOutPhotoCapture({
             <div className="flex gap-3">
               <button
                 onClick={capture}
-                disabled={phase !== "live"}
+                disabled={phase !== "live" || processing}
                 className="flex-1 h-11 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
                 style={{ backgroundColor: "#f15b5c" }}
               >
-                <Camera className="w-4 h-4" />
-                Chụp ảnh
+                {processing ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />Đang xử lý ảnh...</>
+                ) : (
+                  <><Camera className="w-4 h-4" />Chụp ảnh</>
+                )}
               </button>
               {/* Luôn có đường mở lại camera, kể cả khi spinner còn đang quay:
                   đây là lối thoát duy nhất khi iOS treo giữa chừng. */}
