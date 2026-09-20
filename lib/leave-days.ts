@@ -130,6 +130,29 @@ export async function getHireDate(userId: string): Promise<Date | null> {
 }
 
 /**
+ * Ngày nhận việc quy về nửa đêm UTC, để so ngày với ngày.
+ *
+ * `startDate` là DateTime (có thể kèm giờ) còn `leave_days.date` là DATE, nên
+ * phải cắt phần giờ đi; không cắt thì chính ngày đầu đi làm cũng bị coi là
+ * "trước khi vào làm" khi startDate lưu kèm giờ chiều.
+ */
+export function hireDayOf(hireDate: Date | null): Date | null {
+  if (!hireDate) return null;
+  return new Date(Date.UTC(
+    hireDate.getUTCFullYear(), hireDate.getUTCMonth(), hireDate.getUTCDate(),
+  ));
+}
+
+/**
+ * `true` nếu ngày này nằm TRƯỚC ngày nhận việc — nhân sự chưa vào làm thì không
+ * có ngày công để trừ, nên lịch nghỉ không cho tích. Chưa biết ngày nhận việc
+ * thì không chặn gì.
+ */
+export function isBeforeHire(date: Date, hireDay: Date | null): boolean {
+  return !!hireDay && date < hireDay;
+}
+
+/**
  * Số ngày phép được hưởng trong một năm: mỗi tháng làm việc 1 ngày, tối đa 12.
  * Vào làm giữa năm thì tính từ tháng nhận việc (tháng nhận việc tính trọn 1
  * ngày phép), làm từ trước năm đó thì đủ 12 ngày. Phép không cộng dồn sang năm

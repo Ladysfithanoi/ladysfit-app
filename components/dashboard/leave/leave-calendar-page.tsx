@@ -50,6 +50,8 @@ type MonthState = {
   annualRemaining:  number;
   standardWorkDays: number;
   actualWorkDays:   number;
+  /** Ngày nhận việc `YYYY-MM-DD`; mọi ngày trước mốc này bị khoá. null = chưa rõ. */
+  hireDate:         string | null;
 };
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -63,7 +65,7 @@ const ROLE_BADGE: Record<string, string> = {
 const EMPTY: MonthState = {
   days: [], unpaidCount: 0, halfDayCount: 0, deductedDays: 0,
   annualQuota: 0, annualUsed: 0, annualRemaining: 0,
-  standardWorkDays: 0, actualWorkDays: 0,
+  standardWorkDays: 0, actualWorkDays: 0, hireDate: null,
 };
 
 /** Số ô trống trước ngày 1 khi tuần bắt đầu từ Thứ 2. */
@@ -83,6 +85,12 @@ function isSunday(day: number, month: number, year: number) {
 function weekdayLabel(day: number, month: number, year: number) {
   const d = new Date(year, month - 1, day).getDay();
   return d === 0 ? "Chủ nhật" : `Thứ ${d + 1}`;
+}
+
+/** "2026-03-09" → "09/03/2026". */
+function fmtHireDate(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, branches }: Props) {
@@ -132,11 +140,22 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
   }
 
   /**
+   * Ngày này nằm trước khi nhân sự vào làm — chưa có ngày công nào để trừ nên ô
+   * lịch bị khoá. So bằng chuỗi `YYYY-MM-DD` để không dính lệch múi giờ.
+   * Server cũng chặn lại trong POST /api/leave.
+   */
+  function beforeHire(day: number): boolean {
+    if (!state.hireDate) return false;
+    const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return iso < state.hireDate;
+  }
+
+  /**
    * Đặt loại nghỉ cho một ngày. Không tô màu trước vì server còn kiểm tra quỹ
    * phép và giới hạn 5 ngày liền — hiện đúng kết quả server trả về.
    */
   async function setDayType(day: number, type: LeaveType | "NONE") {
-    if (!canEdit || isSunday(day, month, year) || savingDay !== null) return;
+    if (!canEdit || isSunday(day, month, year) || beforeHire(day) || savingDay !== null) return;
     setPickerDay(null);
     setSavingDay(day);
     try {
@@ -276,6 +295,11 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
             {selectedBranchNames.length > 0 && (
               <span className="text-[11px] text-gray-400 font-medium">· {selectedBranchNames.join(", ")}</span>
             )}
+            {state.hireDate && (
+              <span className="text-[11px] text-gray-400 font-medium">
+                · vào làm {fmtHireDate(state.hireDate)}
+              </span>
+            )}
             {!isSelf && <span className="text-[10px] text-gray-400">— bạn đang sửa lịch hộ</span>}
           </div>
         )}
@@ -342,6 +366,8 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
 
           {Array.from({ length: total }, (_, i) => i + 1).map(day => {
             const sunday  = isSunday(day, month, year);
+            // Chưa vào làm — ô mờ đi và không bấm được, kể cả với quản lý.
+            const unhired = beforeHire(day);
             const type    = typeOf(day);
             const isToday =
               day === today.getDate() && month === today.getMonth() + 1 && year === today.getFullYear();
@@ -351,14 +377,16 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                 key={day}
                 type="button"
                 onClick={() => setPickerDay(day)}
-                disabled={!canEdit || sunday || loading}
+                disabled={!canEdit || sunday || unhired || loading}
                 className={cn(
                   "min-h-[84px] sm:min-h-[104px] p-2 flex flex-col items-start gap-1.5 text-left",
                   "border-r border-b border-gray-100 transition-colors",
                   // Không có quyền tích thì ô ngày chỉ là ô hiển thị: giữ nguyên
                   // màu trạng thái nhưng bỏ hiệu ứng hover và con trỏ bấm được.
-                  !canEdit && !sunday && "cursor-default",
-                  sunday
+                  !canEdit && !sunday && !unhired && "cursor-default",
+                  unhired
+                    ? "bg-gray-100/70 cursor-not-allowed"
+                    : sunday
                     ? "bg-gray-50/60 cursor-not-allowed"
                     : type === "ANNUAL"
                       ? cn("bg-emerald-50", canEdit && "hover:bg-emerald-100/70")
@@ -372,7 +400,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
               >
                 <span className={cn(
                   "w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold",
-                  isToday
+                  unhired
+                    ? "text-gray-300"
+                    : isToday
                     ? "bg-[#f15b5c] text-white"
                     : sunday
                       ? "text-gray-300"
@@ -387,7 +417,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                   {day}
                 </span>
 
-                {sunday ? (
+                {unhired ? (
+                  <span className="text-[10px] text-gray-300 font-medium">Chưa vào làm</span>
+                ) : sunday ? (
                   <span className="text-[10px] text-gray-300 font-medium">Chủ nhật</span>
                 ) : type === "ANNUAL" ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500 text-white text-[10px] font-bold">
@@ -420,6 +452,11 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
           <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
             <span className="w-3 h-3 rounded bg-gray-200" /> Chủ nhật — không tính ngày công
           </span>
+          {state.hireDate && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+              <span className="w-3 h-3 rounded bg-gray-300" /> Chưa vào làm — trước {fmtHireDate(state.hireDate)}
+            </span>
+          )}
         </div>
         <p className="px-5 pb-3 text-[11px] text-gray-400 italic">
           * Phép năm: mỗi tháng làm việc được 1 ngày, tối đa 12 ngày/năm, nghỉ liên tiếp

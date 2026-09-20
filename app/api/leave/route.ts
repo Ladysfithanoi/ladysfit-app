@@ -10,7 +10,10 @@ import {
   canViewLeaveOf,
   canEditLeaveOf,
   getAnnualLeaveBalance,
+  getHireDate,
   getLeaveDaysOfMonth,
+  hireDayOf,
+  isBeforeHire,
   isSunday,
   utcDay,
   type LeaveDayEntry,
@@ -23,9 +26,10 @@ function countedDays(days: LeaveDayEntry[], month: number, year: number): LeaveD
 
 /** Trạng thái lịch nghỉ của một nhân sự trong tháng, dùng chung cho GET và POST. */
 async function monthState(userId: string, month: number, year: number) {
-  const [days, balance] = await Promise.all([
+  const [days, balance, hireDate] = await Promise.all([
     getLeaveDaysOfMonth(userId, month, year),
     getAnnualLeaveBalance(userId, year),
+    getHireDate(userId),
   ]);
   const standard = standardWorkDays(month, year);
   const counted  = countedDays(days, month, year);
@@ -34,6 +38,8 @@ async function monthState(userId: string, month: number, year: number) {
 
   return {
     userId, month, year, days,
+    // Ngày nhận việc (YYYY-MM-DD) — lịch khoá mọi ngày trước mốc này.
+    hireDate: hireDayOf(hireDate)?.toISOString().slice(0, 10) ?? null,
     unpaidCount:      counted.filter(d => d.type === "UNPAID").length,
     halfDayCount:     counted.filter(d => d.type === "HALF_DAY").length,
     deductedDays:     deducted,
@@ -106,6 +112,17 @@ export async function POST(req: Request) {
   // Chủ nhật đã bị trừ khỏi ngày công chuẩn nên tích nghỉ sẽ trừ lương hai lần.
   if (isSunday(date)) {
     return NextResponse.json({ error: "Chủ nhật vốn không tính ngày công" }, { status: 400 });
+  }
+
+  // Trước ngày nhận việc thì nhân sự chưa có ngày công nào để trừ. Giao diện đã
+  // khoá sẵn các ô đó, nhưng chặn luôn ở đây để không ai ghi vòng qua API —
+  // kể cả khi FM đang tích hộ hoặc đổi tháng về trước lúc người đó vào làm.
+  const hireDay = hireDayOf(await getHireDate(userId));
+  if (isBeforeHire(date, hireDay)) {
+    const shown = hireDay!.toISOString().slice(0, 10).split("-").reverse().join("/");
+    return NextResponse.json({
+      error: `Nhân sự vào làm từ ${shown}, không tích nghỉ cho ngày trước đó`,
+    }, { status: 400 });
   }
 
   const existing = await prisma.leaveDay.findUnique({
