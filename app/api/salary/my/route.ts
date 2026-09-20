@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sumLeaveDeductionByUser } from "@/lib/leave-days";
-import { computeTotalSalary } from "@/lib/salary-total";
-import { showPayOf } from "@/lib/session-pay";
-import { liveShowsForUser } from "@/lib/session-pay-server";
+import { recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -28,49 +25,17 @@ export async function GET(req: Request) {
   ]);
 
   // Bảng lương chỉ được tính lại khi FM mở trang Quỹ lương, nên PT tự tích lịch
-  // nghỉ xong, hay vừa dạy xong một buổi, sẽ không thấy gì đổi. Đồng bộ ngay ở
-  // đây hai thứ PT tự sinh ra được:
-  //
-  //   • NGÀY NGHỈ — trừ đúng phần lịch nghỉ chênh so với lần tính trước, giữ
-  //     nguyên số FM sửa tay.
-  //   • TIỀN BUỔI DẠY — buổi đã check-in/check-out đầy đủ là đã đủ điều kiện
-  //     tính tiền, nên đọc thẳng từ buổi tập (lib/session-pay), cùng nguồn với
-  //     màn tạo bảng lương của FM nên hai bên luôn thấy một con số.
-  if (record && record.standardWorkDays > 0) {
-    const leaveCount = (await sumLeaveDeductionByUser([session.user.id], month, year))[session.user.id] ?? 0;
-    const shows   = await liveShowsForUser(session.user.id, month, year);
-    const showPay = showPayOf(shows);
-
-    if (leaveCount !== record.leaveDays || Math.abs(showPay - record.showPay) > 0.01) {
-      const actualWorkDays = Math.max(0, Math.min(
-        record.actualWorkDays - (leaveCount - record.leaveDays),
-        record.standardWorkDays,
-      ));
-      const totalSalary = computeTotalSalary({
-        role:             role,
-        baseSalary:       record.baseSalary,
-        fixedAllowances:  record.fixedAllowances,
-        seniorityBonus:   record.seniorityBonus,
-        commissionAmount: record.commissionAmount,
-        showPay,
-        goalBonus:        record.goalBonus,
-        googleBonus:      record.googleBonus,
-        renewBonus:       record.renewBonus,
-        kocCommission:    record.kocCommission,
-        kolCommission:    record.kolCommission,
-        standardWorkDays: record.standardWorkDays,
-        actualWorkDays,
-      });
+  // nghỉ, vừa dạy xong một buổi, hay vừa chốt thêm hợp đồng, sẽ không thấy gì
+  // đổi cho tới khi FM mở trang. Chạy đúng công thức tính lại của màn Quỹ lương
+  // (lib/salary-live) ngay tại đây nên PT thấy cùng con số với FM, thời gian
+  // thực: doanh số và hoa hồng theo bậc %, tiền buổi dạy, thưởng KOC/KOL và
+  // ngày công theo lịch nghỉ.
+  if (record) {
+    const { patch, changed } = await recalcSalary({ record, role, month, year });
+    if (changed) {
       const synced = await prisma.salaryRecord.update({
         where: { id: record.id },
-        data:  {
-          actualWorkDays,
-          leaveDays: leaveCount,
-          ...shows,
-          showPay,
-          totalSalary,
-          remainingPayment: totalSalary - record.advancePaid,
-        },
+        data:  salaryUpdateData(patch),
       });
       return NextResponse.json({ record: synced, config });
     }

@@ -3,100 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
-import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
-import { showPayOf, type ShowBuckets } from "@/lib/session-pay";
-import { liveShowsForUser } from "@/lib/session-pay-server";
+import { showPayOf } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumLeaveDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
-
-// ── KOC commission helper ──────────────────────────────────────────────────
-
-function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
-  if (endWeight == null) return 0;
-  const weightLost = startWeight - endWeight;
-  const maxSessions = Math.min(sessions, 60);
-  if (startWeight < 70) return 0;
-  if (weightLost >= 8 && weightLost <= 9.9) return maxSessions * 35_000;
-  if (weightLost >= 5 && weightLost <= 7.9) return maxSessions * 25_000;
-  if (weightLost >= 3 && weightLost <= 4.9) return maxSessions * 20_000;
-  return 0;
-}
-
-async function fetchKOCKOLCommission(
-  ptId:  string,
-  month: number,
-  year:  number,
-): Promise<{ kocCommission: number; kolCommission: number; kocContracts: number; kolSessions: number }> {
-  // KOC: thưởng một lần cho hợp đồng KẾT THÚC TRONG THÁNG NÀY.
-  //
-  // Cách cũ lọc theo pe.status = 'ACTIVE' và không giới hạn tháng nên trả lặp
-  // lại mỗi tháng chừng nào gói còn ACTIVE. Gói KOC là 60 buổi/60 ngày nên khi
-  // lộ trình tự đóng (hết buổi/hết hạn) điều kiện đó vĩnh viễn không khớp và
-  // thưởng KOC sẽ không bao giờ được trả. Nay bám theo ngày kết thúc hợp đồng —
-  // độc lập với trạng thái gói, và chỉ vào lương đúng một tháng.
-  const kocRows = await prisma.$queryRawUnsafe<{
-    startWeight: number;
-    endWeight: number | null;
-    endWeightConfirmed: boolean;
-    totalSessions: number;
-    contractType: string;
-  }[]>(
-    `
-    SELECT k."startWeight", k."endWeight", k."endWeightConfirmed", k."totalSessions",
-           pe."contractType"
-    FROM koc_contracts k
-    JOIN package_enrollments pe ON pe.id = k."enrollmentId"
-    WHERE k."ptId" = $1 AND k.status = 'COMPLETED'
-      AND k."endDate" >= $2 AND k."endDate" < $3
-    `,
-    ptId, new Date(year, month - 1, 1), new Date(year, month, 1)
-  );
-
-  let kocCommission = 0;
-  let kocContracts = 0;
-  for (const row of kocRows) {
-    if (row.contractType === "KOC" && row.endWeightConfirmed) {
-      kocCommission += calculateKOCCommission(Number(row.startWeight), row.endWeight != null ? Number(row.endWeight) : null, Number(row.totalSessions));
-      kocContracts++;
-    }
-  }
-
-  // KOL: 60.000đ cho mỗi buổi KOL DẠY TRONG THÁNG NÀY.
-  //
-  // Cách cũ cộng dồn pe."sessionsUsed" của mọi gói KOL ACTIVE (tổng số buổi từ
-  // đầu hợp đồng) và trả lặp lại nguyên số đó mỗi tháng — một khách KOL 60 buổi
-  // trả 3,6tr/tháng vô thời hạn, kể cả tháng PT không dạy buổi KOL nào. Nay đếm
-  // đúng buổi đã check-out có chữ ký trong tháng, cùng nguồn với tiền buổi dạy,
-  // nên buổi KOL dạy hộ cũng ghi công đúng người dạy.
-  const taught = await getTaughtSessions([ptId], new Date(year, month - 1, 1), new Date(year, month, 1));
-  const kolAdjust = (await getSessionAdjustments([ptId], month, year))
-    .filter(a => a.contractType === "KOL")
-    .reduce((sum, a) => sum + a.delta, 0);
-  const kolSessions   = Math.max(0, taught.filter(r => r.contractType === "KOL").length + kolAdjust);
-  const kolCommission = kolSessions * 60_000;
-
-  return { kocCommission, kolCommission, kocContracts, kolSessions };
-}
-
-// ── Fixed company-wide tiers ───────────────────────────────────────────────
-
-const PT_TIERS  = [
-  { min: 86_000_000,  rate: 0.04  },
-  { min: 60_000_000,  rate: 0.035 },
-  { min: 38_000_000,  rate: 0.025 },
-  { min: 0,           rate: 0.01  },
-];
-
-const FM_TIERS = [
-  { min: 200_000_001, rate: 0.02  },
-  { min: 140_000_001, rate: 0.015 },
-  { min: 100_000_000, rate: 0.01  },
-  { min: 0,           rate: 0     },
-];
-
-function ptRate(revenue: number)  { return PT_TIERS.find(t => revenue >= t.min)!.rate; }
-function fmRate(revenue: number)  { return FM_TIERS.find(t => revenue >= t.min)!.rate; }
+// Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
+// PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
+import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -166,103 +79,24 @@ export async function GET(req: Request) {
   const updated = await Promise.all(records.map(async (r) => {
     const role = r.user.role;
 
-    const totalRevenue = role === "FM"
-      ? (branchRevenueMap[r.branchId] ?? 0)
-      : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0);
-
-    // FM bị bỏ tích "hưởng hoa hồng doanh số phòng" thì tính lại vẫn phải giữ 0 —
-    // nếu không, mỗi lần mở bảng lương là hoa hồng tự mọc lại khi doanh số phòng đổi.
-    const rate = role === "FM"
-      ? (r.branchCommission === false ? 0 : fmRate(totalRevenue))
-      : ptRate(totalRevenue);
-    const commissionRate   = rate * 100;
-    const commissionAmount = totalRevenue * rate;
-
-    // Fetch KOC/KOL commission for PT/ADMIN roles
-    const { kocCommission, kolCommission } = (role !== "FM")
-      ? await fetchKOCKOLCommission(r.userId, month, year)
-      : { kocCommission: 0, kolCommission: 0 };
-
-    // TIỀN BUỔI DẠY CỦA PT TÍNH LẠI THEO THỜI GIAN THỰC.
-    //
-    // PT dạy xong một buổi (check-in + check-out đầy đủ) là buổi đó đã đủ điều
-    // kiện tính tiền, nên bảng lương phải thấy ngay chứ không đợi FM tạo lại.
-    // Đọc thẳng từ buổi tập qua lib/session-pay — cùng nguồn với màn tạo bảng
-    // lương nên hai chỗ không bao giờ lệch.
-    //
-    // FM GIỮ NGUYÊN NHƯ CŨ: tiền buổi dạy của FM có trần 60 buổi/tháng và do
-    // người tạo bảng lương chốt, tính lại ở đây sẽ phá trần đó. Admin dạy thêm
-    // cũng giữ nguyên con số đã chốt.
-    const liveShows: ShowBuckets | null = role === "PT"
-      ? await liveShowsForUser(r.userId, month, year)
-      : null;
-    const showPay = liveShows ? showPayOf(liveShows) : r.showPay;
-
-    // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
-    // như đi làm đủ, để FM sửa được ngay mà tổng lương không đổi.
-    const rWithDays = r as typeof r & { standardWorkDays?: number; actualWorkDays?: number; leaveDays?: number };
-    const hasWorkDays      = (rWithDays.standardWorkDays ?? 0) > 0;
-    const standardDays     = hasWorkDays ? rWithDays.standardWorkDays! : standardWorkDays(month, year);
-
-    // Lịch nghỉ đổi bao nhiêu ngày thì trừ (hoặc trả lại) đúng bấy nhiêu ngày công,
-    // nên phần FM sửa tay trước đó vẫn được giữ nguyên.
-    const leaveCount  = leaveMap[r.userId] ?? 0;
-    const storedLeave = rWithDays.leaveDays ?? 0;
-    const baseDays    = hasWorkDays ? (rWithDays.actualWorkDays ?? 0) : standardDays;
-    const actualDays  = leaveCount === storedLeave
-      ? baseDays
-      : Math.max(0, Math.min(baseDays - (leaveCount - storedLeave), standardDays));
-
-    const totalSalary = computeTotalSalary({
+    const { patch, changed } = await recalcSalary({
+      record:     r,
       role,
-      baseSalary:       r.baseSalary,
-      fixedAllowances:  r.fixedAllowances,
-      seniorityBonus:   r.seniorityBonus,
-      commissionAmount,
-      showPay,
-      goalBonus:        r.goalBonus,
-      googleBonus:      r.googleBonus,
-      renewBonus:       r.renewBonus,
-      kocCommission,
-      kolCommission,
-      standardWorkDays: standardDays,
-      actualWorkDays:   actualDays,
+      month,
+      year,
+      revenue:    role === "FM"
+        ? (branchRevenueMap[r.branchId] ?? 0)
+        : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0),
+      leaveCount: leaveMap[r.userId] ?? 0,
     });
 
-    const remainingPayment = totalSalary - r.advancePaid;
+    if (!changed) return r;
 
-    const rWithKOC = r as typeof r & { kocCommission?: number; kolCommission?: number };
-    const changed =
-      !hasWorkDays ||
-      leaveCount !== storedLeave ||
-      Math.abs(r.totalRevenue    - totalRevenue)     > 0.01 ||
-      Math.abs(r.commissionRate  - commissionRate)   > 0.001 ||
-      Math.abs(r.commissionAmount - commissionAmount) > 0.01 ||
-      Math.abs(r.totalSalary     - totalSalary)      > 0.01 ||
-      Math.abs(r.showPay         - showPay)          > 0.01 ||
-      Math.abs((rWithKOC.kocCommission ?? 0) - kocCommission) > 0.01 ||
-      Math.abs((rWithKOC.kolCommission ?? 0) - kolCommission) > 0.01;
-
-    if (!changed) return { ...r, kocCommission: rWithKOC.kocCommission ?? 0, kolCommission: rWithKOC.kolCommission ?? 0 };
-
-    const refreshed = await prisma.salaryRecord.update({
+    return prisma.salaryRecord.update({
       where: { id: r.id },
-      data: {
-        totalRevenue,
-        commissionRate,
-        commissionAmount,
-        ...(liveShows ? { ...liveShows, showPay } : {}),
-        kocCommission: kocCommission as unknown as never,
-        kolCommission: kolCommission as unknown as never,
-        standardWorkDays: standardDays as unknown as never,
-        actualWorkDays:   actualDays   as unknown as never,
-        leaveDays:        leaveCount   as unknown as never,
-        totalSalary,
-        remainingPayment,
-      },
+      data: salaryUpdateData(patch),
       include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
     });
-    return { ...refreshed, kocCommission, kolCommission };
   }));
 
   console.log("[salary/GET] returning", updated.length, "records");

@@ -87,9 +87,10 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Tiền buổi dạy được tính lại ở server mỗi lần gọi, nên chỉ cần gọi lại là
-  // thấy buổi vừa dạy xong: PT check-out ở tab/màn khác rồi quay lại đây là số
-  // đã mới, không phải bấm tải lại trang.
+  // Doanh số, hoa hồng theo bậc %, tiền buổi dạy và ngày công đều được tính lại
+  // ở server mỗi lần gọi (lib/salary-live), nên chỉ cần gọi lại là thấy số mới:
+  // vừa chốt thêm hợp đồng hay check-out xong một buổi ở tab/màn khác rồi quay
+  // lại đây là bảng lương đã cập nhật, không phải bấm tải lại trang.
   useEffect(() => {
     function onFocus() { fetchData(); }
     window.addEventListener("focus", onFocus);
