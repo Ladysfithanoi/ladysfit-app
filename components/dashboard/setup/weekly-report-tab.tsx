@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, X, Eye } from "lucide-react";
+import { Plus, X, Eye, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 
@@ -49,6 +49,26 @@ type UserReport = {
   solutions: string | null;
 };
 
+// Báo cáo tuần luồng mới (Check-list ngày + Tổng kết bằng AI).
+type ChecklistReport = {
+  userId: string;
+  userName: string;
+  role: string;
+  submitted: boolean;
+  submittedAt: string | null;
+  hasDraft: boolean;
+  aiGenerated: boolean;
+  results: string;
+  completed: string;
+  incomplete: string;
+  nextPlan: string;
+  daysFilled: number;
+  tasksTotal: number;
+  tasksDone: number;
+  taskRate: number;
+  teachingDone: number;
+};
+
 type Props = {
   branchId: string;
   branchName: string;
@@ -85,6 +105,32 @@ function getCurrentWeek(month: number, year: number): number {
     if (today >= wStart) return w;
   }
   return 1;
+}
+
+const CHECKLIST_LABELS: [keyof ChecklistReport, string][] = [
+  ["results",    "📈 Kết quả nổi bật trong tuần"],
+  ["completed",  "✅ Việc đã hoàn thành"],
+  ["incomplete", "⏳ Việc chưa hoàn thành"],
+  ["nextPlan",   "➡️ Kế hoạch tuần tới"],
+];
+
+/**
+ * Gộp báo cáo check-list về một đoạn văn bản duy nhất — giống hệt màn hình
+ * Check-list của FM: báo cáo mới chỉ có `results` thì trả nguyên văn, báo cáo
+ * viết theo bố cục 4 ô cũ thì ghép lại kèm tiêu đề để không mất chữ nào.
+ */
+function mergeChecklistReport(r: ChecklistReport): string {
+  const hasLegacy = [r.completed, r.incomplete, r.nextPlan].some((v) => v?.trim());
+  if (!hasLegacy) return r.results?.trim() ?? "";
+  return CHECKLIST_LABELS
+    .filter(([k]) => String(r[k] ?? "").trim())
+    .map(([k, label]) => `${label}:\n${String(r[k]).trim()}`)
+    .join("\n\n");
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatDateRange(start: string, end: string): string {
@@ -129,6 +175,8 @@ export function WeeklyReportTab({
   const [solutions, setSolutions] = useState("");
   const [userReports, setUserReports] = useState<UserReport[]>([]);
   const [openReportUserId, setOpenReportUserId] = useState<string | null>(null);
+  const [checklistReports, setChecklistReports] = useState<ChecklistReport[]>([]);
+  const [openChecklistUserId, setOpenChecklistUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -161,9 +209,10 @@ export function WeeklyReportTab({
         `/api/setup/weekly-report?branchId=${branchId}&month=${month}&year=${year}&weekNumber=${selectedWeek}`
       );
       if (res.ok) {
-        const data: { report: ReportData | null; userReports?: UserReport[]; kpi: KpiRow[]; perUserKpi: PerUserKpi[]; weekBounds: WeekBound[] } = await res.json();
+        const data: { report: ReportData | null; userReports?: UserReport[]; checklistReports?: ChecklistReport[]; kpi: KpiRow[]; perUserKpi: PerUserKpi[]; weekBounds: WeekBound[] } = await res.json();
         setWeekBounds(data.weekBounds ?? []);
         setUserReports(data.userReports ?? []);
+        setChecklistReports(data.checklistReports ?? []);
         const rows = isFitpartner
           ? (data.kpi ?? [])
           : (data.kpi ?? []).filter((r) => !isFitpartnerLabel(r.label));
@@ -929,6 +978,106 @@ export function WeeklyReportTab({
                       );
                     })
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── BÁO CÁO TUẦN CHECK-LIST (luồng mới, Tổng kết bằng AI) ── */}
+            {canViewPtReports && (
+              <div className="pt-2">
+                <div
+                  className="px-4 py-2.5 text-sm font-extrabold text-white uppercase text-center rounded-t-lg"
+                  style={{ backgroundColor: "#7c3aed" }}
+                >
+                  BÁO CÁO TUẦN TỪ CHECK-LIST (TỔNG KẾT AI)
+                </div>
+                <div className="border border-gray-200 border-t-0 rounded-b-lg">
+                  <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-100 bg-gray-50/60 text-[11px]">
+                    <span className="text-gray-500">
+                      <span className="font-bold text-emerald-600">{checklistReports.filter((c) => c.submitted).length}</span> đã gửi
+                    </span>
+                    <span className="text-gray-500">
+                      <span className="font-bold text-blue-500">{checklistReports.filter((c) => c.hasDraft).length}</span> đang nháp
+                    </span>
+                    <span className="text-gray-500">
+                      <span className="font-bold text-amber-500">{checklistReports.filter((c) => !c.submitted && !c.hasDraft).length}</span> chưa làm
+                    </span>
+                    <span className="text-gray-400 ml-auto">{checklistReports.length} nhân sự</span>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {checklistReports.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-xs text-gray-300 italic">
+                        Cơ sở chưa có nhân sự nào dùng báo cáo tuần Check-list
+                      </p>
+                    ) : (
+                      checklistReports.map((cr) => {
+                        const open = openChecklistUserId === cr.userId;
+                        const hasReport = cr.submitted || cr.hasDraft;
+                        const body = mergeChecklistReport(cr);
+                        return (
+                          <div key={cr.userId}>
+                            <button
+                              type="button"
+                              onClick={() => setOpenChecklistUserId(open ? null : cr.userId)}
+                              className="w-full flex items-start justify-between gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn(
+                                    "inline-block rounded px-1.5 py-0.5 text-[10px] font-bold",
+                                    cr.role === "FM" ? "bg-indigo-100 text-indigo-700" : "bg-blue-100 text-blue-700"
+                                  )}>
+                                    {getRoleDisplay(cr.role)}
+                                  </span>
+                                  <span className="text-sm font-bold text-gray-700">{cr.userName}</span>
+                                  {cr.aiGenerated && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-violet-500">
+                                      <Sparkles className="w-2.5 h-2.5" /> AI
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="block text-[11px] text-gray-400 mt-0.5">
+                                  {cr.daysFilled}/7 ngày check-list · {cr.tasksDone}/{cr.tasksTotal} việc đạt ({cr.taskRate}%)
+                                  {cr.teachingDone > 0 && ` · ${cr.teachingDone} buổi dạy`}
+                                  {cr.submittedAt && ` · gửi lúc ${formatDateTime(cr.submittedAt)}`}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-2 flex-shrink-0">
+                                <span className={cn(
+                                  "text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap border",
+                                  cr.submitted
+                                    ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+                                    : cr.hasDraft
+                                      ? "text-blue-600 bg-blue-50 border-blue-200"
+                                      : "text-amber-600 bg-amber-50 border-amber-200"
+                                )}>
+                                  {cr.submitted ? "Đã gửi" : cr.hasDraft ? "Bản nháp" : "Chưa làm"}
+                                </span>
+                                <span className="text-[11px] text-gray-400">{open ? "▲" : "▼"}</span>
+                              </span>
+                            </button>
+                            {open && (
+                              <div className="px-4 pb-4">
+                                {!hasReport ? (
+                                  <p className="text-xs text-gray-300 italic py-1">
+                                    Nhân sự chưa viết báo cáo Check-list cho tuần này.
+                                  </p>
+                                ) : (
+                                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                                    {body ? (
+                                      <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{body}</p>
+                                    ) : (
+                                      <p className="text-xs text-gray-300 italic">Báo cáo còn trống</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             )}

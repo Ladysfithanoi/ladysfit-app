@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
+import { ymd, addDaysISO, weekKey } from "@/lib/week";
 
 function computeWeekBounds(year: number, month: number) {
   const d = new Date(year, month - 1, 1);
@@ -22,7 +23,14 @@ function computeWeekBounds(year: number, month: number) {
       end.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
     }
     end.setHours(23, 59, 59, 999);
-    return { weekNumber: w, weekStart: start.toISOString(), weekEnd: end.toISOString() };
+    // `mondayISO` là đúng ngày Thứ 2 dạng YYYY-MM-DD (không đi vòng qua UTC như
+    // toISOString), để tra đúng tuần của báo cáo check-list bên dưới.
+    return {
+      weekNumber: w,
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      mondayISO: ymd(start),
+    };
   });
 }
 
@@ -168,6 +176,99 @@ export async function GET(req: Request) {
 
   const weekBounds = computeWeekBounds(year, month);
 
+  // ── Báo cáo tuần Check-list (luồng mới, có Tổng kết bằng AI) ───────────────
+  // Cùng một tuần nhưng hai luồng đánh số khác nhau: Setup đếm tuần 1–5 trong
+  // tháng, còn check-list lưu theo tuần ISO. Quy chiếu qua đúng ngày Thứ 2 của
+  // tuần đang chọn nên CEO/COO/FM/Admin xem được cả hai loại báo cáo ở cùng một
+  // chỗ, không phải mở thêm màn hình Check-list (nơi CEO/COO không có quyền vào).
+  let checklistReports: {
+    userId: string; userName: string; role: string;
+    submitted: boolean; submittedAt: string | null; hasDraft: boolean; aiGenerated: boolean;
+    results: string; completed: string; incomplete: string; nextPlan: string;
+    daysFilled: number; tasksTotal: number; tasksDone: number; taskRate: number; teachingDone: number;
+  }[] = [];
+
+  const selectedMonday = weekBounds.find((b) => b.weekNumber === weekNumber)?.mondayISO ?? null;
+  if (canViewOthers && selectedMonday) {
+    const staff = await prisma.user.findMany({
+      where: { branchId, deletedAt: null, role: { in: ["PT", "FM"] as Role[] } },
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    if (staff.length > 0) {
+      const staffIds = staff.map((s) => s.id);
+      const wk = weekKey(selectedMonday);
+      const [reports, checklists] = await Promise.all([
+        prisma.weeklyMonthlyReport.findMany({
+          where: {
+            userId: { in: staffIds },
+            reportType: "WEEKLY",
+            month: wk.month,
+            year: wk.year,
+            weekNumber: wk.weekNumber,
+          },
+        }),
+        prisma.dailyChecklist.findMany({
+          where: {
+            userId: { in: staffIds },
+            reportDate: {
+              gte: new Date(selectedMonday + "T00:00:00.000Z"),
+              lt: new Date(addDaysISO(selectedMonday, 7) + "T00:00:00.000Z"),
+            },
+          },
+          select: {
+            userId: true,
+            items: { select: { kpi: true, actualResult: true, isTeachingSession: true } },
+          },
+        }),
+      ]);
+
+      const reportByUser = new Map(reports.map((r) => [r.userId, r]));
+      const statsByUser = new Map<string, { days: number; total: number; done: number; teaching: number }>();
+      for (const cl of checklists) {
+        const st = statsByUser.get(cl.userId) ?? { days: 0, total: 0, done: 0, teaching: 0 };
+        st.days += 1;
+        for (const item of cl.items) {
+          st.total += 1;
+          const k = item.kpi ? parseFloat(item.kpi) : NaN;
+          if (!isNaN(k) && k > 0 && ((item.actualResult ?? 0) / k) * 100 >= 80) st.done += 1;
+          if (item.isTeachingSession) st.teaching += item.actualResult ?? 0;
+        }
+        statsByUser.set(cl.userId, st);
+      }
+
+      checklistReports = staff
+        .map((s) => {
+          const r = reportByUser.get(s.id);
+          const st = statsByUser.get(s.id) ?? { days: 0, total: 0, done: 0, teaching: 0 };
+          return {
+            userId:       s.id,
+            userName:     s.name ?? s.email,
+            role:         s.role as string,
+            submitted:    !!r?.submittedAt,
+            submittedAt:  r?.submittedAt ? r.submittedAt.toISOString() : null,
+            hasDraft:     !!r && !r.submittedAt,
+            aiGenerated:  r?.aiGenerated ?? false,
+            results:      r?.results    ?? "",
+            completed:    r?.completed  ?? "",
+            incomplete:   r?.incomplete ?? "",
+            nextPlan:     r?.nextPlan   ?? "",
+            daysFilled:   st.days,
+            tasksTotal:   st.total,
+            tasksDone:    st.done,
+            taskRate:     st.total > 0 ? Math.round((st.done / st.total) * 100) : 0,
+            teachingDone: Math.round(st.teaching * 10) / 10,
+          };
+        })
+        // FM trước, rồi PT; trong cùng cấp thì xếp theo tên.
+        .sort((a, b) =>
+          a.role === b.role
+            ? a.userName.localeCompare(b.userName, "vi")
+            : a.role === "FM" ? -1 : 1
+        );
+    }
+  }
+
   // Aggregate KPI (sum across all users) — used by FM/Admin/CEO view
   const kpi = KPI_DEFS.map((k) => {
     const weekTarget = targets.reduce((s, t) => {
@@ -275,7 +376,7 @@ export async function GET(req: Request) {
   // Only expose aggregate to privileged roles; PT/Admin see only their own row
   const kpiForRole = (isPT || isAdmin) ? [] : kpi;
 
-  return NextResponse.json({ report, userReports, kpi: kpiForRole, perUserKpi, weekBounds });
+  return NextResponse.json({ report, userReports, checklistReports, kpi: kpiForRole, perUserKpi, weekBounds });
 }
 
 export async function PUT(req: Request) {
