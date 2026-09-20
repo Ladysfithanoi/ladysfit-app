@@ -1409,6 +1409,10 @@ model SalesLead {
   year              Int
   consultationId    String?    @unique
   syncedClientId    String?
+  /// Dòng "Thanh toán nốt" sinh ra từ một lead Đặt cọc: id của lead cọc gốc.
+  /// Có giá trị = dòng này là đợt thu nốt, tình trạng khoá cứng ở PB. Cố tình
+  /// KHÔNG đặt khoá ngoại: xoá lead cọc thì đợt thu nốt vẫn phải là thu nốt.
+  payoffOfId        String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -1417,6 +1421,7 @@ model SalesLead {
   createdBy    User          @relation("CreatedLeads", fields: [createdById], references: [id])
   consultation Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
 
+  @@index([payoffOfId])
   @@map("sales_leads")
 }
 

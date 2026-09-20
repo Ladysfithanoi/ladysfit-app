@@ -48,6 +48,11 @@ export type SalesLead = {
   month: number;
   year: number;
   syncedClientId: string | null;
+  /**
+   * Id của lead Đặt cọc đã sinh ra dòng này. Có giá trị = đây là đợt "Thanh toán
+   * nốt", tình trạng khoá cứng ở PB.
+   */
+  payoffOfId: string | null;
   assignedPT: PTUser | null;
   createdBy: { id: string; name: string | null };
 };

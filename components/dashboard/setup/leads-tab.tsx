@@ -132,6 +132,8 @@ export function LeadsTab({
   const [bulkDeleteOpen, setBulkDeleteOpen]       = useState(false);
   const [bulkDeleting, setBulkDeleting]           = useState(false);
   // Phân lại Lead của nhân sự đã nghỉ trước khi đẩy sang tháng sau
+  const [creatingPayoff, setCreatingPayoff]             = useState(false);
+
   const [reassignDialogOpen, setReassignDialogOpen]     = useState(false);
   const [quitStaffToReassign, setQuitStaffToReassign]   = useState<{ id: string; name: string; leadCount: number }[]>([]);
   const [reassignMap, setReassignMap]                   = useState<Record<string, string>>({});
@@ -238,6 +240,30 @@ export function LeadsTab({
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Tạo đợt "Thanh toán nốt" từ lead Đặt cọc đang mở: bản sao toàn bộ thông tin
+   * khách, cùng nhân sự, cùng bảng — chỉ khác là tình trạng khoá ở Thanh toán nốt
+   * và ba ô tiền để trống chờ điền. Server sao chép từ bản ghi trong CSDL, nên
+   * nút chỉ mở khi khoản cọc đã được lưu.
+   */
+  async function handleCreatePayoff() {
+    if (!editing || creatingPayoff) return;
+    setCreatingPayoff(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/setup/leads/${editing.id}/payoff`, { method: "POST" });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) { setError(data.error ?? `Lỗi ${res.status}`); return; }
+      closeForm();
+      await fetchLeads();
+      showToast(`Đã tạo đợt Thanh toán nốt cho ${editing.customerName} — điền số tiền thu nốt để cập nhật`);
+    } catch {
+      setError("Không tạo được đợt Thanh toán nốt, thử lại nhé");
+    } finally {
+      setCreatingPayoff(false);
     }
   }
 
@@ -522,7 +548,22 @@ export function LeadsTab({
    * request, server không thấy key nên tưởng là cập nhật một phần và giữ lại số
    * tiền cũ ở ô vừa khoá.
    */
+  // ── Đợt "Thanh toán nốt" của một khoản cọc ─────────────────────────────────
+  // Dòng do nút này sinh ra mang payoffOfId → tình trạng khoá cứng ở Thanh toán
+  // nốt (server cũng chặn lại trong PUT).
+  const isPayoffRow = !!editing?.payoffOfId;
+  // Nút chỉ hiện khi form đang là Đặt cọc VÀ đã có tiền vào ô Doanh thu — đúng
+  // như lúc bình thường thì không thấy nó đâu.
+  const canShowPayoffBtn =
+    (isPT || isFM || isAdmin || isCOO) && !!editing && !isPayoffRow &&
+    formStatus === "DE" && !!form.actualRevenue;
+  // ...nhưng chỉ bấm được khi khoản cọc đã LƯU: server sao chép từ bản ghi trong
+  // CSDL, chưa bấm Cập nhật thì bản sao sẽ thiếu đúng những gì vừa gõ.
+  const payoffSaved = editing?.status === "DE" && !!editing.actualRevenue;
+
   function changeStatus(status: LeadStatus) {
+    // Đợt thu nốt không đổi tình trạng được — xem isPayoffRow.
+    if (isPayoffRow) return;
     const locks = fieldLocks(status);
     setForm(f => {
       const next = { ...f, status };
@@ -1195,13 +1236,20 @@ export function LeadsTab({
                 <select
                   value={form.status ?? "TAKECARE"}
                   onChange={e => changeStatus(e.target.value as LeadStatus)}
-                  className={inputCls}
+                  disabled={isPayoffRow}
+                  className={cn(inputCls, isPayoffRow && lockedCls)}
+                  title={isPayoffRow ? "Đây là đợt thu nốt của một khoản cọc — tình trạng luôn là Thanh toán nốt" : undefined}
                 >
-                  {STATUS_OPTIONS.map(s => (
+                  {(isPayoffRow ? (["PB"] as LeadStatus[]) : STATUS_OPTIONS).map(s => (
                     <option key={s} value={s}>{LEAD_STATUS_LABEL[s]}</option>
                   ))}
                 </select>
               </FormRow>
+              {isPayoffRow && (
+                <p className="-mt-1 text-xs text-gray-400">
+                  Đợt thu nốt của khoản cọc — điền số tiền vào ô Doanh thu rồi bấm Cập nhật.
+                </p>
+              )}
               <FormRow label="Gói tập đăng ký">
                 <PackageMultiSelect
                   value={formPkgs}
@@ -1305,6 +1353,27 @@ export function LeadsTab({
               </FormRow>
               {error && <p className="text-sm text-red-500 font-semibold">{error}</p>}
             </div>
+            {/* Đặt cọc + đã có tiền cọc → mở đường tạo đợt thu nốt. Không thoả
+                thì nút không tồn tại, đúng như lúc bình thường. */}
+            {canShowPayoffBtn && (
+              <div className="px-6 pt-4 border-t border-gray-100">
+                <button
+                  onClick={handleCreatePayoff}
+                  disabled={creatingPayoff || !payoffSaved}
+                  className="w-full h-11 rounded-xl border-2 border-orange-400 text-orange-600 font-bold text-sm hover:bg-orange-50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+                  title={payoffSaved
+                    ? "Tạo một dòng Thanh toán nốt sao chép thông tin khách này"
+                    : "Hãy bấm Cập nhật để lưu khoản cọc trước khi tạo đợt thu nốt"}
+                >
+                  {creatingPayoff ? "Đang tạo..." : "💰 Tạo thanh toán nốt"}
+                </button>
+                <p className="mt-1.5 text-xs text-gray-400">
+                  {payoffSaved
+                    ? "Tạo bản sao lead này với tình trạng Thanh toán nốt, để trống tiền chờ thu."
+                    : "Bấm Cập nhật để lưu khoản cọc trước — bản sao được chép từ dữ liệu đã lưu."}
+                </p>
+              </div>
+            )}
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
               <button
                 onClick={handleSave}

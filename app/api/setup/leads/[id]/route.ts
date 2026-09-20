@@ -47,7 +47,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // request body. This prevents partial callers (e.g. the care-notes popup, which only
   // sends { notes }) from inadvertently nullifying revenue and other financial fields.
   const num = (v: unknown) => (v != null && v !== "" ? parseFloat(String(v)) : null);
-  const nextStatus    = ("status" in body && body.status ? body.status : lead.status) as LeadFinanceStatus;
+  // Dòng sinh ra từ nút "Tạo thanh toán nốt" phải mãi là đợt thu nốt: nó tồn tại
+  // để thu phần còn nợ của một khoản cọc, đổi sang tình trạng khác là sai bản
+  // chất và làm khoản cọc mất dấu đợt thu. Giao diện đã khoá ô Tình trạng, nhưng
+  // khoá ở trình duyệt không phải là quyền.
+  const isPayoffRow   = !!lead.payoffOfId;
+  const nextStatus    = (isPayoffRow
+    ? "PB"
+    : "status" in body && body.status ? body.status : lead.status) as LeadFinanceStatus;
   const nextSource    = "source" in body ? (body.source ? String(body.source) : null) : lead.source;
   const nextPackage   = "packageRegistered" in body ? (body.packageRegistered ? String(body.packageRegistered) : null) : lead.packageRegistered;
   const rawRevenue    = "actualRevenue" in body ? num(body.actualRevenue) : lead.actualRevenue;
