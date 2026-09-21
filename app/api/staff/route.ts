@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { parseDayInput, todayAsDay } from "@/lib/leave-days";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -54,6 +55,7 @@ export async function GET(req: Request) {
       branch: { select: { id: true, name: true } },
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },
+      employmentStartDate: true,
       createdAt: true,
     },
     orderBy: { createdAt: "asc" },
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId } = body;
+  const { name, email, password, branchId, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate } = body;
 
   if (!name || !email || !password || !jobPositionId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -118,6 +120,10 @@ export async function POST(req: Request) {
   try {
     const parsedDOB = dateOfBirth ? new Date(dateOfBirth) : undefined;
 
+    // NGÀY BẮT ĐẦU LÀM VIỆC — không khai thì lấy chính hôm nay, vì nhập nhân sự
+    // vào app cũng là lúc họ vào làm. Lịch nghỉ khoá mọi ngày trước mốc này.
+    const parsedStart = parseDayInput(employmentStartDate) ?? todayAsDay();
+
     // Use upsert so that a previously soft-deleted account with the same email
     // is reactivated instead of triggering a P2002 unique constraint error.
     const user = await prisma.user.upsert({
@@ -130,6 +136,7 @@ export async function POST(req: Request) {
         deletedAt: null,
         ptLevelId: ptLevelId || null,
         jobPositionId: jobPositionId || null,
+        employmentStartDate: parsedStart,
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) ? { dateOfBirth: parsedDOB } : {}),
       },
       create: {
@@ -138,6 +145,7 @@ export async function POST(req: Request) {
         password: hashed,
         branchId: noBranchRole ? null : (branchId || null),
         role,
+        employmentStartDate: parsedStart,
         ...(ptLevelId && { ptLevelId }),
         ...(jobPositionId && { jobPositionId }),
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) && { dateOfBirth: parsedDOB }),
@@ -151,6 +159,7 @@ export async function POST(req: Request) {
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },
+        employmentStartDate: true,
       },
     });
 

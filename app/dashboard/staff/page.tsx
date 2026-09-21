@@ -24,6 +24,7 @@ export default async function StaffPage() {
       select: {
         id: true, name: true, email: true, role: true, branchId: true,
         dateOfBirth: true,
+        employmentStartDate: true,
         ptLevelId: true,
         ptLevel: { select: { id: true, name: true, color: true } },
         jobPositionId: true,

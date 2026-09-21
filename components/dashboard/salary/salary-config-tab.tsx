@@ -5,12 +5,23 @@ import { Save } from "lucide-react";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { Branch, StaffMember } from "./salary-page";
 
+/**
+ * Cấu hình lương của từng nhân sự.
+ *
+ * HAI MỐC NGÀY TÁCH RỜI, đừng gộp lại:
+ *   • Ngày làm chính thức — lương thâm niên bắt đầu đếm từ đây.
+ *   • Ngày nhận bảo hiểm  — BHXH bắt đầu từ đây, thường muộn hơn vì còn thử việc.
+ *
+ * Ngày BẮT ĐẦU LÀM VIỆC (mốc của lịch nghỉ) không nằm ở đây mà ở thông tin nhân
+ * sự — xem `User.employmentStartDate` và lib/leave-days.ts.
+ */
 type Config = {
-  baseSalary: string;
-  seniorityYears: number;
-  startDate: string;
-  effectiveFrom: string;
-  saving: boolean;
+  baseSalary:         string;
+  seniorityYears:     number;
+  officialStartDate:  string;
+  insuranceStartDate: string;
+  effectiveFrom:      string;
+  saving:             boolean;
 };
 
 type Props = {
@@ -27,6 +38,11 @@ const FM_TRANSPORT    = 500_000;
 const FM_FIXED_TOTAL  = FM_BASE + FM_LUNCH + FM_PHONE + FM_TRANSPORT;
 const PT_DEFAULT_BASE = 5_310_000;
 
+/** Thưởng thâm niên mỗi năm và số năm được tính tối đa. */
+const FM_PER_YEAR   = 9_000_000;
+const PT_PER_YEAR   = 6_000_000;
+const MAX_SENIORITY = 4;
+
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
 const PT_TIERS = [
@@ -37,31 +53,161 @@ const PT_TIERS = [
 ];
 
 const FM_TIERS = [
-  { label: "Dưới 100M",    rate: "0%"   },
-  { label: "100M – 139.9M", rate: "1%"  },
+  { label: "Dưới 100M",     rate: "0%"   },
+  { label: "100M – 139.9M", rate: "1%"   },
   { label: "140M – 199.9M", rate: "1.5%" },
-  { label: "200M trở lên",  rate: "2%"  },
+  { label: "200M trở lên",  rate: "2%"   },
 ];
 
 function makeDefault(isFM: boolean): Config {
   return {
-    baseSalary:     isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE),
-    seniorityYears: 0,
-    startDate:      "",
-    effectiveFrom:  new Date().toISOString().split("T")[0],
-    saving:         false,
+    baseSalary:         isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE),
+    seniorityYears:     0,
+    officialStartDate:  "",
+    insuranceStartDate: "",
+    effectiveFrom:      new Date().toISOString().split("T")[0],
+    saving:             false,
   };
+}
+
+/**
+ * Số năm TRÒN từ một mốc ngày tới hôm nay. Chưa tới ngày kỷ niệm trong năm thì
+ * chưa được tính thêm năm — đó là cách "tính thâm niên từ ngày làm chính thức".
+ * Ô trống hoặc ngày chưa gõ xong trả `null`.
+ */
+function yearsSince(ymd: string): number | null {
+  if (!ymd) return null;
+  const from = new Date(`${ymd}T00:00:00.000Z`);
+  if (isNaN(from.getTime())) return null;
+
+  const now = new Date();
+  const beforeAnniversary =
+    now.getUTCMonth() < from.getUTCMonth() ||
+    (now.getUTCMonth() === from.getUTCMonth() && now.getUTCDate() < from.getUTCDate());
+  return Math.max(0, now.getUTCFullYear() - from.getUTCFullYear() - (beforeAnniversary ? 1 : 0));
 }
 
 const inputCls   = "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full";
 const roFieldCls = "h-9 flex items-center px-3 text-sm font-semibold text-gray-700 bg-gray-50 rounded-xl border border-gray-100";
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">{children}</p>
+  );
+}
+
+function FieldBox({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1 min-w-0">
+      <label className="text-xs font-semibold text-gray-500">{label}</label>
+      {children}
+      {hint && <p className="text-[10px] text-gray-400 leading-snug">{hint}</p>}
+    </div>
+  );
+}
+
+/** Hai mốc ngày của bảng lương — dùng chung cho cả thẻ FM lẫn thẻ PT. */
+function MilestoneFields({
+  cfg,
+  onPatch,
+}: {
+  cfg: Config;
+  onPatch: (update: Partial<Config>) => void;
+}) {
+  const years = yearsSince(cfg.officialStartDate);
+
+  // Gõ xong ngày làm chính thức thì điền luôn số năm thâm niên tương ứng, để
+  // hai ô không nói hai chuyện khác nhau. Vẫn sửa tay đè lên được — có trường
+  // hợp thâm niên được công nhận khác với thời gian thực tế trên giấy tờ.
+  function setOfficial(value: string) {
+    const computed = yearsSince(value);
+    onPatch({
+      officialStartDate: value,
+      ...(computed === null ? {} : { seniorityYears: Math.min(computed, MAX_SENIORITY) }),
+    });
+  }
+
+  return (
+    <div>
+      <SectionTitle>Mốc thời gian</SectionTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <FieldBox
+          label="Ngày làm chính thức"
+          hint={
+            years === null
+              ? "Lương thâm niên bắt đầu tính từ mốc này."
+              : `Lương thâm niên tính từ mốc này — tới nay là ${years} năm.`
+          }
+        >
+          <DateMaskInput
+            value={cfg.officialStartDate}
+            onChange={setOfficial}
+            className={inputCls}
+          />
+        </FieldBox>
+        <FieldBox label="Ngày nhận bảo hiểm" hint="Bắt đầu đóng và hưởng BHXH từ mốc này.">
+          <DateMaskInput
+            value={cfg.insuranceStartDate}
+            onChange={v => onPatch({ insuranceStartDate: v })}
+            className={inputCls}
+          />
+        </FieldBox>
+      </div>
+    </div>
+  );
+}
+
+/** Số năm thâm niên và khoản thưởng đi kèm. */
+function SeniorityFields({
+  cfg,
+  perYear,
+  onPatch,
+}: {
+  cfg: Config;
+  perYear: number;
+  onPatch: (update: Partial<Config>) => void;
+}) {
+  return (
+    <div>
+      <SectionTitle>Thâm niên</SectionTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <FieldBox label={`Số năm thâm niên (0–${MAX_SENIORITY})`}>
+          <select
+            value={cfg.seniorityYears}
+            onChange={e => onPatch({ seniorityYears: Number(e.target.value) })}
+            className={inputCls}
+          >
+            {Array.from({ length: MAX_SENIORITY + 1 }, (_, y) => (
+              <option key={y} value={y}>
+                {y} năm{y > 0 ? ` (+${vnd(y * perYear)})` : ""}
+              </option>
+            ))}
+          </select>
+        </FieldBox>
+        <FieldBox label="Thưởng thâm niên">
+          <div className={roFieldCls}>
+            {cfg.seniorityYears > 0
+              ? vnd(Math.min(cfg.seniorityYears, MAX_SENIORITY) * perYear)
+              : "—"}
+          </div>
+        </FieldBox>
+      </div>
+    </div>
+  );
+}
+
 function TierTable({ tiers, note }: { tiers: { label: string; rate: string }[]; note: string }) {
   return (
     <div>
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
-        Chính sách hoa hồng (toàn công ty)
-      </p>
+      <SectionTitle>Chính sách hoa hồng (toàn công ty)</SectionTitle>
       <div className="border border-gray-100 rounded-xl overflow-hidden">
         <table className="w-full text-xs border-collapse">
           <thead>
@@ -85,6 +231,48 @@ function TierTable({ tiers, note }: { tiers: { label: string; rate: string }[]; 
   );
 }
 
+/** Khung thẻ cấu hình của một người: tên, nhãn vai trò, nội dung, nút lưu. */
+function ConfigCard({
+  name,
+  badge,
+  badgeCls,
+  saving,
+  onSave,
+  children,
+}: {
+  name: string;
+  badge: string;
+  badgeCls: string;
+  saving: boolean;
+  onSave: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3">
+        <p className="text-sm font-extrabold text-gray-700 truncate">{name}</p>
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${badgeCls}`}>
+          {badge}
+        </span>
+      </div>
+      <div className="p-4 sm:p-5 space-y-5">
+        {children}
+        <div className="flex justify-stretch sm:justify-end pt-3 border-t border-gray-100">
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+            style={{ backgroundColor: "#f15b5c" }}
+          >
+            <Save className="w-4 h-4" />
+            {saving ? "Đang lưu..." : "Lưu cấu hình"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMName }: Props) {
   const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id ?? "");
   const [configs, setConfigs] = useState<Record<string, Config>>({});
@@ -99,15 +287,19 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
         if (!res.ok) { setConfigs(prev => ({ ...prev, [userId]: makeDefault(isFM) })); return; }
         const data = await res.json() as {
           baseSalary: number; seniorityYears: number;
-          startDate: string | null; effectiveFrom: string;
+          officialStartDate: string | null; insuranceStartDate: string | null;
+          effectiveFrom: string;
         } | null;
+        const ymd = (iso: string | null | undefined) =>
+          iso ? new Date(iso).toISOString().split("T")[0] : "";
         setConfigs(prev => ({
           ...prev,
           [userId]: {
-            baseSalary:     data ? String(data.baseSalary) : (isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE)),
-            seniorityYears: data?.seniorityYears ?? 0,
-            startDate:      data?.startDate ? new Date(data.startDate).toISOString().split("T")[0] : "",
-            effectiveFrom:  data?.effectiveFrom
+            baseSalary:         data ? String(data.baseSalary) : (isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE)),
+            seniorityYears:     data?.seniorityYears ?? 0,
+            officialStartDate:  ymd(data?.officialStartDate),
+            insuranceStartDate: ymd(data?.insuranceStartDate),
+            effectiveFrom:      data?.effectiveFrom
               ? new Date(data.effectiveFrom).toISOString().split("T")[0]
               : new Date().toISOString().split("T")[0],
             saving: false,
@@ -141,10 +333,11 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       const body: Record<string, unknown> = {
         userId,
         branchId,
-        baseSalary:     isFM ? FM_BASE : (parseFloat(cfg.baseSalary) || PT_DEFAULT_BASE),
-        seniorityYears: cfg.seniorityYears,
-        startDate:      cfg.startDate || null,
-        effectiveFrom:  cfg.effectiveFrom,
+        baseSalary:         isFM ? FM_BASE : (parseFloat(cfg.baseSalary) || PT_DEFAULT_BASE),
+        seniorityYears:     cfg.seniorityYears,
+        officialStartDate:  cfg.officialStartDate  || null,
+        insuranceStartDate: cfg.insuranceStartDate || null,
+        effectiveFrom:      cfg.effectiveFrom,
         ...(isFM ? { lunchAllowance: FM_LUNCH, phoneAllowance: FM_PHONE, transportAllowance: FM_TRANSPORT } : {}),
       };
       const res = await fetch("/api/salary/config", {
@@ -171,7 +364,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
           <select
             value={selectedBranchId}
             onChange={e => setSelectedBranchId(e.target.value)}
-            className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+            className="h-9 min-w-0 flex-1 sm:flex-none sm:w-64 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
           >
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
@@ -179,82 +372,38 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       )}
 
       {/* ── FM own config ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-          <p className="text-sm font-extrabold text-gray-700">{currentFMName}</p>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#f15b5c]/10 text-[#f15b5c]">FM</span>
-        </div>
-        <div className="p-5 space-y-5">
-
-          {/* Fixed allowances (read-only) */}
-          <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Lương & phụ cấp cố định</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Lương cơ bản",          val: FM_BASE      },
-                { label: "Phụ cấp ăn trưa",        val: FM_LUNCH     },
-                { label: "Phụ cấp điện thoại",     val: FM_PHONE     },
-                { label: "Phụ cấp xăng xe",        val: FM_TRANSPORT },
-              ].map(({ label, val }) => (
-                <div key={label} className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500">{label}</label>
-                  <div className={roFieldCls}>{vnd(val)}</div>
-                </div>
-              ))}
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500">Tổng cố định</label>
-                <div className={roFieldCls} style={{ color: "#f15b5c", fontWeight: 800 }}>{vnd(FM_FIXED_TOTAL)}</div>
+      <ConfigCard
+        name={currentFMName}
+        badge="FM"
+        badgeCls="bg-[#f15b5c]/10 text-[#f15b5c]"
+        saving={fmCfg.saving}
+        onSave={() => handleSave(currentFMId, true)}
+      >
+        <div>
+          <SectionTitle>Lương &amp; phụ cấp cố định</SectionTitle>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              { label: "Lương cơ bản",       val: FM_BASE      },
+              { label: "Phụ cấp ăn trưa",    val: FM_LUNCH     },
+              { label: "Phụ cấp điện thoại", val: FM_PHONE     },
+              { label: "Phụ cấp xăng xe",    val: FM_TRANSPORT },
+            ].map(({ label, val }) => (
+              <FieldBox key={label} label={label}>
+                <div className={roFieldCls}>{vnd(val)}</div>
+              </FieldBox>
+            ))}
+            <FieldBox label="Tổng cố định">
+              <div className={roFieldCls} style={{ color: "#f15b5c", fontWeight: 800 }}>
+                {vnd(FM_FIXED_TOTAL)}
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500">Thưởng thâm niên</label>
-                <div className={roFieldCls}>
-                  {fmCfg.seniorityYears > 0 ? vnd(Math.min(fmCfg.seniorityYears, 4) * 9_000_000) : "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Editable: seniority + startDate */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-500">Năm thâm niên (0–4)</label>
-              <select
-                value={fmCfg.seniorityYears}
-                onChange={e => patch(currentFMId, { seniorityYears: Number(e.target.value) })}
-                className={inputCls}
-              >
-                {[0, 1, 2, 3, 4].map(y => (
-                  <option key={y} value={y}>
-                    {y} năm{y > 0 ? ` (+${vnd(y * 9_000_000)})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-500">Ngày nhận việc (BHXH)</label>
-              <DateMaskInput
-                value={fmCfg.startDate}
-                onChange={v => patch(currentFMId, { startDate: v })}
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <TierTable tiers={FM_TIERS} note="* Tính trên tổng doanh thu chi nhánh trong tháng" />
-
-          <div className="flex justify-end pt-2 border-t border-gray-100">
-            <button
-              onClick={() => handleSave(currentFMId, true)}
-              disabled={fmCfg.saving}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
-              style={{ backgroundColor: "#f15b5c" }}
-            >
-              <Save className="w-4 h-4" />
-              {fmCfg.saving ? "Đang lưu..." : "Lưu cấu hình"}
-            </button>
+            </FieldBox>
           </div>
         </div>
-      </div>
+
+        <MilestoneFields cfg={fmCfg} onPatch={u => patch(currentFMId, u)} />
+        <SeniorityFields cfg={fmCfg} perYear={FM_PER_YEAR} onPatch={u => patch(currentFMId, u)} />
+        <TierTable tiers={FM_TIERS} note="* Tính trên tổng doanh thu chi nhánh trong tháng" />
+      </ConfigCard>
 
       {/* ── PT config cards ── */}
       {branchPTs.length === 0 ? (
@@ -265,70 +414,35 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
         branchPTs.map(staff => {
           const cfg = getCfg(staff.id);
           return (
-            <div key={staff.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-                <p className="text-sm font-extrabold text-gray-700">{staff.name ?? staff.email}</p>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-500">PT</span>
-              </div>
-              <div className="p-5 space-y-5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-500">Lương cơ bản</label>
+            <ConfigCard
+              key={staff.id}
+              name={staff.name ?? staff.email}
+              badge="PT"
+              badgeCls="bg-blue-50 text-blue-500"
+              saving={cfg.saving}
+              onSave={() => handleSave(staff.id, false)}
+            >
+              <div>
+                <SectionTitle>Lương cơ bản</SectionTitle>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <FieldBox label="Lương cơ bản" hint={vnd(parseFloat(cfg.baseSalary) || 0)}>
                     <input
                       type="number"
                       step="10000"
+                      inputMode="numeric"
                       value={cfg.baseSalary}
-                      onFocus={(e) => e.target.select()}
+                      onFocus={e => e.target.select()}
                       onChange={e => patch(staff.id, { baseSalary: e.target.value })}
                       className={inputCls}
                     />
-                    <p className="text-[10px] text-gray-400">{vnd(parseFloat(cfg.baseSalary) || 0)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-500">Năm thâm niên (0–4)</label>
-                    <select
-                      value={cfg.seniorityYears}
-                      onChange={e => patch(staff.id, { seniorityYears: Number(e.target.value) })}
-                      className={inputCls}
-                    >
-                      {[0, 1, 2, 3, 4].map(y => (
-                        <option key={y} value={y}>
-                          {y} năm{y > 0 ? ` (+${vnd(y * 6_000_000)})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-500">Ngày nhận việc (BHXH)</label>
-                    <DateMaskInput
-                      value={cfg.startDate}
-                      onChange={v => patch(staff.id, { startDate: v })}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-500">Thưởng thâm niên</label>
-                    <div className={roFieldCls}>
-                      {cfg.seniorityYears > 0 ? vnd(Math.min(cfg.seniorityYears, 4) * 6_000_000) : "—"}
-                    </div>
-                  </div>
-                </div>
-
-                <TierTable tiers={PT_TIERS} note="* % áp dụng theo bậc toàn bộ doanh số tháng" />
-
-                <div className="flex justify-end pt-2 border-t border-gray-100">
-                  <button
-                    onClick={() => handleSave(staff.id, false)}
-                    disabled={cfg.saving}
-                    className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
-                    style={{ backgroundColor: "#f15b5c" }}
-                  >
-                    <Save className="w-4 h-4" />
-                    {cfg.saving ? "Đang lưu..." : "Lưu cấu hình"}
-                  </button>
+                  </FieldBox>
                 </div>
               </div>
-            </div>
+
+              <MilestoneFields cfg={cfg} onPatch={u => patch(staff.id, u)} />
+              <SeniorityFields cfg={cfg} perYear={PT_PER_YEAR} onPatch={u => patch(staff.id, u)} />
+              <TierTable tiers={PT_TIERS} note="* % áp dụng theo bậc toàn bộ doanh số tháng" />
+            </ConfigCard>
           );
         })
       )}

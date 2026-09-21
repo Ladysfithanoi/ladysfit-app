@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { captureTrash } from "@/lib/trash";
+import { parseDayInput } from "@/lib/leave-days";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -80,7 +81,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId } = body;
+  const { name, email, password, branchId, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate } = body;
 
   // QUYỀN SUY TỪ CHỨC VỤ, không lấy theo giá trị client gửi lên — xem POST
   // /api/staff. Không gửi chức vụ thì giữ nguyên quyền cũ.
@@ -126,6 +127,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const d = dateOfBirth ? new Date(dateOfBirth) : null;
     updateData.dateOfBirth = d && !isNaN(d.getTime()) ? d : null;
   }
+  // Ngày bắt đầu làm việc — FM/Admin sửa được, vì mốc tự đặt lúc tạo tài khoản
+  // hiếm khi trùng ngày người đó thực sự vào làm. Xoá trắng ô thì về null và
+  // lịch nghỉ lùi lại mốc tạo tài khoản.
+  if (employmentStartDate !== undefined) {
+    updateData.employmentStartDate = parseDayInput(employmentStartDate);
+  }
 
   if (role === "FM") {
     updateData.role = role;
@@ -149,6 +156,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         branch: { select: { id: true, name: true } },
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },
+        employmentStartDate: true,
       },
     });
 

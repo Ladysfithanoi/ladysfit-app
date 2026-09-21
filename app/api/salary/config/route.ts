@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseDayInput } from "@/lib/leave-days";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -36,15 +37,19 @@ export async function PUT(req: Request) {
   if (session.user.role !== "FM") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {
-    userId:            string;
-    branchId:          string;
-    baseSalary:        number;
-    seniorityYears:    number;
-    startDate?:        string | null;
-    lunchAllowance?:   number;
-    phoneAllowance?:   number;
+    userId:              string;
+    branchId:            string;
+    baseSalary:          number;
+    seniorityYears:      number;
+    // HAI MỐC TÁCH RỜI. Ngày làm chính thức là nơi thâm niên bắt đầu đếm; ngày
+    // nhận bảo hiểm là nơi BHXH bắt đầu. Hết thử việc rồi mới đóng bảo hiểm nên
+    // hai mốc thường lệch nhau, gộp một ô là sai mất một trong hai.
+    officialStartDate?:  string | null;
+    insuranceStartDate?: string | null;
+    lunchAllowance?:     number;
+    phoneAllowance?:     number;
     transportAllowance?: number;
-    effectiveFrom:     string;
+    effectiveFrom:       string;
   };
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
@@ -68,13 +73,14 @@ export async function PUT(req: Request) {
   });
 
   const data = {
-    baseSalary:        body.baseSalary,
-    seniorityYears:    body.seniorityYears,
-    startDate:         body.startDate ? new Date(body.startDate) : null,
-    lunchAllowance:    body.lunchAllowance     ?? 2_600_000,
-    phoneAllowance:    body.phoneAllowance     ?? 900_000,
-    transportAllowance: body.transportAllowance ?? 500_000,
-    effectiveFrom:     new Date(body.effectiveFrom),
+    baseSalary:         body.baseSalary,
+    seniorityYears:     body.seniorityYears,
+    officialStartDate:  parseDayInput(body.officialStartDate),
+    insuranceStartDate: parseDayInput(body.insuranceStartDate),
+    lunchAllowance:     body.lunchAllowance      ?? 2_600_000,
+    phoneAllowance:     body.phoneAllowance      ?? 900_000,
+    transportAllowance: body.transportAllowance  ?? 500_000,
+    effectiveFrom:      new Date(body.effectiveFrom),
   };
 
   const config = existing

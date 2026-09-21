@@ -30,6 +30,11 @@ type StaffMember = {
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
   branchId: string | null;
   dateOfBirth: Date | null;
+  /**
+   * Ngày bắt đầu đi làm — mốc lịch nghỉ đọc để khoá những ngày người này chưa
+   * vào làm. Tự đặt là hôm nay khi thêm nhân sự, FM/Admin sửa lại được.
+   */
+  employmentStartDate: Date | null;
   ptLevelId: string | null;
   ptLevel: { id: string; name: string; color: string } | null;
   /** Chức vụ — nhãn nghề nghiệp Admin tự quản, KHÔNG cấp quyền gì. */
@@ -205,6 +210,7 @@ export function StaffPageClient({
   const [jobPositions, setJobPositions] = useState<JobPositionRow[]>([]);
   const [posOpen, setPosOpen] = useState(false);
   const [birthDateVal, setBirthDateVal] = useState("");
+  const [workStartVal, setWorkStartVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
@@ -270,6 +276,16 @@ export function StaffPageClient({
     return s.split("T")[0]; // "YYYY-MM-DD" for type="date"
   }
 
+  /** Hôm nay theo lịch máy người dùng, dạng "YYYY-MM-DD". */
+  function todayYMD(): string {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+  }
+
   function openAdd() {
     setEditing(null);
     setError("");
@@ -278,6 +294,9 @@ export function StaffPageClient({
     setSelectedBranchIds([]);
     setSelectedPtLevelId("");
     setBirthDateVal("");
+    // Thêm nhân sự là họ vào làm từ hôm nay — điền sẵn để không ai phải nhớ,
+    // và vẫn sửa được ngay tại đây nếu người đó đã đi làm từ trước.
+    setWorkStartVal(todayYMD());
     setShowPassword(false);
     setOpen(true);
   }
@@ -290,6 +309,7 @@ export function StaffPageClient({
     setSelectedPtLevelId(s.ptLevelId ?? "");
     setSelectedJobPositionId(s.jobPositionId ?? "");
     setBirthDateVal(isoToYMD(s.dateOfBirth));
+    setWorkStartVal(isoToYMD(s.employmentStartDate));
     setShowPassword(false);
     setOpen(true);
   }
@@ -363,6 +383,7 @@ export function StaffPageClient({
       name: fd.get("name") as string,
       email: fd.get("email") as string,
       dateOfBirth: birthDateVal ? new Date(birthDateVal + "T00:00:00.000Z").toISOString() : null,
+      employmentStartDate: workStartVal || null,
     };
 
     if (selectedRole === "FM") {
@@ -827,7 +848,7 @@ export function StaffPageClient({
         onClose={closePanel}
         title={editing ? "Chỉnh sửa nhân sự" : "Thêm nhân sự mới"}
       >
-        <form key={editing?.id ?? "new"} onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form key={editing?.id ?? "new"} onSubmit={handleSubmit} className="px-4 sm:px-6 py-5 space-y-4">
           <Field label="Họ tên *">
             <Input
               name="name"
@@ -847,15 +868,29 @@ export function StaffPageClient({
               className="h-11 rounded-xl"
             />
           </Field>
-          <Field label="Ngày sinh">
-            <input
-              type="date"
-              lang="vi"
-              value={birthDateVal}
-              onChange={(e) => setBirthDateVal(e.target.value)}
-              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
-            />
-          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Ngày sinh">
+              <input
+                type="date"
+                lang="vi"
+                value={birthDateVal}
+                onChange={(e) => setBirthDateVal(e.target.value)}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              />
+            </Field>
+            <Field label="Ngày bắt đầu làm việc">
+              <input
+                type="date"
+                lang="vi"
+                value={workStartVal}
+                onChange={(e) => setWorkStartVal(e.target.value)}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+              />
+              <p className="text-[11px] text-gray-400">
+                Lịch nghỉ khoá mọi ngày trước mốc này và tính phép năm từ đây.
+              </p>
+            </Field>
+          </div>
           <Field label={editing ? "Mật khẩu mới (bỏ trống để giữ nguyên)" : "Mật khẩu *"}>
             <div className="relative">
               <input

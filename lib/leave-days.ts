@@ -114,33 +114,50 @@ export async function sumLeaveDeductionByUser(
 // ── Phép năm ───────────────────────────────────────────────────────────────
 
 /**
- * Ngày nhận việc: lấy từ cấu hình lương (ô "Ngày nhận việc (BHXH)"), chưa khai
- * thì lùi về ngày tạo tài khoản để nhân sự cũ vẫn có đủ phép.
+ * Ngày bắt đầu làm việc — ô "Ngày bắt đầu làm việc" trong thông tin nhân sự,
+ * mặc định là ngày tài khoản được tạo. Đây là mốc DUY NHẤT của lịch nghỉ: hai
+ * mốc bên bảng lương (ngày làm chính thức cho thâm niên, ngày nhận bảo hiểm cho
+ * BHXH) thường lệch sau và không dính gì tới ngày công.
  */
 export async function getHireDate(userId: string): Promise<Date | null> {
-  const [config, user] = await Promise.all([
-    prisma.salaryConfig.findFirst({
-      where:   { userId, startDate: { not: null } },
-      orderBy: { effectiveFrom: "desc" },
-      select:  { startDate: true },
-    }),
-    prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } }),
-  ]);
-  return config?.startDate ?? user?.createdAt ?? null;
+  const user = await prisma.user.findUnique({
+    where:  { id: userId },
+    select: { employmentStartDate: true, createdAt: true },
+  });
+  return user?.employmentStartDate ?? user?.createdAt ?? null;
 }
 
 /**
  * Ngày nhận việc quy về nửa đêm UTC, để so ngày với ngày.
  *
- * `startDate` là DateTime (có thể kèm giờ) còn `leave_days.date` là DATE, nên
- * phải cắt phần giờ đi; không cắt thì chính ngày đầu đi làm cũng bị coi là
- * "trước khi vào làm" khi startDate lưu kèm giờ chiều.
+ * `employmentStartDate` là DateTime (có thể kèm giờ) còn `leave_days.date` là
+ * DATE, nên phải cắt phần giờ đi; không cắt thì chính ngày đầu đi làm cũng bị
+ * coi là "trước khi vào làm" khi mốc đó lưu kèm giờ chiều.
  */
 export function hireDayOf(hireDate: Date | null): Date | null {
   if (!hireDate) return null;
   return new Date(Date.UTC(
     hireDate.getUTCFullYear(), hireDate.getUTCMonth(), hireDate.getUTCDate(),
   ));
+}
+
+/**
+ * Chuỗi ngày người dùng nhập ("YYYY-MM-DD" hoặc ISO đầy đủ) quy về nửa đêm UTC.
+ * Rỗng hoặc sai định dạng thì trả `null`, để nơi gọi tự quyết định mặc định.
+ */
+export function parseDayInput(input: unknown): Date | null {
+  if (typeof input !== "string" || input.trim() === "") return null;
+  const parsed = new Date(input.length === 10 ? `${input}T00:00:00.000Z` : input);
+  return isNaN(parsed.getTime()) ? null : hireDayOf(parsed);
+}
+
+/**
+ * Hôm nay theo giờ Việt Nam, quy về nửa đêm UTC — mốc mặc định khi thêm nhân sự
+ * mới. Máy chủ chạy giờ UTC nên phải cộng +7 trước khi cắt ngày, không thì nhập
+ * nhân sự lúc sáng sớm ở Việt Nam sẽ ghi lùi mất một ngày.
+ */
+export function todayAsDay(): Date {
+  return hireDayOf(new Date(Date.now() + 7 * 60 * 60 * 1000))!;
 }
 
 /**

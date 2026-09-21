@@ -93,6 +93,11 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   dateOfBirth           DateTime?
+  // NGÀY BẮT ĐẦU LÀM VIỆC — mặc định là ngày tài khoản được tạo, FM/Admin sửa
+  // lại được trong thông tin nhân sự. Lịch nghỉ khoá mọi ngày trước mốc này và
+  // tính quỹ phép năm từ đây. Khác hai mốc bên bảng lương: officialStartDate
+  // (thâm niên) và insuranceStartDate (BHXH).
+  employmentStartDate   DateTime?
   ptLevelId             String?
   deletedAt             DateTime?
   ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
@@ -1681,7 +1686,11 @@ model SalaryConfig {
   baseSalary         Float     @default(0)
   commissionTiers    String    @db.Text @default("[]")
   seniorityYears     Int       @default(0)
-  startDate          DateTime?
+  // NGÀY LÀM CHÍNH THỨC — mốc bắt đầu tính lương thâm niên.
+  officialStartDate  DateTime?
+  // NGÀY NHẬN BẢO HIỂM — mốc bắt đầu đóng/hưởng BHXH. Thường sau ngày làm
+  // chính thức (hết thử việc) nên tách hẳn khỏi mốc thâm niên.
+  insuranceStartDate DateTime?
   lunchAllowance     Float     @default(2600000)
   phoneAllowance     Float     @default(900000)
   transportAllowance Float     @default(500000)

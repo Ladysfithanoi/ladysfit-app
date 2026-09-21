@@ -35,31 +35,31 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="bg-white border-b border-gray-100 px-8 py-5">
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-8 py-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 rounded-xl bg-[#f15b5c]/10">
             <Wallet className="w-5 h-5 text-[#f15b5c]" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-extrabold text-gray-900">Quỹ lương</h1>
-            <p className="text-xs text-gray-400 font-semibold mt-0.5">
+            <p className="text-xs text-gray-400 font-semibold mt-0.5 truncate">
               {isManager ? "Quản lý lương nhân sự" : currentUserName}
             </p>
           </div>
         </div>
 
         {isFM && !isCOO && (
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto">
             {FM_TABS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                  "flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap shrink-0 transition-all",
                   tab === key ? "bg-white text-[#f15b5c] shadow-sm" : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-4 h-4 shrink-0" />
                 {label}
               </button>
             ))}
@@ -67,7 +67,7 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
         )}
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 sm:px-8 py-6">
         {isManager ? (
           <>
             {(tab === "table" || isCOO) && (
