@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
-import { Plus, Trash2, Save, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, CalendarDays, User, Users, Download, X, LayoutGrid, ArrowUpDown, Dumbbell, ChevronLeft, ChevronRight, LogOut, CheckCircle2, Star, Cloud, CloudOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StaffMember } from "./checklist-page";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
+import { MAX_RATING, MIN_RATING, RATING_LABEL } from "@/lib/checklist-review";
+
+/** Khoảng lặng sau lần gõ cuối rồi mới đẩy check-list lên máy chủ. */
+const AUTOSAVE_MS = 1200;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 // Use local-time methods to build YYYY-MM-DD — avoids UTC midnight crossing local-date boundary
@@ -133,6 +137,12 @@ type ChecklistData = {
     dailyCompleted: string | null;
     dailyIncomplete: string | null;
     dailyNextPlan: string | null;
+    /** Mốc nhân sự bấm Check-out — rỗng nghĩa là ngày đó chưa chốt. */
+    checkedOutAt: string | null;
+    fmRating: number | null;
+    fmComment: string | null;
+    fmReviewedAt: string | null;
+    fmReviewer: { name: string | null; email: string } | null;
     items: Array<Record<string, unknown>>;
   } | null;
   totalActual: number;
@@ -144,6 +154,10 @@ type OverviewStaff = {
   role: string;
   branchName: string;
   filled: boolean;
+  checkedOut: boolean;
+  checkedOutAt: string | null;
+  fmRating: number | null;
+  reviewed: boolean;
   tasksTotal: number;
   tasksCompleted: number;
   taskRate: number;
@@ -158,7 +172,20 @@ type Props = {
   currentUserName: string;
   currentUserRole: string;
   staffList: StaffMember[];
+  /**
+   * Mở thẳng check-list của một nhân sự trong một ngày — chuông thông báo
+   * Check-out gắn sẵn hai giá trị này vào đường dẫn, để FM bấm một phát là tới
+   * đúng chỗ thay vì phải tự chọn lại người và ngày.
+   */
+  initialTeamUserId?: string;
+  initialDate?: string;
 };
+
+/** "18:42" — giờ phút của một mốc ISO, theo giờ máy người xem. */
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 // ── DateInput — iOS Safari locale fix ────────────────────────────────────────
 // Safari on iOS renders <input type="date"> in device locale ("ngày 22 thg 05, 2026").
@@ -530,23 +557,183 @@ function CalendarGrid({ rows, date }: { rows: Row[]; date: string }) {
   );
 }
 
+// ── SaveStatus — bảng không còn nút Lưu, nên phải nói rõ tình trạng ──────────
+//
+// Không có dòng này thì người điền chẳng có cách nào biết cái mình vừa gõ đã
+// nằm trên máy chủ hay chưa — đó là cái giá của việc bỏ nút Lưu, và đây là chỗ
+// trả lại.
+function SaveStatus({
+  state,
+  savedAt,
+  error,
+}: {
+  state:   "idle" | "pending" | "saving" | "saved" | "error";
+  savedAt: string | null;
+  error:   string;
+}) {
+  if (state === "error") {
+    return (
+      <p className="flex items-start gap-1.5 text-[11px] font-semibold text-[#f15b5c] leading-snug">
+        <CloudOff className="w-3.5 h-3.5 shrink-0 mt-px" />
+        <span>{error || "Không lưu được"}</span>
+      </p>
+    );
+  }
+  if (state === "saving" || state === "pending") {
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400">
+        <Cloud className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+        Đang lưu...
+      </p>
+    );
+  }
+  if (state === "saved" && savedAt) {
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+        <Cloud className="w-3.5 h-3.5 shrink-0" />
+        Đã tự lưu lúc {fmtTime(savedAt)}
+      </p>
+    );
+  }
+  return (
+    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400">
+      <Cloud className="w-3.5 h-3.5 shrink-0" />
+      Check-list tự lưu — không cần bấm Lưu
+    </p>
+  );
+}
+
+// ── FMReviewCard — nơi FM chấm sau khi đọc tự luận cuối ngày ─────────────────
+//
+// Điểm 1–5 là thứ duy nhất cộng lại được, nên màn Tổng kết đánh giá theo ngày /
+// tuần / tháng / quý / năm sống nhờ chính ô này.
+function FMReviewCard({
+  canReview,
+  checkedOutAt,
+  rating,
+  comment,
+  reviewedAt,
+  reviewerName,
+  saving,
+  onRating,
+  onComment,
+  onSave,
+}: {
+  canReview:    boolean;
+  checkedOutAt: string | null;
+  rating:       number | null;
+  comment:      string;
+  reviewedAt:   string | null;
+  reviewerName: string | null;
+  saving:       boolean;
+  onRating:  (v: number | null) => void;
+  onComment: (v: string) => void;
+  onSave:    () => void;
+}) {
+  const stars = Array.from({ length: MAX_RATING - MIN_RATING + 1 }, (_, i) => MIN_RATING + i);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 bg-gray-800">
+        <p className="text-sm font-extrabold text-white tracking-wide uppercase">Đánh giá của FM</p>
+        {reviewedAt && (
+          <span className="text-[11px] font-semibold text-white/70 whitespace-nowrap truncate">
+            {reviewerName ? `${reviewerName} · ` : ""}{fmtTime(reviewedAt)}
+          </span>
+        )}
+      </div>
+
+      <div className="p-4 sm:p-5 space-y-4">
+        {!checkedOutAt && (
+          <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-snug">
+            Nhân sự chưa check-out ngày này — tự luận có thể còn viết dở.
+          </p>
+        )}
+
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-gray-500">Điểm đánh giá</label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {stars.map((v) => (
+              <button
+                key={v}
+                type="button"
+                disabled={!canReview}
+                // Bấm lại đúng mức đang chọn là bỏ chọn — không cần thêm nút xoá.
+                onClick={() => onRating(rating === v ? null : v)}
+                title={RATING_LABEL[v]}
+                className={cn(
+                  "w-9 h-9 rounded-xl flex items-center justify-center transition-colors",
+                  rating != null && v <= rating
+                    ? "text-amber-500"
+                    : "text-gray-200",
+                  canReview ? "hover:bg-amber-50" : "cursor-not-allowed"
+                )}
+              >
+                <Star className="w-5 h-5" fill={rating != null && v <= rating ? "currentColor" : "none"} />
+              </button>
+            ))}
+            <span className="ml-1 text-xs font-bold text-gray-500">
+              {rating != null ? `${rating}/${MAX_RATING} · ${RATING_LABEL[rating]}` : "Chưa chấm"}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-gray-500">Nhận xét</label>
+          <textarea
+            value={comment}
+            onChange={(e) => onComment(e.target.value)}
+            disabled={!canReview}
+            rows={4}
+            placeholder={canReview ? "Nhận xét cho nhân sự về ngày làm việc này..." : ""}
+            className={cn(
+              "w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 resize-y",
+              canReview ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
+            )}
+          />
+        </div>
+
+        {canReview && (
+          <div className="flex justify-stretch sm:justify-end pt-1">
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Star className="w-4 h-4" />
+              {saving ? "Đang lưu..." : reviewedAt ? "Cập nhật đánh giá" : "Lưu đánh giá"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── main component ────────────────────────────────────────────────────────────
 export function DailyTab({
   currentUserId,
   currentUserName,
   currentUserRole,
   staffList,
+  initialTeamUserId,
+  initialDate,
 }: Props) {
   const isManager = currentUserRole === "FM" || currentUserRole === "ADMIN";
 
-  const [fmSubTab, setFmSubTab] = useState<"own" | "team">("own");
+  // Tới từ chuông Check-out thì mở thẳng tab Quản lý PT của đúng người đó.
+  const openedFromNotif = isManager && !!initialTeamUserId;
+  const [fmSubTab, setFmSubTab] = useState<"own" | "team">(openedFromNotif ? "team" : "own");
   const isTeamView = isManager && fmSubTab === "team";
 
-  const [ownDate, setOwnDate]   = useState(todayISO());
-  const [teamDate, setTeamDate] = useState(todayISO());
+  const [ownDate, setOwnDate]   = useState(initialDate ?? todayISO());
+  const [teamDate, setTeamDate] = useState(initialDate ?? todayISO());
 
   const firstPTId = staffList.find((s) => s.id !== currentUserId)?.id ?? currentUserId;
-  const [teamSelectedId, setTeamSelectedId] = useState(firstPTId);
+  const [teamSelectedId, setTeamSelectedId] = useState(
+    openedFromNotif ? initialTeamUserId! : firstPTId
+  );
 
   const selectedUserId = isTeamView ? teamSelectedId : currentUserId;
   const date = isTeamView ? teamDate : ownDate;
@@ -559,11 +746,28 @@ export function DailyTab({
   const [rows, setRows]                       = useState<Row[]>([]);
   // Single end-of-day reflection box (replaces the former 4 boxes).
   const [dailyResults, setDailyResults]       = useState("");
-  const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isDirty, setIsDirty] = useState(false);
+
+  // Bảng TỰ LƯU nên không còn nút Lưu; thay vào đó là một dòng trạng thái nhỏ
+  // để người điền luôn biết việc mình gõ đã nằm trên máy chủ hay chưa.
+  type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [savedAt, setSavedAt]     = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
+
+  // Chốt ngày làm việc
+  const [checkedOutAt, setCheckedOutAt] = useState<string | null>(null);
+  const [checkingOut, setCheckingOut]   = useState(false);
+
+  // Đánh giá của FM cho ngày đang xem
+  const [fmRating, setFmRating]           = useState<number | null>(null);
+  const [fmComment, setFmComment]         = useState("");
+  const [fmReviewedAt, setFmReviewedAt]   = useState<string | null>(null);
+  const [fmReviewerName, setFmReviewerName] = useState<string | null>(null);
+  const [reviewSaving, setReviewSaving]   = useState(false);
 
   // Import modal state
   const [importOpen, setImportOpen]       = useState(false);
@@ -590,6 +794,16 @@ export function DailyTab({
   const canEditReflection = canEdit;
   const isFutureDay       = date > today;
 
+  // Check-out chỉ cho ngày hôm nay hoặc hôm qua (ca tối tan sau nửa đêm là
+  // chuyện thường), và chỉ cho check-list của chính mình.
+  const canCheckOut = !isTeamView
+    && date <= today
+    && date >= addDaysISO(today, -1)
+    && !checkedOutAt;
+
+  // FM/Admin chấm cho NGƯỜI KHÁC. Tự chấm cho mình thì điểm tổng kết vô nghĩa.
+  const canReview = isManager && isTeamView && selectedUserId !== currentUserId;
+
   // ── Auto-save draft (own checklist only) ──────────────────────────────────
   const draftKey = `ladysfit_draft_checklist_${currentUserId}_${ownDate}`;
   const { clearDraft: clearChecklistDraft } = useFormAutoSave(
@@ -602,10 +816,22 @@ export function DailyTab({
   const displayName  = selectedUser?.name ?? selectedUser?.email ?? currentUserName;
   // Không còn giới hạn dưới: nhân sự xem lại được toàn bộ lịch sử của mình.
 
+  /**
+   * Form ĐANG GIỮ dữ liệu của ai, ngày nào — dạng `userId|YYYY-MM-DD`, rỗng khi
+   * chưa nạp được gì.
+   *
+   * Mốc này là thứ quyết định lượt tự lưu ghi vào ngày nào, chứ KHÔNG phải ngày
+   * đang chọn trên lịch. Vừa bấm sang ngày khác thì `date` đã đổi nhưng dữ liệu
+   * mới chưa về, trên màn vẫn là bảng của ngày cũ — lấy `date` lúc đó là chép
+   * nguyên việc hôm qua đè sang hôm nay.
+   */
+  const loadedKeyRef = useRef("");
+
   // ── fetch main ─────────────────────────────────────────────────────────────
   const fetchChecklist = useCallback(async () => {
     setLoading(true);
     setLoadError("");
+    loadedKeyRef.current = "";
     try {
       const res = await fetch(`/api/checklist/daily?date=${date}&userId=${selectedUserId}`);
       if (!res.ok) {
@@ -616,11 +842,25 @@ export function DailyTab({
         setLoadError(msg?.error ?? "Không tải được check-list của ngày này");
         setPosition(""); setTargetNote(""); setTotalTarget("");
         setDailyResults(""); setRows([]); setTotalActual(0);
+        setCheckedOutAt(null);
+        setFmRating(null); setFmComment(""); setFmReviewedAt(null); setFmReviewerName(null);
         setIsDirty(false);
         return;
       }
       const data = (await res.json()) as ChecklistData;
       setTotalActual(data.totalActual);
+
+      // Chốt ngày và đánh giá KHÔNG bao giờ lấy từ bản nháp trong máy: cả hai
+      // đều do máy chủ quyết, bản nháp chỉ giữ phần người dùng đang gõ dở.
+      const cl = data.checklist;
+      setCheckedOutAt(cl?.checkedOutAt ?? null);
+      setFmRating(cl?.fmRating ?? null);
+      setFmComment(cl?.fmComment ?? "");
+      setFmReviewedAt(cl?.fmReviewedAt ?? null);
+      setFmReviewerName(cl?.fmReviewer?.name ?? cl?.fmReviewer?.email ?? null);
+      setSaveState("idle");
+      setSavedAt(null);
+
       type ChecklistDraft = {
         position: string; targetNote: string; totalTarget: string;
         rows: Row[]; dailyResults: string;
@@ -661,6 +901,7 @@ export function DailyTab({
         setRows([]);
       }
       setIsDirty(false);
+      loadedKeyRef.current = `${selectedUserId}|${date}`;
     } finally {
       setLoading(false);
     }
@@ -761,29 +1002,58 @@ export function DailyTab({
     setTimeout(() => setToast(""), 2000);
   }
 
-  // ── save ───────────────────────────────────────────────────────────────────
-  async function handleSave() {
-    setSaving(true);
-    const normalizedRows = rows.map((r) => ({ ...r, time: r.time ? normalizeTime(r.time) : "" }));
-    const sortedRows = sortRowsByTime(normalizedRows);
-    setRows(sortedRows);
+  // ── Tự lưu lên máy chủ ─────────────────────────────────────────────────────
+  //
+  // Check-list KHÔNG còn nút "Lưu": mỗi lần gõ được gom lại rồi đẩy lên sau
+  // AUTOSAVE_MS. Nút duy nhất ở cuối bảng là CHECK-OUT — chốt ngày làm việc và
+  // báo cho FM, chứ không phải để lưu.
+  //
+  // Ảnh chụp dữ liệu nằm trong ref: hàm lưu được gọi từ trong setTimeout và từ
+  // nút Check-out, cả hai đều phải thấy giá trị MỚI NHẤT chứ không phải giá trị
+  // đóng băng lúc hàm được tạo ra.
+  const payloadRef = useRef({ position, targetNote, totalTarget, dailyResults, rows });
+  payloadRef.current = { position, targetNote, totalTarget, dailyResults, rows };
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingRef = useRef<Promise<boolean> | null>(null);
+  const dirtyRef  = useRef(false);
+
+  /**
+   * Một lượt đẩy lên máy chủ.
+   *
+   * `tidy` chỉ bật lúc Check-out: nó chuẩn hoá giờ rồi xếp lại bảng theo thời
+   * gian NGAY TRÊN MÀN HÌNH. Tự lưu thì không được làm vậy — bảng nhảy chỗ ngay
+   * dưới con trỏ trong lúc người ta đang gõ là hỏng hết.
+   */
+  const doSave = useCallback(async (tidy = false): Promise<boolean> => {
+    // Chưa nạp xong, hoặc đang xem check-list của người khác, thì không ghi gì.
+    const [loadedUserId, loadedDate] = loadedKeyRef.current.split("|");
+    if (!loadedDate || loadedUserId !== currentUserId) return false;
+
+    const snap = payloadRef.current;
+    const normalized = snap.rows.map((r) => ({ ...r, time: r.time ? normalizeTime(r.time) : "" }));
+    const outRows = tidy ? sortRowsByTime(normalized) : normalized;
+    if (tidy) setRows(outRows);
+
+    setSaveState("saving");
+    setSaveError("");
     try {
       const res = await fetch("/api/checklist/daily", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date,
-          userId: currentUserId,
-          position,
-          targetNote:      targetNote || undefined,
-          totalTarget:     totalTarget ? parseFloat(totalTarget) : undefined,
-          dailyResults:    dailyResults || undefined,
-          // Legacy 3-field reflection replaced by the single box above.
+          date:            loadedDate,
+          userId:          currentUserId,
+          position:        snap.position,
+          targetNote:      snap.targetNote || undefined,
+          totalTarget:     snap.totalTarget ? parseFloat(snap.totalTarget) : undefined,
+          dailyResults:    snap.dailyResults || undefined,
+          // Ba ô tự luận cũ đã gộp thành một ô duy nhất phía trên.
           dailyCompleted:  undefined,
           dailyIncomplete: undefined,
           dailyNextPlan:   undefined,
-          items: sortedRows.map((r) => ({
-            order: r.order,
+          items: outRows.map((r, i) => ({
+            order: tidy ? i + 1 : r.order,
             time: r.time || undefined,
             task: r.task,
             kpi: r.kpi || undefined,
@@ -793,19 +1063,130 @@ export function DailyTab({
           })),
         }),
       });
-      if (res.ok) {
-        clearChecklistDraft();
-        setIsDirty(false);
-        setToast("Đã lưu check-list ✓");
-        setTimeout(() => setToast(""), 3000);
-        fetchChecklist();
-      } else {
+      if (!res.ok) {
         const msg = await res.json().catch(() => null);
-        setToast(`❌ ${msg?.error ?? "Không lưu được check-list"}`);
-        setTimeout(() => setToast(""), 5000);
+        setSaveState("error");
+        setSaveError(msg?.error ?? "Không lưu được check-list");
+        return false;
       }
+      dirtyRef.current = false;
+      clearChecklistDraft();
+      setSavedAt(new Date().toISOString());
+      setSaveState("saved");
+      return true;
+    } catch {
+      setSaveState("error");
+      setSaveError("Mất kết nối — bản nháp vẫn giữ trên máy, sẽ lưu lại khi bạn gõ tiếp");
+      return false;
+    }
+  }, [currentUserId, clearChecklistDraft]);
+
+  /**
+   * Nối đuôi lượt đang chạy thay vì bắn song song: mỗi lượt POST xoá rồi tạo
+   * lại toàn bộ dòng việc, hai lượt chồng nhau có thể để lại bảng thiếu dòng.
+   */
+  const pushSave = useCallback((tidy = false): Promise<boolean> => {
+    const run = (savingRef.current ?? Promise.resolve(true)).then(() => doSave(tidy));
+    savingRef.current = run.catch(() => false);
+    return run;
+  }, [doSave]);
+
+  /** Đẩy nốt những gì còn đang chờ trong hàng đợi, rồi mới làm việc tiếp theo. */
+  const flushSave = useCallback((tidy = false): Promise<boolean> => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    return pushSave(tidy);
+  }, [pushSave]);
+
+  // Hẹn giờ đẩy lên sau mỗi thay đổi. Chuỗi hoá để chỉ chạy lại khi nội dung
+  // thật sự khác, không phải mỗi lần React vẽ lại.
+  const formSnapshot = JSON.stringify({ position, targetNote, totalTarget, dailyResults, rows });
+  useEffect(() => {
+    if (!canEdit || loading || !isDirty) return;
+    dirtyRef.current = true;
+    setSaveState("pending");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { saveTimer.current = null; pushSave(); }, AUTOSAVE_MS);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [formSnapshot, canEdit, loading, isDirty, pushSave]);
+
+  // Rời trang / đổi ngày khi còn dở: đẩy nốt lần cuối. Đóng hẳn tab thì lượt
+  // này có thể không kịp bay đi — bản nháp trong máy là lưới an toàn cuối cùng.
+  useEffect(() => {
+    function flushIfDirty() { if (dirtyRef.current) pushSave(); }
+    window.addEventListener("beforeunload", flushIfDirty);
+    return () => {
+      window.removeEventListener("beforeunload", flushIfDirty);
+      flushIfDirty();
+    };
+  }, [pushSave]);
+
+  // ── Chốt ngày làm việc ─────────────────────────────────────────────────────
+  async function handleCheckOut() {
+    // Chốt đúng cái ngày mà form đang giữ, không phải ngày vừa bấm trên lịch —
+    // cùng lý do với doSave().
+    const [, loadedDate] = loadedKeyRef.current.split("|");
+    if (!loadedDate) return;
+
+    setCheckingOut(true);
+    try {
+      // Lưu nốt TRƯỚC khi chốt: FM được mời vào đọc ngay sau thông báo, nên
+      // những gì vừa gõ phải nằm sẵn trên máy chủ.
+      const saved = await flushSave(true);
+      if (!saved) {
+        setToast("❌ Chưa lưu được check-list, thử lại giúp mình nhé");
+        setTimeout(() => setToast(""), 5000);
+        return;
+      }
+
+      const res = await fetch("/api/checklist/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: loadedDate }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setToast(`❌ ${data?.error ?? "Không check-out được"}`);
+        setTimeout(() => setToast(""), 5000);
+        return;
+      }
+      setCheckedOutAt(data.checkedOutAt);
+      setToast(
+        data.notified > 0
+          ? `Đã check-out ✓ Đã báo ${data.notified} quản lý`
+          : "Đã check-out ✓"
+      );
+      setTimeout(() => setToast(""), 4000);
     } finally {
-      setSaving(false);
+      setCheckingOut(false);
+    }
+  }
+
+  // ── Đánh giá của FM ────────────────────────────────────────────────────────
+  async function handleSaveReview() {
+    setReviewSaving(true);
+    try {
+      const res = await fetch("/api/checklist/review", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          userId:  selectedUserId,
+          rating:  fmRating,
+          comment: fmComment,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setToast(`❌ ${data?.error ?? "Không lưu được đánh giá"}`);
+        setTimeout(() => setToast(""), 5000);
+        return;
+      }
+      setFmReviewedAt(data.fmReviewedAt);
+      setFmReviewerName(data.fmReviewerName);
+      setToast(data.fmReviewedAt ? "Đã lưu đánh giá ✓" : "Đã gỡ đánh giá ✓");
+      setTimeout(() => setToast(""), 3000);
+    } finally {
+      setReviewSaving(false);
     }
   }
 
@@ -1229,13 +1610,18 @@ export function DailyTab({
 
       {/* ── Tự luận cuối ngày ─────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: "#f15b5c" }}>
+        <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3" style={{ backgroundColor: "#f15b5c" }}>
           <p className="text-sm font-extrabold text-white tracking-wide uppercase">Tự luận cuối ngày</p>
-          {isTeamView && (
-            <span className="text-xs text-white/80 italic flex items-center gap-1.5">
+          {checkedOutAt ? (
+            <span className="text-[11px] font-bold text-white/90 flex items-center gap-1.5 whitespace-nowrap">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              Đã check-out {fmtTime(checkedOutAt)}
+            </span>
+          ) : isTeamView ? (
+            <span className="text-xs text-white/80 italic flex items-center gap-1.5 whitespace-nowrap">
               <span>👁️</span> Chế độ xem
             </span>
-          )}
+          ) : null}
         </div>
         <div className="p-5 space-y-1.5">
           <p className="text-xs text-gray-400 leading-relaxed">
@@ -1259,26 +1645,62 @@ export function DailyTab({
         </div>
       </div>
 
-      {/* ── Lưu + Nhập từ ngày khác ───────────────────────────────────────── */}
+      {/* ── Đánh giá của FM ───────────────────────────────────────────────── */}
+      {/* Nhân sự cũng THẤY đánh giá của mình — nhưng chỉ khi đã có, để những
+          ngày chưa chấm không hiện ra một thẻ trống. Đánh giá mà người được
+          đánh giá không đọc được thì không còn là phản hồi. */}
+      {(isTeamView || !!fmReviewedAt) && <FMReviewCard
+        canReview={canReview}
+        checkedOutAt={checkedOutAt}
+        rating={fmRating}
+        comment={fmComment}
+        reviewedAt={fmReviewedAt}
+        reviewerName={fmReviewerName}
+        saving={reviewSaving}
+        onRating={setFmRating}
+        onComment={setFmComment}
+        onSave={handleSaveReview}
+      />}
+
+      {/* ── Tự lưu + Chốt ngày ────────────────────────────────────────────── */}
       {canEdit && (
-        <div className="flex items-center justify-end gap-3">
-          <button
-            onClick={openImportModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors bg-white"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Nhập từ ngày khác</span>
-            <span className="sm:hidden">Nhập</span>
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-60"
-            style={{ backgroundColor: "#f15b5c" }}
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Đang lưu..." : "Lưu check-list"}
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <SaveStatus state={saveState} savedAt={savedAt} error={saveError} />
+
+          <div className="flex items-center gap-3 sm:ml-auto">
+            <button
+              onClick={openImportModal}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:border-[#f15b5c] hover:text-[#f15b5c] transition-colors bg-white"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Nhập từ ngày khác</span>
+              <span className="sm:hidden">Nhập</span>
+            </button>
+
+            {/* Nút cuối bảng KHÔNG còn là "Lưu" — bảng tự lưu rồi. Bấm đây là
+                chốt ngày làm việc và mời FM vào đọc. */}
+            <button
+              onClick={handleCheckOut}
+              disabled={checkingOut || !canCheckOut}
+              title={
+                checkedOutAt ? "Ngày này đã chốt rồi"
+                  : !canCheckOut ? "Chỉ check-out được cho hôm nay hoặc hôm qua"
+                  : undefined
+              }
+              className={cn(
+                "flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors",
+                checkedOutAt
+                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default"
+                  : "text-white disabled:opacity-60"
+              )}
+              style={checkedOutAt ? undefined : { backgroundColor: "#f15b5c" }}
+            >
+              {checkedOutAt ? <CheckCircle2 className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
+              {checkedOutAt
+                ? `Đã check-out ${fmtTime(checkedOutAt)}`
+                : checkingOut ? "Đang chốt ngày..." : "Check-out"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -1360,15 +1782,29 @@ export function DailyTab({
                             <p className="text-[11px] text-gray-400 mt-1 truncate">🎯 {s.targetNote}</p>
                           )}
                         </div>
-                        {s.filled ? (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                            Đã làm
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                            Chưa làm
-                          </span>
-                        )}
+                        {/* "Đã làm" chỉ nói có điền; "Đã check-out" mới là đã
+                            chốt ngày và mời FM vào đọc — hai chuyện khác nhau. */}
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {s.checkedOut ? (
+                            <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              🏁 Check-out{s.checkedOutAt ? ` ${fmtTime(s.checkedOutAt)}` : ""}
+                            </span>
+                          ) : s.filled ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              Đã làm
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              Chưa làm
+                            </span>
+                          )}
+                          {s.reviewed && (
+                            <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5 whitespace-nowrap">
+                              <Star className="w-2.5 h-2.5" fill="currentColor" />
+                              {s.fmRating != null ? `${s.fmRating}/${MAX_RATING}` : "Đã đánh giá"}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {s.filled && (

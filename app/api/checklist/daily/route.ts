@@ -56,7 +56,12 @@ export async function GET(req: Request) {
 
   const checklist = await prisma.dailyChecklist.findFirst({
     where: { userId: requestedUserId, reportDate: { gte: reportDate, lt: nextDay } },
-    include: { items: { orderBy: { order: "asc" } } },
+    include: {
+      items: { orderBy: { order: "asc" } },
+      // Ai đã chấm — để màn check-list ghi rõ tên người đánh giá thay vì một ô
+      // nhận xét không biết của ai.
+      fmReviewer: { select: { name: true, email: true } },
+    },
   });
 
   // Auto-calculate totalActual from SalesLead for current month/year

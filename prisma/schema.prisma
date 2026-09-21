@@ -127,6 +127,7 @@ model User {
   ownedWeeklyReports        WeeklyReport[]        @relation("UserWeeklyReports")
   ownedMonthlyBranchReports MonthlyBranchReport[] @relation("UserMonthlyReports")
   dailyChecklists       DailyChecklist[]      @relation("UserDailyChecklists")
+  reviewedChecklists    DailyChecklist[]      @relation("FMChecklistReviews")
   weeklyMonthlyReports  WeeklyMonthlyReport[] @relation("UserWeeklyMonthlyReports")
   salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
   salaryRecords         SalaryRecord[]        @relation("UserSalaryRecords")
@@ -1596,12 +1597,29 @@ model DailyChecklist {
   dailyCompleted   String?  @db.Text
   dailyIncomplete  String?  @db.Text
   dailyNextPlan    String?  @db.Text
+
+  // ── CHỐT NGÀY LÀM VIỆC ────────────────────────────────────────────────────
+  // Nhân sự bấm Check-out khi xong việc. Check-list tự lưu suốt ngày nên mốc
+  // này KHÔNG phải "đã lưu" mà là "tôi đã làm xong, mời quản lý đọc" — chính
+  // nó bắn thông báo sang FM. Rỗng nghĩa là ngày đó chưa chốt.
+  checkedOutAt     DateTime?
+
+  // ── ĐÁNH GIÁ CỦA FM ───────────────────────────────────────────────────────
+  // FM đọc tự luận cuối ngày rồi chấm. Điểm 1–5 để tổng kết được theo ngày /
+  // tuần / tháng / quý / năm; nhận xét là phần chữ đi kèm.
+  fmRating         Int?
+  fmComment        String?  @db.Text
+  fmReviewedAt     DateTime?
+  fmReviewerId     String?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user  User            @relation("UserDailyChecklists", fields: [userId], references: [id])
-  items ChecklistItem[]
+  user       User            @relation("UserDailyChecklists", fields: [userId], references: [id])
+  fmReviewer User?           @relation("FMChecklistReviews", fields: [fmReviewerId], references: [id])
+  items      ChecklistItem[]
 
+  @@index([fmReviewerId])
   @@map("daily_checklists")
 }
 
@@ -1630,6 +1648,8 @@ enum ChecklistNotifType {
   LEAD_REMINDER
   SUBSTITUTE_REQUEST
   WEEKLY_REPORT
+  // Nhân sự đã chốt ngày làm việc — gửi cho FM phụ trách cơ sở của người đó.
+  CHECKOUT
 }
 
 model ChecklistNotification {

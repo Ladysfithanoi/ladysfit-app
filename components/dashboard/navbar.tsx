@@ -109,14 +109,89 @@ type PackageProgressNotif = {
   client: { id: string; fullName: string };
 };
 
+type ChecklistNotifType =
+  | "REMINDER" | "DAILY_REPORT" | "LEAD_REMINDER"
+  | "SUBSTITUTE_REQUEST" | "WEEKLY_REPORT" | "CHECKOUT";
+
 type ChecklistNotif = {
   id:        string;
-  type:      "REMINDER" | "DAILY_REPORT" | "LEAD_REMINDER" | "SUBSTITUTE_REQUEST" | "WEEKLY_REPORT";
+  type:      ChecklistNotifType;
   message:   string;
   isRead:    boolean;
   date:      string;
   relatedId: string | null;
   createdAt: string;
+};
+
+/**
+ * Mỗi loại thông báo check-list khác nhau ở đúng mấy thứ: màu, biểu tượng, câu
+ * mời bấm, và bấm vào thì đi đâu. Gom hết vào một bảng — trước đây chúng nằm
+ * rải trong năm nhánh if/else chép gần giống hệt nhau, thêm một loại là phải
+ * sửa bốn chỗ và rất dễ sót một.
+ *
+ * DAILY_REPORT không có `href`: nó mở hộp thoại tổng hợp ngay tại chỗ.
+ */
+type NotifKind = {
+  /** Nền của dòng khi chưa đọc. */
+  tint:   string;
+  /** Vòng tròn biểu tượng. */
+  chip:   string;
+  /** Chấm tròn báo chưa đọc. */
+  dot:    string;
+  emoji:  string;
+  /** Màu chữ tiêu đề khi chưa đọc. */
+  title:  string;
+  /** Câu mời bấm nằm dưới tiêu đề. */
+  cta:    string;
+  ctaCls: string;
+  /** Nội dung hiện ra: `message` của bản ghi, hay một câu cố định. */
+  fixedTitle?: string;
+  href?:  (n: ChecklistNotif) => string;
+};
+
+const NOTIF_KIND: Record<ChecklistNotifType, NotifKind> = {
+  REMINDER: {
+    tint: "bg-orange-50/60", chip: "bg-orange-100 text-orange-600", dot: "bg-orange-500",
+    emoji: "⏰", title: "text-orange-700",
+    cta: "Nhấn để điền ngay →", ctaCls: "text-orange-400",
+    fixedTitle: "Chưa điền Check-list hôm nay",
+    href: () => "/dashboard/checklist",
+  },
+  LEAD_REMINDER: {
+    tint: "bg-amber-50/60", chip: "bg-amber-100 text-amber-600", dot: "bg-amber-500",
+    emoji: "⚠️", title: "text-amber-700",
+    cta: "Nhấn để cập nhật ngay →", ctaCls: "text-amber-500",
+    href: () => "/dashboard/setup",
+  },
+  SUBSTITUTE_REQUEST: {
+    tint: "bg-purple-50/60", chip: "bg-purple-100 text-purple-600", dot: "bg-purple-500",
+    emoji: "🔄", title: "text-purple-700",
+    cta: "Nhấn để xem hồ sơ KH →", ctaCls: "text-purple-500",
+    href: (n) => n.relatedId ? `/dashboard/clients/${n.relatedId}` : "/dashboard/clients",
+  },
+  WEEKLY_REPORT: {
+    tint: "bg-emerald-50/60", chip: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500",
+    emoji: "🗒️", title: "text-emerald-700",
+    cta: "Nhấn để xem báo cáo tuần →", ctaCls: "text-emerald-500",
+    href: () => "/dashboard/checklist",
+  },
+  CHECKOUT: {
+    tint: "bg-teal-50/60", chip: "bg-teal-100 text-teal-600", dot: "bg-teal-500",
+    emoji: "🏁", title: "text-teal-700",
+    cta: "Nhấn để đọc tự luận và đánh giá →", ctaCls: "text-teal-500",
+    // Mở thẳng check-list của đúng người, đúng ngày — `relatedId` là id nhân sự.
+    href: (n) => {
+      const day = n.date.slice(0, 10);
+      return n.relatedId
+        ? `/dashboard/checklist?userId=${n.relatedId}&date=${day}`
+        : "/dashboard/checklist";
+    },
+  },
+  DAILY_REPORT: {
+    tint: "bg-blue-50/40", chip: "bg-blue-100 text-blue-600", dot: "bg-blue-500",
+    emoji: "📋", title: "text-blue-700",
+    cta: "Nhấn để xem chi tiết →", ctaCls: "text-blue-400",
+  },
 };
 
 export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -989,146 +1064,78 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
-                    {checklistNotifs.map((n) => (
-                      <div
-                        key={n.id}
-                        className={cn(
-                          "flex items-start gap-3 px-4 py-3 transition-colors",
-                          !n.isRead && (
-                            n.type === "REMINDER"           ? "bg-orange-50/60"  :
-                            n.type === "LEAD_REMINDER"      ? "bg-amber-50/60"   :
-                            n.type === "SUBSTITUTE_REQUEST" ? "bg-purple-50/60"  :
-                            n.type === "WEEKLY_REPORT"      ? "bg-emerald-50/60" : "bg-blue-50/40"
-                          ),
-                          n.type === "DAILY_REPORT" && "cursor-pointer hover:bg-blue-50/60"
-                        )}
-                        onClick={() => n.type === "DAILY_REPORT" ? openReportModal(n) : undefined}
-                      >
-                        <div className={cn(
-                          "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs",
-                          n.type === "REMINDER"           ? "bg-orange-100 text-orange-600"  :
-                          n.type === "LEAD_REMINDER"      ? "bg-amber-100 text-amber-600"   :
-                          n.type === "SUBSTITUTE_REQUEST" ? "bg-purple-100 text-purple-600" :
-                          n.type === "WEEKLY_REPORT"      ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"
-                        )}>
-                          {n.type === "REMINDER" ? "⏰"
-                            : n.type === "LEAD_REMINDER" ? "⚠️"
-                            : n.type === "SUBSTITUTE_REQUEST" ? "🔄"
-                            : n.type === "WEEKLY_REPORT" ? "🗒️" : "📋"}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {n.type === "REMINDER" ? (
-                            <a
-                              href="/dashboard/checklist"
-                              onClick={() => {
-                                setChecklistBellOpen(false);
-                                if (!n.isRead) {
-                                  fetch("/api/notifications/checklist", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ ids: [n.id] }),
-                                  });
-                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
-                                  setChecklistUnread((c) => Math.max(0, c - 1));
-                                }
-                              }}
-                            >
-                              <p className={cn("text-xs", !n.isRead ? "font-bold text-orange-700" : "font-semibold text-gray-500")}>
-                                Chưa điền Check-list hôm nay
-                              </p>
-                              <p className="text-[10px] text-orange-400 mt-0.5 font-semibold">Nhấn để điền ngay →</p>
-                            </a>
-                          ) : n.type === "LEAD_REMINDER" ? (
-                            <a
-                              href="/dashboard/setup"
-                              onClick={() => {
-                                setChecklistBellOpen(false);
-                                if (!n.isRead) {
-                                  fetch("/api/notifications/checklist", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ ids: [n.id] }),
-                                  });
-                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
-                                  setChecklistUnread((c) => Math.max(0, c - 1));
-                                }
-                              }}
-                            >
-                              <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-amber-700" : "font-semibold text-gray-500")}>
-                                {n.message}
-                              </p>
-                              <p className="text-[10px] text-amber-500 mt-0.5 font-semibold">Nhấn để cập nhật ngay →</p>
-                            </a>
-                          ) : n.type === "SUBSTITUTE_REQUEST" ? (
-                            <a
-                              href={n.relatedId ? `/dashboard/clients/${n.relatedId}` : "/dashboard/clients"}
-                              onClick={() => {
-                                setChecklistBellOpen(false);
-                                if (!n.isRead) {
-                                  fetch("/api/notifications/checklist", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ ids: [n.id] }),
-                                  });
-                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
-                                  setChecklistUnread((c) => Math.max(0, c - 1));
-                                }
-                              }}
-                            >
-                              <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-purple-700" : "font-semibold text-gray-500")}>
-                                {n.message}
-                              </p>
-                              <p className="text-[10px] text-purple-500 mt-0.5 font-semibold">Nhấn để xem hồ sơ KH →</p>
-                            </a>
-                          ) : n.type === "WEEKLY_REPORT" ? (
-                            <a
-                              href="/dashboard/checklist"
-                              onClick={() => {
-                                setChecklistBellOpen(false);
-                                if (!n.isRead) {
-                                  fetch("/api/notifications/checklist", {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ ids: [n.id] }),
-                                  });
-                                  setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
-                                  setChecklistUnread((c) => Math.max(0, c - 1));
-                                }
-                              }}
-                            >
-                              <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-emerald-700" : "font-semibold text-gray-500")}>
-                                {n.message}
-                              </p>
-                              <p className="text-[10px] text-emerald-500 mt-0.5 font-semibold">Nhấn để xem báo cáo tuần →</p>
-                            </a>
-                          ) : (
-                            <>
-                              <p className={cn("text-xs", !n.isRead ? "font-bold text-blue-700" : "font-semibold text-gray-500")}>
-                                {(() => {
-                                  const d = new Date(n.date);
-                                  return `Báo cáo ngày ${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-                                })()}
-                              </p>
-                              <p className="text-[10px] text-blue-400 mt-0.5 font-semibold">Nhấn để xem chi tiết →</p>
-                            </>
-                          )}
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {new Date(n.createdAt).toLocaleString("vi-VN", {
-                              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                            })}
+                    {checklistNotifs.map((n) => {
+                      const kind = NOTIF_KIND[n.type] ?? NOTIF_KIND.DAILY_REPORT;
+                      const isModal = !kind.href;
+
+                      // Đánh dấu đã đọc — cùng một việc cho mọi loại, nên viết
+                      // một lần ở đây thay vì chép lại trong từng nhánh.
+                      function markRead() {
+                        if (n.isRead) return;
+                        fetch("/api/notifications/checklist", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ ids: [n.id] }),
+                        });
+                        setChecklistNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                        setChecklistUnread((c) => Math.max(0, c - 1));
+                      }
+
+                      const body = (
+                        <>
+                          <p className={cn(
+                            "text-xs leading-snug",
+                            !n.isRead ? `font-bold ${kind.title}` : "font-semibold text-gray-500"
+                          )}>
+                            {kind.fixedTitle
+                              ?? (isModal
+                                ? `Báo cáo ngày ${(() => {
+                                    const d = new Date(n.date);
+                                    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+                                  })()}`
+                                : n.message)}
                           </p>
-                        </div>
-                        {!n.isRead && (
+                          <p className={cn("text-[10px] mt-0.5 font-semibold", kind.ctaCls)}>{kind.cta}</p>
+                        </>
+                      );
+
+                      return (
+                        <div
+                          key={n.id}
+                          className={cn(
+                            "flex items-start gap-3 px-4 py-3 transition-colors",
+                            !n.isRead && kind.tint,
+                            isModal && "cursor-pointer hover:bg-blue-50/60"
+                          )}
+                          onClick={isModal ? () => openReportModal(n) : undefined}
+                        >
                           <div className={cn(
-                            "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
-                            n.type === "REMINDER"           ? "bg-orange-500"  :
-                            n.type === "LEAD_REMINDER"      ? "bg-amber-500"   :
-                            n.type === "SUBSTITUTE_REQUEST" ? "bg-purple-500"  :
-                            n.type === "WEEKLY_REPORT"      ? "bg-emerald-500" : "bg-blue-500"
-                          )} />
-                        )}
-                      </div>
-                    ))}
+                            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-xs",
+                            kind.chip
+                          )}>
+                            {kind.emoji}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {kind.href ? (
+                              <a
+                                href={kind.href(n)}
+                                onClick={() => { setChecklistBellOpen(false); markRead(); }}
+                              >
+                                {body}
+                              </a>
+                            ) : body}
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                              {new Date(n.createdAt).toLocaleString("vi-VN", {
+                                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                          {!n.isRead && (
+                            <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", kind.dot)} />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 </div>

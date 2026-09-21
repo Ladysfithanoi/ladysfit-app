@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CheckSquare, Bell, ClipboardList, BarChart3, FileText } from "lucide-react";
+import { CheckSquare, Bell, ClipboardList, BarChart3, FileText, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DailyTab } from "./daily-tab";
 import { WeeklyReportTab } from "./weekly-report";
 import { ChecklistMonthlyStats } from "./monthly-stats";
+import { EvaluationTab } from "./evaluation-tab";
 
 export type StaffMember = { id: string; name: string | null; email: string; branchId: string | null; role: string };
 
@@ -16,20 +17,38 @@ type Props = {
   staffList:        StaffMember[];
   managedBranchIds: string[];
   isAdmin?:         boolean;
+  /**
+   * Mở thẳng check-list của một nhân sự trong một ngày — chuông Check-out gắn
+   * sẵn hai giá trị này vào đường dẫn.
+   */
+  initialTeamUserId?: string;
+  initialDate?:       string;
 };
 
-export function ChecklistPage({ currentUserId, currentUserName, currentUserRole, staffList, isAdmin }: Props) {
+export function ChecklistPage({
+  currentUserId,
+  currentUserName,
+  currentUserRole,
+  staffList,
+  isAdmin,
+  initialTeamUserId,
+  initialDate,
+}: Props) {
   const isFM = currentUserRole === "FM";
-  // Monthly performance view is for managers (FM/Admin) only.
+  // Monthly performance + đánh giá là màn của quản lý (FM/Admin).
   const showMonthly = isFM || !!isAdmin;
-  type View = "daily" | "weekly" | "monthly";
+  type View = "daily" | "weekly" | "monthly" | "evaluation";
   const [view, setView] = useState<View>("daily");
 
-  // Ai cũng có Check-list ngày + Báo cáo tuần; Thống kê tháng chỉ dành cho quản lý.
+  // Ai cũng có Check-list ngày + Báo cáo tuần; Tổng kết đánh giá và Thống kê
+  // tháng chỉ dành cho quản lý.
   const tabs: { key: View; label: string; icon: typeof ClipboardList }[] = [
     { key: "daily",  label: "Check-list ngày", icon: ClipboardList },
     { key: "weekly", label: "Báo cáo tuần",    icon: FileText },
-    ...(showMonthly ? [{ key: "monthly" as const, label: "Thống kê tháng", icon: BarChart3 }] : []),
+    ...(showMonthly ? [
+      { key: "evaluation" as const, label: "Tổng kết đánh giá", icon: Star },
+      { key: "monthly"    as const, label: "Thống kê tháng",    icon: BarChart3 },
+    ] : []),
   ];
 
   // Admin test notifications
@@ -119,6 +138,8 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
       <div className="px-3 sm:px-8 py-6">
         {showMonthly && view === "monthly" ? (
           <ChecklistMonthlyStats />
+        ) : showMonthly && view === "evaluation" ? (
+          <EvaluationTab />
         ) : view === "weekly" ? (
           <WeeklyReportTab
             currentUserId={currentUserId}
@@ -132,6 +153,8 @@ export function ChecklistPage({ currentUserId, currentUserName, currentUserRole,
             currentUserName={currentUserName}
             currentUserRole={currentUserRole}
             staffList={staffList}
+            initialTeamUserId={initialTeamUserId}
+            initialDate={initialDate}
           />
         )}
       </div>
