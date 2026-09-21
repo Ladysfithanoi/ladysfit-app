@@ -1419,6 +1419,25 @@ model SalesLead {
   /// Có giá trị = dòng này là đợt thu nốt, tình trạng khoá cứng ở PB. Cố tình
   /// KHÔNG đặt khoá ngoại: xoá lead cọc thì đợt thu nốt vẫn phải là thu nốt.
   payoffOfId        String?
+
+  /// ƯU TIÊN — khách được đẩy lên đầu danh sách của nhân sự phụ trách.
+  /// Lưu THỜI ĐIỂM bấm chứ không phải số thứ tự: "chọn trước thì lên trước"
+  /// chính là xếp theo mốc này, và bỏ ưu tiên một khách ở giữa cũng không phải
+  /// đánh số lại cả bảng. Rỗng = khách thường.
+  prioritizedAt     DateTime?
+
+  /// NHẮC HẸN CHĂM SÓC LẠI — mốc hẹn gọi lại khách, có cả ngày lẫn giờ.
+  /// Tới giờ thì hiện một dòng nhắc trên đầu trang, ngay dưới dòng nhắc buổi
+  /// tập chưa ký check-out.
+  followUpAt        DateTime?
+  followUpNote      String?
+  /// Ai đặt hẹn. Cần vì FM đặt hộ lead của nhân sự khác thì chính FM cũng phải
+  /// thấy dòng nhắc đó. Cố tình KHÔNG đặt khoá ngoại — chỉ đem so với id người
+  /// đang đăng nhập, không bao giờ join.
+  followUpById      String?
+  /// Đã chăm xong / đã tắt nhắc. Còn rỗng thì dòng nhắc vẫn hiện khi tới giờ.
+  followUpDoneAt    DateTime?
+
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -1428,6 +1447,7 @@ model SalesLead {
   consultation Consultation? @relation(fields: [consultationId], references: [id], onDelete: SetNull)
 
   @@index([payoffOfId])
+  @@index([followUpAt])
   @@map("sales_leads")
 }
 

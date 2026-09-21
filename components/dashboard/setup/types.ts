@@ -53,6 +53,16 @@ export type SalesLead = {
    * nốt", tình trạng khoá cứng ở PB.
    */
   payoffOfId: string | null;
+  /**
+   * Thời điểm khách được bấm ƯU TIÊN — khách ưu tiên nằm ở những STT đầu, ai
+   * được chọn trước đứng trước. Rỗng = khách thường. Xem lib/lead-care.ts.
+   */
+  prioritizedAt: string | null;
+  /** Mốc hẹn chăm sóc lại (ngày + giờ), rỗng = chưa đặt hẹn. */
+  followUpAt: string | null;
+  followUpNote: string | null;
+  /** Đã chăm xong cái hẹn đó — còn giữ mốc hẹn nhưng thôi không nhắc nữa. */
+  followUpDoneAt: string | null;
   assignedPT: PTUser | null;
   createdBy: { id: string; name: string | null };
 };

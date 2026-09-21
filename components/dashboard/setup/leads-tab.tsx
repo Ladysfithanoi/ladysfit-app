@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, FileSpreadsheet, Star, BellRing, BellOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   SalesLead, LeadStatus, LEAD_STATUS_LABEL, LEAD_STATUS_STYLE, SOURCES, PTUser,
@@ -15,6 +15,7 @@ import {
   validateLeadFinance, fieldLocks, POST_L0_SOURCE, type ActivePromoForLead as ActivePromo,
 } from "@/lib/lead-pricing";
 import { TRIAL_PACKAGE } from "@/lib/packages";
+import { sortLeadsForDisplay } from "@/lib/lead-care";
 
 type Props = {
   branchId: string;
@@ -54,6 +55,55 @@ const PACKAGE_OPTIONS = ["L0", "L1", "L2", "L3", "L4", "L5", "Loyalfit"] as cons
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ── Nhắc hẹn chăm sóc lại ─────────────────────────────────────────────────────
+
+/** Mốc ISO → hai ô rời `{ date: "YYYY-MM-DD", time: "HH:MM" }` theo giờ máy. */
+function isoToDateTime(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { date: "", time: "" };
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+/**
+ * Hai ô ngày + giờ → mốc ISO tuyệt đối. Dựng bằng giờ ĐỊA PHƯƠNG của người đặt
+ * rồi mới quy sang ISO, nên 14:30 người ta chọn đúng là 14:30 giờ Việt Nam khi
+ * dòng nhắc bật lên.
+ */
+function dateTimeToISO(date: string, time: string): string | null {
+  if (!date) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm]  = (time || "09:00").split(":").map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  return isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+/** Nhãn ngắn của cái hẹn để hiện trong ô Chăm sóc — rỗng khi chưa đặt hẹn. */
+function followUpState(l: SalesLead): { label: string; due: boolean; done: boolean } | null {
+  if (!l.followUpAt) return null;
+  const at = new Date(l.followUpAt);
+  if (isNaN(at.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const sameDay =
+    at.getFullYear() === now.getFullYear() &&
+    at.getMonth() === now.getMonth() &&
+    at.getDate() === now.getDate();
+  const when = sameDay
+    ? `${pad(at.getHours())}:${pad(at.getMinutes())}`
+    : `${pad(at.getDate())}/${pad(at.getMonth() + 1)} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  return {
+    label: `Hẹn ${when}`,
+    due:   at.getTime() <= now.getTime(),
+    done:  !!l.followUpDoneAt,
+  };
 }
 
 type NoteEntry = { date: string; text: string };
@@ -123,6 +173,7 @@ export function LeadsTab({
   const [carryOverDialogOpen, setCarryOverDialogOpen] = useState(false);
   const [carrying, setCarrying]             = useState(false);
   const [careNotesLead, setCareNotesLead]   = useState<SalesLead | null>(null);
+  const [togglingPriorityId, setTogglingPriorityId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [bulkConfirmOpen, setBulkConfirmOpen]     = useState(false);
   const [bulkSending, setBulkSending]             = useState(false);
@@ -452,6 +503,42 @@ export function LeadsTab({
     });
   }
 
+  /**
+   * Ai được bấm ưu tiên / đặt hẹn cho một lead. Giống hệt `canCareForLead` bên
+   * máy chủ (lib/lead-care.ts) — bản này chỉ để ẩn nút cho gọn mắt, quyền thật
+   * do máy chủ giữ.
+   */
+  function canCare(l: SalesLead): boolean {
+    if (isAdmin || isCOO) return true;
+    if (isFM) return true;                       // FM chỉ thấy cơ sở mình quản lý
+    if (isPT) return l.assignedPTId === currentUserId;
+    return false;
+  }
+
+  // ── Ưu tiên khách ──────────────────────────────────────────────────────────
+  async function togglePriority(l: SalesLead) {
+    if (togglingPriorityId) return;
+    const next = l.prioritizedAt ? null : new Date().toISOString();
+    setTogglingPriorityId(l.id);
+    // Đổi ngay trên màn rồi mới gửi đi: hàng nhảy lên đúng lúc bấm, hỏng thì trả về chỗ cũ.
+    setLeads(prev => prev.map(x => x.id === l.id ? { ...x, prioritizedAt: next } : x));
+    try {
+      const res = await fetch(`/api/setup/leads/${l.id}/priority`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ priority: !!next }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { prioritizedAt: string | null };
+      setLeads(prev => prev.map(x => x.id === l.id ? { ...x, prioritizedAt: data.prioritizedAt } : x));
+    } catch {
+      setLeads(prev => prev.map(x => x.id === l.id ? { ...x, prioritizedAt: l.prioritizedAt } : x));
+      showToast("Không đổi được ưu tiên", true);
+    } finally {
+      setTogglingPriorityId(null);
+    }
+  }
+
   async function handleBulkDelete() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
@@ -487,6 +574,13 @@ export function LeadsTab({
     acc[key].push(l);
     return acc;
   }, {});
+
+  // Thứ tự hiển thị do ĐÂY quyết, không phải do máy chủ: bấm ngôi sao là hàng
+  // nhảy lên đầu ngay, không phải tải lại cả danh sách rồi mới thấy. STT của
+  // bảng chính là vị trí sau khi xếp, nên khách ưu tiên luôn ở những số đầu.
+  for (const key of Object.keys(grouped)) {
+    grouped[key] = sortLeadsForDisplay(grouped[key]);
+  }
 
   const visibleGrouped: Record<string, SalesLead[]> = Object.fromEntries(
     Object.entries(grouped)
@@ -756,20 +850,24 @@ export function LeadsTab({
                           const isPaid     = l.status === "PIF" || l.status === "PB";
                           const warnRow    = isPT && isOwnLead && !isPaid && !l.notes?.trim();
                           const warnBanner = !isPaid && needsReminder(l.notes);
+                          const isPriority = !!l.prioritizedAt;
+                          const followUp   = followUpState(l);
 
                           return (
                             <tr
                               key={l.id}
                               className={cn(
                                 "border-b border-gray-100 last:border-0 hover:bg-gray-50/50 even:bg-[#fafafa] divide-x divide-gray-100",
-                                warnRow && "border-l-[3px] border-l-amber-400"
+                                warnRow && "border-l-[3px] border-l-amber-400",
+                                isPriority && "border-l-[3px] border-l-amber-500 bg-amber-50 even:bg-amber-50"
                               )}
                             >
                               <td className={cn(
                                 "px-3 py-2.5 text-gray-400 sm:sticky sm:left-0 z-10",
-                                selectedIds.has(l.id) ? "bg-[#f15b5c]/5" : "bg-white"
+                                selectedIds.has(l.id) ? "bg-[#f15b5c]/5"
+                                  : isPriority ? "bg-amber-50" : "bg-white"
                               )}>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   {canMutate && canDeleteLead(l) && (
                                     <input
                                       type="checkbox"
@@ -778,13 +876,34 @@ export function LeadsTab({
                                       className="w-3.5 h-3.5 accent-[#f15b5c] cursor-pointer"
                                     />
                                   )}
-                                  <span>{idx + 1}</span>
+                                  <span className={cn(isPriority && "font-extrabold text-amber-600")}>
+                                    {idx + 1}
+                                  </span>
+                                  {/* Ưu tiên bật/tắt NGAY TRÊN BẢNG — không phải mở
+                                      form sửa lead chỉ để đánh dấu một khách cần gọi
+                                      trước. Bấm xong hàng nhảy lên đầu luôn. */}
+                                  {canCare(l) && (
+                                    <button
+                                      onClick={() => togglePriority(l)}
+                                      disabled={togglingPriorityId === l.id}
+                                      title={isPriority ? "Bỏ ưu tiên" : "Đánh dấu khách ưu tiên"}
+                                      className={cn(
+                                        "flex-shrink-0 transition-colors disabled:opacity-40",
+                                        isPriority ? "text-amber-500 hover:text-amber-600" : "text-gray-200 hover:text-amber-400"
+                                      )}
+                                    >
+                                      <Star className="w-3.5 h-3.5" fill={isPriority ? "currentColor" : "none"} />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
 
                               {/* Customer name + badges — bề rộng giới hạn để badge xuống dòng,
                                   tránh cell phình ra che cả bảng trên điện thoại; vẫn ghim trái */}
-                              <td className="px-3 py-2.5 font-semibold text-gray-800 align-top min-w-[120px] max-w-[160px] sm:max-w-none sticky left-0 sm:left-10 z-10 bg-white">
+                              <td className={cn(
+                                "px-3 py-2.5 font-semibold text-gray-800 align-top min-w-[120px] max-w-[160px] sm:max-w-none sticky left-0 sm:left-10 z-10",
+                                isPriority ? "bg-amber-50" : "bg-white"
+                              )}>
                                 <span className="break-words">{l.customerName}</span>
                                 {warnRow && (
                                   <span className="ml-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
@@ -842,6 +961,26 @@ export function LeadsTab({
                                       <span className="text-[10px] font-semibold">Chưa cập nhật</span>
                                     </span>
                                   )}
+
+                                  {/* Nhắc hẹn nằm ngay trong ô Chăm sóc: bấm vào ô
+                                      là mở đúng chỗ đặt ngày giờ gọi lại. */}
+                                  {followUp ? (
+                                    <span className={cn(
+                                      "mt-1 flex items-center gap-1 text-[10px] font-bold whitespace-nowrap",
+                                      followUp.done ? "text-gray-300"
+                                        : followUp.due ? "text-sky-700" : "text-sky-500"
+                                    )}>
+                                      {followUp.done
+                                        ? <BellOff className="w-2.5 h-2.5 flex-shrink-0" />
+                                        : <BellRing className="w-2.5 h-2.5 flex-shrink-0" />}
+                                      {followUp.label}
+                                    </span>
+                                  ) : canCare(l) ? (
+                                    <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-gray-300 group-hover:text-sky-500 transition-colors whitespace-nowrap">
+                                      <BellRing className="w-2.5 h-2.5 flex-shrink-0" />
+                                      Đặt nhắc hẹn
+                                    </span>
+                                  ) : null}
                                 </button>
                               </td>
 
@@ -1118,6 +1257,10 @@ export function LeadsTab({
           onUpdated={(id, newNotes) => {
             setLeads(prev => prev.map(l => l.id === id ? { ...l, notes: newNotes } : l));
             setCareNotesLead(prev => prev ? { ...prev, notes: newNotes } : null);
+          }}
+          onFollowUpChanged={(id, fu) => {
+            setLeads(prev => prev.map(l => l.id === id ? { ...l, ...fu } : l));
+            setCareNotesLead(prev => prev ? { ...prev, ...fu } : null);
           }}
         />
       )}
@@ -1404,20 +1547,70 @@ export function LeadsTab({
 
 // ── Care Notes Popup ──────────────────────────────────────────────────────────
 
+type FollowUpPatch = {
+  followUpAt:     string | null;
+  followUpNote:   string | null;
+  followUpDoneAt: string | null;
+};
+
 function CareNotesPopup({
   lead,
   canEdit,
   onClose,
   onUpdated,
+  onFollowUpChanged,
 }: {
   lead: SalesLead;
   canEdit: boolean;
   onClose: () => void;
   onUpdated: (id: string, newNotes: string) => void;
+  onFollowUpChanged: (id: string, patch: FollowUpPatch) => void;
 }) {
   const [newDate, setNewDate] = useState(todayISO());
   const [newText, setNewText] = useState("");
   const [saving, setSaving]   = useState(false);
+
+  // ── Nhắc hẹn chăm sóc lại ──
+  const initial = isoToDateTime(lead.followUpAt);
+  const [fuDate, setFuDate] = useState(initial.date);
+  const [fuTime, setFuTime] = useState(initial.time || "09:00");
+  const [fuNote, setFuNote] = useState(lead.followUpNote ?? "");
+  const [fuSaving, setFuSaving] = useState(false);
+  const [fuError, setFuError]   = useState("");
+
+  async function saveFollowUp(payload: Record<string, unknown>) {
+    setFuSaving(true);
+    setFuError("");
+    try {
+      const res = await fetch(`/api/setup/leads/${lead.id}/follow-up`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFuError(data?.error ?? "Không lưu được nhắc hẹn");
+        return;
+      }
+      onFollowUpChanged(lead.id, {
+        followUpAt:     data.followUpAt,
+        followUpNote:   data.followUpNote,
+        followUpDoneAt: data.followUpDoneAt,
+      });
+      const next = isoToDateTime(data.followUpAt);
+      setFuDate(next.date);
+      setFuTime(next.time || "09:00");
+      setFuNote(data.followUpNote ?? "");
+    } finally {
+      setFuSaving(false);
+    }
+  }
+
+  function handleSaveFollowUp() {
+    const at = dateTimeToISO(fuDate, fuTime);
+    if (!at) { setFuError("Chọn ngày hẹn trước đã nhé"); return; }
+    saveFollowUp({ at, note: fuNote });
+  }
 
   const entries = parseNoteEntries(lead.notes ?? "");
   const ptName  = lead.assignedPT?.name ?? lead.assignedPT?.email ?? "Nhân sự đã nghỉ";
@@ -1497,6 +1690,83 @@ function CareNotesPopup({
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* ── Nhắc hẹn chăm sóc lại ──
+              Đặt ở đây chứ không phải trong form sửa lead: hẹn gọi lại là việc
+              sinh ra ngay lúc vừa ghi xong một dòng chăm sóc, không phải lúc
+              sửa doanh thu. Tới giờ sẽ có một dòng nhắc trên đầu trang. */}
+          <div className="border-t border-gray-100 px-5 py-4 space-y-3 flex-shrink-0 bg-sky-50/50">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-bold text-sky-700 uppercase tracking-wide flex items-center gap-1.5">
+                <BellRing className="w-3.5 h-3.5" />
+                Nhắc hẹn chăm sóc lại
+              </p>
+              {lead.followUpAt && lead.followUpDoneAt && (
+                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">Đã chăm xong</span>
+              )}
+            </div>
+
+            {canEdit ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="date"
+                    lang="vi"
+                    value={fuDate}
+                    onChange={e => setFuDate(e.target.value)}
+                    className="h-9 flex-1 min-w-[140px] rounded-xl border border-gray-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                  />
+                  <input
+                    type="time"
+                    value={fuTime}
+                    onChange={e => setFuTime(e.target.value)}
+                    className="h-9 w-28 flex-shrink-0 rounded-xl border border-gray-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                  />
+                </div>
+                <input
+                  value={fuNote}
+                  onChange={e => setFuNote(e.target.value)}
+                  placeholder="Nhắc gì khi tới hẹn? (VD: gọi chốt gói L3)"
+                  className="w-full h-9 rounded-xl border border-gray-200 px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                />
+                {fuError && <p className="text-[11px] font-semibold text-[#f15b5c]">{fuError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveFollowUp}
+                    disabled={fuSaving}
+                    className="flex-1 h-9 rounded-xl bg-sky-600 text-white text-xs font-bold disabled:opacity-50 transition-opacity"
+                  >
+                    {fuSaving ? "Đang lưu..." : lead.followUpAt ? "Cập nhật hẹn" : "Đặt hẹn"}
+                  </button>
+                  {lead.followUpAt && !lead.followUpDoneAt && (
+                    <button
+                      onClick={() => saveFollowUp({ done: true })}
+                      disabled={fuSaving}
+                      className="h-9 px-3 rounded-xl border border-sky-200 text-sky-700 text-xs font-bold disabled:opacity-50"
+                      title="Đã chăm xong — tắt nhắc nhưng vẫn giữ mốc hẹn"
+                    >
+                      Đã xong
+                    </button>
+                  )}
+                  {lead.followUpAt && (
+                    <button
+                      onClick={() => saveFollowUp({ at: null })}
+                      disabled={fuSaving}
+                      className="h-9 px-3 rounded-xl border border-gray-200 text-gray-500 text-xs font-bold disabled:opacity-50"
+                    >
+                      Gỡ
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-gray-500">
+                {lead.followUpAt
+                  ? `Hẹn lúc ${new Date(lead.followUpAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${lead.followUpNote ? ` — ${lead.followUpNote}` : ""}`
+                  : "Chưa đặt nhắc hẹn"}
+              </p>
             )}
           </div>
 
