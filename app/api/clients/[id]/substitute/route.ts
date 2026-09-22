@@ -80,6 +80,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Không tìm thấy nhân sự được chọn" }, { status: 404 });
   }
 
+  // Người nhận khách phải là người có dạy khách. Giao diện đã lọc sẵn, nhưng
+  // chốt lại ở đây vì đây mới là chỗ khách thực sự đổi chủ.
+  if (["STAFF", "COO", "CEO_FITPARTNER"].includes(substitute.role)) {
+    return NextResponse.json(
+      { error: "Nhân sự này không dạy khách nên không nhận bàn giao được." },
+      { status: 400 }
+    );
+  }
+
   const substituteBranchIds = [
     ...(substitute.branchId ? [substitute.branchId] : []),
     ...substitute.managedBranches.map((m) => m.branchId),

@@ -579,8 +579,9 @@ export function ClientDetailPage({
 
   // PTs available for substitute selection
   const substitutablePTs = staffList.filter((pt) => {
-    // Exclude management-only roles that don't teach
-    if (!pt.role || pt.role === "COO" || pt.role === "CEO_FITPARTNER") return false;
+    // Exclude management-only roles that don't teach, và STAFF — nhân sự không
+    // dùng phần mềm quản lý thì không dạy khách, nên không nhận bàn giao được.
+    if (!pt.role || pt.role === "COO" || pt.role === "CEO_FITPARTNER" || pt.role === "STAFF") return false;
     // PT đang phụ trách không thể nhận lại chính khách của mình
     if (pt.id === client.assignedPT.id) return false;
     // Nhân sự thuộc cơ sở đang chọn — FM tính theo cơ sở được phân công quản lý
@@ -2623,6 +2624,14 @@ export function ClientDetailPage({
           <SectionTitle>Phân công</SectionTitle>
           <Field label="Nhân sự phụ trách *">
             <select name="assignedPTId" required defaultValue={client.assignedPT.id} className={selectCls}>
+              {/* Người đang phụ trách có thể đã rơi khỏi staffList (đổi sang vai
+                  trò không dạy khách). Vẫn phải có mặt ở đây, nếu không ô chọn
+                  rơi về người đầu danh sách và lưu là đổi chủ khách im lặng. */}
+              {!staffList.some((s) => s.id === client.assignedPT.id) && (
+                <option value={client.assignedPT.id}>
+                  {client.assignedPT.name ?? client.assignedPT.email} (hiện tại)
+                </option>
+              )}
               {staffList.map((s) => (
                 <option key={s.id} value={s.id}>{s.name ?? s.email}</option>
               ))}
