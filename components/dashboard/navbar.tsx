@@ -369,9 +369,9 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     return () => clearInterval(interval);
   }, [isFM]);
 
-  // Poll checklist notification unread count (PT + FM)
+  // Poll checklist notification unread count (PT + FM + Admin)
   useEffect(() => {
-    if (!isPT && !isFM) return;
+    if (!isPT && !isFM && !isAdmin) return;
     async function fetchChecklistUnread() {
       try {
         const res = await fetch("/api/notifications/checklist");
@@ -384,7 +384,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     fetchChecklistUnread();
     const interval = setInterval(fetchChecklistUnread, 60000);
     return () => clearInterval(interval);
-  }, [isPT, isFM]);
+  }, [isPT, isFM, isAdmin]);
 
   // Poll measurement notification unread (PT only)
   useEffect(() => {
@@ -1021,13 +1021,15 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
         )}
 
-        {/* Checklist notification bell — PT (REMINDER) + FM (DAILY_REPORT) */}
-        {(isPT || isFM) && (
+        {/* Checklist notification bell — PT (REMINDER) + FM (DAILY_REPORT).
+            Admin cũng dạy khách nên vẫn được chuyển giao KH (SUBSTITUTE_REQUEST);
+            thiếu chuông này thì thông báo vẫn vào CSDL mà không ai nhìn thấy. */}
+        {(isPT || isFM || isAdmin) && (
           <div ref={checklistBellRef} className="relative">
             <button
               onClick={openChecklistBell}
               className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-              title="Thông báo check-list"
+              title={isAdmin ? "Thông báo chuyển giao khách hàng" : "Thông báo check-list"}
             >
               <ClipboardList className="w-5 h-5" />
               {checklistUnread > 0 && (
@@ -1046,7 +1048,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
                 <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-bold text-gray-900">Thông báo Check-list</p>
+                  <p className="text-sm font-bold text-gray-900">{isAdmin ? "Thông báo khách hàng" : "Thông báo Check-list"}</p>
                   {checklistUnread > 0 && (
                     <button
                       onClick={markChecklistRead}

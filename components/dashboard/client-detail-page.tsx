@@ -585,9 +585,13 @@ export function ClientDetailPage({
     if (pt.id === client.assignedPT.id) return false;
     // Nhân sự thuộc cơ sở đang chọn — FM tính theo cơ sở được phân công quản lý
     // (branchId của FM để trống), PT/Admin tính theo cơ sở làm việc.
+    // Admin chưa gắn cơ sở nào (branchId để trống — xem app/api/staff) là người
+    // của mọi cơ sở: họ vẫn dạy khách nên phải chọn được ở bất kỳ cơ sở nào,
+    // nếu không thì không ai bàn giao khách cho Admin được.
     const inBranch =
       pt.branchId === subTargetBranchId ||
-      (pt.role === "FM" && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId));
+      (pt.role === "FM" && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId)) ||
+      (pt.role === "ADMIN" && !pt.branchId);
     if (!inBranch) return false;
     return true;
   });

@@ -71,7 +71,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const substitute = await prisma.user.findFirst({
     where: { id: substituteId, deletedAt: null },
     select: {
-      id: true, name: true, email: true, branchId: true,
+      id: true, name: true, email: true, branchId: true, role: true,
       // FM không có branchId — cơ sở của họ là các cơ sở được phân công quản lý.
       managedBranches: { select: { branchId: true } },
     },
@@ -88,9 +88,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // Nhân sự nhận khách ở cơ sở khác → đây là việc phân khách sang cơ sở khác,
   // chỉ Admin được làm. Chuyển giao DÀI HẠN thì khách đổi luôn cơ sở theo nhân
   // sự mới; hỗ trợ ngắn hạn chỉ là dạy hộ tạm nên khách vẫn thuộc cơ sở cũ.
-  const crossBranch = client.branchId
-    ? !substituteBranchIds.includes(client.branchId)
-    : substituteBranchIds.length > 0;
+  // Admin chưa gắn cơ sở nào thuộc về mọi cơ sở, nên bàn giao cho họ không phải
+  // là chuyển khách sang cơ sở khác — khách ở nguyên cơ sở cũ, và PT/FM vẫn
+  // được bàn giao mà không vướng rào "chỉ Admin mới phân khách sang cơ sở khác".
+  const substituteIsGlobalAdmin =
+    substitute.role === "ADMIN" && substituteBranchIds.length === 0;
+  const crossBranch = substituteIsGlobalAdmin
+    ? false
+    : client.branchId
+      ? !substituteBranchIds.includes(client.branchId)
+      : substituteBranchIds.length > 0;
   let destinationBranchId: string | null = null;
   if (crossBranch) {
     if (role !== "ADMIN") {
