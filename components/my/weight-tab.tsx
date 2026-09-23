@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { sheetDay } from "@/lib/checkin-sheet";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -13,8 +14,11 @@ import { cn } from "@/lib/utils";
 
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
 
+/** Nhãn "dd/mm" theo NGÀY GIỜ VIỆT NAM — xem chú thích ở lib/checkin-sheet. */
 function formatDate(iso: string) {
-  const [, m, d] = iso.split("T")[0].split("-");
+  const t = new Date(iso).getTime();
+  const day = Number.isFinite(t) ? sheetDay(new Date(t).toISOString()) : iso.split("T")[0];
+  const [, m, d] = day.split("-");
   return `${(d ?? "").padStart(2, "0")}/${(m ?? "").padStart(2, "0")}`;
 }
 
@@ -194,7 +198,7 @@ export function WeightTab({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-gray-700">Ngày *</label>
-            <DateMaskInput name="date" required defaultValue={new Date().toISOString().split("T")[0]}
+            <DateMaskInput name="date" required defaultValue={sheetDay(new Date().toISOString())}
               className="w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50" />
           </div>
           <div className="space-y-1.5">

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sheetDay, isoFromSheetTime } from "@/lib/checkin-sheet";
 
 /**
  * GHI CÂN NẶNG — MỘT ĐƯỜNG DUY NHẤT.
@@ -22,9 +23,27 @@ export function parseWeightInput(v: unknown): number | null {
   return Math.round(n * 10) / 10;
 }
 
-/** Phần ngày của một mốc thời gian — cùng cách phiếu check-in và biểu đồ đọc ngày. */
+/**
+ * Phần ngày của một mốc thời gian, THEO GIỜ VIỆT NAM — cùng một hàm mà phiếu
+ * check-in dùng cho cột "Ngày" (lib/checkin-sheet).
+ *
+ * Cắt thẳng chuỗi ISO là cắt theo giờ UTC, mà giờ VN sớm hơn 7 tiếng: buổi tập
+ * 6h30 sáng có mốc UTC rơi vào HÔM TRƯỚC. Hệ quả không nhìn thấy ngay mà rất
+ * tệ — số cân PT nhập lúc check-in sáng sớm bị coi là "cân lại của hôm qua",
+ * đè lên số cân hôm qua, còn hôm nay thì không có dòng nào. Nhìn từ màn hình
+ * "Cập nhật cân nặng" thì đúng là số vừa nhập biến mất.
+ */
 function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return sheetDay(d.toISOString());
+}
+
+/** Một ngày VN kéo từ 00:00 tới 23:59:59.999 giờ VN — quy về mốc UTC để hỏi CSDL. */
+function vnDayRange(day: string): { gte: Date; lte: Date } {
+  const startIso = isoFromSheetTime(day, "00:00");
+  // dayKey luôn sinh ra YYYY-MM-DD hợp lệ nên nhánh này không xảy ra; giữ lại
+  // để không phải ép kiểu, và nếu có xảy ra thì rơi về đúng ngày UTC như cũ.
+  const start = startIso ? new Date(startIso) : new Date(`${day}T00:00:00.000Z`);
+  return { gte: start, lte: new Date(start.getTime() + 24 * 3600_000 - 1) };
 }
 
 /**
@@ -74,10 +93,7 @@ export async function recordWeightLog(args: {
   const day = dayKey(date);
 
   const sameDayLog = await prisma.weightLog.findFirst({
-    where: {
-      clientId,
-      date: { gte: new Date(`${day}T00:00:00.000Z`), lte: new Date(`${day}T23:59:59.999Z`) },
-    },
+    where: { clientId, date: vnDayRange(day) },
     orderBy: { date: "desc" },
   });
 

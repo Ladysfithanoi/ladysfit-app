@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { sheetDay } from "@/lib/checkin-sheet";
 import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
@@ -232,7 +233,7 @@ export function OverviewTab({
             <DateMaskInput
               name="date"
               required
-              defaultValue={new Date().toISOString().split("T")[0]}
+              defaultValue={sheetDay(new Date().toISOString())}
               className="w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50"
             />
           </div>

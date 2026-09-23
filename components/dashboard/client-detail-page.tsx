@@ -25,6 +25,7 @@ import { BodyMeasurementsSection } from "@/components/dashboard/body-measurement
 import { CheckinSheetModal } from "@/components/dashboard/checkin-sheet-modal";
 import { PACKAGES, RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 import { cn } from "@/lib/utils";
+import { sheetDay } from "@/lib/checkin-sheet";
 
 type Branch = { id: string; name: string };
 type PT = {
@@ -149,12 +150,24 @@ function getWHRInfo(whr: number) {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  // Parse date-only part directly to avoid UTC↔local timezone offset
-  const datePart = iso.split("T")[0];
+  // Ngày hiện ra là NGÀY GIỜ VIỆT NAM. Cắt thẳng chuỗi ISO là cắt theo giờ UTC,
+  // mà một lần cân lúc 6h30 sáng có mốc UTC rơi vào hôm trước — bảng cân nặng
+  // in lùi đúng một ngày, và số cân PT vừa nhập ở check-in trông như không có.
+  // Mốc "chỉ có ngày" (00:00 UTC, kiểu ngày bắt đầu lộ trình) cộng 7 tiếng vẫn
+  // nằm nguyên trong ngày của nó, nên không có chỗ nào lệch ngược lại.
+  const t = new Date(iso).getTime();
+  const datePart = Number.isFinite(t)
+    ? sheetDay(new Date(t).toISOString())
+    : iso.split("T")[0];
   const parts = datePart.split("-");
   if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return "—";
   const [y, m, d] = parts;
   return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+}
+
+/** Hôm nay theo giờ VN — ô "Ngày" của form nhập cân phải mở đúng ngày này. */
+function vnToday(): string {
+  return sheetDay(new Date().toISOString());
 }
 
 function dmyToISO(dmy: string): string {
@@ -439,6 +452,15 @@ export function ClientDetailPage({
 
   // Weight logs local state — allows optimistic updates after add/edit/delete
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>(client.weightLogs);
+  // …nhưng nhật ký cân nặng còn được ghi từ NGOÀI khung này: ô "+ Cân nặng" lúc
+  // khách ký check-in (tab Nhật ký tập ngay bên cạnh) và app của khách. Những
+  // chỗ đó gọi router.refresh() nên máy chủ đã trả về danh sách mới — chỉ có
+  // useState là chỉ nhận giá trị ban đầu ĐÚNG MỘT LẦN. Không kéo lại ở đây thì
+  // bảng và biểu đồ vĩnh viễn là bản chụp lúc mở trang, và số cân nhập ở
+  // check-in trông như rơi vào hư không.
+  useEffect(() => {
+    setWeightLogs(client.weightLogs);
+  }, [client.weightLogs]);
   // Weight-log table pagination — max 5 weigh-in days per page
   const [weightLogPage, setWeightLogPage] = useState(1);
   // Modal chi tiết % giảm theo từng tuần (mở khi bấm ô "Tốc độ giảm")
@@ -2462,7 +2484,7 @@ export function ClientDetailPage({
             <DateMaskInput
               name="date"
               required
-              defaultValue={new Date().toISOString().split("T")[0]}
+              defaultValue={vnToday()}
               className={inputCls}
             />
           </Field>
