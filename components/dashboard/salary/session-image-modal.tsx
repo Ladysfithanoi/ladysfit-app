@@ -214,11 +214,13 @@ export function SessionImageModal({
                     onClick={() => { setViewIdx(i); setCurrentMode("view"); }}
                   />
                   {canEdit && (
+                    // Hiện sẵn — xem chú thích cùng loại ở session-detail-table.
                     <button
                       onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
-                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                      title="Xoá ảnh này"
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <div className="absolute bottom-0 inset-x-0 bg-black/30 text-white text-[9px] text-center py-0.5">

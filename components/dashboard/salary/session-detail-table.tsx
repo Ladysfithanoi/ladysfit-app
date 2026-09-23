@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Camera, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Camera, X, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 
@@ -411,14 +411,18 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
               {uploading.images.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {uploading.images.map((img, i) => (
-                    <div key={i} className="relative group w-16 h-16 rounded-xl overflow-hidden border border-gray-200">
+                    <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-200">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img} alt="" className="w-full h-full object-cover" />
+                      {/* Hiện sẵn, không đợi rê chuột: PT thao tác trên điện
+                          thoại, mà màn cảm ứng thì không có "hover" — nút ẩn
+                          tới khi rê chuột là nút không tồn tại. */}
                       <button
                         onClick={() => setUploading(u => u ? { ...u, images: u.images.filter((_, j) => j !== i) } : u)}
-                        className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        title="Xoá ảnh này"
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow"
                       >
-                        <X className="w-2.5 h-2.5" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
@@ -624,9 +628,16 @@ function CheckinCell({ images, canEdit, onView, onUpload }: {
           <img src={img} alt="" className="w-full h-full object-cover" />
         </button>
       ))}
-      {canEdit && images.length < 2 && (
-        <button onClick={onUpload} className="w-12 h-12 rounded-lg border-2 border-dashed border-gray-200 hover:border-[#f15b5c] flex items-center justify-center text-gray-400 hover:text-[#f15b5c] transition-colors flex-shrink-0">
-          <Camera className="w-4 h-4" />
+      {/* Luôn có một lối vào màn sửa khi còn quyền. Trước đây nút này chỉ hiện
+          khi CHƯA đủ ảnh, nên chụp nhầm rồi tải đủ 2 tấm là hết đường thay:
+          bấm vào ảnh chỉ phóng to để xem. Đủ ảnh thì nút đổi thành cây bút. */}
+      {canEdit && (
+        <button
+          onClick={onUpload}
+          title={images.length < 2 ? "Thêm ảnh" : "Sửa / thay ảnh"}
+          className="w-12 h-12 rounded-lg border-2 border-dashed border-gray-200 hover:border-[#f15b5c] flex items-center justify-center text-gray-400 hover:text-[#f15b5c] transition-colors flex-shrink-0"
+        >
+          {images.length < 2 ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
         </button>
       )}
     </div>
@@ -663,9 +674,13 @@ function TransformCell({ hasTransformed, transformImages, canEdit, onToggle, onV
               <img src={img} alt="" className="w-full h-full object-cover" />
             </button>
           ))}
-          {canEdit && transformImages.length < 3 && (
-            <button onClick={onUpload} className="w-12 h-12 rounded-lg border-2 border-dashed border-green-200 hover:border-green-400 flex items-center justify-center text-green-400 hover:text-green-600 transition-colors flex-shrink-0">
-              <Camera className="w-4 h-4" />
+          {canEdit && (
+            <button
+              onClick={onUpload}
+              title={transformImages.length < 3 ? "Thêm ảnh" : "Sửa / thay ảnh"}
+              className="w-12 h-12 rounded-lg border-2 border-dashed border-green-200 hover:border-green-400 flex items-center justify-center text-green-400 hover:text-green-600 transition-colors flex-shrink-0"
+            >
+              {transformImages.length < 3 ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
             </button>
           )}
         </div>
