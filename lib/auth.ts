@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { normalizeEmail } from "@/lib/normalize-email";
 import { Role } from "@prisma/client";
 
 // ─── In-memory login rate limiter ────────────────────────────────────────────
@@ -94,9 +95,17 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 15 phút.");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.trim().toLowerCase() },
-        });
+        const email = normalizeEmail(credentials.email);
+
+        // Khớp thẳng trước; không thấy thì dò lại không phân biệt hoa thường,
+        // để tài khoản cũ lỡ lưu chữ hoa vẫn đăng nhập được. Từ nay email ghi
+        // vào đều đã hạ chữ thường nên nhánh dự phòng này sẽ thưa dần.
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+          user = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: "insensitive" }, deletedAt: null },
+          });
+        }
 
         if (!user?.password) {
           recordFailure(ip);

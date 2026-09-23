@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { captureTrash } from "@/lib/trash";
 import { parseDayInput } from "@/lib/leave-days";
+import { normalizeEmail } from "@/lib/normalize-email";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -116,7 +117,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const updateData: Record<string, unknown> = {};
   if (name) updateData.name = name;
-  if (email) updateData.email = email;
+  if (email) updateData.email = normalizeEmail(email);
   if (password) updateData.password = await bcrypt.hash(password, 12);
   if (ptLevelId !== undefined) updateData.ptLevelId = ptLevelId || null;
   // Đổi chức vụ là đổi luôn quyền — hai thứ đi liền nhau, đúng như ô chọn duy

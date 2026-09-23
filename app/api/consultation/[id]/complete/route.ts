@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { fmtDate } from "@/lib/format-date";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { normalizeEmail } from "@/lib/normalize-email";
 import { promoPriceFor } from "@/lib/package-promos";
 import { getActivePromos } from "@/lib/package-promos-server";
 
@@ -51,7 +52,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return `LDF${String(nextNum).padStart(4, "0")}`;
   };
 
-  const emailToUse: string | null = info.email?.trim() || null;
+  const emailToUse: string | null = normalizeEmail(info.email ?? "") || null;
   let client: { id: string } | null = null;
 
   const makeClientData = (clientCode: string, email: string | null) => ({

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { normalizeEmail } from "@/lib/normalize-email";
 import { captureTrash } from "@/lib/trash";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -98,7 +99,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     data: {
       fullName: body.fullName,
       phone: body.phone,
-      email: body.email ?? undefined,
+      email: body.email != null ? normalizeEmail(body.email) : undefined,
       dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : undefined,
       initialWeight: body.initialWeight ? parseFloat(body.initialWeight) : undefined,
       currentWeight: body.currentWeight ? parseFloat(body.currentWeight) : undefined,

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
+import { normalizeEmail } from "@/lib/normalize-email";
 
 /**
  * ── Thùng rác ───────────────────────────────────────────────────────────────
@@ -649,7 +650,7 @@ export const TRASH_TYPES: Record<string, TrashTypeDef> = {
       if (!meta?.userId || !meta.email) return;
       await prisma.user.update({
         where: { id: meta.userId },
-        data: { deletedAt: null, email: meta.email },
+        data: { deletedAt: null, email: normalizeEmail(meta.email) },
       });
     },
   },

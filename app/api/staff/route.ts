@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { parseDayInput, todayAsDay } from "@/lib/leave-days";
+import { normalizeEmail } from "@/lib/normalize-email";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -110,7 +111,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  // Hạ chữ thường NGAY tại đây: email là danh tính đăng nhập, và chỗ xác thực
+  // cũng hạ y hệt (lib/normalize-email). Lập tài khoản "Hoa@..." rồi không đăng
+  // nhập được chính là vì trước đây địa chỉ được cất nguyên chữ hoa.
+  const normalizedEmail = normalizeEmail(email);
+
+  // Trùng email kiểu "Hoa@" với "hoa@" vẫn là trùng — dò cả hai lối.
+  const existing =
+    (await prisma.user.findUnique({ where: { email: normalizedEmail } })) ??
+    (await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: "insensitive" } },
+    }));
   if (existing && !existing.deletedAt) {
     return NextResponse.json({ error: "Email đã tồn tại" }, { status: 400 });
   }
@@ -127,9 +138,12 @@ export async function POST(req: Request) {
     // Use upsert so that a previously soft-deleted account with the same email
     // is reactivated instead of triggering a P2002 unique constraint error.
     const user = await prisma.user.upsert({
-      where: { email },
+      // Khôi phục đúng bản ghi cũ dù nó đang lưu chữ hoa, và ghi đè địa chỉ đã
+      // hạ chữ thường để lần sau không còn lệch.
+      where: { email: existing?.email ?? normalizedEmail },
       update: {
         name,
+        email: normalizedEmail,
         password: hashed,
         branchId: noBranchRole ? null : (branchId || null),
         role,
@@ -141,7 +155,7 @@ export async function POST(req: Request) {
       },
       create: {
         name,
-        email,
+        email: normalizedEmail,
         password: hashed,
         branchId: noBranchRole ? null : (branchId || null),
         role,
