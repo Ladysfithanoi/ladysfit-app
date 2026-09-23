@@ -191,7 +191,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
 
               {record.goalBonus > 0 && (
                 <Row
-                  label={`Thưởng KH đạt MT (${record.clientsAchievedGoal} KH)`}
+                  label={`Thưởng Transform (${record.clientsAchievedGoal} HĐ đạt)`}
                   value={vnd(record.goalBonus)}
                 />
               )}

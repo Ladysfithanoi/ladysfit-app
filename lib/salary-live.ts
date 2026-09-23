@@ -6,6 +6,7 @@ import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumLeaveDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
+import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 
 /**
  * MỘT ĐƯỜNG TÍNH LẠI BẢNG LƯƠNG THEO THỜI GIAN THỰC.
@@ -145,6 +146,9 @@ export type SalaryPatch = {
   commissionAmount: number;
   kocCommission:    number;
   kolCommission:    number;
+  goalBonus:        number;
+  /** Chỉ PT — số hợp đồng đạt mốc thưởng transform trong tháng. */
+  clientsAchievedGoal?: number;
   showPay:          number;
   standardWorkDays: number;
   actualWorkDays:   number;
@@ -168,6 +172,8 @@ export async function recalcSalary(args: {
   year:        number;
   revenue?:    number;
   leaveCount?: number;
+  /** Thưởng transform cả tháng đã tính sẵn (màn Quỹ lương tính một lần cho mọi dòng). */
+  transformBonuses?: TransformBonus[];
 }): Promise<{ patch: SalaryPatch; changed: boolean }> {
   const { record: r, role, month, year } = args;
 
@@ -199,6 +205,19 @@ export async function recalcSalary(args: {
   // FM GIỮ NGUYÊN NHƯ CŨ: tiền buổi dạy của FM có trần 60 buổi/tháng và do
   // người tạo bảng lương chốt, tính lại ở đây sẽ phá trần đó. Admin dạy thêm
   // cũng giữ nguyên con số đã chốt.
+  // THƯỞNG TRANSFORM (100k/hợp đồng đạt cam kết giảm cân) — tự tính từ nhật
+  // ký cân, không nhập tay. Chỉ PT: Admin/FM không có khoản này trong tổng lương.
+  let goalBonus = r.goalBonus;
+  let clientsAchievedGoal = 0;
+  if (role === "PT") {
+    if (args.transformBonuses) {
+      clientsAchievedGoal = args.transformBonuses.filter(b => b.ptId === r.userId).length;
+      goalBonus = clientsAchievedGoal * TRANSFORM_BONUS_AMOUNT;
+    } else {
+      ({ goalBonus, clientsAchievedGoal } = await transformBonusForUser(r.userId, month, year));
+    }
+  }
+
   const shows: ShowBuckets | null = role === "PT"
     ? await liveShowsForUser(r.userId, month, year)
     : null;
@@ -225,7 +244,7 @@ export async function recalcSalary(args: {
     seniorityBonus:  r.seniorityBonus,
     commissionAmount,
     showPay,
-    goalBonus:       r.goalBonus,
+    goalBonus,
     googleBonus:     r.googleBonus,
     renewBonus:      r.renewBonus,
     kocCommission,
@@ -243,7 +262,8 @@ export async function recalcSalary(args: {
     Math.abs(r.totalSalary      - totalSalary)      > 0.01 ||
     Math.abs(r.showPay          - showPay)          > 0.01 ||
     Math.abs(r.kocCommission    - kocCommission)    > 0.01 ||
-    Math.abs(r.kolCommission    - kolCommission)    > 0.01;
+    Math.abs(r.kolCommission    - kolCommission)    > 0.01 ||
+    Math.abs(r.goalBonus        - goalBonus)        > 0.01;
 
   return {
     changed,
@@ -253,6 +273,7 @@ export async function recalcSalary(args: {
       commissionAmount,
       kocCommission,
       kolCommission,
+      ...(role === "PT" ? { goalBonus, clientsAchievedGoal } : { goalBonus: r.goalBonus }),
       showPay,
       standardWorkDays: standardDays,
       actualWorkDays:   actualDays,

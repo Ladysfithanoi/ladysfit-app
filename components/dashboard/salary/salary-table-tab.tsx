@@ -34,6 +34,7 @@ type SalaryRecord = {
   showsTransfer: number;
   showPay: number;
   goalBonus: number;
+  clientsAchievedGoal?: number;
   googleBonus: number;
   renewBonus: number;
   fixedAllowances: number;
@@ -638,7 +639,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Ngày công","Thâm niên","Doanh số","% HH","Tiền HH","Thưởng MT","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương CB","Ngày công","Thâm niên","Doanh số","% HH","Tiền HH","Thưởng Transform","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -671,7 +672,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.totalRevenue)}</td>
                           <td className="px-3 py-2.5 text-gray-600">{r.commissionRate}%</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.commissionAmount)}</td>
-                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.goalBonus)}</td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {r.goalBonus > 0 ? (
+                              <span className="inline-flex flex-col gap-0.5">
+                                <span className="font-semibold text-gray-700">{vnd(r.goalBonus)}</span>
+                                <span className="text-[10px] text-gray-400">{r.clientsAchievedGoal ?? 0} HĐ đạt</span>
+                              </span>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
                           <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
@@ -1052,15 +1060,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   {/* PT-specific extra input */}
                   {entry.userRole === "PT" && (
                     <div className="pt-1 border-t border-gray-100">
-                      <div className="space-y-1 max-w-[180px]">
-                        <label className="text-xs font-semibold text-gray-500">KH đạt mục tiêu</label>
-                        <input
-                          type="number" min={0}
-                          value={entry.clientsAchievedGoal}
-                          onFocus={(e) => e.target.select()}
-                          onChange={e => updateEntry(entry.userId, "clientsAchievedGoal", parseInt(e.target.value) || 0)}
-                          className={numInput + " w-full text-left"}
-                        />
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-gray-500">Thưởng Transform</p>
+                        <p className="text-[10px] text-gray-400 leading-relaxed">
+                          Tự tính: 100.000đ/hợp đồng đạt cam kết (L1 giảm ≥2kg, L2 ≥5kg, L3/L4 đạt mục tiêu của lộ trình).
+                        </p>
                       </div>
                     </div>
                   )}

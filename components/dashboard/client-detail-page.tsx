@@ -55,6 +55,8 @@ type PackageEnrollment = {
   status: "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED";
   notes: string | null;
   contractCode: string | null;
+  /** Mục tiêu giảm (kg) của lộ trình L3/L4 — đạt thì PT được thưởng transform. */
+  goalLossKg: number | null;
   createdAt: string;
 };
 
@@ -430,6 +432,8 @@ export function ClientDetailPage({
   const [deletePkgError, setDeletePkgError] = useState("");
   const [pkgContractInputs, setPkgContractInputs] = useState<Partial<Record<string, string>>>({});
   const [savingContractId, setSavingContractId] = useState<string | null>(null);
+  const [pkgGoalInputs, setPkgGoalInputs] = useState<Partial<Record<string, string>>>({});
+  const [savingGoalId, setSavingGoalId] = useState<string | null>(null);
   const [pkgStartDateInputs, setPkgStartDateInputs] = useState<Record<string, string>>({});
   const [savingStartDateId, setSavingStartDateId] = useState<string | null>(null);
   const [pkgSessionsInputs, setPkgSessionsInputs] = useState<Record<string, string>>({});
@@ -920,6 +924,30 @@ export function ClientDetailPage({
     }
   }
 
+  async function handleSaveGoalLoss(pkgId: string) {
+    const raw = (pkgGoalInputs[pkgId] ?? "").trim().replace(",", ".");
+    const goalLossKg = raw === "" ? null : parseFloat(raw);
+    if (goalLossKg !== null && (isNaN(goalLossKg) || goalLossKg <= 0 || goalLossKg > 50)) return;
+    setSavingGoalId(pkgId);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/packages/${pkgId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goalLossKg }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setPackages((prev) => prev.map((p) => p.id === pkgId ? { ...p, goalLossKg: updated.goalLossKg ?? null } : p));
+      setPkgGoalInputs((prev) => { const next = { ...prev }; delete next[pkgId]; return next; });
+      setToastMsg("Đã lưu mục tiêu giảm cân ✓");
+      setTimeout(() => setToastMsg(null), 3000);
+    } catch {
+      // silent
+    } finally {
+      setSavingGoalId(null);
+    }
+  }
+
   async function handleSaveStartDate(pkgId: string) {
     const raw = pkgStartDateInputs[pkgId] ?? isoToDmy(packages.find((p) => p.id === pkgId)?.startDate ?? null);
     if (!raw || raw.length < 10) return;
@@ -1066,6 +1094,7 @@ export function ClientDetailPage({
         status: created.status,
         notes: created.notes ?? null,
         contractCode: created.contractCode ?? null,
+        goalLossKg: created.goalLossKg ?? null,
         reservedDays: created.reservedDays ?? 0,
         extensionDays: created.extensionDays ?? 0,
         createdAt: created.createdAt,
@@ -2926,6 +2955,37 @@ export function ClientDetailPage({
                       <span className="text-xs text-gray-400 w-16 flex-shrink-0">Ngày KT:</span>
                       <span className="text-xs text-gray-600">{formatDate(pkg.endDate)}</span>
                     </div>
+                  )}
+                  {/* Mục tiêu giảm của L3/L4 — đạt trong thời hạn lộ trình thì PT được
+                      thưởng transform 100k (L1/L2 có ngưỡng cố định 2kg/5kg). */}
+                  {(pkg.packageName === "L3" || pkg.packageName === "L4") && (
+                    canEditSessions ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-16 flex-shrink-0">Mục tiêu giảm (kg):</span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="VD: 4"
+                            value={pkgGoalInputs[pkg.id] ?? (pkg.goalLossKg != null ? String(pkg.goalLossKg) : "")}
+                            onChange={(e) => setPkgGoalInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                            className="w-20 h-7 rounded-lg border border-gray-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                          />
+                          <button
+                            onClick={() => handleSaveGoalLoss(pkg.id)}
+                            disabled={savingGoalId === pkg.id || pkgGoalInputs[pkg.id] === undefined}
+                            className="h-7 px-2 rounded-lg text-white text-xs font-bold disabled:opacity-50"
+                            style={{ backgroundColor: "#f15b5c" }}
+                          >
+                            {savingGoalId === pkg.id ? "..." : "Lưu"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        Mục tiêu giảm: <strong>{pkg.goalLossKg != null ? `${pkg.goalLossKg} kg` : "chưa đặt"}</strong>
+                      </div>
+                    )
                   )}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Mã HĐ:</span>

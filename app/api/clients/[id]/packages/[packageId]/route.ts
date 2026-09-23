@@ -15,7 +15,7 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { startDate, sessionsUsed, status, notes, contractCode, reservedDays, extensionDays } = body;
+  const { startDate, sessionsUsed, status, notes, contractCode, reservedDays, extensionDays, goalLossKg } = body;
 
   const existing = await prisma.packageEnrollment.findUnique({
     where: { id: params.packageId },
@@ -30,6 +30,19 @@ export async function PUT(
   if (status !== undefined) data.status = status;
   if (notes !== undefined) data.notes = notes || null;
   if (contractCode !== undefined) data.contractCode = contractCode || null;
+
+  // Mục tiêu giảm (kg) của L3/L4 quyết định thưởng transform trên bảng lương,
+  // nên chỉ Admin/FM đặt được — PT không tự hạ mục tiêu cho khách mình.
+  if (goalLossKg !== undefined) {
+    if (!["ADMIN", "FM"].includes(session.user.role)) {
+      return NextResponse.json({ error: "Chỉ Admin/FM đặt được mục tiêu giảm cân" }, { status: 403 });
+    }
+    const kg = goalLossKg === null || goalLossKg === "" ? null : Number(goalLossKg);
+    if (kg !== null && (!Number.isFinite(kg) || kg <= 0 || kg > 50)) {
+      return NextResponse.json({ error: "Mục tiêu giảm không hợp lệ" }, { status: 400 });
+    }
+    data.goalLossKg = kg;
+  }
 
   // Resolve the effective values for endDate recalculation
   const effectiveReserved = reservedDays !== undefined ? Number(reservedDays) : existing.reservedDays;

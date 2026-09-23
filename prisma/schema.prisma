@@ -516,6 +516,9 @@ model PackageEnrollment {
   contractType   ContractType            @default(NORMAL)
   status         PackageEnrollmentStatus @default(ACTIVE)
   notes          String?                 @db.Text
+  // Mục tiêu giảm (kg) của lộ trình L3/L4 — đạt thì PT được thưởng transform.
+  // L1/L2 dùng ngưỡng cố định, không đọc cột này. Xem lib/transform-bonus.ts.
+  goalLossKg     Float?
   createdAt      DateTime                @default(now())
 
   client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)

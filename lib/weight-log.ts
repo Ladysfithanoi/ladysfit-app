@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sheetDay, isoFromSheetTime } from "@/lib/checkin-sheet";
+import { TRANSFORM_LOSS_KG } from "@/lib/transform-credit";
 
 /**
  * GHI CÂN NẶNG — MỘT ĐƯỜNG DUY NHẤT.
@@ -64,7 +65,7 @@ export async function syncClientWeight(clientId: string): Promise<void> {
   ]);
   if (!latest || !client) return;
 
-  const nowTransformed = client.initialWeight - latest.weight >= 7;
+  const nowTransformed = client.initialWeight - latest.weight >= TRANSFORM_LOSS_KG;
   await prisma.client.update({
     where: { id: clientId },
     data: {

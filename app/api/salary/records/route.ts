@@ -10,6 +10,7 @@ import { computeTotalSalary } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
 import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
+import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -75,6 +76,12 @@ export async function GET(req: Request) {
     Array.from(new Set(records.map(r => r.userId))), month, year,
   );
 
+  // Thưởng transform của cả tháng — tính một lần, mỗi dòng lọc phần của mình.
+  const transformBonuses = await computeTransformBonuses({
+    start: new Date(year, month - 1, 1),
+    end:   new Date(year, month, 1),
+  });
+
   // Recalculate and patch each record where revenue-derived values changed
   const updated = await Promise.all(records.map(async (r) => {
     const role = r.user.role;
@@ -88,6 +95,7 @@ export async function GET(req: Request) {
         ? (branchRevenueMap[r.branchId] ?? 0)
         : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0),
       leaveCount: leaveMap[r.userId] ?? 0,
+      transformBonuses,
     });
 
     if (!changed) return r;
@@ -122,7 +130,8 @@ type GenEntry = {
   showsTransfer?:       number;
   /** FM: có hưởng hoa hồng doanh số cả phòng không (mặc định có). */
   branchCommission?:    boolean;
-  clientsAchievedGoal:  number;
+  /** Bỏ qua — thưởng transform nay tự tính (lib/transform-bonus). */
+  clientsAchievedGoal?: number;
   googleReviews:        number;
   renewContracts:       number;
   /** Ngày công thực tế FM nhập; bỏ trống = đi làm đủ ngày công chuẩn. */
@@ -186,6 +195,10 @@ export async function POST(req: Request) {
 
   // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
   const stdDays = standardWorkDays(body.month, body.year);
+  const transformBonuses = await computeTransformBonuses({
+    start: new Date(body.year, body.month - 1, 1),
+    end:   new Date(body.year, body.month, 1),
+  });
   // Ngày công bị trừ theo lịch nghỉ (nghỉ thường 1, nửa ngày 0,5) — mặc định trừ
   // luôn vào ngày công thực tế; nghỉ phép năm không trừ.
   const leaveMap = await sumLeaveDeductionByUser(targetUserIds, body.month, body.year);
@@ -299,7 +312,9 @@ export async function POST(req: Request) {
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = showPayOf(entry);
-      const goalBonus        = entry.clientsAchievedGoal * 100_000;
+      // Thưởng transform tự tính theo hợp đồng đạt cam kết — xem lib/transform-bonus.
+      const clientsAchievedGoal = transformBonuses.filter(b => b.ptId === entry.userId).length;
+      const goalBonus        = clientsAchievedGoal * TRANSFORM_BONUS_AMOUNT;
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       const totalSalary      = computeTotalSalary({
         role: "PT", baseSalary, fixedAllowances: 0, seniorityBonus, commissionAmount,
@@ -317,7 +332,7 @@ export async function POST(req: Request) {
           showsL1L2Loyal: entry.showsL1L2Loyal, showsL3L4L5: entry.showsL3L4L5,
           showsResident: entry.showsResident, showsL0: entry.showsL0,
           showsTransfer: (entry.showsTransfer ?? 0) as unknown as never, showPay,
-          goalBonus, clientsAchievedGoal: entry.clientsAchievedGoal,
+          goalBonus, clientsAchievedGoal,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
           bhxh: 4_960_000, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
           totalSalary, advancePaid: 0, remainingPayment: totalSalary,

@@ -76,6 +76,25 @@ function buildHistory(client: ClientRow, logged: Segment[]): Segment[] {
     : [...history, { ptId: client.assignedPTId, startedAt: new Date() }];
 }
 
+/**
+ * Người đang phụ trách khách vào một ngày — chặng cuối cùng mở trước ngày đó.
+ * Không áp luật 6 tuần: dùng cho thưởng theo hợp đồng (lib/transform-bonus),
+ * nơi lộ trình L1 chỉ dài 30 ngày.
+ */
+export function ptInChargeAt(
+  client: ClientRow,
+  logged: Segment[],
+  date: Date,
+): string {
+  const history = buildHistory(client, logged);
+  let current = history[0];
+  for (const seg of history) {
+    if (seg.startedAt <= date) current = seg;
+    else break;
+  }
+  return current.ptId;
+}
+
 function creditedPt(client: ClientRow, history: Segment[], date: Date): string | null {
   // Nhật ký phủ từ lúc mở hồ sơ (chặng đầu bắt đầu từ ngày tạo khách) và chỉ có
   // một chặng ⇒ khách chưa từng đổi tay. Khách đã đổi tay trước khi có bảng
