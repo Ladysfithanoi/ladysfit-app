@@ -363,12 +363,29 @@ export function mergeSheetRows(rows: SheetRow[], capacity: number): SheetRow[] {
     .slice(0, Math.max(ROWS_PER_SHEET, capacity));
 }
 
+/**
+ * Ngày sửa tay của một buổi APP GHI → mốc in ra phiếu.
+ *
+ * Buổi app ghi luôn có giờ vào thật (lúc khách ký check-in). Một mốc sửa tay
+ * "chỉ có ngày" không được phép xoá giờ đó: lấy NGÀY từ bản sửa, GIỜ từ lần ký
+ * thật. Trình sửa bản cũ (trước khi có ô "Giờ vào") lưu lại mọi dòng thành nửa
+ * đêm dù FM không đụng tới — cả phiếu mất cột giờ, và hai buổi cùng một ngày như
+ * 01/08/2026 của Nguyễn Thị Phương Anh (07:10 Vũ Ngọc Duy, 11:15 Vũ Văn Đạt) lại
+ * in ra hai dòng y hệt nhau, nhìn như một buổi bị ghi hai lần.
+ */
+function overrideDate(real: string, edited: string | undefined): string {
+  if (!edited) return real;
+  if (!isBareDay(edited)) return edited;
+  if (sheetDay(edited) === sheetDay(real)) return real;
+  return isoFromSheetTime(sheetDay(edited), sheetTime(real)) ?? real;
+}
+
 /** Áp phần sửa tay lên một buổi app ghi. Chữ ký và ảnh giữ nguyên, luôn luôn. */
 export function applyRowOverride(row: SheetRow, o: SheetRowOverride | undefined): SheetRow {
   if (!o) return row;
   return {
     ...row,
-    date: o.date ?? row.date,
+    date: overrideDate(row.date, o.date),
     checkOutAt: o.checkOutAt !== undefined ? o.checkOutAt : row.checkOutAt,
     weight: o.weight !== undefined && o.weight !== null ? o.weight : row.weight,
     // Số FM/PT tự điền là một khẳng định, in đậm như số cân đo đúng ngày.
