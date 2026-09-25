@@ -1919,6 +1919,8 @@ model BodyMeasurementLog {
   thighFromKnee  Float?
   calfSize       Float?
   calfFromKnee   Float?
+  hip            Float?   // Hông
+  glute          Float?   // Mông
   notes          String?   @db.Text
   createdAt      DateTime  @default(now())
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
+import { pickMeasurements } from "@/lib/body-measurements";
 import { PortalLayoutClient } from "@/components/my/portal-layout-client";
 import { OverviewTab } from "@/components/my/overview-tab";
 
@@ -40,14 +41,7 @@ export default async function MyPage() {
         }))}
         latestMeasurement={latestMeasurement ? {
           measuredDate:  latestMeasurement.measuredDate.toISOString(),
-          waist:         latestMeasurement.waist,
-          belly:         latestMeasurement.belly,
-          armSize:       latestMeasurement.armSize,
-          armFromElbow:  latestMeasurement.armFromElbow,
-          thighSize:     latestMeasurement.thighSize,
-          thighFromKnee: latestMeasurement.thighFromKnee,
-          calfSize:      latestMeasurement.calfSize,
-          calfFromKnee:  latestMeasurement.calfFromKnee,
+          ...pickMeasurements(latestMeasurement),
         } : null}
       />
     </PortalLayoutClient>

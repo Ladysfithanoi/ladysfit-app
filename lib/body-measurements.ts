@@ -2,15 +2,16 @@
 // PT đo thông số nào thì khách hàng cũng đo đúng thông số đó, cùng tên gọi,
 // cùng thứ tự, cùng màu biểu đồ — mọi giao diện đều đọc từ file này.
 
+// Bộ số đo rút gọn (25/09/2026): Vòng 2 (ngang rốn), Eo, Hông, Bắp tay, Đùi,
+// Mông. Các cột cũ (bắp tay từ khuỷu, bắp đùi từ đầu gối, bắp chân…) vẫn nằm
+// trong DB để giữ lịch sử đã đo, nhưng không còn nhập và không còn hiện ở đâu.
 export type BodyMeasurementKey =
-  | "waist"
   | "belly"
+  | "waist"
+  | "hip"
   | "armSize"
-  | "armFromElbow"
   | "thighSize"
-  | "thighFromKnee"
-  | "calfSize"
-  | "calfFromKnee";
+  | "glute";
 
 export type BodyMeasurementValues = Record<BodyMeasurementKey, number | null>;
 
@@ -33,17 +34,33 @@ export type BodyMeasurementField = {
 };
 
 export const MEASUREMENT_FIELDS: BodyMeasurementField[] = [
-  { key: "waist",         label: "Eo",                  formLabel: "Eo (cm)",                  placeholder: "70", color: "#f15b5c" },
-  { key: "belly",         label: "Bụng",                formLabel: "Bụng (cm)",                placeholder: "80", color: "#f97316" },
-  { key: "armSize",       label: "Bắp tay",             formLabel: "Bắp tay (cm)",             placeholder: "30", color: "#8b5cf6" },
-  { key: "armFromElbow",  label: "Bắp tay từ khuỷu",    formLabel: "Bắp tay từ khuỷu (cm)",    placeholder: "25", color: "#a78bfa" },
-  { key: "thighSize",     label: "Bắp đùi",             formLabel: "Bắp đùi (cm)",             placeholder: "55", color: "#06b6d4" },
-  { key: "thighFromKnee", label: "Bắp đùi từ đầu gối",  formLabel: "Bắp đùi từ đầu gối (cm)",  placeholder: "40", color: "#38bdf8" },
-  { key: "calfSize",      label: "Bắp chân",            formLabel: "Bắp chân (cm)",            placeholder: "35", color: "#10b981" },
-  { key: "calfFromKnee",  label: "Bắp chân từ đầu gối", formLabel: "Bắp chân từ đầu gối (cm)", placeholder: "30", color: "#34d399" },
+  { key: "belly",     label: "Vòng 2 (ngang rốn)", formLabel: "Vòng 2 – ngang rốn (cm)", placeholder: "80", color: "#f97316" },
+  { key: "waist",     label: "Eo",                 formLabel: "Eo (cm)",                 placeholder: "70", color: "#f15b5c" },
+  { key: "hip",       label: "Hông",               formLabel: "Hông (cm)",               placeholder: "90", color: "#ec4899" },
+  { key: "armSize",   label: "Bắp tay",            formLabel: "Bắp tay (cm)",            placeholder: "30", color: "#8b5cf6" },
+  { key: "thighSize", label: "Đùi",                formLabel: "Đùi (cm)",                placeholder: "55", color: "#06b6d4" },
+  { key: "glute",     label: "Mông",               formLabel: "Mông (cm)",               placeholder: "95", color: "#10b981" },
 ];
 
 export const MEASUREMENT_KEYS: BodyMeasurementKey[] = MEASUREMENT_FIELDS.map((f) => f.key);
+
+/** Body API → giá trị ghi DB, đúng các cột đang đo. Ô trống/không phải số → null. */
+export function parseMeasurementBody(body: Record<string, unknown>): BodyMeasurementValues {
+  const out = {} as BodyMeasurementValues;
+  for (const key of MEASUREMENT_KEYS) {
+    const v = body[key];
+    const n = v == null || v === "" ? NaN : parseFloat(String(v));
+    out[key] = Number.isFinite(n) ? n : null;
+  }
+  return out;
+}
+
+/** Lấy đúng các cột đang đo từ một dòng DB — cột cũ không lọt ra giao diện. */
+export function pickMeasurements(row: Record<BodyMeasurementKey, number | null>): BodyMeasurementValues {
+  const out = {} as BodyMeasurementValues;
+  for (const key of MEASUREMENT_KEYS) out[key] = row[key] ?? null;
+  return out;
+}
 
 /** Gom các ô đã nhập (chuỗi) thành payload gửi API — ô trống thành null. */
 export function buildMeasurementPayload(vals: Record<string, string>): BodyMeasurementValues {

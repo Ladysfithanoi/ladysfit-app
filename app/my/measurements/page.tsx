@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
+import { pickMeasurements } from "@/lib/body-measurements";
 import { PortalLayoutClient } from "@/components/my/portal-layout-client";
 import { MeasurementsTab } from "@/components/my/measurements-tab";
 
@@ -23,14 +24,7 @@ export default async function MyMeasurementsPage() {
   const serialized = logs.map((l) => ({
     id:            l.id,
     measuredDate:  l.measuredDate.toISOString(),
-    waist:         l.waist,
-    belly:         l.belly,
-    armSize:       l.armSize,
-    armFromElbow:  l.armFromElbow,
-    thighSize:     l.thighSize,
-    thighFromKnee: l.thighFromKnee,
-    calfSize:      l.calfSize,
-    calfFromKnee:  l.calfFromKnee,
+    ...pickMeasurements(l),
     notes:         l.notes,
     measuredBy:    l.measuredBy,
   }));
