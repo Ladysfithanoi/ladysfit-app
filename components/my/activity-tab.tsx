@@ -342,19 +342,20 @@ function WorkoutProgramSection({ program }: { program: PortalProgram | null }) {
                 {currentSession.movements.map((m, i) => (
                   <div
                     key={m.id}
-                    className={`flex items-center gap-3 px-4 py-3 ${i < currentSession.movements.length - 1 ? "border-b border-gray-50" : ""}`}
+                    className={`flex items-start gap-3 px-4 py-3 ${i < currentSession.movements.length - 1 ? "border-b border-gray-50" : ""}`}
                   >
-                    <div className="w-6 h-6 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 mt-0.5 rounded-full bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
                       <span className="text-[10px] font-extrabold text-[#f15b5c]">{i + 1}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 font-semibold">{m.movementName}</p>
-                      <p className="text-sm font-bold text-gray-800 truncate">
+                      <p className="text-xs text-gray-400 font-semibold leading-snug">{m.movementName}</p>
+                      {/* Tên bài tập thường dài — cho xuống dòng thay vì cắt "..." để khách đọc đủ. */}
+                      <p className="text-sm font-bold text-gray-800 leading-snug break-words">
                         {m.selectedExercise || <span className="text-gray-300 italic font-normal">Chưa xác định</span>}
                       </p>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-bold text-gray-700">{m.sets > 1 ? `${m.sets} set` : ""}</p>
+                    <div className="text-right flex-shrink-0 max-w-[30%] mt-0.5">
+                      <p className="text-xs font-bold text-gray-700 whitespace-nowrap">{m.sets > 1 ? `${m.sets} set` : ""}</p>
                       <p className="text-xs text-gray-500">{m.reps}</p>
                     </div>
                   </div>
