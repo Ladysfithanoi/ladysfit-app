@@ -2,11 +2,52 @@
 
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { LoginOtpStep, requestLoginOtp } from "@/components/auth/login-otp-step";
 
 export default function MyLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Giữ lại email/mật khẩu cho bước nhập mã khi đăng nhập trên máy lạ.
+  const [creds, setCreds] = useState({ email: "", password: "" });
+  const [otpStep, setOtpStep] = useState<{ maskedEmail: string; retryAfterSec: number } | null>(null);
+
+  async function doSignIn(email: string, password: string, otp?: string) {
+    // Fetch CSRF token from the client auth endpoint (not the staff /api/auth endpoint)
+    const csrfRes = await fetch("/api/my/auth/csrf");
+    const { csrfToken } = await csrfRes.json();
+
+    // POST directly to the client auth callback — bypasses the global __NEXTAUTH.basePath
+    // which gets overwritten by the root SessionProvider in providers.tsx
+    const res = await fetch("/api/my/auth/callback/client-credentials", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Auth-Return-Redirect": "1",
+      },
+      body: new URLSearchParams({
+        email,
+        password,
+        ...(otp ? { otp } : {}),
+        csrfToken,
+        callbackUrl: `${window.location.origin}/my`,
+        json: "true",
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.url && !data.url.includes("error")) {
+      // Hard navigation (không dùng router.push) để xoá sạch Router Cache phía
+      // trình duyệt — tránh thấy dữ liệu của tài khoản khách đã đăng nhập trước
+      // đó khi dùng chung 1 máy/điện thoại.
+      window.location.href = "/my";
+      return;
+    }
+    const code = data.url ? new URL(data.url, window.location.origin).searchParams.get("error") : null;
+    setError(!code || code === "CredentialsSignin" ? "Email hoặc mật khẩu không đúng" : code);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -15,39 +56,16 @@ export default function MyLoginPage() {
     const fd = new FormData(e.currentTarget);
     const email = (fd.get("email") as string)?.trim().toLowerCase();
     const password = fd.get("password") as string;
+    setCreds({ email, password });
 
     try {
-      // Fetch CSRF token from the client auth endpoint (not the staff /api/auth endpoint)
-      const csrfRes = await fetch("/api/my/auth/csrf");
-      const { csrfToken } = await csrfRes.json();
-
-      // POST directly to the client auth callback — bypasses the global __NEXTAUTH.basePath
-      // which gets overwritten by the root SessionProvider in providers.tsx
-      const res = await fetch("/api/my/auth/callback/client-credentials", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-Auth-Return-Redirect": "1",
-        },
-        body: new URLSearchParams({
-          email,
-          password,
-          csrfToken,
-          callbackUrl: `${window.location.origin}/my`,
-          json: "true",
-        }),
-      });
-
-      const data = await res.json();
-      console.log("[my/login] auth response:", data);
-
-      if (data.url && !data.url.includes("error")) {
-        // Hard navigation (không dùng router.push) để xoá sạch Router Cache phía
-        // trình duyệt — tránh thấy dữ liệu của tài khoản khách đã đăng nhập trước
-        // đó khi dùng chung 1 máy/điện thoại.
-        window.location.href = "/my";
+      const check = await requestLoginOtp("client", email, password);
+      if (!check.ok) {
+        setError(check.error);
+      } else if (check.otpRequired) {
+        setOtpStep({ maskedEmail: check.maskedEmail, retryAfterSec: check.retryAfterSec });
       } else {
-        setError("Email hoặc mật khẩu không đúng");
+        await doSignIn(email, password);
       }
     } catch (err) {
       console.error("[my/login] error:", err);
@@ -55,6 +73,29 @@ export default function MyLoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleOtpSubmit(code: string) {
+    setLoading(true);
+    setError("");
+    try {
+      await doSignIn(creds.email, creds.password, code);
+    } catch (err) {
+      console.error("[my/login] error:", err);
+      setError("Có lỗi xảy ra, vui lòng thử lại");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setError("");
+    const check = await requestLoginOtp("client", creds.email, creds.password);
+    if (!check.ok) {
+      setError(check.error);
+      return null;
+    }
+    return check.otpRequired ? check.retryAfterSec : 0;
   }
 
   return (
@@ -68,6 +109,20 @@ export default function MyLoginPage() {
 
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
+          {otpStep ? (
+            <LoginOtpStep
+              maskedEmail={otpStep.maskedEmail}
+              initialRetryAfterSec={otpStep.retryAfterSec}
+              loading={loading}
+              error={error}
+              onSubmit={handleOtpSubmit}
+              onResend={handleResend}
+              onBack={() => {
+                setOtpStep(null);
+                setError("");
+              }}
+            />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-bold text-gray-700">Email</label>
@@ -115,6 +170,7 @@ export default function MyLoginPage() {
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
           </form>
+          )}
 
           <p className="text-center text-xs text-gray-400 font-semibold pt-2">
             Liên hệ PT để được cấp tài khoản

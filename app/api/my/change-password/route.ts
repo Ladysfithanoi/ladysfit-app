@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { revokeTrustedDevices } from "@/lib/login-device";
 
 export async function POST(req: Request) {
   const session = await getServerSession(clientAuthOptions);
@@ -37,6 +38,8 @@ export async function POST(req: Request) {
     where: { id: client.id },
     data: { password: hashed, passwordSetAt: new Date() },
   });
+  // Đổi mật khẩu = đăng xuất mọi máy khác, chỉ giữ máy đang dùng.
+  await revokeTrustedDevices("CLIENT", client.id, session.user.deviceId);
 
   return NextResponse.json({ success: true });
 }

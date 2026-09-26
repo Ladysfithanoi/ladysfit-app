@@ -12,6 +12,8 @@ declare module "next-auth" {
       role: Role;
       branchId?: string | null;
       managedBranchIds: string[];
+      // id dòng trusted_devices của máy đang dùng (lib/login-device.ts)
+      deviceId?: string;
     };
   }
 
@@ -19,6 +21,7 @@ declare module "next-auth" {
     role: Role;
     branchId?: string | null;
     managedBranchIds?: string[];
+    did?: string;
   }
 }
 
@@ -26,5 +29,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: Role;
     branchId?: string | null;
+    did?: string;
   }
 }

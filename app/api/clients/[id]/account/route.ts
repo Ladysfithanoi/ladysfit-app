@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { revokeTrustedDevices } from "@/lib/login-device";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -87,6 +88,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     }
     throw err;
   }
+
+  // Cấp mật khẩu mới → đăng xuất khách khỏi mọi máy, ai đang dùng ké phải đăng nhập lại.
+  if (hashed) await revokeTrustedDevices("CLIENT", client.id);
 
   return NextResponse.json(client);
 }

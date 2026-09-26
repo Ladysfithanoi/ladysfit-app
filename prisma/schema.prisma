@@ -2252,3 +2252,39 @@ model TrashItem {
   @@index([deletedAt])
   @@map("trash_items")
 }
+
+// ─── XÁC MINH THIẾT BỊ KHI ĐĂNG NHẬP ─────────────────────────────────────────
+// Mỗi trình duyệt mang một cookie ngẫu nhiên "lf-did" (định danh máy). Đăng nhập
+// từ máy chưa quen → phải nhập mã 6 số gửi về email của tài khoản; nhập đúng thì
+// máy được ghi vào đây và lần sau khỏi hỏi. Dùng chung cho nhân sự (users) và
+// khách (clients), phân biệt bằng accountType. Chỉ lưu băm của cookie, không lưu
+// cookie gốc. Xoá dòng = đá phiên của máy đó ra (xem lib/login-device.ts).
+model TrustedDevice {
+  id          String   @id @default(cuid())
+  accountType String   // "STAFF" | "CLIENT"
+  accountId   String
+  deviceHash  String
+  userAgent   String?
+  ip          String?
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([accountType, accountId, deviceHash])
+  @@index([accountType, accountId])
+  @@map("trusted_devices")
+}
+
+// Mã đăng nhập đang chờ nhập cho một cặp (tài khoản, máy). Chỉ lưu băm của mã.
+model LoginOtp {
+  id          String   @id @default(cuid())
+  accountType String
+  accountId   String
+  deviceHash  String
+  codeHash    String
+  attempts    Int      @default(0)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([accountType, accountId, deviceHash])
+  @@map("login_otps")
+}

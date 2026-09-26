@@ -2,51 +2,8 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
-import { normalizeEmail } from "@/lib/normalize-email";
 import { Role } from "@prisma/client";
-
-// ─── In-memory login rate limiter ────────────────────────────────────────────
-// Tracks failed attempts per IP. Resets after 15 minutes.
-// Note: single-instance only. Use Redis/Upstash for multi-instance deployments.
-
-const loginFailures = new Map<string, { count: number; windowStart: number }>();
-const MAX_FAILURES  = 5;
-const WINDOW_MS     = 15 * 60 * 1000; // 15 minutes
-
-function getClientIp(req: unknown): string {
-  if (!req || typeof req !== "object") return "unknown";
-  const headers = (req as { headers?: Record<string, string | string[]> }).headers;
-  if (!headers) return "unknown";
-  const forwarded = headers["x-forwarded-for"];
-  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
-  if (Array.isArray(forwarded) && forwarded.length > 0) return forwarded[0].split(",")[0].trim();
-  return "unknown";
-}
-
-function isRateLimited(ip: string): boolean {
-  const entry = loginFailures.get(ip);
-  if (!entry) return false;
-  if (Date.now() - entry.windowStart > WINDOW_MS) {
-    loginFailures.delete(ip);
-    return false;
-  }
-  return entry.count >= MAX_FAILURES;
-}
-
-function recordFailure(ip: string): void {
-  const now   = Date.now();
-  const entry = loginFailures.get(ip);
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
-    loginFailures.set(ip, { count: 1, windowStart: now });
-  } else {
-    entry.count++;
-  }
-}
-
-function clearFailures(ip: string): void {
-  loginFailures.delete(ip);
-}
+import { assertSessionDevice, authorizeLogin } from "@/lib/login-device";
 
 // ─── Auth options ─────────────────────────────────────────────────────────────
 
@@ -85,47 +42,20 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email:    { label: "Email",      type: "email"    },
         password: { label: "Mật khẩu",  type: "password" },
+        otp:      { label: "Mã xác minh", type: "text"   },
       },
       async authorize(credentials, req) {
-        if (!credentials?.email || !credentials?.password) return null;
-
-        const ip = getClientIp(req);
-
-        if (isRateLimited(ip)) {
-          throw new Error("Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 15 phút.");
-        }
-
-        const email = normalizeEmail(credentials.email);
-
-        // Khớp thẳng trước; không thấy thì dò lại không phân biệt hoa thường,
-        // để tài khoản cũ lỡ lưu chữ hoa vẫn đăng nhập được. Từ nay email ghi
-        // vào đều đã hạ chữ thường nên nhánh dự phòng này sẽ thưa dần.
-        let user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-          user = await prisma.user.findFirst({
-            where: { email: { equals: email, mode: "insensitive" }, deletedAt: null },
-          });
-        }
-
-        if (!user?.password) {
-          recordFailure(ip);
-          return null;
-        }
-
-        const valid = await bcrypt.compare(credentials.password, user.password);
-        if (!valid) {
-          recordFailure(ip);
-          return null;
-        }
-
-        clearFailures(ip);
-
+        // Mật khẩu + giới hạn thử sai + xác minh máy lạ bằng mã email: lib/login-device.ts
+        const result = await authorizeLogin("STAFF", credentials, req);
+        if (!result) return null;
+        const { account, did } = result;
         return {
-          id:       user.id,
-          email:    user.email,
-          name:     user.name,
-          role:     user.role,
-          branchId: user.branchId,
+          id:       account.id,
+          email:    account.email,
+          name:     account.name,
+          role:     account.role ?? Role.PT,
+          branchId: account.branchId ?? null,
+          did,
         };
       },
     }),
@@ -137,7 +67,10 @@ export const authOptions: NextAuthOptions = {
         token.role     = user.role;
         token.branchId = user.branchId;
         token.iat      = Math.floor(Date.now() / 1000);
+        token.did      = user.did;
       }
+      // Máy bị gỡ khỏi danh sách tin cậy → throw để NextAuth huỷ phiên.
+      await assertSessionDevice("STAFF", token);
       // On explicit session.update() calls (e.g. after role change), refresh iat
       if (trigger === "update") {
         token.iat = Math.floor(Date.now() / 1000);
@@ -179,6 +112,7 @@ export const authOptions: NextAuthOptions = {
           role:             resolvedRole,
           branchId:         dbUser?.branchId ?? token.branchId ?? null,
           managedBranchIds: dbUser?.managedBranches?.map((m) => m.branchId) ?? [],
+          deviceId:         token.did,
         },
       };
     },

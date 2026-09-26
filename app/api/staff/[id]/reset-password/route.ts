@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { revokeTrustedDevices } from "@/lib/login-device";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -20,6 +21,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const hashed = await bcrypt.hash(password, 10);
   await prisma.user.update({ where: { id: params.id }, data: { password: hashed } });
+  // Mật khẩu bị reset → đăng xuất người đó khỏi mọi máy.
+  await revokeTrustedDevices("STAFF", params.id);
 
   return NextResponse.json({ success: true });
 }

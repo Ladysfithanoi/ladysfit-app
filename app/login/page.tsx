@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { LoginOtpStep, requestLoginOtp } from "@/components/auth/login-otp-step";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,6 +18,25 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasLogo, setHasLogo] = useState(true);
+  // Máy lạ → bước nhập mã gửi về email (lib/login-device.ts)
+  const [otpStep, setOtpStep] = useState<{ maskedEmail: string; retryAfterSec: number } | null>(null);
+
+  const doSignIn = async (otp?: string) => {
+    const result = await signIn("credentials", {
+      email,
+      password,
+      ...(otp ? { otp } : {}),
+      redirect: false,
+    });
+    if (result?.error) {
+      setError(
+        result.error === "CredentialsSignin" ? "Email hoặc mật khẩu không đúng." : result.error,
+      );
+      return;
+    }
+    router.push("/dashboard");
+    router.refresh();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,23 +44,41 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError("Email hoặc mật khẩu không đúng.");
+      const check = await requestLoginOtp("staff", email, password);
+      if (!check.ok) {
+        setError(check.error);
+      } else if (check.otpRequired) {
+        setOtpStep({ maskedEmail: check.maskedEmail, retryAfterSec: check.retryAfterSec });
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        await doSignIn();
       }
     } catch {
       setError("Đã xảy ra lỗi. Vui lòng thử lại.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOtpSubmit = async (code: string) => {
+    setIsLoading(true);
+    setError("");
+    try {
+      await doSignIn(code);
+    } catch {
+      setError("Đã xảy ra lỗi. Vui lòng thử lại.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError("");
+    const check = await requestLoginOtp("staff", email, password);
+    if (!check.ok) {
+      setError(check.error);
+      return null;
+    }
+    return check.otpRequired ? check.retryAfterSec : 0;
   };
 
   return (
@@ -94,7 +132,20 @@ export default function LoginPage() {
           </h1>
         </div>
 
-        {/* Form */}
+        {otpStep ? (
+          <LoginOtpStep
+            maskedEmail={otpStep.maskedEmail}
+            initialRetryAfterSec={otpStep.retryAfterSec}
+            loading={isLoading}
+            error={error}
+            onSubmit={handleOtpSubmit}
+            onResend={handleResend}
+            onBack={() => {
+              setOtpStep(null);
+              setError("");
+            }}
+          />
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="email" className="text-gray-700 font-semibold text-sm">
@@ -167,6 +218,7 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
+        )}
 
         <p className="text-center text-xs text-gray-300 mt-10 font-medium">
           © 2026 Trung Trung. All rights reserved.

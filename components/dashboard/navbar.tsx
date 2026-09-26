@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChecklistReportModal } from "@/components/dashboard/checklist-notif-modal";
+import { TrustedDevicesCard } from "@/components/auth/trusted-devices-card";
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -1389,6 +1390,13 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 {pwLoading ? "Đang lưu..." : "Lưu thay đổi"}
               </button>
             </form>
+          )}
+          {pwOpen && (
+            <TrustedDevicesCard
+              key={String(pwSuccess)}
+              endpoint="/api/staff/me/devices"
+              className="mt-8 pt-6 border-t border-gray-100"
+            />
           )}
         </div>
       </div>

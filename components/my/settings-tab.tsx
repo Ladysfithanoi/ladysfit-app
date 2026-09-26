@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
+import { TrustedDevicesCard } from "@/components/auth/trusted-devices-card";
 
 const inputCls =
   "w-full h-12 rounded-2xl border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 bg-gray-50";
@@ -107,6 +108,7 @@ export function SettingsTab() {
           </button>
         </form>
       </div>
+      <TrustedDevicesCard key={String(success)} endpoint="/api/my/devices" />
     </div>
   );
 }

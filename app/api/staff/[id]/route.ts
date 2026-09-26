@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { captureTrash } from "@/lib/trash";
 import { parseDayInput } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { revokeTrustedDevices } from "@/lib/login-device";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -61,6 +62,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
         email: `deleted_${Date.now()}_${user.email}`,
       },
     });
+    // Nghỉ việc → đá khỏi mọi máy đang đăng nhập.
+    await revokeTrustedDevices("STAFF", params.id);
   } catch (err) {
     console.error("Delete staff error:", err);
     return NextResponse.json({ error: "Không thể xóa nhân sự. Vui lòng thử lại." }, { status: 500 });
@@ -173,6 +176,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       // Changing FROM FM to another role — remove assignments
       await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
     }
+
+    // Admin/FM đặt mật khẩu mới → đăng xuất người đó khỏi mọi máy.
+    if (password) await revokeTrustedDevices("STAFF", params.id);
 
     return NextResponse.json(user);
   } catch (error: unknown) {
