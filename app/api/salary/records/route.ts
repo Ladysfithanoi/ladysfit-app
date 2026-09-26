@@ -223,8 +223,9 @@ export async function POST(req: Request) {
     if (entry.userRole === "STAFF") {
       // Nhân sự STAFF (lao công, marketing…): lương cơ bản theo cấu hình lương,
       // chia theo ngày công. Không doanh số, không hoa hồng, không buổi dạy.
-      // Chưa cấu hình thì lấy mức mặc định 5.310.000đ như PT.
-      const baseSalary  = config?.baseSalary ?? 5_310_000;
+      // Chưa cấu hình thì để 0 — mức 5.310.000đ chỉ là mặc định của PT. FM đặt
+      // lương cơ bản cho từng người ngay trong bảng lương hoặc tab Cấu hình lương.
+      const baseSalary  = config?.baseSalary ?? 0;
       const totalSalary = computeTotalSalary({
         role: "STAFF", baseSalary, fixedAllowances: 0, seniorityBonus: 0, commissionAmount: 0,
         showPay: 0, goalBonus: 0, googleBonus: 0, renewBonus: 0, kocCommission: 0, kolCommission: 0,

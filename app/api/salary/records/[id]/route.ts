@@ -25,7 +25,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const body = await req.json() as {
     status?: SalaryStatus; advancePaid?: number; notes?: string; actualWorkDays?: number;
+    /** Lương cơ bản FM đặt tay cho người này ngay trong bảng lương. */
+    baseSalary?: number;
   };
+
+  if (body.baseSalary !== undefined && !(Number.isFinite(body.baseSalary) && body.baseSalary >= 0)) {
+    return NextResponse.json({ error: "Lương cơ bản không hợp lệ" }, { status: 400 });
+  }
+  // Admin dạy thêm không có lương cứng nên không có lương cơ bản để sửa.
+  const baseSalary = body.baseSalary !== undefined && record.user.role !== "ADMIN"
+    ? body.baseSalary
+    : record.baseSalary;
 
   const oldStatus    = record.status;
   const newStatus    = body.status ?? oldStatus;
@@ -48,7 +58,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const totalSalary = computeTotalSalary({
     role:             record.user.role,
-    baseSalary:       record.baseSalary,
+    baseSalary,
     fixedAllowances:  record.fixedAllowances,
     seniorityBonus:   record.seniorityBonus,
     commissionAmount: record.commissionAmount,
@@ -68,6 +78,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     data: {
       ...(body.status && { status: body.status }),
       advancePaid,
+      baseSalary,
       standardWorkDays: standardDays as unknown as never,
       actualWorkDays:   actualDays   as unknown as never,
       leaveDays:        leaveCount   as unknown as never,
@@ -75,8 +86,24 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       remainingPayment,
       ...(body.notes !== undefined && { notes: body.notes }),
     },
-    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
   });
+
+  // Lương cơ bản sửa trong bảng lương cũng ghi vào cấu hình lương của người đó,
+  // để tháng sau tạo bảng lương không phải nhập lại (và tab Cấu hình lương khớp).
+  if (baseSalary !== record.baseSalary) {
+    const config = await prisma.salaryConfig.findFirst({
+      where:   { userId: record.userId, branchId: record.branchId },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (config) {
+      await prisma.salaryConfig.update({ where: { id: config.id }, data: { baseSalary } });
+    } else {
+      await prisma.salaryConfig.create({
+        data: { userId: record.userId, branchId: record.branchId, baseSalary, effectiveFrom: new Date() },
+      });
+    }
+  }
 
   // ── Auto-create expense transaction when marking PAID ────────────────────
   if (newStatus === "PAID" && oldStatus !== "PAID") {

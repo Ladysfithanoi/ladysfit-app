@@ -135,6 +135,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [editAdvance, setEditAdvance] = useState("");
   const [editNotes, setEditNotes]     = useState("");
   const [editWorkDays, setEditWorkDays] = useState("");
+  // Lương cơ bản của riêng người này — FM đặt tay ngay trong bảng lương.
+  const [editBase, setEditBase]       = useState("");
   const [saving, setSaving]           = useState(false);
 
   /** Mở/đóng dòng sửa của một bản ghi. */
@@ -144,6 +146,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     setEditAdvance(String(r.advancePaid));
     setEditNotes(r.notes ?? "");
     setEditWorkDays(String(r.actualWorkDays ?? standardWorkDays(month, year)));
+    setEditBase(String(r.baseSalary ?? 0));
   }
 
   // Generate modal state
@@ -360,6 +363,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           advancePaid:    parseFloat(editAdvance) || 0,
           notes:          editNotes,
           actualWorkDays: parseFloat(editWorkDays) || 0,
+          // Admin dạy thêm không có lương cứng — server bỏ qua trường này.
+          baseSalary:     Math.max(0, parseFloat(editBase) || 0),
         }),
       });
       if (res.ok) {
@@ -722,7 +727,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         </tr>
                         {editingId === r.id && (
                           <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
-                            editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                            editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
                             leaveDays={r.leaveDays ?? 0}
                             saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                             onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
@@ -826,7 +831,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         {editingId === r.id && (
                           /* Admin dạy thêm không có lương cứng → không nhập ngày công (standardDays = 0). */
                           <EditRow colSpan={15} editAdvance={editAdvance} editNotes={editNotes}
-                            editWorkDays={editWorkDays} standardDays={0} leaveDays={0} saving={saving}
+                            editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={0} leaveDays={0} saving={saving}
                             onAdvance={setEditAdvance} onNotes={setEditNotes}
                             onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
                         )}
@@ -942,7 +947,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       </tr>
                       {editingId === r.id && (
                         <EditRow colSpan={18} editAdvance={editAdvance} editNotes={editNotes}
-                          editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                          editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
                           leaveDays={r.leaveDays ?? 0}
                           saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                           onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
@@ -1025,7 +1030,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         </tr>
                         {editingId === r.id && (
                           <EditRow colSpan={9} editAdvance={editAdvance} editNotes={editNotes}
-                            editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                            editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
                             leaveDays={r.leaveDays ?? 0}
                             saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
                             onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
@@ -1036,7 +1041,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
-                * Lương cơ bản đặt ở tab Cấu hình lương · chia theo ngày công thực tế / ngày công chuẩn
+                * Lương cơ bản mặc định 0đ — bấm Sửa ở từng dòng để đặt (hoặc tab Cấu hình lương) · chia theo ngày công thực tế / ngày công chuẩn
               </p>
             </div>
           )}
@@ -1238,8 +1243,10 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
   );
 }
 
-function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onSave }: {
+function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onBase, onSave }: {
   colSpan: number; editAdvance: string; editNotes: string; editWorkDays: string;
+  /** Lương cơ bản — chỉ hiện với vai trò có lương cứng (cùng điều kiện với ô ngày công). */
+  editBase: string; onBase: (v: string) => void;
   /** Ngày công chuẩn của tháng; 0 = vai trò không có lương cứng → ẩn ô ngày công. */
   standardDays: number;
   /** Ngày nghỉ đã trừ tự động từ lịch nghỉ — FM sửa đè được số bên dưới. */
@@ -1251,6 +1258,15 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, 
     <tr className="bg-amber-50/50 border-b border-gray-100">
       <td colSpan={colSpan} className="px-5 py-4">
         <div className="flex flex-wrap items-end gap-4">
+          {standardDays > 0 && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500">Lương cơ bản (đ)</label>
+              <input type="number" min={0} step="10000" inputMode="numeric" value={editBase}
+                onFocus={(e) => e.target.select()} onChange={e => onBase(e.target.value)}
+                className="h-9 w-40 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+              <p className="text-[10px] text-gray-400">Lưu luôn vào cấu hình lương cho các tháng sau</p>
+            </div>
+          )}
           {standardDays > 0 && (
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500">
