@@ -37,6 +37,8 @@ type SalaryRecord = {
 type Props = {
   currentUserId:   string;
   currentUserName: string;
+  /** Nhân sự STAFF (lao công, marketing…) — chỉ có lương cứng, ẩn doanh số/hoa hồng/buổi dạy. */
+  isStaff?: boolean;
   currentUserRole?: string;
 };
 
@@ -65,7 +67,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-export function PtSalaryView({ currentUserId, currentUserName }: Props) {
+export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }: Props) {
   const now = new Date();
   const [month, setMonth]   = useState(now.getMonth() + 1);
   const [year, setYear]     = useState(now.getFullYear());
@@ -158,7 +160,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
               {record.standardWorkDays > 0 && (
                 <Row
                   label={(record.leaveDays ?? 0) > 0
-                    ? `Ngày công (nghỉ ${formatDays(record.leaveDays)} ngày)`
+                    ? `Ngày công (trừ ${formatDays(record.leaveDays)} ngày)`
                     : "Ngày công"}
                   value={record.actualWorkDays >= record.standardWorkDays
                     ? `${formatDays(record.actualWorkDays)}/${record.standardWorkDays} ngày (đủ công)`
@@ -170,12 +172,16 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
                 <Row label="Lương thâm niên" value={vnd(record.seniorityBonus)} />
               )}
 
-              <Row label="Doanh số tháng"  value={vnd(record.totalRevenue)} />
+              {!isStaff && (
+                <>
+                  <Row label="Doanh số tháng"  value={vnd(record.totalRevenue)} />
 
-              <Row
-                label={`Hoa hồng (${record.commissionRate}%)`}
-                value={vnd(record.commissionAmount)}
-              />
+                  <Row
+                    label={`Hoa hồng (${record.commissionRate}%)`}
+                    value={vnd(record.commissionAmount)}
+                  />
+                </>
+              )}
 
               {record.showPay > 0 && (
                 <>
@@ -242,7 +248,7 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
           </div>
 
           {/* Commission tier reference */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          {!isStaff && <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-3.5 border-b border-gray-100">
               <p className="text-sm font-extrabold text-gray-700">Bảng hoa hồng tham chiếu</p>
             </div>
@@ -282,18 +288,21 @@ export function PtSalaryView({ currentUserId, currentUserName }: Props) {
             <p className="px-4 py-2.5 text-[10px] text-gray-400 italic border-t border-gray-100">
               * % doanh thu áp dụng theo bậc toàn bộ doanh số tháng
             </p>
-          </div>
+          </div>}
         </>
       )}
 
-      {/* Session detail table — always visible, independent of salary record */}
-      <SessionDetailTable
-        ptId={currentUserId}
-        ptName={currentUserName}
-        month={month}
-        year={year}
-        canEdit
-      />
+      {/* Session detail table — always visible, independent of salary record.
+          STAFF không dạy khách nên không có bảng này. */}
+      {!isStaff && (
+        <SessionDetailTable
+          ptId={currentUserId}
+          ptName={currentUserName}
+          month={month}
+          year={year}
+          canEdit
+        />
+      )}
     </div>
   );
 }

@@ -111,6 +111,70 @@ export async function sumLeaveDeductionByUser(
   return deducted;
 }
 
+// ── Ngày công trước khi vào làm ────────────────────────────────────────────
+
+/**
+ * Số ngày công của tháng nằm TRƯỚC ngày nhận việc (bỏ Chủ nhật, vì ngày công
+ * chuẩn đã trừ sẵn Chủ nhật). PT vào làm ngày 15 thì những ngày 1–14 chưa đi
+ * làm, không được nhận lương cứng cho những ngày đó. Tháng nằm trọn trước ngày
+ * nhận việc thì trả đủ số ngày công chuẩn; chưa biết ngày nhận việc thì trả 0.
+ */
+export function unhiredWorkDays(hireDay: Date | null, month: number, year: number): number {
+  if (!hireDay) return 0;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = utcDay(year, month, day);
+    if (!isBeforeHire(date, hireDay)) break;
+    if (!isSunday(date)) count++;
+  }
+  return count;
+}
+
+/**
+ * Tổng số NGÀY CÔNG bị trừ khỏi bảng lương tháng của từng nhân sự: ngày nghỉ
+ * trên lịch (sumLeaveDeductionByUser) cộng những ngày công trước ngày bắt đầu
+ * làm việc (unhiredWorkDays). Mọi nơi tính ngày công thực tế của bảng lương đều
+ * đi qua hàm này — đây là con số được lưu vào cột `leaveDays` của SalaryRecord,
+ * nên sửa ngày bắt đầu làm việc bên tab Nhân sự là bảng lương tự tính lại.
+ */
+export async function sumWorkDayDeductionByUser(
+  userIds: string[],
+  month:   number,
+  year:    number,
+): Promise<Record<string, number>> {
+  const deducted: Record<string, number> = {};
+  for (const id of userIds) deducted[id] = 0;
+  if (userIds.length === 0) return deducted;
+
+  const [rows, users] = await Promise.all([
+    prisma.leaveDay.findMany({
+      where:  {
+        userId: { in: userIds },
+        date:   monthDateRange(month, year),
+        type:   { in: ["UNPAID", "HALF_DAY"] },
+      },
+      select: { userId: true, date: true, type: true },
+    }),
+    prisma.user.findMany({
+      where:  { id: { in: userIds } },
+      select: { id: true, employmentStartDate: true, createdAt: true },
+    }),
+  ]);
+
+  const hireDays = new Map(users.map(u => [u.id, hireDayOf(u.employmentStartDate ?? u.createdAt)]));
+  for (const u of users) {
+    deducted[u.id] += unhiredWorkDays(hireDays.get(u.id) ?? null, month, year);
+  }
+  // Ngày nghỉ tích trước khi ngày vào làm bị dời về sau đã nằm trong phần "chưa
+  // vào làm" rồi — cộng thêm lần nữa là trừ công hai lần.
+  for (const row of rows) {
+    if (isSunday(row.date) || isBeforeHire(row.date, hireDays.get(row.userId) ?? null)) continue;
+    deducted[row.userId] = (deducted[row.userId] ?? 0) + LEAVE_DEDUCTION[row.type];
+  }
+  return deducted;
+}
+
 // ── Phép năm ───────────────────────────────────────────────────────────────
 
 /**

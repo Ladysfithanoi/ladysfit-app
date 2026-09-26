@@ -4,7 +4,7 @@ import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count
 import { showPayOf, type ShowBuckets } from "@/lib/session-pay";
 import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
-import { sumLeaveDeductionByUser } from "@/lib/leave-days";
+import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 
@@ -176,10 +176,13 @@ export async function recalcSalary(args: {
   transformBonuses?: TransformBonus[];
 }): Promise<{ patch: SalaryPatch; changed: boolean }> {
   const { record: r, role, month, year } = args;
+  // STAFF (lao công, marketing…) không có doanh số, hoa hồng hay buổi dạy —
+  // tính lại chỉ để cập nhật ngày công theo lịch nghỉ / ngày vào làm.
+  const isStaff = role === "STAFF";
 
   // DOANH SỐ: FM ăn theo doanh số cả phòng, PT/Admin theo doanh số cá nhân —
   // cùng định nghĩa với "Tổng doanh thu" bên Setup (lib/salary-revenue).
-  const totalRevenue = args.revenue ?? (
+  const totalRevenue = isStaff ? 0 : args.revenue ?? (
     role === "FM"
       ? await getBranchRevenue(r.branchId, month, year)
       : await getUserRevenue(r.userId, r.branchId, month, year)
@@ -187,13 +190,14 @@ export async function recalcSalary(args: {
 
   // FM bị bỏ tích "hưởng hoa hồng doanh số phòng" thì tính lại vẫn phải giữ 0 —
   // nếu không, mỗi lần mở bảng lương là hoa hồng tự mọc lại khi doanh số phòng đổi.
-  const rate = role === "FM"
+  const rate = isStaff ? 0
+    : role === "FM"
     ? (r.branchCommission === false ? 0 : fmRate(totalRevenue))
     : ptRate(totalRevenue);
   const commissionRate   = rate * 100;
   const commissionAmount = totalRevenue * rate;
 
-  const { kocCommission, kolCommission } = role !== "FM"
+  const { kocCommission, kolCommission } = role !== "FM" && !isStaff
     ? await fetchKOCKOLCommission(r.userId, month, year)
     : { kocCommission: 0, kolCommission: 0 };
 
@@ -231,7 +235,7 @@ export async function recalcSalary(args: {
   // Lịch nghỉ đổi bao nhiêu ngày thì trừ (hoặc trả lại) đúng bấy nhiêu ngày công,
   // nên phần FM sửa tay trước đó vẫn được giữ nguyên.
   const leaveCount = args.leaveCount ??
-    ((await sumLeaveDeductionByUser([r.userId], month, year))[r.userId] ?? 0);
+    ((await sumWorkDayDeductionByUser([r.userId], month, year))[r.userId] ?? 0);
   const baseDays   = hasWorkDays ? r.actualWorkDays : standardDays;
   const actualDays = leaveCount === r.leaveDays
     ? baseDays

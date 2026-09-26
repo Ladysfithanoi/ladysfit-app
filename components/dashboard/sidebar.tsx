@@ -26,7 +26,7 @@ const forAdminOnly  = (r: Role) => isAdmin(r);
 const forNotCEO     = (r: Role) => !isCEO(r) && !isCOO(r);
 const forFMandPT    = (r: Role) => isFM(r) || r === "PT";
 /** Nhân sự vận hành phòng tập — những vai trò có chấm ngày công. */
-const forStaff      = (r: Role) => isAdmin(r) || isFM(r) || r === "PT";
+const forStaff      = (r: Role) => isAdmin(r) || isFM(r) || r === "PT" || r === "STAFF";
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     header: "TÀI CHÍNH",
     items: [
-      { href: "/dashboard/salary",  icon: Wallet,     label: "Quỹ lương", show: (r) => forFMandPT(r) || isCOO(r) },
+      { href: "/dashboard/salary",  icon: Wallet,     label: "Quỹ lương", show: (r) => forFMandPT(r) || isCOO(r) || r === "STAFF" },
       { href: "/dashboard/finance", icon: DollarSign, label: "Thu Chi",   show: (r) => isFM(r) || isCEO(r) || isCOO(r) },
     ],
   },

@@ -15,6 +15,7 @@ import {
   hireDayOf,
   isBeforeHire,
   isSunday,
+  unhiredWorkDays,
   utcDay,
   type LeaveDayEntry,
 } from "@/lib/leave-days";
@@ -32,14 +33,22 @@ async function monthState(userId: string, month: number, year: number) {
     getHireDate(userId),
   ]);
   const standard = standardWorkDays(month, year);
-  const counted  = countedDays(days, month, year);
+  const hireDay  = hireDayOf(hireDate);
+  // Ngày nghỉ nằm trước ngày vào làm (tích trước khi ngày vào làm bị dời về sau)
+  // đã nằm trong phần "chưa vào làm" — không đếm lại lần nữa.
+  const counted  = countedDays(days, month, year)
+    .filter(d => !isBeforeHire(utcDay(year, month, d.day), hireDay));
   // Số ngày công bị trừ — nghỉ thường 1, nghỉ nửa ngày 0,5, phép năm 0.
   const deducted = counted.reduce((sum, d) => sum + LEAVE_DEDUCTION[d.type], 0);
+  // Ngày công của tháng nằm trước ngày bắt đầu làm việc (tab Nhân sự) — chưa đi
+  // làm nên không có công. Cùng công thức với bảng lương (sumWorkDayDeductionByUser).
+  const unhired  = unhiredWorkDays(hireDay, month, year);
 
   return {
     userId, month, year, days,
     // Ngày nhận việc (YYYY-MM-DD) — lịch khoá mọi ngày trước mốc này.
-    hireDate: hireDayOf(hireDate)?.toISOString().slice(0, 10) ?? null,
+    hireDate: hireDay?.toISOString().slice(0, 10) ?? null,
+    unhiredDays:      unhired,
     unpaidCount:      counted.filter(d => d.type === "UNPAID").length,
     halfDayCount:     counted.filter(d => d.type === "HALF_DAY").length,
     deductedDays:     deducted,
@@ -47,7 +56,7 @@ async function monthState(userId: string, month: number, year: number) {
     annualUsed:       balance.used,
     annualRemaining:  balance.remaining,
     standardWorkDays: standard,
-    actualWorkDays:   Math.max(0, standard - deducted),
+    actualWorkDays:   Math.max(0, standard - deducted - unhired),
   };
 }
 

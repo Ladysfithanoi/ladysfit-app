@@ -35,6 +35,10 @@ export function computeTotalSalary(p: SalaryParts): number {
   const fixedPay = (p.baseSalary + p.fixedAllowances)
                  * workDayRatio(p.actualWorkDays, p.standardWorkDays);
 
+  // STAFF (lao công, marketing…) không bán gói, không dạy khách — chỉ có lương
+  // cứng theo ngày công.
+  if (p.role === "STAFF") return fixedPay;
+
   if (p.role === "FM") {
     return fixedPay + p.seniorityBonus + p.commissionAmount + p.showPay
          + p.googleBonus + p.renewBonus;

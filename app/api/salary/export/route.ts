@@ -86,7 +86,7 @@ export async function POST(req: Request) {
 
     const startDate = new Date(year, month - 1, 1);
     const endDate   = new Date(year, month, 1);
-    const ptAdminRecords = records.filter(r => r.user.role !== "FM");
+    const ptAdminRecords = records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF");
     const ptUserIds = ptAdminRecords.map(r => r.userId);
 
     // KOC contracts for branch PTs (fetched first so rates populate session rows)
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán",
     };
     const ROLE_VN: Record<string, string> = {
-      FM: "FM", PT: "PT", ADMIN: "Admin",
+      FM: "FM", PT: "PT", ADMIN: "Admin", STAFF: "Nhân sự",
     };
 
     // ═══════════════════════════════════════════════════════════════════════

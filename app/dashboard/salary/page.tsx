@@ -14,12 +14,24 @@ export default async function SalaryPageRoute() {
   const isFM = role === "FM";
   const isCOO = role === "COO";
   const isPT = role === "PT";
-  if (!isFM && !isPT && !isCOO) redirect("/dashboard");
+  // STAFF (lao công, marketing…) vào đây chỉ để xem lương của chính mình.
+  const isStaff = role === "STAFF";
+  if (!isFM && !isPT && !isCOO && !isStaff) redirect("/dashboard");
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
   let branches: { id: string; name: string }[] = [];
-  let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string }[] = [];
+  let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string; positionName?: string | null }[] = [];
+
+  // Nhân sự STAFF (lao công, marketing…) có lương cứng theo ngày công như mọi
+  // người, nên phải nằm trong danh sách tạo bảng lương và cấu hình lương của cơ sở.
+  const STAFF_ROLES = ["PT", "ADMIN", "STAFF"] as const;
+  const STAFF_FIELDS = {
+    id: true, name: true, email: true, branchId: true, role: true,
+    jobPosition: { select: { name: true } },
+  } as const;
+  const flat = (rows: { id: string; name: string | null; email: string; branchId: string | null; role: string; jobPosition: { name: string } | null }[]) =>
+    rows.map(({ jobPosition, ...u }) => ({ ...u, positionName: jobPosition?.name ?? null }));
 
   // FM cũng dạy khách nên phải có mặt trong danh sách tạo bảng lương như PT/Admin.
   // FM gắn với cơ sở qua FMBranchAssignment (một cơ sở có thể có nhiều FM), KHÔNG
@@ -52,14 +64,14 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { role: { in: ["PT", "ADMIN"] }, deletedAt: null },
-        select: { id: true, name: true, email: true, branchId: true, role: true },
+        where: { role: { in: [...STAFF_ROLES] }, deletedAt: null },
+        select: STAFF_FIELDS,
         orderBy: { name: "asc" },
       }),
       fmStaffFor([]),
     ]);
     branches = branchRows;
-    staffList = [...staffRows, ...fmRows];
+    staffList = [...flat(staffRows), ...fmRows];
   } else if (isFM) {
     const [branchRows, staffRows, fmRows] = await Promise.all([
       prisma.branch.findMany({
@@ -68,14 +80,14 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { branchId: { in: managedBranchIds }, role: { in: ["PT", "ADMIN"] }, deletedAt: null },
-        select: { id: true, name: true, email: true, branchId: true, role: true },
+        where: { branchId: { in: managedBranchIds }, role: { in: [...STAFF_ROLES] }, deletedAt: null },
+        select: STAFF_FIELDS,
         orderBy: { name: "asc" },
       }),
       fmStaffFor(managedBranchIds),
     ]);
     branches = branchRows;
-    staffList = [...staffRows, ...fmRows];
+    staffList = [...flat(staffRows), ...fmRows];
   }
 
   return (

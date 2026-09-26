@@ -56,7 +56,10 @@ type SalaryRecord = {
 type GenEntry = {
   userId: string;
   name: string;
-  userRole: "PT" | "FM" | "ADMIN";
+  /** STAFF = lao công, marketing… — chỉ có lương cứng theo ngày công. */
+  userRole: "PT" | "FM" | "ADMIN" | "STAFF";
+  /** Tên chức vụ, làm nhãn cho STAFF. */
+  positionName?: string | null;
   showsL1L2Loyal: number;
   showsL3L4L5: number;
   showsResident: number;
@@ -183,6 +186,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   async function openGenModal() {
     const branchPTs    = staffList.filter(s => s.branchId === selectedBranchId && s.role === "PT");
     const branchAdmins = staffList.filter(s => s.branchId === selectedBranchId && s.role === "ADMIN");
+    // Nhân sự khác của cơ sở (lao công, marketing…) — có lương cứng theo ngày công.
+    const branchOthers = staffList.filter(s => s.branchId === selectedBranchId && s.role === "STAFF");
     // FM của cơ sở này — LẤY CẢ DANH SÁCH chứ không chỉ người đang đăng nhập. FM
     // cũng dạy khách, mà cơ sở có thể có nhiều FM; trước đây chỉ người bấm tạo
     // bảng lương mới có dòng, nên FM còn lại dạy bao nhiêu buổi cũng không được
@@ -222,6 +227,13 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
       })),
       ...branchAdmins.map(a => ({
         userId: a.id, name: a.name ?? a.email, userRole: "ADMIN" as const,
+        showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0, showsTransfer: 0,
+        clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
+        actualWorkDays: stdDays, leaveDays: 0,
+      })),
+      ...branchOthers.map(o => ({
+        userId: o.id, name: o.name ?? o.email, userRole: "STAFF" as const,
+        positionName: o.positionName ?? null,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0, showsTransfer: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
@@ -395,6 +407,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const ptRecords    = records.filter(r => r.user.role === "PT");
   const adminRecords = records.filter(r => r.user.role === "ADMIN");
   const fmRecords    = records.filter(r => r.user.role === "FM");
+  const staffRecords = records.filter(r => r.user.role === "STAFF");
   const totalFund      = records.reduce((s, r) => s + r.totalSalary, 0);
   const totalPaid      = records.filter(r => r.status === "PAID").reduce((s, r) => s + r.totalSalary, 0);
   const totalRemaining = records.reduce((s, r) => s + r.remainingPayment, 0);
@@ -438,7 +451,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           <span className="block text-[10px] text-orange-400">nghỉ {formatDays(std - act)} ngày</span>
         )}
         {fromCalendar > 0 && (
-          <span className="block text-[10px] text-gray-400">{formatDays(fromCalendar)} ngày công nghỉ từ lịch</span>
+          <span className="block text-[10px] text-gray-400">{formatDays(fromCalendar)} ngày trừ theo lịch nghỉ / ngày vào làm</span>
         )}
       </td>
     );
@@ -958,6 +971,75 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </p>
             </div>
           )}
+
+          {/* Nhân sự khác (lao công, marketing…) — chỉ có lương cứng chia theo ngày công. */}
+          {staffRecords.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Nhân sự</span>
+                <p className="text-sm font-extrabold text-gray-700">Bảng lương nhân sự khác — tháng {month}/{year}</p>
+              </div>
+              <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#f5f5f5] border-b border-gray-200">
+                      {["Nhân viên","Chức vụ","Lương CB","Ngày công","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Hành động"].map(h => (
+                        <th key={h} className={TH}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffRecords.map(r => (
+                      <React.Fragment key={r.id}>
+                        <tr className="border-b border-gray-100 hover:bg-gray-50/50 divide-x divide-gray-100">
+                          <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap min-w-[180px]">
+                            {r.user.name ?? r.user.email}
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {r.user.jobPosition ? (
+                              <span
+                                className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                                style={{ backgroundColor: r.user.jobPosition.color + "22", color: r.user.jobPosition.color }}
+                              >
+                                {r.user.jobPosition.name}
+                              </span>
+                            ) : <span className="text-gray-400">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                            {r.baseSalary > 0 ? vnd(r.baseSalary) : (
+                              <span className="text-[10px] font-semibold text-orange-500">Chưa cấu hình lương</span>
+                            )}
+                          </td>
+                          {workDaysCell(r)}
+                          <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
+                          <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={cn("px-2 py-1 rounded-full text-[10px] font-bold whitespace-nowrap", STATUS_COLORS[r.status])}>
+                              {STATUS_LABELS[r.status]}
+                            </span>
+                          </td>
+                          <ActionCell r={r} editingId={editingId}
+                            onEdit={() => toggleEdit(r)}
+                            onStatus={handleStatusChange} />
+                        </tr>
+                        {editingId === r.id && (
+                          <EditRow colSpan={9} editAdvance={editAdvance} editNotes={editNotes}
+                            editWorkDays={editWorkDays} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
+                            leaveDays={r.leaveDays ?? 0}
+                            saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
+                            onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
+                * Lương cơ bản đặt ở tab Cấu hình lương · chia theo ngày công thực tế / ngày công chuẩn
+              </p>
+            </div>
+          )}
         </>
       )}
 
@@ -980,14 +1062,18 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       "text-[10px] font-bold px-2 py-0.5 rounded-full",
                       entry.userRole === "FM"    ? "bg-purple-100 text-purple-600" :
                       entry.userRole === "ADMIN" ? "bg-orange-100 text-orange-600" :
+                      entry.userRole === "STAFF" ? "bg-gray-100 text-gray-600" :
                                                    "bg-blue-100 text-blue-600",
                     )}>
-                      {entry.userRole === "ADMIN" ? "Admin" : entry.userRole}
+                      {entry.userRole === "ADMIN" ? "Admin"
+                        : entry.userRole === "STAFF" ? (entry.positionName ?? "Nhân sự")
+                        : entry.userRole}
                     </span>
                     <p className="text-sm font-semibold text-gray-700">{entry.name}</p>
                   </div>
 
-                  <SessionCountCard entry={entry} />
+                  {/* STAFF không dạy khách nên không có số buổi dạy. */}
+                  {entry.userRole !== "STAFF" && <SessionCountCard entry={entry} />}
 
                   {/* Ngày công — lương cứng chia theo thực tế / chuẩn.
                       Admin dạy thêm không có lương cứng nên không hỏi. */}
@@ -1008,8 +1094,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         />
                         {entry.leaveDays > 0 && (
                           <p className="text-[10px] font-semibold text-orange-500">
-                            Đã trừ {formatDays(entry.leaveDays)} ngày công nghỉ theo lịch nghỉ
-                            (nghỉ nửa ngày 0,5 công; phép năm không trừ)
+                            Đã trừ {formatDays(entry.leaveDays)} ngày công theo lịch nghỉ và ngày bắt đầu làm việc
+                            (nghỉ nửa ngày 0,5 công; phép năm không trừ; ngày trước khi vào làm không tính công)
                           </p>
                         )}
                         <p className="text-[10px] text-gray-400">
@@ -1176,7 +1262,7 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, standardDays, 
                 className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
               {leaveDays > 0 && (
                 <p className="text-[10px] text-orange-500 font-semibold">
-                  Đã trừ {formatDays(leaveDays)} ngày công nghỉ từ lịch nghỉ
+                  Đã trừ {formatDays(leaveDays)} ngày công theo lịch nghỉ / ngày vào làm
                 </p>
               )}
             </div>

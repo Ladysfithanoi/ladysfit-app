@@ -10,7 +10,8 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isPT = role === "PT";
-  if (!isPT) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // STAFF (lao công, marketing…) cũng tự xem lương của mình như PT.
+  if (!isPT && role !== "STAFF") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const month = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));

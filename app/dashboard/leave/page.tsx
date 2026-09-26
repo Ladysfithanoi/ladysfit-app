@@ -14,6 +14,7 @@ type StaffRow = {
   role:            string;
   branchId:        string | null;
   managedBranches: { branchId: string }[];
+  jobPosition:     { name: string } | null;
 };
 
 function toStaff(u: StaffRow) {
@@ -22,6 +23,8 @@ function toStaff(u: StaffRow) {
     name:  u.name,
     email: u.email,
     role:  u.role,
+    // Nhân sự STAFF (lao công, marketing…) hiện theo tên chức vụ thay vì "STAFF".
+    positionName: u.jobPosition?.name ?? null,
     branchIds: u.role === "FM"
       ? u.managedBranches.map(b => b.branchId)
       : (u.branchId ? [u.branchId] : []),
@@ -31,6 +34,7 @@ function toStaff(u: StaffRow) {
 const STAFF_SELECT = {
   id: true, name: true, email: true, role: true, branchId: true,
   managedBranches: { select: { branchId: true } },
+  jobPosition:     { select: { name: true } },
 } as const;
 
 export default async function LeavePageRoute() {
@@ -41,7 +45,9 @@ export default async function LeavePageRoute() {
   const isAdmin = role === "ADMIN";
   const isFM    = role === "FM";
   const isPT    = role === "PT";
-  if (!isAdmin && !isFM && !isPT) redirect("/dashboard");
+  // STAFF (lao công, marketing…) cũng chấm ngày công nên được xem lịch nghỉ của chính mình.
+  const isStaff = role === "STAFF";
+  if (!isAdmin && !isFM && !isPT && !isStaff) redirect("/dashboard");
 
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
@@ -54,7 +60,7 @@ export default async function LeavePageRoute() {
   if (isAdmin) {
     [staffRows, branches] = await Promise.all([
       prisma.user.findMany({
-        where:   { role: { in: ["PT", "FM", "ADMIN"] }, deletedAt: null },
+        where:   { role: { in: ["PT", "FM", "ADMIN", "STAFF"] }, deletedAt: null },
         select:  STAFF_SELECT,
         orderBy: [{ role: "asc" }, { name: "asc" }],
       }),
@@ -67,7 +73,7 @@ export default async function LeavePageRoute() {
   } else if (isFM) {
     const [branchStaff, me, fmBranches] = await Promise.all([
       prisma.user.findMany({
-        where:   { branchId: { in: managedBranchIds }, role: { in: ["PT", "ADMIN"] }, deletedAt: null },
+        where:   { branchId: { in: managedBranchIds }, role: { in: ["PT", "ADMIN", "STAFF"] }, deletedAt: null },
         select:  STAFF_SELECT,
         orderBy: { name: "asc" },
       }),

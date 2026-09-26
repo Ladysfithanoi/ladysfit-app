@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { showPayOf } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
-import { sumLeaveDeductionByUser } from "@/lib/leave-days";
+import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
@@ -64,7 +64,7 @@ export async function GET(req: Request) {
 
   // Fresh individual revenue (VND) per user — used for PT/ADMIN commission.
   // Khoá theo cả cơ sở: một người có thể có bảng lương ở nhiều cơ sở.
-  const ptAdminRecords = records.filter(r => r.user.role !== "FM");
+  const ptAdminRecords = records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF");
   const ptRevenueMap: Record<string, number> = {};
   await Promise.all(ptAdminRecords.map(async (r) => {
     ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
@@ -72,7 +72,7 @@ export async function GET(req: Request) {
 
   // Ngày công bị trừ theo lịch nghỉ của tháng (nghỉ thường 1, nửa ngày 0,5).
   // Nghỉ phép năm không nằm ở đây vì vẫn hưởng đủ lương.
-  const leaveMap = await sumLeaveDeductionByUser(
+  const leaveMap = await sumWorkDayDeductionByUser(
     Array.from(new Set(records.map(r => r.userId))), month, year,
   );
 
@@ -121,7 +121,8 @@ export async function GET(req: Request) {
 
 type GenEntry = {
   userId:               string;
-  userRole:             "PT" | "FM" | "ADMIN";
+  /** STAFF = lao công, marketing… — chỉ có lương cứng theo ngày công. */
+  userRole:             "PT" | "FM" | "ADMIN" | "STAFF";
   showsL1L2Loyal:       number;
   showsL3L4L5:          number;
   showsResident:        number;
@@ -201,7 +202,7 @@ export async function POST(req: Request) {
   });
   // Ngày công bị trừ theo lịch nghỉ (nghỉ thường 1, nửa ngày 0,5) — mặc định trừ
   // luôn vào ngày công thực tế; nghỉ phép năm không trừ.
-  const leaveMap = await sumLeaveDeductionByUser(targetUserIds, body.month, body.year);
+  const leaveMap = await sumWorkDayDeductionByUser(targetUserIds, body.month, body.year);
 
   for (const entry of body.entries) {
     if (blocked.has(entry.userId)) {
@@ -219,7 +220,33 @@ export async function POST(req: Request) {
     const leaveCount = leaveMap[entry.userId] ?? 0;
     const actDays = Math.max(0, Math.min(entry.actualWorkDays ?? (stdDays - leaveCount), stdDays));
 
-    if (entry.userRole === "ADMIN") {
+    if (entry.userRole === "STAFF") {
+      // Nhân sự STAFF (lao công, marketing…): lương cơ bản theo cấu hình lương,
+      // chia theo ngày công. Không doanh số, không hoa hồng, không buổi dạy.
+      // Chưa cấu hình thì để 0 — mỗi chức vụ một mức, không có mặc định chung.
+      const baseSalary  = config?.baseSalary ?? 0;
+      const totalSalary = computeTotalSalary({
+        role: "STAFF", baseSalary, fixedAllowances: 0, seniorityBonus: 0, commissionAmount: 0,
+        showPay: 0, goalBonus: 0, googleBonus: 0, renewBonus: 0, kocCommission: 0, kolCommission: 0,
+        standardWorkDays: stdDays, actualWorkDays: actDays,
+      });
+
+      await prisma.salaryRecord.create({
+        data: {
+          userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
+          baseSalary, totalRevenue: 0, commissionRate: 0, commissionAmount: 0,
+          seniorityBonus: 0, fixedAllowances: 0,
+          standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
+          leaveDays: leaveCount as unknown as never,
+          showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0,
+          showsTransfer: 0 as unknown as never, showPay: 0,
+          goalBonus: 0, clientsAchievedGoal: 0,
+          googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
+          bhxh: 0, kocCommission: 0 as unknown as never, kolCommission: 0 as unknown as never,
+          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+        },
+      });
+    } else if (entry.userRole === "ADMIN") {
       const totalRevenue     = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;

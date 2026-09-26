@@ -9,7 +9,11 @@ import { PtSalaryView } from "./pt-salary-view";
 import { KOCFMPanel } from "./koc-fm-panel";
 
 export type Branch = { id: string; name: string };
-export type StaffMember = { id: string; name: string | null; email: string; branchId: string | null; role: string };
+export type StaffMember = {
+  id: string; name: string | null; email: string; branchId: string | null; role: string;
+  /** Tên chức vụ — nhãn cho nhân sự STAFF (lao công, marketing…). */
+  positionName?: string | null;
+};
 
 type Props = {
   currentUserId: string;
@@ -91,7 +95,7 @@ export function SalaryPage({ currentUserId, currentUserName, currentUserRole, ma
             )}
           </>
         ) : (
-          <PtSalaryView currentUserId={currentUserId} currentUserName={currentUserName} />
+          <PtSalaryView currentUserId={currentUserId} currentUserName={currentUserName} isStaff={currentUserRole === "STAFF"} />
         )}
       </div>
     </div>

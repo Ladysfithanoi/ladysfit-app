@@ -24,6 +24,8 @@ type Staff = {
   name:  string | null;
   email: string;
   role:  string;
+  /** Tên chức vụ — dùng làm nhãn cho nhân sự STAFF (lao công, marketing…). */
+  positionName: string | null;
   /** Cơ sở của nhân sự — FM thuộc tất cả cơ sở mình quản lý. */
   branchIds: string[];
 };
@@ -52,6 +54,8 @@ type MonthState = {
   actualWorkDays:   number;
   /** Ngày nhận việc `YYYY-MM-DD`; mọi ngày trước mốc này bị khoá. null = chưa rõ. */
   hireDate:         string | null;
+  /** Ngày công của tháng nằm trước ngày bắt đầu làm việc — không tính công. */
+  unhiredDays:      number;
 };
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -60,12 +64,13 @@ const ROLE_BADGE: Record<string, string> = {
   PT:    "bg-blue-100 text-blue-600",
   FM:    "bg-purple-100 text-purple-600",
   ADMIN: "bg-orange-100 text-orange-600",
+  STAFF: "bg-gray-100 text-gray-600",
 };
 
 const EMPTY: MonthState = {
   days: [], unpaidCount: 0, halfDayCount: 0, deductedDays: 0,
   annualQuota: 0, annualUsed: 0, annualRemaining: 0,
-  standardWorkDays: 0, actualWorkDays: 0, hireDate: null,
+  standardWorkDays: 0, actualWorkDays: 0, hireDate: null, unhiredDays: 0,
 };
 
 /** Số ô trống trước ngày 1 khi tuần bắt đầu từ Thứ 2. */
@@ -289,7 +294,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
         {selectedStaff && (
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
             <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", ROLE_BADGE[selectedStaff.role] ?? "bg-gray-100 text-gray-500")}>
-              {selectedStaff.role === "ADMIN" ? "Admin" : selectedStaff.role}
+              {selectedStaff.role === "ADMIN" ? "Admin"
+                : selectedStaff.role === "STAFF" ? (selectedStaff.positionName ?? "Nhân sự")
+                : selectedStaff.role}
             </span>
             <p className="text-sm font-semibold text-gray-700">{selectedStaff.name ?? selectedStaff.email}</p>
             {selectedBranchNames.length > 0 && (
@@ -334,7 +341,9 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
           {
             label: "Ngày công thực tế",
             value: `${formatDays(state.actualWorkDays)} ngày`,
-            hint:  "phép năm vẫn tính đủ công",
+            hint:  state.unhiredDays > 0 && state.hireDate
+              ? `trừ ${state.unhiredDays} ngày trước khi vào làm (${fmtHireDate(state.hireDate)})`
+              : "phép năm vẫn tính đủ công",
             color: "text-gray-800",
           },
         ].map(({ label, value, hint, color }) => (

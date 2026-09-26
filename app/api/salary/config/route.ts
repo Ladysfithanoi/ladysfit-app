@@ -14,7 +14,8 @@ export async function GET(req: Request) {
 
   const role = session.user.role;
   const isFM = role === "FM";
-  const isPT = role === "PT";
+  // STAFF tự xem cấu hình lương của mình như PT.
+  const isPT = role === "PT" || role === "STAFF";
 
   if (isPT && userId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

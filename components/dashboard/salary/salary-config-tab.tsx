@@ -59,9 +59,17 @@ const FM_TIERS = [
   { label: "200M trở lên",  rate: "2%"   },
 ];
 
-function makeDefault(isFM: boolean): Config {
+/**
+ * Lương cơ bản mặc định khi chưa cấu hình. Nhân sự STAFF (lao công, marketing…)
+ * mỗi chức vụ một mức nên để 0 — FM phải tự nhập, không lấy nhầm mức lương PT.
+ */
+function defaultBase(isFM: boolean, isStaff = false): number {
+  return isFM ? FM_BASE : isStaff ? 0 : PT_DEFAULT_BASE;
+}
+
+function makeDefault(isFM: boolean, isStaff = false): Config {
   return {
-    baseSalary:         isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE),
+    baseSalary:         String(defaultBase(isFM, isStaff)),
     seniorityYears:     0,
     officialStartDate:  "",
     insuranceStartDate: "",
@@ -281,10 +289,10 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
   const branchPTs = staffList.filter(s => s.branchId === selectedBranchId && s.id !== currentFMId && s.role !== "ADMIN");
 
   useEffect(() => {
-    async function loadOne(userId: string, isFM: boolean) {
+    async function loadOne(userId: string, isFM: boolean, isStaff = false) {
       try {
         const res = await fetch(`/api/salary/config?userId=${userId}`);
-        if (!res.ok) { setConfigs(prev => ({ ...prev, [userId]: makeDefault(isFM) })); return; }
+        if (!res.ok) { setConfigs(prev => ({ ...prev, [userId]: makeDefault(isFM, isStaff) })); return; }
         const data = await res.json() as {
           baseSalary: number; seniorityYears: number;
           officialStartDate: string | null; insuranceStartDate: string | null;
@@ -295,7 +303,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
         setConfigs(prev => ({
           ...prev,
           [userId]: {
-            baseSalary:         data ? String(data.baseSalary) : (isFM ? String(FM_BASE) : String(PT_DEFAULT_BASE)),
+            baseSalary:         String(data ? data.baseSalary : defaultBase(isFM, isStaff)),
             seniorityYears:     data?.seniorityYears ?? 0,
             officialStartDate:  ymd(data?.officialStartDate),
             insuranceStartDate: ymd(data?.insuranceStartDate),
@@ -311,12 +319,12 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
     loadOne(currentFMId, true);
     staffList
       .filter(s => s.branchId === selectedBranchId && s.id !== currentFMId && s.role !== "ADMIN")
-      .forEach(s => loadOne(s.id, false));
+      .forEach(s => loadOne(s.id, false, s.role === "STAFF"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBranchId]);
 
-  function getCfg(userId: string, isFM = false): Config {
-    return configs[userId] ?? makeDefault(isFM);
+  function getCfg(userId: string, isFM = false, isStaff = false): Config {
+    return configs[userId] ?? makeDefault(isFM, isStaff);
   }
 
   function patch(userId: string, update: Partial<Config>) {
@@ -324,7 +332,8 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
   }
 
   async function handleSave(userId: string, isFM: boolean) {
-    const cfg = getCfg(userId, isFM);
+    const isStaff = staffList.find(s => s.id === userId)?.role === "STAFF";
+    const cfg = getCfg(userId, isFM, isStaff);
     const branchId = isFM
       ? selectedBranchId
       : (staffList.find(s => s.id === userId)?.branchId ?? selectedBranchId);
@@ -333,8 +342,9 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       const body: Record<string, unknown> = {
         userId,
         branchId,
-        baseSalary:         isFM ? FM_BASE : (parseFloat(cfg.baseSalary) || PT_DEFAULT_BASE),
-        seniorityYears:     cfg.seniorityYears,
+        baseSalary:         isFM ? FM_BASE : (parseFloat(cfg.baseSalary) || defaultBase(false, isStaff)),
+        // STAFF không có thưởng thâm niên.
+        seniorityYears:     isStaff ? 0 : cfg.seniorityYears,
         officialStartDate:  cfg.officialStartDate  || null,
         insuranceStartDate: cfg.insuranceStartDate || null,
         effectiveFrom:      cfg.effectiveFrom,
@@ -408,17 +418,18 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
       {/* ── PT config cards ── */}
       {branchPTs.length === 0 ? (
         <div className="py-10 text-center text-sm text-gray-400 italic">
-          Không có nhân sự PT trong chi nhánh này
+          Không có nhân sự trong chi nhánh này
         </div>
       ) : (
         branchPTs.map(staff => {
-          const cfg = getCfg(staff.id);
+          const isStaff = staff.role === "STAFF";
+          const cfg = getCfg(staff.id, false, isStaff);
           return (
             <ConfigCard
               key={staff.id}
               name={staff.name ?? staff.email}
-              badge="PT"
-              badgeCls="bg-blue-50 text-blue-500"
+              badge={isStaff ? (staff.positionName ?? "Nhân sự") : "PT"}
+              badgeCls={isStaff ? "bg-gray-100 text-gray-600" : "bg-blue-50 text-blue-500"}
               saving={cfg.saving}
               onSave={() => handleSave(staff.id, false)}
             >
@@ -440,8 +451,13 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
               </div>
 
               <MilestoneFields cfg={cfg} onPatch={u => patch(staff.id, u)} />
-              <SeniorityFields cfg={cfg} perYear={PT_PER_YEAR} onPatch={u => patch(staff.id, u)} />
-              <TierTable tiers={PT_TIERS} note="* % áp dụng theo bậc toàn bộ doanh số tháng" />
+              {/* STAFF chỉ có lương cứng theo ngày công — không thâm niên, không hoa hồng. */}
+              {!isStaff && (
+                <>
+                  <SeniorityFields cfg={cfg} perYear={PT_PER_YEAR} onPatch={u => patch(staff.id, u)} />
+                  <TierTable tiers={PT_TIERS} note="* % áp dụng theo bậc toàn bộ doanh số tháng" />
+                </>
+              )}
             </ConfigCard>
           );
         })
