@@ -30,6 +30,10 @@ type Row = (string | number)[];
 function buildSheetRows(year: number, branchName: string, data: StatsData): Row[] {
   const { bySource, bySourceAll, byAge, byWeight, byPT, totalLeads, totalContracts, totalRevenue } = data;
   const overallConversionPct = totalLeads > 0 ? round1((totalContracts / totalLeads) * 100) : 0;
+  // Hai bảng nguồn đếm theo gói (lead nhiều gói: từ gói thứ 2 tính vào Renew).
+  const srcLeads     = data.sourceTotalLeads ?? totalLeads;
+  const srcContracts = data.sourceTotalContracts ?? totalContracts;
+  const srcConversionPct = srcLeads > 0 ? round1((srcContracts / srcLeads) * 100) : 0;
 
   const rows: Row[] = [];
   rows.push([`Thống kê năm ${year} — ${branchName}`]);
@@ -46,7 +50,7 @@ function buildSheetRows(year: number, branchName: string, data: StatsData): Row[
   for (const r of bySourceAll) {
     rows.push([r.source, r.leads, `${r.leadPct}%`, r.contracts, `${r.conversionPct}%`]);
   }
-  rows.push(["Tổng", totalLeads, "100%", totalContracts, `${overallConversionPct}%`]);
+  rows.push(["Tổng", srcLeads, "100%", srcContracts, `${srcConversionPct}%`]);
   rows.push([]);
 
   // Phân tích nguồn lead theo doanh thu (chỉ HĐ đã chốt)
@@ -55,7 +59,7 @@ function buildSheetRows(year: number, branchName: string, data: StatsData): Row[
   for (const r of bySource) {
     rows.push([r.source, r.contracts, round1(r.revenue), `${r.contractPct}%`, `${r.revenuePct}%`]);
   }
-  rows.push(["Tổng", totalContracts, round1(totalRevenue), "100%", "100%"]);
+  rows.push(["Tổng", srcContracts, round1(totalRevenue), "100%", "100%"]);
   rows.push([]);
 
   // Chuẩn tệp — độ tuổi

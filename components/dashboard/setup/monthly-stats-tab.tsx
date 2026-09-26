@@ -49,6 +49,10 @@ export type StatsData = {
   totalLeads: number;
   totalContracts: number;
   totalRevenue: number;
+  /** Tổng của hai bảng nguồn — đếm theo GÓI: lead nhiều gói thì từ gói thứ 2
+   *  tính vào Renew, nên có thể lớn hơn totalLeads / totalContracts. */
+  sourceTotalLeads?: number;
+  sourceTotalContracts?: number;
 };
 
 type Branch = { id: string; name: string };
@@ -258,6 +262,10 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
 
   const { bySource, bySourceAll, byAge, byWeight, byPT, totalLeads, totalContracts, totalRevenue } = data;
   const overallConversionPct = totalLeads > 0 ? Math.round((totalContracts / totalLeads) * 1000) / 10 : 0;
+  const srcLeads     = data.sourceTotalLeads ?? totalLeads;
+  const srcContracts = data.sourceTotalContracts ?? totalContracts;
+  const srcConversionPct = srcLeads > 0 ? Math.round((srcContracts / srcLeads) * 1000) / 10 : 0;
+  const renewNote = "Khách mua nhiều gói: gói đầu tính theo nguồn của lead, từ gói thứ 2 trở đi tính vào Renew";
 
   const contractChartData = bySource.map((s) => ({
     name: s.source,
@@ -289,7 +297,7 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Toàn bộ lead về theo nguồn và tỉ lệ chốt hợp đồng của từng kênh
+            Toàn bộ lead về theo nguồn và tỉ lệ chốt hợp đồng của từng kênh · {renewNote}
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
@@ -329,10 +337,10 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200">
                 <td className={cn(td, "font-extrabold text-gray-900")}>Tổng</td>
-                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalLeads}</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{srcLeads}</td>
                 <td className={cn(td, "text-center font-bold text-gray-500")}>100%</td>
-                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalContracts}</td>
-                <td className={cn(td, "text-center font-bold text-emerald-600")}>{overallConversionPct}%</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{srcContracts}</td>
+                <td className={cn(td, "text-center font-bold text-emerald-600")}>{srcConversionPct}%</td>
               </tr>
             </tfoot>
           </table>
@@ -344,7 +352,8 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
           <p className="text-sm font-extrabold text-gray-800">Phân tích nguồn lead theo doanh thu</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Doanh thu tính theo tất cả lead trong tháng (khớp Tổng doanh thu ở Setup); số HĐ chỉ tính lead Đã thanh toán
+            Doanh thu tính theo tất cả lead trong tháng (khớp Tổng doanh thu ở Setup); số HĐ chỉ tính lead Đã thanh toán, đếm theo gói.
+            {" "}{renewNote} (doanh thu chia theo giá từng gói)
           </p>
         </div>
         <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full p-1">
@@ -384,7 +393,7 @@ export function MonthlyStatsTab({ branchId, month, year, period = "month", quart
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200">
                 <td className={cn(td, "font-extrabold text-gray-900")}>Tổng</td>
-                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{totalContracts}</td>
+                <td className={cn(td, "text-center font-extrabold text-gray-900")}>{srcContracts}</td>
                 <td className={cn(td, "text-center font-extrabold text-gray-900")}>{fmtRevenue(totalRevenue)}</td>
                 <td className={cn(td, "text-center font-bold text-gray-500")}>100%</td>
                 <td className={cn(td, "text-center font-bold text-gray-500")}>100%</td>

@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LEAD_SOURCES as SOURCES } from "@/lib/lead-sources";
+import { splitLeadBySource } from "@/lib/lead-source-split";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     },
     select: {
       source: true,
+      packageRegistered: true,
       status: true,
       signDate: true,
       actualRevenue: true,
@@ -74,14 +76,23 @@ export async function GET(req: Request) {
   const totalRevenue = allLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
 
   // ── By source ────────────────────────────────────────────────────────────
+  // Lead nhiều gói được tách theo từng gói: gói đầu theo nguồn của lead, từ gói
+  // thứ 2 trở đi tính vào Renew (xem lib/lead-source-split). Vì vậy tổng số HĐ ở
+  // hai bảng nguồn đếm theo GÓI, có thể lớn hơn số khách đã chốt (totalContracts).
+  const sharesOf = (lead: (typeof allLeads)[number]) =>
+    splitLeadBySource(lead.source, lead.packageRegistered);
+
   const sourceMap = new Map<string, { contracts: number; revenue: number }>();
   for (const lead of allLeads) {
-    const key = lead.source?.trim() || "Không rõ nguồn";
-    const cur = sourceMap.get(key) ?? { contracts: 0, revenue: 0 };
-    cur.revenue += lead.actualRevenue ?? 0;
-    if (isWon(lead)) cur.contracts += 1;
-    sourceMap.set(key, cur);
+    const won = isWon(lead);
+    for (const share of sharesOf(lead)) {
+      const cur = sourceMap.get(share.source) ?? { contracts: 0, revenue: 0 };
+      cur.revenue += (lead.actualRevenue ?? 0) * share.weight;
+      if (won) cur.contracts += 1;
+      sourceMap.set(share.source, cur);
+    }
   }
+  const sourceTotalContracts = Array.from(sourceMap.values()).reduce((s, v) => s + v.contracts, 0);
 
   const bySource = Array.from(sourceMap.entries())
     .filter(([, stat]) => stat.contracts > 0 || stat.revenue > 0)
@@ -89,7 +100,7 @@ export async function GET(req: Request) {
       source,
       contracts: stat.contracts,
       revenue: stat.revenue,
-      contractPct: totalContracts > 0 ? Math.round((stat.contracts / totalContracts) * 1000) / 10 : 0,
+      contractPct: sourceTotalContracts > 0 ? Math.round((stat.contracts / sourceTotalContracts) * 1000) / 10 : 0,
       revenuePct: totalRevenue > 0 ? Math.round((stat.revenue / totalRevenue) * 1000) / 10 : 0,
     }))
     .sort((a, b) => {
@@ -146,14 +157,20 @@ export async function GET(req: Request) {
     .sort((a, b) => b.revenue - a.revenue);
 
   // ── By source (all leads + conversion) ───────────────────────────────────
+  // Lead đã chốt nhiều gói: mỗi gói Renew cũng là một lead đã chốt của nguồn
+  // Renew. Lead chưa chốt thì chỉ tính một lead vào nguồn của nó.
   const sourceAllMap = new Map<string, { leads: number; contracts: number }>();
   for (const lead of allLeads) {
-    const key = lead.source?.trim() || "Không rõ nguồn";
-    const cur = sourceAllMap.get(key) ?? { leads: 0, contracts: 0 };
-    cur.leads += 1;
-    if (isWon(lead)) cur.contracts += 1;
-    sourceAllMap.set(key, cur);
+    const won = isWon(lead);
+    const shares = won ? sharesOf(lead) : sharesOf(lead).slice(0, 1);
+    for (const share of shares) {
+      const cur = sourceAllMap.get(share.source) ?? { leads: 0, contracts: 0 };
+      cur.leads += 1;
+      if (won) cur.contracts += 1;
+      sourceAllMap.set(share.source, cur);
+    }
   }
+  const sourceTotalLeads = Array.from(sourceAllMap.values()).reduce((s, v) => s + v.leads, 0);
 
   const bySourceAll = Array.from(sourceAllMap.entries())
     .filter(([, stat]) => stat.leads > 0)
@@ -161,7 +178,7 @@ export async function GET(req: Request) {
       source,
       leads: stat.leads,
       contracts: stat.contracts,
-      leadPct: totalLeads > 0 ? Math.round((stat.leads / totalLeads) * 1000) / 10 : 0,
+      leadPct: sourceTotalLeads > 0 ? Math.round((stat.leads / sourceTotalLeads) * 1000) / 10 : 0,
       conversionPct: stat.leads > 0 ? Math.round((stat.contracts / stat.leads) * 1000) / 10 : 0,
     }))
     .sort((a, b) => {
@@ -239,5 +256,8 @@ export async function GET(req: Request) {
     totalLeads,
     totalContracts,
     totalRevenue,
+    // Tổng của hai bảng nguồn — đếm theo gói (lead nhiều gói tách ra Renew).
+    sourceTotalLeads,
+    sourceTotalContracts,
   });
 }
