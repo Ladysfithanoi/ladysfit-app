@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientsPageClient } from "@/components/dashboard/clients-page-client";
+import { computeTransformCredits } from "@/lib/transform-credit";
 
 type PkgRow = {
   packageName: string;
@@ -110,7 +111,7 @@ export default async function ClientsPage() {
 
   const clientIds = clients.map((c) => c.id);
 
-  const [latestScans, selfMeasurements] = await Promise.all([
+  const [latestScans, selfMeasurements, transformCredits] = await Promise.all([
     prisma.foodScanLog.groupBy({
       by: ["clientId"],
       _max: { scanDate: true },
@@ -124,7 +125,24 @@ export default async function ClientsPage() {
       },
       select: { clientId: true },
     }),
+    // Mốc transform — CÙNG nguồn với bảng xếp hạng, thăng cấp và tab hiệu suất
+    // (lib/transform-credit), để ngày hiện dưới nhãn "Đã Transform" đúng là ngày
+    // được dùng để tính, kèm người được ghi công.
+    computeTransformCredits(),
   ]);
+
+  const creditByClient = new Map(transformCredits.map((t) => [t.clientId, t]));
+  const creditedPtIds = Array.from(new Set(
+    transformCredits
+      .filter((t) => t.ptId && clientIds.includes(t.clientId))
+      .map((t) => t.ptId as string),
+  ));
+  const creditedPtNames = new Map(
+    (creditedPtIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: creditedPtIds } }, select: { id: true, name: true } })
+      : []
+    ).map((u) => [u.id, u.name]),
+  );
 
   const scanMap = new Map(latestScans.map((s) => [s.clientId, s._max.scanDate]));
   const selfMeasuredSet = new Set(selfMeasurements.map((m) => m.clientId));
@@ -158,6 +176,15 @@ export default async function ClientsPage() {
       foodLogToday:       latestScan != null && latestScan >= todayStart,
       foodLogStale:       latestScan == null || latestScan < threeDaysAgo,
       selfMeasuredThisWeek: selfMeasuredSet.has(c.id),
+      transform: (() => {
+        const credit = creditByClient.get(c.id);
+        if (!credit) return null;
+        return {
+          date: credit.date.toISOString(),
+          creditedPtId: credit.ptId,
+          creditedPtName: credit.ptId ? (creditedPtNames.get(credit.ptId) ?? null) : null,
+        };
+      })(),
     };
   });
 

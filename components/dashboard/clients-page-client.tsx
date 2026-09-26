@@ -39,6 +39,11 @@ type ClientRow = {
   foodLogToday: boolean;
   foodLogStale: boolean;
   selfMeasuredThisWeek: boolean;
+  /**
+   * Mốc transform dùng để tính (lib/transform-credit): ngày cân đầu tiên giảm đủ
+   * 7 kg, và người được ghi công (null = không ai — chưa kèm đủ 6 tuần).
+   */
+  transform?: { date: string; creditedPtId: string | null; creditedPtName: string | null } | null;
   substituteInfo?: { type: string; daysLeft: number | null } | null;
 };
 
@@ -556,9 +561,32 @@ export function ClientsPageClient({
                     </td>
                     <td className="px-5 py-3.5">
                       {c.initialWeight - c.currentWeight >= 7 ? (
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-[#f15b5c]/10 text-[#f15b5c]">
-                          Đã Transform
-                        </span>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-[#f15b5c]/10 text-[#f15b5c]">
+                            Đã Transform
+                          </span>
+                          {c.transform && (
+                            <span
+                              className="text-[10px] text-gray-400 whitespace-nowrap"
+                              title="Ngày cân đầu tiên giảm đủ 7 kg — transform được tính vào tháng/quý của ngày này"
+                            >
+                              Tính ngày {fmtDate(c.transform.date)}
+                            </span>
+                          )}
+                          {c.transform && !c.transform.creditedPtId && (
+                            <span
+                              className="text-[10px] text-orange-400 whitespace-nowrap"
+                              title="Người phụ trách tại ngày đạt mốc chưa kèm khách đủ 6 tuần, nên transform này không ghi công cho PT nào"
+                            >
+                              Không ghi công PT
+                            </span>
+                          )}
+                          {c.transform?.creditedPtId && c.transform.creditedPtId !== c.assignedPT.id && (
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                              Ghi công: {c.transform.creditedPtName ?? "PT cũ"}
+                            </span>
+                          )}
+                        </div>
                       ) : null}
                     </td>
                     <td className="px-5 py-3.5">
