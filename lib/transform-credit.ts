@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 //     chuyển sang người khác (công của người làm ra kết quả).
 //   • Chặng đó phải dài ít nhất 6 tuần tính đến ngày đạt mốc, không thì không
 //     ai được tính — chặn đúng trường hợp nhận khách xong ăn theo kết quả sẵn có.
+//   • Mốc đạt TRƯỚC 01/04/2026 (chưa có app, khách nhập từ nơi khác vào): luôn
+//     được tính, bỏ qua luật 6 tuần và luật đổi tay — xem PRE_APP_BEFORE.
 //   • Mốc có TRƯỚC chặng đầu tiên (dữ liệu cũ nhập lúc chuyển sang phần mềm):
 //     khách chưa từng đổi tay thì người đang phụ trách vẫn được tính; khách đã
 //     từng đổi tay thì không rõ ai làm nên không tính cho ai.
@@ -33,6 +35,15 @@ export const TRANSFORM_MIN_TENURE_DAYS = 42;
  * áp đủ luật, nên ngoại lệ này tự hết theo thời gian.
  */
 const LEGACY_IMPORT_BEFORE = new Date("2026-06-01T00:00:00+07:00");
+
+/**
+ * App bắt đầu dùng từ 01/04/2026. Transform đạt trước ngày này là kết quả PT
+ * làm ra từ trước, khách được nhập từ nơi khác vào nên nhật ký phụ trách và
+ * thâm niên kèm khách không phản ánh thực tế. Để công bằng cho PT, mọi mốc đạt
+ * trước ngày này MẶC ĐỊNH được tính cho người phụ trách khách tại ngày đạt mốc
+ * (mốc có trước cả chặng đầu tiên thì tính cho người của chặng đầu tiên).
+ */
+export const PRE_APP_BEFORE = new Date("2026-04-01T00:00:00+07:00");
 
 const DAY_MS = 86_400_000;
 
@@ -106,6 +117,9 @@ function creditedPt(client: ClientRow, history: Segment[], date: Date): string |
     if (seg.startedAt <= date) current = seg;
     else break; // history đã sắp xếp tăng dần theo startedAt
   }
+
+  // Đạt mốc trước khi có app → mặc định tính, không xét 6 tuần hay đổi tay.
+  if (date < PRE_APP_BEFORE) return (current ?? history[0]).ptId;
 
   // Đạt mốc trước cả chặng đầu tiên — chỉ tính khi khách chưa từng đổi tay.
   if (!current) return neverChangedHands ? client.assignedPTId : null;
