@@ -38,12 +38,14 @@ function fmt(d: string) {
 }
 
 /**
- * "Thiết bị đang đăng nhập" — xem các máy đã xác minh và đăng xuất từ xa.
- * Ẩn hẳn khi chưa bật xác minh thiết bị (LOGIN_OTP_ENABLED).
+ * "Thiết bị đang đăng nhập" — bật/tắt xác minh máy lạ bằng mã email, xem các
+ * máy đã đăng nhập và đăng xuất từ xa.
+ * Ẩn hẳn khi chưa bật xác minh thiết bị toàn hệ thống (LOGIN_OTP_ENABLED).
  */
 export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; className?: string }) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [enabled, setEnabled] = useState(false);
+  const [verifyNew, setVerifyNew] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -52,6 +54,7 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
       if (!res.ok) return;
       const data = await res.json();
       setEnabled(!!data.enabled);
+      setVerifyNew(data.verifyNewDevices !== false);
       setDevices(data.devices ?? []);
     } catch {
       /* im lặng — thẻ này chỉ là tiện ích */
@@ -74,6 +77,24 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
     }
   }
 
+  async function toggleVerify() {
+    const next = !verifyNew;
+    if (!next && !window.confirm(
+      "Tắt xác minh thì ai biết mật khẩu cũng đăng nhập được tài khoản của bạn từ bất kỳ máy nào mà không cần mã email. Vẫn tắt?",
+    )) return;
+    setBusy("toggle");
+    try {
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verifyNewDevices: next }),
+      });
+      if (res.ok) await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!enabled || !devices) return null;
   const others = devices.filter((d) => !d.current);
 
@@ -91,8 +112,35 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
           </button>
         )}
       </div>
+      <div className="flex items-start gap-3 rounded-2xl bg-gray-50 p-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-gray-800">Xác nhận qua email khi có máy lạ</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            {verifyNew
+              ? "Đang bật: máy mới đăng nhập phải nhập mã gửi về email."
+              : "Đang tắt: ai biết mật khẩu cũng vào được từ máy bất kỳ. Bật lại sẽ đăng xuất mọi máy khác."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={verifyNew}
+          aria-label="Xác nhận qua email khi có máy lạ"
+          onClick={toggleVerify}
+          disabled={busy !== null}
+          className={`relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${
+            verifyNew ? "bg-[#f15b5c]" : "bg-gray-300"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+              verifyNew ? "translate-x-5" : ""
+            }`}
+          />
+        </button>
+      </div>
       <p className="text-xs text-gray-400 mb-3">
-        Đăng nhập trên máy mới cần mã gửi về email. Thấy máy lạ? Đăng xuất nó và đổi mật khẩu.
+        Thấy máy lạ? Đăng xuất nó và đổi mật khẩu.
       </p>
       <div className="divide-y divide-gray-50">
         {devices.map((d) => {

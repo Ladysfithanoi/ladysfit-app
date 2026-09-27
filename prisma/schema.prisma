@@ -82,6 +82,8 @@ model User {
   emailVerified   DateTime?
   image           String?
   password        String?
+  // Tự bật/tắt ở "Đổi mật khẩu": tắt thì máy lạ đăng nhập không cần mã email.
+  loginOtpEnabled Boolean   @default(true)
   // QUYỀN — quyết định vào được màn nào, sửa được gì. Cố định trong code.
   role            Role      @default(PT)
   // CHỨC VỤ — nhãn nghề nghiệp do Admin tự thêm (lao công, marketing, lễ tân…).
@@ -199,6 +201,8 @@ model Client {
   email            String?      @unique
   password         String?
   passwordSetAt    DateTime?
+  // Tự bật/tắt ở "Đổi mật khẩu": tắt thì máy lạ đăng nhập không cần mã email.
+  loginOtpEnabled  Boolean      @default(true)
   dateOfBirth      DateTime?
   initialWeight    Float
   currentWeight    Float

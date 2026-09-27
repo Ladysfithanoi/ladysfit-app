@@ -22,6 +22,9 @@ import {
  *     email của tài khoản; nhập đúng mã thì máy được tin cậy, lần sau khỏi hỏi.
  *  3. Mỗi phiên (JWT) mang `did` = id dòng trusted_devices. Dòng đó bị xoá
  *     (đổi mật khẩu, "đăng xuất thiết bị khác") → phiên trên máy đó chết ngay.
+ *  4. Tài khoản tự tắt xác minh (loginOtpEnabled=false) → máy lạ vào thẳng, không
+ *     hỏi mã, nhưng vẫn được ghi vào trusted_devices để xem & đăng xuất từ xa.
+ *     Bật lại → mọi máy khác bị đăng xuất, chỉ giữ máy đang bật.
  *
  * Chỉ bật khi LOGIN_OTP_ENABLED=true VÀ đã cấu hình SMTP — thiếu mail mà vẫn bật
  * thì cả hệ thống khoá cửa. Lúc vừa bật, mọi phiên cũ (chưa có `did`) bị buộc
@@ -82,6 +85,7 @@ export interface LoginAccount {
   email:        string;
   name:         string | null;
   passwordHash: string | null;
+  otpEnabled:   boolean;
   role?:        Role;
   branchId?:    string | null;
 }
@@ -101,7 +105,7 @@ async function findLoginAccount(type: AccountType, rawEmail: string): Promise<Lo
     if (!user) return null;
     return {
       id: user.id, email: user.email, name: user.name, passwordHash: user.password,
-      role: user.role, branchId: user.branchId,
+      otpEnabled: user.loginOtpEnabled, role: user.role, branchId: user.branchId,
     };
   }
 
@@ -110,7 +114,10 @@ async function findLoginAccount(type: AccountType, rawEmail: string): Promise<Lo
     client = await prisma.client.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
   }
   if (!client?.email) return null;
-  return { id: client.id, email: client.email, name: client.fullName, passwordHash: client.password };
+  return {
+    id: client.id, email: client.email, name: client.fullName, passwordHash: client.password,
+    otpEnabled: client.loginOtpEnabled,
+  };
 }
 
 /** Kiểm mật khẩu có giới hạn số lần sai theo IP. Sai → null; bị chặn → throw. */
@@ -278,9 +285,12 @@ export async function authorizeLogin(
     return { account, did: trusted.id };
   }
 
-  const otp = credentials?.otp;
-  if (!otp || !(await consumeLoginOtp(type, account.id, deviceHash, otp))) {
-    throw new Error(OTP_INVALID_MESSAGE);
+  // Chủ tài khoản đã tắt xác minh → máy lạ vào thẳng, chỉ ghi nhận máy.
+  if (account.otpEnabled) {
+    const otp = credentials?.otp;
+    if (!otp || !(await consumeLoginOtp(type, account.id, deviceHash, otp))) {
+      throw new Error(OTP_INVALID_MESSAGE);
+    }
   }
   const device = await prisma.trustedDevice.upsert({
     where:  { accountType_accountId_deviceHash: { accountType: type, accountId: account.id, deviceHash } },
@@ -308,13 +318,48 @@ export async function assertSessionDevice(type: AccountType, token: { sub?: stri
 
 // ─── Danh sách máy cho màn "Thiết bị đang đăng nhập" ─────────────────────────
 
-/** Xử lý GET/DELETE chung cho /api/my/devices (khách) và /api/staff/me/devices (nhân sự). */
+async function getAccountOtpEnabled(type: AccountType, accountId: string): Promise<boolean> {
+  const row = type === "STAFF"
+    ? await prisma.user.findUnique({ where: { id: accountId }, select: { loginOtpEnabled: true } })
+    : await prisma.client.findUnique({ where: { id: accountId }, select: { loginOtpEnabled: true } });
+  return row?.loginOtpEnabled ?? true;
+}
+
+/**
+ * Tài khoản tự bật/tắt xác minh máy lạ. Bật lại thì đăng xuất mọi máy khác —
+ * máy nào lọt vào lúc đang tắt cũng phải xác minh lại bằng mã.
+ */
+async function setAccountOtpEnabled(
+  type: AccountType,
+  accountId: string,
+  enabled: boolean,
+  currentDeviceId: string | undefined,
+) {
+  if (type === "STAFF") {
+    await prisma.user.update({ where: { id: accountId }, data: { loginOtpEnabled: enabled } });
+  } else {
+    await prisma.client.update({ where: { id: accountId }, data: { loginOtpEnabled: enabled } });
+  }
+  if (enabled) await revokeTrustedDevices(type, accountId, currentDeviceId ?? null);
+}
+
+/** Xử lý GET/PATCH/DELETE chung cho /api/my/devices (khách) và /api/staff/me/devices (nhân sự). */
 export async function handleDevicesRequest(
   req: Request,
   type: AccountType,
   accountId: string,
   currentDeviceId: string | undefined,
 ): Promise<Response> {
+  if (req.method === "PATCH") {
+    let body: { verifyNewDevices?: unknown } = {};
+    try { body = await req.json(); } catch { /* body rỗng */ }
+    if (typeof body.verifyNewDevices !== "boolean") {
+      return Response.json({ error: "Yêu cầu không hợp lệ" }, { status: 400 });
+    }
+    await setAccountOtpEnabled(type, accountId, body.verifyNewDevices, currentDeviceId);
+    return Response.json({ success: true });
+  }
+
   if (req.method === "DELETE") {
     let body: { id?: unknown; others?: unknown } = {};
     try { body = await req.json(); } catch { /* body rỗng */ }
@@ -335,6 +380,7 @@ export async function handleDevicesRequest(
   });
   return Response.json({
     enabled: isLoginOtpEnabled(),
+    verifyNewDevices: await getAccountOtpEnabled(type, accountId),
     devices: devices.map((d) => ({ ...d, current: d.id === currentDeviceId })),
   });
 }

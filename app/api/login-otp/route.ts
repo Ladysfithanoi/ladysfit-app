@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   }
   if (!account) return respond({ error: "Email hoặc mật khẩu không đúng." }, 401);
 
-  if (!isLoginOtpEnabled()) return respond({ otpRequired: false });
+  if (!isLoginOtpEnabled() || !account.otpEnabled) return respond({ otpRequired: false });
 
   const deviceHash = hashDeviceId(deviceId);
   if (await isDeviceTrusted(type, account.id, deviceHash)) return respond({ otpRequired: false });
