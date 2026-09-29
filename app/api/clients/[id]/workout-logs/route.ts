@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { countPackageSession } from "@/lib/workout-session";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -117,32 +118,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     },
   });
 
-  // Increment sessionsUsed on the active package enrollment
-  let packageUpdate: {
-    id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
-  } | null = null;
-
-  const activePackage = await prisma.packageEnrollment.findFirst({
-    where: { clientId: params.id, status: "ACTIVE" },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (activePackage) {
-    const newSessionsUsed = activePackage.sessionsUsed + 1;
-    const newStatus = newSessionsUsed >= activePackage.sessions ? "COMPLETED" : "ACTIVE";
-    const updated = await prisma.packageEnrollment.update({
-      where: { id: activePackage.id },
-      data: { sessionsUsed: newSessionsUsed, status: newStatus },
+  // Trừ một buổi — cùng một luật chọn gói với check-in (countPackageSession).
+  const packageUpdate = await countPackageSession(params.id);
+  if (packageUpdate) {
+    // Flag the log as counted so a later delete reverses the deduction exactly
+    // once, on the exact lộ trình that was charged.
+    await prisma.workoutLog.update({
+      where: { id: log.id },
+      data: { packageCounted: true, packageEnrollmentId: packageUpdate.id },
     });
-    packageUpdate = {
-      id: updated.id,
-      sessionsUsed: updated.sessionsUsed,
-      sessions: updated.sessions,
-      packageName: updated.packageName,
-      status: updated.status,
-    };
-    // Flag the log as counted so a later delete reverses the deduction exactly once.
-    await prisma.workoutLog.update({ where: { id: log.id }, data: { packageCounted: true } });
   }
 
   // Create workout completion notification for client

@@ -9,6 +9,8 @@
 // Logic thuần (không đụng Prisma) để dùng chung: API chặn thật ở server, giao
 // diện hồ sơ khách dùng đúng hàm này để khoá nút và hiện lý do.
 
+import { PACKAGES } from "@/lib/packages";
+
 export type PackageForCheckIn = {
   status: string;
   sessions: number;
@@ -59,6 +61,54 @@ export function isChargeablePackage(p: PackageForCheckIn, now: Date = new Date()
   const end = toDate(p.endDate);
   if (end != null && end < now) return false;
   return p.sessionsUsed < p.sessions;
+}
+
+/**
+ * Bậc ưu tiên trừ buổi của một gói: số NHỎ trừ TRƯỚC.
+ *   1 — Giai đoạn 1 (L1/L2, cùng L0, Cư dân, KOC)
+ *   2 — Giai đoạn 2 (L3/L4)
+ *   3 — Giai đoạn 3 (L5/Loyalfit)
+ * Tên gói lạ (không có trong PACKAGES) xếp sau cùng.
+ */
+export function chargePriority(packageName: string | null | undefined): number {
+  const stage = packageName ? PACKAGES[packageName]?.stage : undefined;
+  return stage ? Number(stage) : 99;
+}
+
+/**
+ * MỘT lần check-in trừ đúng MỘT lộ trình — lộ trình nào thì hỏi hàm này.
+ *
+ * Trong các gói trừ được buổi (isChargeablePackage):
+ *   1. Bậc thấp trừ trước: L1/L2 → L3/L4 → L5/Loyalfit (chargePriority).
+ *   2. Cùng bậc (L3 với L4, L5 với Loyalfit, hay hai gói cùng lộ trình): gói có
+ *      NGÀY BẮT ĐẦU sớm hơn trừ trước.
+ *   3. Vẫn hoà (cùng bậc, cùng ngày bắt đầu): chọn ngẫu nhiên một gói.
+ *
+ * Luật cũ lấy "gói tạo sớm nhất" (createdAt) — nhưng khách mua nhiều gói một lúc
+ * thì các gói được tạo cùng một câu lệnh, createdAt trùng nhau tới từng mili-giây,
+ * và thứ tự trả về từ database là hên xui: hôm nay trừ L2, mai trừ L4, ngày kia
+ * lại L2. Buổi tập của một khách bị rải đều ra mọi gói đang mở.
+ */
+export function pickChargeablePackage<T extends PackageForCheckIn>(
+  packages: T[],
+  now: Date = new Date(),
+  random: () => number = Math.random,
+): T | null {
+  const chargeable = packages.filter((p) => isChargeablePackage(p, now));
+  if (chargeable.length === 0) return null;
+
+  const key = (p: T): [number, number] => [
+    chargePriority(p.packageName),
+    toDate(p.startDate)!.getTime(), // isChargeablePackage đã bảo đảm có ngày bắt đầu
+  ];
+  const [bestTier, bestStart] = chargeable.map(key).reduce((a, b) =>
+    b[0] < a[0] || (b[0] === a[0] && b[1] < a[1]) ? b : a
+  );
+  const tied = chargeable.filter((p) => {
+    const [t, s] = key(p);
+    return t === bestTier && s === bestStart;
+  });
+  return tied[Math.floor(random() * tied.length)] ?? tied[0];
 }
 
 /**

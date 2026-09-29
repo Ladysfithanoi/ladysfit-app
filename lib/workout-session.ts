@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { refreshClientChurnStatus } from "@/lib/client-status";
 import {
-  isChargeablePackage,
+  pickChargeablePackage,
   MAX_SESSION_MINUTES,
   RUNNING_LOG_STATUSES,
 } from "@/lib/checkin-eligibility";
@@ -75,17 +75,16 @@ export async function sessionIdsWithLogs(sessionIds: string[]): Promise<Set<stri
 // PT được cho khách ký check-in rồi buổi lại không trừ vào lộ trình nào: khách
 // tập không mất buổi mà PT vẫn được tính lương.
 //
-// Trong các gói hợp lệ, trừ gói CŨ NHẤT trước (oldest createdAt) — dùng xong gói
-// cũ rồi mới sang gói mới. Nếu không có gói hợp lệ nào thì không trừ (trả null).
+// Trong các gói hợp lệ, gói nào bị trừ do pickChargeablePackage quyết định:
+// L1/L2 → L3/L4 → L5/Loyalfit, cùng bậc thì gói bắt đầu sớm hơn. Mỗi lần gọi
+// chỉ trừ đúng MỘT gói. Không có gói hợp lệ nào thì không trừ (trả null).
 export async function countPackageSession(clientId: string): Promise<PackageUpdate | null> {
   const now = new Date();
   const candidates = await prisma.packageEnrollment.findMany({
     where: { clientId, status: "ACTIVE" },
-    orderBy: { createdAt: "asc" }, // oldest → newest
   });
 
-  // Gói hợp lệ CŨ NHẤT — xem isChargeablePackage.
-  const activePackage = candidates.find((p) => isChargeablePackage(p, now)) ?? null;
+  const activePackage = pickChargeablePackage(candidates, now);
   if (!activePackage) return null;
 
   const newSessionsUsed = activePackage.sessionsUsed + 1;
