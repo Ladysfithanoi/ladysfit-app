@@ -28,7 +28,7 @@ export const POST_L0_CREDIT = 2;
  * Có hai cách lead được ghi, và luật phải nhận ra cả hai:
  *
  *   1. GHI CHUNG MỘT LEAD — Gói tập đăng ký là "L0+L2". Khoản trừ tự áp, không
- *      cần chọn nguồn gì đặc biệt: giá hợp đồng = 2 (L0) + 15 (L2) − 2 = 15.
+ *      cần chọn nguồn gì đặc biệt: giá hợp đồng = 2 (L0) + 36 (L2 nguyên giá) − 2 = 36.
  *   2. GHI HAI LEAD — lead L0 đã chốt từ trước với nguồn marketing thật của nó
  *      (Facebook Page, Referral…), lead sau chỉ có gói thật. Lúc này không nhìn
  *      vào danh sách gói mà biết được, nên phải chọn nguồn "Hậu L0".
@@ -51,6 +51,18 @@ function postL0Credit(packages: string[], source: string | null | undefined): nu
 
 /** Chỉ 3 gói này được trợ giá tái ký. L0/L1/L2/Loyalfit giữ nguyên giá. */
 export const RENEW_DISCOUNT_PACKAGES = ["L3", "L4", "L5"];
+
+/**
+ * Khách đi từ gói trải nghiệm L0: L0 nằm chung lead, hoặc lead này là "Hậu L0".
+ *
+ * Khách như vậy mua các gói thật theo NGUYÊN GIÁ NIÊM YẾT — không trợ giá L1/L2,
+ * không giảm tái ký, không áp đợt trợ giá của cơ sở. Ưu đãi duy nhất là 2 triệu
+ * đã đóng cho L0 được cấn trừ MỘT lần (postL0Credit). Bảng giá lúc tư vấn
+ * (lib/roadmap-pricing) theo đúng luật này.
+ */
+export function startedFromTrial(packages: string[], source: string | null | undefined): boolean {
+  return packages.includes(TRIAL_PACKAGE) || source === POST_L0_SOURCE;
+}
 
 /**
  * Gói ở vị trí `i` của lead có phải gói MUA THÊM (tái ký) không.
@@ -171,6 +183,7 @@ export function computeExpectedRevenue(
   if (packages.length === 0) return null;
 
   const renew = renewDiscountFor(promos);
+  const trial = startedFromTrial(packages, source);
 
   const lines: PriceLine[] = [];
   let totalVND = 0;
@@ -179,6 +192,21 @@ export function computeExpectedRevenue(
     const pkg = packages[i];
     const listVND = listPriceVND(pkg);
     if (listVND == null) return null; // gói lạ → không đối chiếu được
+
+    // Khách đi từ L0: gói thật tính NGUYÊN GIÁ NIÊM YẾT — không trợ giá L1/L2,
+    // không giảm tái ký, không áp đợt trợ giá. Ưu đãi duy nhất là 2 triệu L0
+    // cấn trừ bên dưới.
+    if (trial && pkg !== TRIAL_PACKAGE) {
+      const fullVND = PACKAGES[pkg].price;
+      totalVND += fullVND;
+      lines.push({
+        pkg,
+        base: listVND / 1_000_000,
+        final: fullVND / 1_000_000,
+        note: fullVND !== listVND ? "nguyên giá — khách đi từ L0" : undefined,
+      });
+      continue;
+    }
     // Tái ký: chỉ L3/L4/L5 được trợ giá. Hậu L0 không tính tái ký.
     const discounted =
       renew.pct > 0 && RENEW_DISCOUNT_PACKAGES.includes(pkg) && isRenewalSlot(packages, i, source);

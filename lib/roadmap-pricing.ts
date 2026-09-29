@@ -1,5 +1,5 @@
 import { PACKAGES, TRIAL_PACKAGE } from "@/lib/packages";
-import { POST_L0_CREDIT } from "@/lib/lead-pricing";
+import { POST_L0_CREDIT, startedFromTrial } from "@/lib/lead-pricing";
 import { promoPriceFor, renewDiscountFor, type ActivePromo, type RenewDiscount } from "@/lib/package-promos";
 
 /**
@@ -14,11 +14,11 @@ import { promoPriceFor, renewDiscountFor, type ActivePromo, type RenewDiscount }
  *     cơ sở đổi được con số này — xem renewDiscountFor ở lib/package-promos).
  *   • Riêng Loyalfit → luôn nguyên giá, không trợ giá cũng không giảm tái ký.
  *
- * Gói trải nghiệm L0 KHÔNG tính là "gói đầu tiên": khách tập thử xong mới vào lộ
- * trình thật, nên gói thật đầu tiên sau L0 vẫn được giá trợ giá / nguyên giá như
- * mọi khách mới. 2 triệu đã đóng cho L0 được cấn trừ vào gói NGAY SAU nó — gói
- * nào cũng vậy, kể cả Loyalfit. Đúng luật mà Setup doanh số dùng để đối chiếu
- * tiền hợp đồng (postL0Credit ở lib/lead-pricing).
+ * Lộ trình có gói trải nghiệm L0: mọi gói thật phía sau tính NGUYÊN GIÁ NIÊM
+ * YẾT — không trợ giá L1/L2, không giảm tái ký, không áp đợt trợ giá của cơ sở.
+ * Ưu đãi duy nhất là 2 triệu đã đóng cho L0, cấn trừ MỘT lần vào gói ngay sau nó
+ * (gói nào cũng vậy, kể cả Loyalfit). Đúng luật Setup doanh số dùng để đối chiếu
+ * tiền hợp đồng (startedFromTrial / postL0Credit ở lib/lead-pricing).
  *
  * Trên ba mức đó còn có các ĐỢT TRỢ GIÁ riêng của từng cơ sở, có ngày hết hạn —
  * xem lib/package-promos. Đợt nào đang chạy mà rẻ hơn mức thường trực thì khách
@@ -84,12 +84,17 @@ function standardLine(name: string, index: number, renew: RenewDiscount): PriceL
  */
 export function priceRoadmap(packageNames: string[], promos?: ActivePromo[] | null): PriceLine[] {
   const renew = renewDiscountFor(promos);
-  let realIndex = 0;
+  const trial = startedFromTrial(packageNames, null);
   return packageNames.map((name, index) => {
-    // L0 đứng ngoài thứ tự "gói đầu / gói tái ký" — xem chú thích đầu file.
-    const position = name === TRIAL_PACKAGE ? 0 : realIndex++;
-    let line = standardLine(name, position, renew);
-    const promo = promoPriceFor(name, promos);
+    // Khách đi từ L0: nguyên giá niêm yết, không ưu đãi nào khác — xem đầu file.
+    let line: PriceLine;
+    if (trial) {
+      const list = PACKAGES[name]?.price ?? 0;
+      line = { packageName: name, originalPrice: list, effectivePrice: list, type: "full" };
+    } else {
+      line = standardLine(name, index, renew);
+    }
+    const promo = trial ? null : promoPriceFor(name, promos);
 
     // Chỉ đổi khi đợt trợ giá THẬT SỰ rẻ hơn mức thường trực — khách luôn được
     // mức tốt nhất, và một đợt kém hơn giá tái ký không bao giờ làm khách thiệt.

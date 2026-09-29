@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Laptop, Smartphone, Loader2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Laptop, Smartphone, Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
 
 interface Device {
   id: string;
@@ -47,6 +48,8 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
   const [enabled, setEnabled] = useState(false);
   const [verifyNew, setVerifyNew] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  /** Hộp xác nhận đang mở: sắp TẮT hay sắp BẬT xác minh. null = đóng. */
+  const [confirming, setConfirming] = useState<"off" | "on" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -77,11 +80,15 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
     }
   }
 
-  async function toggleVerify() {
-    const next = !verifyNew;
-    if (!next && !window.confirm(
-      "Tắt xác minh thì ai biết mật khẩu cũng đăng nhập được tài khoản của bạn từ bất kỳ máy nào mà không cần mã email. Vẫn tắt?",
-    )) return;
+  // Cả hai chiều đều hỏi lại bằng hộp thoại của app (không dùng window.confirm
+  // của trình duyệt): tắt là mở cửa cho ai biết mật khẩu, bật là đăng xuất mọi
+  // máy khác — chiều nào cũng cần người dùng biết trước chuyện gì sẽ xảy ra.
+  function toggleVerify() {
+    setConfirming(verifyNew ? "off" : "on");
+  }
+
+  async function applyVerify(next: boolean) {
+    setConfirming(null);
     setBusy("toggle");
     try {
       const res = await fetch(endpoint, {
@@ -168,6 +175,85 @@ export function TrustedDevicesCard({ endpoint, className }: { endpoint: string; 
             </div>
           );
         })}
+      </div>
+
+      {confirming && typeof document !== "undefined" && createPortal(
+        <VerifyConfirmDialog
+          mode={confirming}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => applyVerify(confirming === "on")}
+        />,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+/**
+ * Hộp xác nhận bật/tắt xác minh máy lạ.
+ *
+ * Gắn thẳng vào <body> qua portal: thẻ thiết bị nằm trong khung trượt "Mật khẩu &
+ * bảo mật" vốn đang dùng transform, mà phần tử fixed nằm trong khung có transform
+ * sẽ bị nhốt trong khung đó thay vì phủ cả màn hình.
+ */
+function VerifyConfirmDialog({ mode, onCancel, onConfirm }: {
+  mode: "off" | "on";
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const off = mode === "off";
+  const Icon = off ? ShieldAlert : ShieldCheck;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-sm rounded-3xl bg-white shadow-2xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={`mx-auto w-12 h-12 rounded-2xl flex items-center justify-center ${off ? "bg-amber-50" : "bg-emerald-50"}`}>
+          <Icon className={`w-6 h-6 ${off ? "text-amber-500" : "text-emerald-500"}`} />
+        </div>
+        <h3 className="mt-4 text-center text-base font-extrabold text-gray-900">
+          {off ? "Tắt xác minh máy lạ?" : "Bật xác minh máy lạ?"}
+        </h3>
+        <p className="mt-2 text-center text-sm text-gray-500 leading-relaxed">
+          {off
+            ? "Ai biết mật khẩu cũng đăng nhập được tài khoản của bạn từ bất kỳ máy nào, không cần mã gửi về email."
+            : "Từ giờ máy mới đăng nhập phải nhập mã gửi về email. Mọi máy khác đang đăng nhập sẽ bị đăng xuất — chỉ giữ lại máy này."}
+        </p>
+        {off && (
+          <p className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-xs font-semibold text-amber-700 leading-relaxed">
+            Chỉ nên tắt khi bạn không nhận được email. Có thể bật lại bất cứ lúc nào.
+          </p>
+        )}
+        <div className="mt-5 flex gap-2.5">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            {off ? "Giữ bật" : "Huỷ"}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            autoFocus
+            className={`flex-1 h-11 rounded-xl text-white text-sm font-bold transition-opacity hover:opacity-90 ${off ? "bg-amber-500" : "bg-[#f15b5c]"}`}
+          >
+            {off ? "Vẫn tắt" : "Bật xác minh"}
+          </button>
+        </div>
       </div>
     </div>
   );
