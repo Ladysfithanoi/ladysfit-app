@@ -195,7 +195,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."clientId" = $1
       AND wl.status = 'COMPLETED'
-      AND wl."checkOutAt" IS NOT NULL
+      -- Buổi FM duyệt tính (PT quên chụp ảnh check-out) không có giờ ra nhưng
+      -- vẫn là buổi thật: khách đã ký check-in, PT đã được tính buổi dạy.
+      AND (wl."checkOutAt" IS NOT NULL OR wl."confirmationMethod" = 'FM_APPROVAL')
       AND ${ENROLLMENT_ID} = $2
       AND ${SINCE_START}
     ORDER BY wl."sessionDate" ASC
@@ -217,7 +219,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         ${ENROLLMENT_OF_LOG_JOIN}
         WHERE wl."clientId" = $1
           AND wl.status = 'COMPLETED'
-          AND wl."checkOutAt" IS NOT NULL
+          AND (wl."checkOutAt" IS NOT NULL OR wl."confirmationMethod" = 'FM_APPROVAL')
           AND ${ENROLLMENT_ID} = $2
           AND NOT ${SINCE_START}
         `,

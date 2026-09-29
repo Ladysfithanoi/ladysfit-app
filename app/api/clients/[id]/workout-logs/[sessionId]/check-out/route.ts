@@ -130,8 +130,8 @@ export async function POST(
     if (!isAwaiting && elapsedMin >= MAX_SESSION_MINUTES) {
       // PT có gửi kèm ảnh (hoặc chữ ký ở luồng cũ) nghĩa là họ ĐÃ đóng buổi
       // thật, chỉ là muộn hơn mốc. GIỮ LẠI bằng chứng đó thay vì vứt đi: buổi
-      // vẫn VOID nên không tự vào lương, nhưng FM đối soát được và cộng tay bằng
-      // "Số buổi PT" nếu buổi dạy là thật. Vứt đi thì hồ sơ trông y hệt trường
+      // vẫn VOID nên không tự vào lương, nhưng FM đối soát được và bấm "Tính
+      // buổi dạy" (xem ../credit) nếu buổi dạy là thật. Vứt đi thì hồ sơ trông y hệt trường
       // hợp PT không làm gì cả — không ai phân xử được.
       const lateSig   = (body.signatureUrl ?? "").trim();
       const latePhoto = (body.checkOutPhotoUrl ?? "").trim();
@@ -144,7 +144,7 @@ export async function POST(
           status: "VOID",
           voidReason: closedLate
             ? `PT đóng buổi muộn ${overBy} phút so với mốc ${MAX_SESSION_MINUTES} phút kể từ check-in. `
-              + `Ảnh/chữ ký đã được lưu lại; buổi không tự tính lương, FM đối soát rồi cộng tay nếu buổi dạy là thật.`
+              + `Ảnh/chữ ký đã được lưu lại; buổi không tự tính lương, FM đối soát rồi bấm "Tính buổi dạy" nếu buổi dạy là thật.`
             : OVER_CAP_VOID_REASON,
           firstInteractionAt,
           ...(closedLate ? { checkOutAt: now } : {}),

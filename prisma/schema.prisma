@@ -1182,6 +1182,10 @@ enum WorkoutLogStatus {
 enum WorkoutConfirmMethod {
   CLIENT_APP
   SIGNATURE
+  // PT sơ suất không chụp được ảnh check-out (buổi tự huỷ sau 2 tiếng), FM/Admin
+  // đối soát thấy buổi dạy là thật và bấm "Tính buổi dạy" — xem
+  // app/api/clients/[id]/workout-logs/[sessionId]/credit.
+  FM_APPROVAL
 }
 
 model WorkoutLog {
@@ -1226,6 +1230,8 @@ model WorkoutLog {
   confirmedAt        DateTime?
   // Reason a session was voided (e.g. no interaction within 10 minutes).
   voidReason         String?
+  // FM/Admin đã bấm "Tính buổi dạy" cho buổi này (confirmationMethod = FM_APPROVAL).
+  creditedById       String?
 
   // ── Đánh giá buổi tập (autoregulation) — PT bắt buộc làm trước khi ký
   // check-out. 3 trục: hiệu suất / cảm giác nỗ lực (RIR) / hồi phục. Từ đó sinh

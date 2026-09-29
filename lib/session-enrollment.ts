@@ -60,6 +60,11 @@ export const ENROLLMENT_CONTRACT_TYPE = `COALESCE(pe_charged."contractType"::tex
 /**
  * Buổi tập ĐƯỢC TÍNH: đã đóng buổi có bằng chứng kèm nhật ký buổi tập.
  *
+ * Bằng chứng là ảnh check-out (hoặc chữ ký check-out ở buổi cũ), HOẶC FM/Admin
+ * đã duyệt tính buổi (FM_APPROVAL): PT sơ suất không chụp được ảnh, buổi tự huỷ
+ * sau 2 tiếng, nhưng khách đã ký check-in và đã bị trừ buổi — FM đối soát thấy
+ * buổi dạy là thật thì bấm "Tính buổi dạy" ngay trên buổi đó.
+ *
  * Dùng `wl` làm bí danh. Cùng một định nghĩa cho bảng lương và thanh tiến độ ở
  * hồ sơ khách — xem lib/pt-session-count.ts.
  */
@@ -68,5 +73,6 @@ export const TAUGHT_SESSION_WHERE = `
       AND (
         (wl."checkOutPhotoUrl" IS NOT NULL AND wl."checkOutPhotoUrl" <> '')
         OR (wl."signatureUrl" IS NOT NULL AND wl."signatureUrl" <> '')
+        OR wl."confirmationMethod" = 'FM_APPROVAL'
       )
       AND EXISTS (SELECT 1 FROM workout_set_logs sl WHERE sl."workoutLogId" = wl.id)`;

@@ -421,6 +421,9 @@ export function ClientDetailPage({
   // dùng để tính lương cho PT.
   const [ptSessionsByPackage, setPtSessionsByPackage] =
     useState<Record<string, number>>(initialPTSessions);
+  // Server tính lại sau router.refresh() (vd FM vừa "Tính buổi dạy" cho buổi huỷ)
+  // — nhận số mới, không thì thanh "Số buổi PT" đứng nguyên số cũ.
+  useEffect(() => { setPtSessionsByPackage(initialPTSessions); }, [initialPTSessions]);
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [pkgStartDate, setPkgStartDate] = useState("");
   const [pkgUpdateLoading, setPkgUpdateLoading] = useState(false);

@@ -110,7 +110,7 @@ export type SetLogRow = {
 };
 
 export type WorkoutLogStatus = "IN_PROGRESS" | "AWAITING_CONFIRMATION" | "COMPLETED" | "VOID";
-export type WorkoutConfirmMethod = "CLIENT_APP" | "SIGNATURE";
+export type WorkoutConfirmMethod = "CLIENT_APP" | "SIGNATURE" | "FM_APPROVAL";
 
 export type WorkoutLogRow = {
   id: string;
@@ -141,7 +141,7 @@ export type WorkoutLogRow = {
   surveyRirFeel?: string | null;
   surveyRecovery?: string | null;
   nextSessionSuggestion?: string | null;
-  /** Vì sao buổi bị huỷ. Chỉ Admin được nhìn thấy — xem VoidedSessions. */
+  /** Vì sao buổi bị huỷ. Chỉ Admin/FM được nhìn thấy — xem VoidedSessions. */
   voidReason?: string | null;
 };
 
@@ -295,69 +295,132 @@ function LastSessionSummary({
 }
 
 /**
- * Những buổi đã bị HUỶ của một buổi tập trong giáo án — CHỈ ADMIN nhìn thấy.
- *
  * Buổi huỷ không tính buổi dạy cho PT nhưng khách vẫn bị trừ buổi (đã trừ lúc
  * check-in). Trước đây toàn bộ giao diện chỉ hiện log COMPLETED nên buổi huỷ
  * biến mất không dấu vết: PT thấy cuối tháng hụt buổi mà không hiểu vì sao, còn
  * lý do huỷ thì nằm im trong DB không ai đọc được. Đây là chỗ đọc nó.
  *
- * Để riêng cho Admin vì đây là dữ liệu đối soát: quyết định có cộng bù "Số buổi
- * PT" hay không là việc của Admin, không phải chuyện tranh luận ở màn hình PT.
+ * Chỉ Admin/FM thấy vì đây là dữ liệu đối soát. PT sơ suất không chụp được ảnh
+ * check-out mà buổi dạy là thật thì FM bấm "Tính buổi dạy" ngay tại đây: buổi vào
+ * thẳng "Số buổi PT" của bảng lương (đúng người dạy, đúng gói, đúng tháng) và in
+ * lên phiếu check-in — khách không bị trừ thêm buổi nào. Buổi FM đã tính vẫn nằm
+ * trong danh sách, kèm nút "Bỏ tính" để sửa khi bấm nhầm.
  */
-function VoidedSessions({ logs }: { logs: WorkoutLogRow[] }) {
+function VoidedSessions({ logs, clientId, onChanged }: {
+  logs: WorkoutLogRow[];
+  clientId: string;
+  onChanged: (updated: WorkoutLogRow) => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
   if (logs.length === 0) return null;
   const sorted = [...logs].sort(
     (a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime()
   );
+  const pending = sorted.filter((l) => l.status === "VOID").length;
+
+  async function toggle(log: WorkoutLogRow, credit: boolean) {
+    setBusyId(log.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/credit`, {
+        method: credit ? "POST" : "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Không lưu được");
+      onChanged({ ...log, ...data, setLogs: log.setLogs, createdBy: log.createdBy });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
-    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
       <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1.5">
         <AlertTriangle className="w-3.5 h-3.5" />
-        {sorted.length} buổi đã huỷ · chỉ Admin thấy
+        {pending} buổi đã huỷ chờ đối soát · chỉ Admin/FM thấy
       </p>
-      <div className="mt-2 space-y-2">
-        {sorted.map((l) => (
-          <div key={l.id} className="rounded-lg bg-white/70 border border-amber-100 px-2.5 py-2">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="text-xs font-bold text-gray-700">{fmtDate(l.sessionDate)}</span>
-              {l.checkInAt && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
-                  <Clock className="w-3 h-3" />
-                  {fmtTime(l.checkInAt)}
-                  {l.checkOutAt && ` → ${fmtTime(l.checkOutAt)}`}
-                </span>
+      <div className="mt-2 space-y-2 max-h-80 overflow-y-auto">
+        {sorted.map((l) => {
+          const credited = l.status === "COMPLETED" && l.confirmationMethod === "FM_APPROVAL";
+          const canCredit = !credited && !!l.checkInSignatureUrl && l.packageCounted !== false;
+          return (
+            <div
+              key={l.id}
+              className={cn(
+                "rounded-lg border px-2.5 py-2",
+                credited ? "bg-emerald-50/80 border-emerald-200" : "bg-white/70 border-amber-100"
               )}
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                <UserCheck className="w-3 h-3" />
-                PT: {l.createdBy.name ?? "—"}
-              </span>
-              {(l.checkInSignatureUrl || l.signatureUrl) && (
-                <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
-                  Khách đã ký
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={l.checkInSignatureUrl || l.signatureUrl || ""}
-                    alt="Chữ ký khách"
-                    className="h-8 rounded-md border border-gray-200 bg-white"
-                  />
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-xs font-bold text-gray-700">{fmtDate(l.sessionDate)}</span>
+                {l.checkInAt && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    {fmtTime(l.checkInAt)}
+                    {l.checkOutAt && ` → ${fmtTime(l.checkOutAt)}`}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                  <UserCheck className="w-3 h-3" />
+                  PT: {l.createdBy.name ?? "—"}
                 </span>
-              )}
-              <CheckOutPhotoThumb
-                src={l.checkOutPhotoUrl}
-                label={`Ảnh check-out (buổi đã huỷ) · ${fmtDate(l.sessionDate)}`}
-              />
+                {(l.checkInSignatureUrl || l.signatureUrl) && (
+                  <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-600">
+                    Khách đã ký
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={l.checkInSignatureUrl || l.signatureUrl || ""}
+                      alt="Chữ ký khách"
+                      className="h-8 rounded-md border border-gray-200 bg-white"
+                    />
+                  </span>
+                )}
+                <CheckOutPhotoThumb
+                  src={l.checkOutPhotoUrl}
+                  label={`Ảnh check-out (buổi đã huỷ) · ${fmtDate(l.sessionDate)}`}
+                />
+                <span className="ml-auto">
+                  {credited ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-emerald-700">✓ Đã tính buổi dạy</span>
+                      <button
+                        onClick={() => toggle(l, false)}
+                        disabled={busyId === l.id}
+                        className="h-7 px-2.5 rounded-lg border border-gray-200 bg-white text-[11px] font-bold text-gray-500 hover:text-red-500 hover:border-red-200 disabled:opacity-50"
+                      >
+                        {busyId === l.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Bỏ tính"}
+                      </button>
+                    </span>
+                  ) : canCredit ? (
+                    <button
+                      onClick={() => toggle(l, true)}
+                      disabled={busyId === l.id}
+                      title="Buổi dạy là thật — tính vào Số buổi PT (bảng lương) và phiếu check-in"
+                      className="h-7 px-2.5 rounded-lg text-white text-[11px] font-bold disabled:opacity-50"
+                      style={{ backgroundColor: "#f15b5c" }}
+                    >
+                      {busyId === l.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Tính buổi dạy"}
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+              <p className={cn("mt-1 text-[11px] leading-relaxed", credited ? "text-emerald-800" : "text-amber-800")}>
+                {credited
+                  ? `FM/Admin đã duyệt tính buổi dạy cho PT${l.confirmedAt ? ` (${fmtTime(l.confirmedAt)} ${fmtDate(l.confirmedAt)})` : ""}. Lý do huỷ ban đầu: ${l.voidReason ?? "—"}`
+                  : l.voidReason ?? "Không ghi lý do huỷ."}
+              </p>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-amber-800">
-              {l.voidReason ?? "Không ghi lý do huỷ."}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {error && <p className="mt-2 text-[11px] font-bold text-red-600">{error}</p>}
       <p className="mt-2 text-[10px] leading-relaxed text-amber-700">
-        Khách vẫn bị trừ buổi (đã trừ lúc check-in), PT không được tính buổi dạy. Nếu đối
-        soát thấy buổi dạy là thật, sửa &ldquo;Số buổi PT&rdquo; của lộ trình để cộng bù.
+        Khách đã bị trừ buổi lúc check-in. Nếu đối soát thấy buổi dạy là thật (PT chỉ sơ suất
+        không chụp được ảnh check-out), bấm &ldquo;Tính buổi dạy&rdquo;: buổi vào bảng lương của PT
+        ngay và hiện trên phiếu check-in, không trừ thêm buổi của khách.
       </p>
     </div>
   );
@@ -694,6 +757,8 @@ function ProgramView({
   // khép giai đoạn (lưu trữ CT + mở CT giai đoạn kế) là nút "Chuyển giai đoạn".
   // Admin đổi được về mọi giai đoạn; FM chỉ từ giai đoạn hiện tại trở lên.
   const isAdmin = userRole === "ADMIN";
+  // Admin/FM đối soát buổi đã huỷ và tính buổi dạy khi PT sơ suất không chụp ảnh.
+  const canReconcile = isAdmin || userRole === "FM";
   const currentPhaseOrder = parsePhaseOrder(program.phase);
   const selectablePhases = isAdmin
     ? phases
@@ -1424,6 +1489,19 @@ function ProgramView({
 
           {currentWeekData && (
             <div className="px-5 pb-5 pt-3">
+              {/* Buổi đã huỷ của cả chương trình — Admin/FM đối soát & tính buổi dạy. */}
+              {canReconcile && !editMode && (
+                <VoidedSessions
+                  logs={workoutLogs.filter(
+                    (l) =>
+                      l.programId === program.id &&
+                      (l.status === "VOID" ||
+                        (l.status === "COMPLETED" && l.confirmationMethod === "FM_APPROVAL"))
+                  )}
+                  clientId={clientId}
+                  onChanged={(u) => onLogUpdated(u)}
+                />
+              )}
               {/* ── Edit mode controls ── */}
               {editMode && (
                 <div className="mb-4 space-y-3">
@@ -1644,8 +1722,6 @@ function ProgramView({
                   const sessionLogs = workoutLogs.filter((l) => l.sessionId === activeSession.id);
                   // Only completed sessions count toward history / last-session / suggestions.
                   const completedLogs = sessionLogs.filter((l) => l.status === "COMPLETED");
-                  // Buổi đã huỷ — không tính vào lịch sử/gợi ý, chỉ hiện cho Admin đối soát.
-                  const voidedLogs = isAdmin ? sessionLogs.filter((l) => l.status === "VOID") : [];
                   // An active session is one in progress OR waiting for the client to confirm.
                   const inProgressLog = sessionLogs.find(
                     (l) => l.status === "IN_PROGRESS" || l.status === "AWAITING_CONFIRMATION"
@@ -1836,7 +1912,6 @@ function ProgramView({
                           )}
                           </>
                         )}
-                        <VoidedSessions logs={voidedLogs} />
                       </div>
 
                       {/* History modal */}
