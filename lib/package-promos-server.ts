@@ -31,5 +31,6 @@ export async function getActivePromos(
     shortLabel: p.shortLabel,
     endsAt: p.endsAt.toISOString(),
     items: p.items.map((i) => ({ packageName: i.packageName, price: i.price })),
+    renewDiscountPct: p.renewDiscountPct,
   }));
 }

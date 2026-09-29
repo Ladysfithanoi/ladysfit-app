@@ -1,5 +1,5 @@
 import { PACKAGES } from "@/lib/packages";
-import { promoPriceFor, type ActivePromo } from "@/lib/package-promos";
+import { promoPriceFor, renewDiscountFor, type ActivePromo, type RenewDiscount } from "@/lib/package-promos";
 
 /**
  * ── Giá một lộ trình ─────────────────────────────────────────────────────────
@@ -9,7 +9,8 @@ import { promoPriceFor, type ActivePromo } from "@/lib/package-promos";
  *
  *   • Gói đầu tiên, nếu là L1 hoặc L2 → giá trợ giá cho khách mua lần đầu.
  *   • Gói đầu tiên, các trường hợp khác → nguyên giá.
- *   • Từ gói thứ hai trở đi → giảm 10% giá tái ký.
+ *   • Từ gói thứ hai trở đi → giảm giá tái ký (mặc định 10%; đợt trợ giá của
+ *     cơ sở đổi được con số này — xem renewDiscountFor ở lib/package-promos).
  *   • Riêng Loyalfit → luôn nguyên giá, không trợ giá cũng không giảm tái ký.
  *
  * Trên ba mức đó còn có các ĐỢT TRỢ GIÁ riêng của từng cơ sở, có ngày hết hạn —
@@ -29,10 +30,12 @@ export type PriceLine = {
   type: PriceType;
   /** Nhãn đợt trợ giá đang áp, chỉ có khi type = "promo". */
   promoLabel?: string;
+  /** % giảm tái ký đã áp, chỉ có khi type = "renewal". */
+  renewPct?: number;
 };
 
 /** Giá thường trực, chưa xét đợt trợ giá của cơ sở. */
-function standardLine(name: string, index: number): PriceLine {
+function standardLine(name: string, index: number, renew: RenewDiscount): PriceLine {
   const def = PACKAGES[name];
   if (!def) {
     return { packageName: name, originalPrice: 0, effectivePrice: 0, type: "full" };
@@ -57,8 +60,9 @@ function standardLine(name: string, index: number): PriceLine {
   return {
     packageName: name,
     originalPrice: def.price,
-    effectivePrice: Math.round(def.price * 0.9),
+    effectivePrice: Math.round(def.price * (1 - renew.pct / 100)),
     type: "renewal",
+    renewPct: renew.pct,
   };
 }
 
@@ -70,8 +74,9 @@ function standardLine(name: string, index: number): PriceLine {
  * những chỗ chưa biết cơ sở, không bao giờ báo nhầm giá rẻ.
  */
 export function priceRoadmap(packageNames: string[], promos?: ActivePromo[] | null): PriceLine[] {
+  const renew = renewDiscountFor(promos);
   return packageNames.map((name, index) => {
-    const line  = standardLine(name, index);
+    const line  = standardLine(name, index, renew);
     const promo = promoPriceFor(name, promos);
 
     // Chỉ đổi khi đợt trợ giá THẬT SỰ rẻ hơn mức thường trực — khách luôn được
@@ -101,11 +106,13 @@ export function quoteTotals(lines: PriceLine[]): QuoteTotals {
 export const PRICE_TYPE_LABEL: Record<PriceType, string> = {
   subsidized: "Giá trợ giá",
   full: "Nguyên giá",
-  renewal: "Giá tái ký (-10%)",
+  renewal: "Giá tái ký",
   promo: "Đợt trợ giá",
 };
 
 /** Nhãn hiện cạnh giá — đợt trợ giá thì lấy tên đợt cho rõ đang áp cái gì. */
 export function priceLineLabel(line: PriceLine): string {
-  return line.type === "promo" && line.promoLabel ? line.promoLabel : PRICE_TYPE_LABEL[line.type];
+  if (line.type === "promo" && line.promoLabel) return line.promoLabel;
+  if (line.type === "renewal" && line.renewPct != null) return `Giá tái ký (-${line.renewPct}%)`;
+  return PRICE_TYPE_LABEL[line.type];
 }

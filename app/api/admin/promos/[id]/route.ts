@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vnStartOfDay, vnEndOfDay } from "@/lib/package-promos";
+import { vnStartOfDay, vnEndOfDay, parseRenewDiscountPct } from "@/lib/package-promos";
 import { ROADMAP_PACKAGES } from "@/lib/roadmap-phases";
 
 type PatchBody = {
@@ -13,6 +13,8 @@ type PatchBody = {
   endDay?: string;
   isActive?: boolean;
   items?: { packageName: string; price: number }[];
+  /** undefined = không đổi; null/"" = về mặc định 10%. */
+  renewDiscountPct?: number | string | null;
 };
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,9 +46,30 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "Ngày kết thúc phải từ ngày bắt đầu trở đi." }, { status: 400 });
   }
 
+  let renewDiscountPct = existing.renewDiscountPct;
+  if (body.renewDiscountPct !== undefined) {
+    const parsed = parseRenewDiscountPct(body.renewDiscountPct);
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    renewDiscountPct = parsed.value;
+    // Bỏ % tái ký mà không gửi danh sách gói: đợt phải còn ít nhất một gói.
+    if (renewDiscountPct == null && !body.items) {
+      const n = await prisma.packagePromoItem.count({ where: { promoId: params.id } });
+      if (n === 0) {
+        return NextResponse.json(
+          { error: "Đợt này không trợ giá gói nào — bỏ % tái ký thì đợt không còn gì để áp." },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
   if (body.items) {
-    if (body.items.length === 0) {
-      return NextResponse.json({ error: "Cần ít nhất một gói được trợ giá." }, { status: 400 });
+    // Đợt chỉ đổi % tái ký mà không trợ giá gói nào cũng là một đợt hợp lệ.
+    if (body.items.length === 0 && renewDiscountPct == null) {
+      return NextResponse.json(
+        { error: "Cần ít nhất một gói được trợ giá, hoặc đặt % trợ giá tái ký." },
+        { status: 400 }
+      );
     }
     const seen = new Set<string>();
     for (const it of body.items) {
@@ -84,6 +107,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         ...(body.shortLabel !== undefined ? { shortLabel: body.shortLabel.trim() } : {}),
         ...(body.branchId !== undefined ? { branchId: body.branchId } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
+        renewDiscountPct,
         startsAt,
         endsAt,
       },

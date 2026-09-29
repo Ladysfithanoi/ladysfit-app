@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vnStartOfDay, vnEndOfDay } from "@/lib/package-promos";
+import { vnStartOfDay, vnEndOfDay, parseRenewDiscountPct } from "@/lib/package-promos";
 import { ROADMAP_PACKAGES } from "@/lib/roadmap-phases";
 
 /**
@@ -22,6 +22,8 @@ export type PromoBody = {
   endDay: string;
   isActive?: boolean;
   items: { packageName: string; price: number }[];
+  /** % trợ giá tái ký trong đợt; null/bỏ trống = giữ mặc định 10%. */
+  renewDiscountPct?: number | string | null;
 };
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,8 +39,14 @@ function validate(body: PromoBody): string | null {
     return "Ngày kết thúc phải từ ngày bắt đầu trở đi.";
   }
 
+  const renew = parseRenewDiscountPct(body.renewDiscountPct);
+  if ("error" in renew) return renew.error;
+
   const items = body.items ?? [];
-  if (items.length === 0) return "Cần ít nhất một gói được trợ giá.";
+  // Đợt chỉ đổi % tái ký mà không trợ giá gói nào cũng là một đợt hợp lệ.
+  if (items.length === 0 && renew.value == null) {
+    return "Cần ít nhất một gói được trợ giá, hoặc đặt % trợ giá tái ký.";
+  }
 
   const seen = new Set<string>();
   for (const it of items) {
@@ -87,6 +95,7 @@ export async function POST(req: Request) {
       startsAt: vnStartOfDay(body.startDay),
       endsAt: vnEndOfDay(body.endDay),
       isActive: body.isActive ?? true,
+      renewDiscountPct: (parseRenewDiscountPct(body.renewDiscountPct) as { value: number | null }).value,
       items: {
         create: body.items.map((it) => ({ packageName: it.packageName, price: it.price })),
       },

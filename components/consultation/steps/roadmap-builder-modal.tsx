@@ -441,7 +441,7 @@ function QuotePanel({
 
         <p className="pt-1 text-[11px] leading-relaxed text-gray-400">
           Giá trợ giá chỉ áp dụng cho gói Giai đoạn 1 (L1 / L2) khi đứng đầu lộ trình. Từ gói
-          thứ hai trở đi khách được giảm 10% giá tái ký, riêng Loyalfit luôn tính nguyên giá.
+          thứ hai trở đi khách được giảm giá tái ký (mặc định 10%, theo đợt trợ giá của cơ sở), riêng Loyalfit luôn tính nguyên giá.
         </p>
       </div>
     </div>

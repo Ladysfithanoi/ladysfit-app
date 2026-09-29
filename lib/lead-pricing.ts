@@ -5,12 +5,12 @@
 // bao giờ lệch luật. Mọi số tiền trong file này tính bằng TRIỆU đồng — đúng đơn vị
 // mà ô "Doanh thu (triệu)" / "Còn thiếu (triệu)" đang lưu vào DB.
 import { PACKAGES, TRIAL_PACKAGE } from "./packages";
-import { promoPriceFor, type ActivePromo } from "./package-promos";
+import { promoPriceFor, renewDiscountFor, type ActivePromo } from "./package-promos";
 
 /** Re-export để màn Lead chỉ phải nhập từ một chỗ — luật tiền của Lead ở đây. */
 export type ActivePromoForLead = ActivePromo;
 
-/** Tái ký — L3/L4/L5 được trợ giá 10%. */
+/** Tái ký — L3/L4/L5 được trợ giá tái ký (mặc định 10%, đổi theo đợt trợ giá). */
 export const RENEW_SOURCE = "Renew";
 
 /** Khách vừa tập xong gói trải nghiệm L0 → gói kế tiếp được cấn trừ 2 triệu đã đóng. */
@@ -51,7 +51,62 @@ function postL0Credit(packages: string[], source: string | null | undefined): nu
 
 /** Chỉ 3 gói này được trợ giá tái ký. L0/L1/L2/Loyalfit giữ nguyên giá. */
 export const RENEW_DISCOUNT_PACKAGES = ["L3", "L4", "L5"];
-export const RENEW_DISCOUNT_RATE = 0.1;
+
+/**
+ * Gói ở vị trí `i` của lead có phải gói MUA THÊM (tái ký) không.
+ *
+ *   • Nguồn lead là Renew → mọi gói đều là tái ký.
+ *   • Còn lại: gói thật ĐẦU TIÊN đến từ nguồn marketing của lead; gói thật ngay
+ *     sau L0 là "Hậu L0" (đã được cấn trừ 2 triệu, không giảm thêm). Từ gói thật
+ *     thứ hai trở đi là khách mua thêm → tái ký.
+ *
+ * Trước đây giá chỉ nhìn vào nguồn lead: combo "L2+L3" nguồn Facebook thì L3 bị
+ * đòi nguyên giá, trong khi bảng báo giá lúc tư vấn đã giảm tái ký cho nó — ô
+ * Doanh thu đòi một con số khác hẳn con số đã báo khách. Thống kê nguồn
+ * (lib/lead-source-split) cũng đã coi gói đó là Renew từ lâu; giờ giá và thống kê
+ * cùng hỏi một hàm.
+ */
+export function isRenewalSlot(
+  packages: string[],
+  i: number,
+  source: string | null | undefined,
+): boolean {
+  if (packages[i] === TRIAL_PACKAGE) return false;
+  if (source === RENEW_SOURCE) return true;
+  return i !== firstRealIndex(packages);
+}
+
+/** Giai đoạn của gói (1/2/3); gói lạ xếp sau cùng. */
+function stageOf(pkg: string): number {
+  const st = PACKAGES[pkg]?.stage;
+  return st ? Number(st) : 99;
+}
+
+/**
+ * Vị trí của gói thật khách mua ĐẦU TIÊN trong lead: gói ở giai đoạn THẤP NHẤT,
+ * hoà thì gói đứng trước. Thứ tự gõ trong ô "Gói tập đăng ký" không nói lên thứ
+ * tự mua — "L3+L1" vẫn là khách vào L1 trước rồi mới lên L3, và giá hợp đồng thực
+ * tế cũng đã ghi L3 theo giá tái ký.
+ */
+function firstRealIndex(packages: string[]): number {
+  let best = -1;
+  for (let i = 0; i < packages.length; i++) {
+    if (packages[i] === TRIAL_PACKAGE) continue;
+    if (best < 0 || stageOf(packages[i]) < stageOf(packages[best])) best = i;
+  }
+  return best;
+}
+
+/**
+ * Thứ tự khách mua các gói trong một lead: L0 trước, rồi gói thật ĐẦU TIÊN (xem
+ * firstRealIndex), rồi các gói còn lại theo thứ tự đã chọn.
+ */
+export function purchaseOrder(packages: string[]): string[] {
+  const trial = packages.filter(p => p === TRIAL_PACKAGE);
+  const real  = packages.filter(p => p !== TRIAL_PACKAGE);
+  const first = firstRealIndex(real);
+  return first < 0 ? trial : [...trial, real[first], ...real.filter((_, j) => j !== first)];
+}
 
 /** Sai số cho phép khi đối chiếu tiền (triệu) — ô nhập bước 0.1 nên 0.001 là đủ. */
 const EPS = 0.001;
@@ -115,18 +170,22 @@ export function computeExpectedRevenue(
 ): ExpectedRevenue | null {
   if (packages.length === 0) return null;
 
-  const isRenew = source === RENEW_SOURCE;
+  const renew = renewDiscountFor(promos);
 
   const lines: PriceLine[] = [];
   let totalVND = 0;
 
-  for (const pkg of packages) {
+  for (let i = 0; i < packages.length; i++) {
+    const pkg = packages[i];
     const listVND = listPriceVND(pkg);
     if (listVND == null) return null; // gói lạ → không đối chiếu được
-    // Renew: chỉ L3/L4/L5 được trợ giá 10%. Hậu L0 không tính renew.
-    const discounted = isRenew && RENEW_DISCOUNT_PACKAGES.includes(pkg);
-    let finalVND = discounted ? Math.round(listVND * (1 - RENEW_DISCOUNT_RATE)) : listVND;
-    let note = discounted ? "trợ giá tái ký 10%" : undefined;
+    // Tái ký: chỉ L3/L4/L5 được trợ giá. Hậu L0 không tính tái ký.
+    const discounted =
+      renew.pct > 0 && RENEW_DISCOUNT_PACKAGES.includes(pkg) && isRenewalSlot(packages, i, source);
+    let finalVND = discounted ? Math.round(listVND * (1 - renew.pct / 100)) : listVND;
+    let note = discounted
+      ? `trợ giá tái ký ${renew.pct}%${renew.promoLabel ? ` · ${renew.promoLabel}` : ""}`
+      : undefined;
 
     // Đợt trợ giá của cơ sở đè lên mức thường trực khi nó RẺ HƠN — đúng luật mà
     // bảng giá ở bước Tư vấn lộ trình đang dùng (lib/roadmap-pricing), nên con số
@@ -226,7 +285,7 @@ export function validateLeadFinance(input: LeadFinanceInput): string | null {
     return "Vui lòng chọn Gói tập đăng ký trước khi điền doanh thu";
   }
   // Khách vừa tập thử L0 thì không thể là khách tái ký — nếu không, một hợp
-  // đồng vừa được trợ giá 10% vừa được cấn trừ 2 triệu.
+  // đồng vừa được trợ giá tái ký vừa được cấn trừ 2 triệu.
   if (input.source === RENEW_SOURCE && packages.includes(TRIAL_PACKAGE)) {
     return `Nguồn ${RENEW_SOURCE} là khách tái ký, không đi cùng gói ${TRIAL_PACKAGE} — hãy chọn nguồn marketing thật của khách`;
   }
@@ -266,7 +325,7 @@ export function validateLeadFinance(input: LeadFinanceInput): string | null {
   return null;
 }
 
-/** "L3 25 + L4 40.5 (trợ giá tái ký 10%)" — dùng cho thông báo lỗi và gợi ý dưới ô nhập. */
+/** "L3 25 + L4 40.5 — trợ giá tái ký 10%" — dùng cho thông báo lỗi và gợi ý dưới ô nhập. */
 export function describeExpected(e: ExpectedRevenue): string {
   const body = e.lines
     .map(l => `${l.pkg} ${fmt(l.final)}${l.note ? ` — ${l.note}` : ""}`)

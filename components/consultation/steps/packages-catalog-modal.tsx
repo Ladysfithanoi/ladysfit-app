@@ -64,7 +64,7 @@ const CATALOG_META: Record<CatalogKey, CatalogMeta> = {
     program: "Thân trên – Thân dưới · Chuyên mông · Slimbody",
     highlights: [
       "Mua được nhiều lần",
-      "Tái ký giảm 10% từ gói thứ hai trở đi",
+      "Tái ký giảm giá (mặc định 10%) từ gói thứ hai trở đi",
     ],
   },
   L4: {
@@ -75,7 +75,7 @@ const CATALOG_META: Record<CatalogKey, CatalogMeta> = {
     program: "Thân trên – Thân dưới · Chuyên mông · Slimbody",
     highlights: [
       "Mua được nhiều lần",
-      "Tái ký giảm 10% từ gói thứ hai trở đi",
+      "Tái ký giảm giá (mặc định 10%) từ gói thứ hai trở đi",
     ],
   },
   L5: {
@@ -265,7 +265,7 @@ export function PackagesCatalogModal({ onClose }: { onClose: () => void }) {
 
             <p className="text-[11px] text-gray-400 leading-relaxed pt-1">
               Giá trợ giá chỉ áp dụng cho gói Giai đoạn 1 (L1 / L2) khi khách mua lần đầu. Từ gói thứ hai
-              trở đi khách được giảm 10% giá tái ký, riêng Loyalfit luôn tính nguyên giá.
+              trở đi khách được giảm giá tái ký (mặc định 10%, theo đợt trợ giá của cơ sở), riêng Loyalfit luôn tính nguyên giá.
             </p>
           </div>
 

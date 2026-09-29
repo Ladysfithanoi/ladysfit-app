@@ -50,6 +50,9 @@ model PackagePromo {
   endsAt     DateTime
   /// Admin tắt tay mà không cần xoá đợt.
   isActive   Boolean  @default(true)
+  /// % trợ giá tái ký (gói L3/L4/L5 mua thêm) trong thời gian đợt chạy.
+  /// NULL = không đổi, dùng mức mặc định 10% — xem renewDiscountFor ở lib/package-promos.
+  renewDiscountPct Float?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

@@ -872,7 +872,7 @@ export function Step5Sales({
               ))}
             </div>
             <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
-              * L1, L2 áp dụng giá trợ giá | Loyalfit giữ nguyên giá gốc | Từ hợp đồng thứ 2 giảm 10%
+              * L1, L2 áp dụng giá trợ giá | Loyalfit giữ nguyên giá gốc | Từ hợp đồng thứ 2 giảm giá tái ký (mặc định 10%)
             </p>
             <p className="text-xs text-gray-400 mt-1 font-semibold">{confirmedPkgs.length} gói đã xác nhận</p>
           </div>

@@ -1187,7 +1187,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <KeyRound className="w-4 h-4 text-gray-400" />
-                Đổi mật khẩu
+                Mật khẩu & bảo mật
               </button>
               <div className="my-1 border-t border-gray-100" />
               <button
@@ -1307,7 +1307,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Đổi mật khẩu</h2>
+          <h2 className="text-base font-bold text-gray-900">Mật khẩu & bảo mật</h2>
           <button
             onClick={() => setPwOpen(false)}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -1316,6 +1316,15 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Xác minh máy lạ + thiết bị đang đăng nhập — đặt LÊN ĐẦU. Để dưới
+              form đổi mật khẩu thì phải kéo qua cả form mới thấy, không ai tìm ra. */}
+          {pwOpen && (
+            <TrustedDevicesCard
+              key={String(pwSuccess)}
+              endpoint="/api/staff/me/devices"
+              className="mb-6 pb-6 border-b border-gray-100"
+            />
+          )}
           {pwSuccess ? (
             <div className="flex flex-col items-center gap-4 py-12">
               <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
@@ -1390,13 +1399,6 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                 {pwLoading ? "Đang lưu..." : "Lưu thay đổi"}
               </button>
             </form>
-          )}
-          {pwOpen && (
-            <TrustedDevicesCard
-              key={String(pwSuccess)}
-              endpoint="/api/staff/me/devices"
-              className="mt-8 pt-6 border-t border-gray-100"
-            />
           )}
         </div>
       </div>

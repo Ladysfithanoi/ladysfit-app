@@ -11,12 +11,13 @@
 // tính là tái ký), từ gói tiếp theo mới là Renew.
 //
 // CHỈ dùng cho thống kê nguồn. Số khách, số hợp đồng và doanh thu tổng không đổi.
-import { TRIAL_PACKAGE } from "./packages";
 import {
   POST_L0_SOURCE,
   RENEW_SOURCE,
   computeExpectedRevenue,
+  isRenewalSlot,
   parsePackageList,
+  purchaseOrder,
 } from "./lead-pricing";
 
 export const UNKNOWN_SOURCE = "Không rõ nguồn";
@@ -35,11 +36,9 @@ export function splitLeadBySource(
   const packages = parsePackageList(packageRegistered);
   if (packages.length <= 1) return [{ source: leadSource, weight: 1 }];
 
-  // L0 luôn là gói đứng đầu — nó là gói khách mua trước, dù chọn theo thứ tự nào.
-  const ordered = [
-    ...packages.filter(p => p === TRIAL_PACKAGE),
-    ...packages.filter(p => p !== TRIAL_PACKAGE),
-  ];
+  // Thứ tự khách THỰC SỰ mua: L0 trước, rồi gói giai đoạn thấp nhất — cùng luật
+  // với giá hợp đồng (purchaseOrder ở lib/lead-pricing).
+  const ordered = purchaseOrder(packages);
 
   // Chia doanh thu theo giá từng gói; có gói lạ không nằm trong bảng giá thì chia đều.
   const lines = computeExpectedRevenue(ordered, null)?.lines;
@@ -49,11 +48,12 @@ export function splitLeadBySource(
     lines && priceSum > 0 ? prices[i] / priceSum : 1 / ordered.length;
 
   return ordered.map((pkg, i) => {
+    // Cùng một luật "gói mua thêm" với giá hợp đồng (isRenewalSlot) — gói nào
+    // được giá tái ký thì cũng chính gói đó được đếm vào nguồn Renew.
     let src: string;
     if (i === 0) src = leadSource;
-    else if (leadSource === RENEW_SOURCE) src = RENEW_SOURCE;
-    else if (i === 1 && ordered[0] === TRIAL_PACKAGE) src = POST_L0_SOURCE;
-    else src = RENEW_SOURCE;
+    else if (isRenewalSlot(ordered, i, leadSource)) src = RENEW_SOURCE;
+    else src = POST_L0_SOURCE;
     return { source: src, weight: weightOf(i) };
   });
 }

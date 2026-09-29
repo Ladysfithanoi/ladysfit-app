@@ -5,7 +5,10 @@ import { Loader2, Plus, Pencil, Trash2, Tag, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGES, formatPrice } from "@/lib/packages";
 import { ROADMAP_PACKAGES } from "@/lib/roadmap-phases";
-import { fmtVnDate, vnDayString } from "@/lib/package-promos";
+import {
+  fmtVnDate, vnDayString, parseRenewDiscountPct,
+  DEFAULT_RENEW_DISCOUNT_PCT, MAX_RENEW_DISCOUNT_PCT,
+} from "@/lib/package-promos";
 
 /**
  * ── Cài đặt → Trợ giá ────────────────────────────────────────────────────────
@@ -27,6 +30,7 @@ type PromoRow = {
   isActive: boolean;
   branch: { id: string; name: string };
   items: { id: string; packageName: string; price: number }[];
+  renewDiscountPct: number | null;
 };
 
 type BranchRow = { id: string; name: string };
@@ -42,6 +46,8 @@ type Draft = {
   endDay: string;
   isActive: boolean;
   items: DraftItem[];
+  /** % trợ giá tái ký; chuỗi rỗng = giữ mặc định 10%. */
+  renewPct: string;
 };
 
 /** Gói có giá niêm yết để trợ giá — gói 0đ (tài trợ) không có gì để giảm. */
@@ -61,6 +67,7 @@ function emptyDraft(branchId: string): Draft {
     endDay: todayVN(),
     isActive: true,
     items: [],
+    renewPct: "",
   };
 }
 
@@ -74,6 +81,7 @@ function draftFrom(p: PromoRow): Draft {
     endDay: vnDayString(p.endsAt),
     isActive: p.isActive,
     items: p.items.map((i) => ({ packageName: i.packageName, price: String(i.price) })),
+    renewPct: p.renewDiscountPct != null ? String(p.renewDiscountPct) : "",
   };
 }
 
@@ -96,7 +104,11 @@ function draftProblem(d: Draft): string | null {
   if (!d.branchId) return "Chưa chọn cơ sở áp dụng.";
   if (!d.startDay || !d.endDay) return "Chưa chọn đủ ngày bắt đầu và ngày kết thúc.";
   if (d.endDay < d.startDay) return "Ngày kết thúc phải từ ngày bắt đầu trở đi.";
-  if (d.items.length === 0) return "Chưa tích gói nào được trợ giá.";
+  const renew = parseRenewDiscountPct(d.renewPct);
+  if ("error" in renew) return renew.error;
+  if (d.items.length === 0 && renew.value == null) {
+    return "Chưa tích gói nào được trợ giá, cũng chưa đặt % trợ giá tái ký.";
+  }
   const missing = d.items.filter((i) => !priceOk(i.price)).map((i) => i.packageName);
   if (missing.length > 0) {
     return missing.length === 1
@@ -172,6 +184,7 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
         endDay: draft.endDay,
         isActive: draft.isActive,
         items: draft.items.map((i) => ({ packageName: i.packageName, price: Number(i.price) })),
+        renewDiscountPct: draft.renewPct.trim() === "" ? null : Number(draft.renewPct),
       };
       const res = await fetch(draft.id ? `/api/admin/promos/${draft.id}` : "/api/admin/promos", {
         method: draft.id ? "PUT" : "POST",
@@ -370,6 +383,30 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
             })}
           </div>
 
+          {/* % trợ giá tái ký — áp cho gói L3/L4/L5 mua thêm (nguồn Renew, hoặc
+              gói thứ hai trở đi của combo), cả ở bảng giá tư vấn lẫn Setup doanh số. */}
+          <div className="mt-4 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-sm font-extrabold text-gray-800 min-w-[9rem]">Trợ giá tái ký</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={draft.renewPct}
+                  onChange={(e) => setDraft({ ...draft, renewPct: e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".") })}
+                  placeholder={String(DEFAULT_RENEW_DISCOUNT_PCT)}
+                  className="h-9 px-3 rounded-lg border border-gray-200 text-sm w-20"
+                />
+                <span className="text-sm font-bold text-gray-500">%</span>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-400 leading-relaxed">
+              Gói L3/L4/L5 khách mua thêm (tái ký, hoặc gói thứ hai trở đi của combo) được giảm bấy
+              nhiêu % trong thời gian đợt chạy — áp chung cho bảng giá lúc tư vấn và Setup doanh số.
+              Để trống = giữ mức mặc định {DEFAULT_RENEW_DISCOUNT_PCT}%. Tối đa {MAX_RENEW_DISCOUNT_PCT}%.
+            </p>
+          </div>
+
           <label className="mt-4 flex items-center gap-2 cursor-pointer w-fit">
             <input
               type="checkbox"
@@ -473,6 +510,12 @@ export function PackagePromosTab({ branches }: { branches: BranchRow[] }) {
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {p.renewDiscountPct != null && (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50 px-2.5 py-1.5 text-xs">
+                      <span className="font-extrabold text-gray-800">Tái ký L3/L4/L5</span>
+                      <span className="font-bold text-violet-600">−{p.renewDiscountPct}%</span>
+                    </span>
+                  )}
                   {p.items.map((it) => {
                     const list = PACKAGES[it.packageName]?.price ?? 0;
                     return (
