@@ -1,4 +1,5 @@
-import { PACKAGES } from "@/lib/packages";
+import { PACKAGES, TRIAL_PACKAGE } from "@/lib/packages";
+import { POST_L0_CREDIT } from "@/lib/lead-pricing";
 import { promoPriceFor, renewDiscountFor, type ActivePromo, type RenewDiscount } from "@/lib/package-promos";
 
 /**
@@ -12,6 +13,12 @@ import { promoPriceFor, renewDiscountFor, type ActivePromo, type RenewDiscount }
  *   • Từ gói thứ hai trở đi → giảm giá tái ký (mặc định 10%; đợt trợ giá của
  *     cơ sở đổi được con số này — xem renewDiscountFor ở lib/package-promos).
  *   • Riêng Loyalfit → luôn nguyên giá, không trợ giá cũng không giảm tái ký.
+ *
+ * Gói trải nghiệm L0 KHÔNG tính là "gói đầu tiên": khách tập thử xong mới vào lộ
+ * trình thật, nên gói thật đầu tiên sau L0 vẫn được giá trợ giá / nguyên giá như
+ * mọi khách mới. 2 triệu đã đóng cho L0 được cấn trừ vào gói NGAY SAU nó — gói
+ * nào cũng vậy, kể cả Loyalfit. Đúng luật mà Setup doanh số dùng để đối chiếu
+ * tiền hợp đồng (postL0Credit ở lib/lead-pricing).
  *
  * Trên ba mức đó còn có các ĐỢT TRỢ GIÁ riêng của từng cơ sở, có ngày hết hạn —
  * xem lib/package-promos. Đợt nào đang chạy mà rẻ hơn mức thường trực thì khách
@@ -32,6 +39,8 @@ export type PriceLine = {
   promoLabel?: string;
   /** % giảm tái ký đã áp, chỉ có khi type = "renewal". */
   renewPct?: number;
+  /** Tiền L0 đã cấn trừ vào gói này (đồng) — chỉ gói ngay sau L0. */
+  l0Credit?: number;
 };
 
 /** Giá thường trực, chưa xét đợt trợ giá của cơ sở. */
@@ -75,14 +84,23 @@ function standardLine(name: string, index: number, renew: RenewDiscount): PriceL
  */
 export function priceRoadmap(packageNames: string[], promos?: ActivePromo[] | null): PriceLine[] {
   const renew = renewDiscountFor(promos);
+  let realIndex = 0;
   return packageNames.map((name, index) => {
-    const line  = standardLine(name, index, renew);
+    // L0 đứng ngoài thứ tự "gói đầu / gói tái ký" — xem chú thích đầu file.
+    const position = name === TRIAL_PACKAGE ? 0 : realIndex++;
+    let line = standardLine(name, position, renew);
     const promo = promoPriceFor(name, promos);
 
     // Chỉ đổi khi đợt trợ giá THẬT SỰ rẻ hơn mức thường trực — khách luôn được
     // mức tốt nhất, và một đợt kém hơn giá tái ký không bao giờ làm khách thiệt.
     if (promo && promo.price < line.effectivePrice) {
-      return { ...line, effectivePrice: promo.price, type: "promo", promoLabel: promo.shortLabel };
+      line = { ...line, effectivePrice: promo.price, type: "promo", promoLabel: promo.shortLabel };
+    }
+
+    // Gói ngay sau L0 được cấn trừ tiền L0 đã đóng.
+    if (index > 0 && packageNames[index - 1] === TRIAL_PACKAGE && name !== TRIAL_PACKAGE) {
+      const credit = Math.min(POST_L0_CREDIT * 1_000_000, line.effectivePrice);
+      line = { ...line, effectivePrice: line.effectivePrice - credit, l0Credit: credit };
     }
     return line;
   });
@@ -112,7 +130,9 @@ export const PRICE_TYPE_LABEL: Record<PriceType, string> = {
 
 /** Nhãn hiện cạnh giá — đợt trợ giá thì lấy tên đợt cho rõ đang áp cái gì. */
 export function priceLineLabel(line: PriceLine): string {
-  if (line.type === "promo" && line.promoLabel) return line.promoLabel;
-  if (line.type === "renewal" && line.renewPct != null) return `Giá tái ký (-${line.renewPct}%)`;
-  return PRICE_TYPE_LABEL[line.type];
+  const base =
+    line.type === "promo" && line.promoLabel ? line.promoLabel
+      : line.type === "renewal" && line.renewPct != null ? `Giá tái ký (-${line.renewPct}%)`
+        : PRICE_TYPE_LABEL[line.type];
+  return line.l0Credit ? `${base} · trừ ${line.l0Credit / 1_000_000}tr đã đóng L0` : base;
 }
