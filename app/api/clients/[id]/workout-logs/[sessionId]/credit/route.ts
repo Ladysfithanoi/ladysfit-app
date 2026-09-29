@@ -36,7 +36,18 @@ async function authorize(clientId: string) {
       return { error: NextResponse.json({ error: "Khách không thuộc cơ sở bạn quản lý" }, { status: 403 }) };
     }
   }
-  return { userId: session.user.id };
+  return { userId: session.user.id, role };
+}
+
+/** Ngày theo giờ Việt Nam, dạng "2026-08-15" — để so hai buổi có cùng một ngày tập không. */
+function vnDay(d: Date): string {
+  return new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** Buổi có ít nhất một ô số liệu (tạ / reps) đã nhập — tức PT thật sự đã ghi buổi tập. */
+function hasAnySetData(sets: Record<string, unknown>[]): boolean {
+  const keys = [1, 2, 3, 4, 5, 6].flatMap((n) => [`set${n}Load`, `set${n}Reps`]);
+  return sets.some((s) => keys.some((k) => s[k] != null && String(s[k]).trim() !== ""));
 }
 
 const INCLUDE = {
@@ -52,7 +63,10 @@ export async function POST(_req: Request, { params }: Ctx) {
 
     const log = await prisma.workoutLog.findFirst({
       where: { id: params.sessionId, clientId: params.id },
-      select: { id: true, status: true, checkInSignatureUrl: true, packageCounted: true },
+      select: {
+        id: true, status: true, checkInSignatureUrl: true, packageCounted: true,
+        createdById: true, sessionDate: true, setLogs: true,
+      },
     });
     if (!log) return NextResponse.json({ error: "Không tìm thấy buổi tập" }, { status: 404 });
     if (log.status !== "VOID") {
@@ -65,6 +79,54 @@ export async function POST(_req: Request, { params }: Ctx) {
         { error: "Buổi này khách chưa ký check-in / chưa bị trừ buổi nên không tính buổi dạy được" },
         { status: 400 }
       );
+    }
+
+    // ── Ba rào chống tính khống ──
+    //
+    // 1. KHÔNG TỰ DUYỆT CHO MÌNH. FM cũng đi dạy; để FM tự bấm tính lương cho buổi
+    //    chính mình dạy thì đường này thành đúng cái lỗ mà ảnh check-out sinh ra
+    //    để bịt. Buổi FM tự dạy thì Admin duyệt.
+    if (log.createdById === auth.userId) {
+      return NextResponse.json(
+        { error: "Không tự tính buổi dạy cho buổi chính mình dạy — nhờ Admin đối soát buổi này." },
+        { status: 403 }
+      );
+    }
+
+    // 2. BUỔI TRỐNG không tính. Chưa nhập một ô số liệu nào nghĩa là PT check-in
+    //    rồi bỏ đó (thường là mở lại buổi khác ngay sau) — không có gì chứng tỏ
+    //    buổi dạy đã diễn ra.
+    if (!hasAnySetData(log.setLogs as unknown as Record<string, unknown>[])) {
+      return NextResponse.json(
+        { error: "Buổi này chưa nhập số liệu bài tập nào — không có gì chứng tỏ buổi dạy đã diễn ra, nên không tính được." },
+        { status: 400 }
+      );
+    }
+
+    // 3. MỘT NGÀY MỘT BUỔI. Kiểu hay gặp: buổi đầu quá 2 tiếng tự huỷ, PT cho
+    //    khách ký check-in lại cùng buổi đó — hai bản ghi cho MỘT lần khách đến.
+    //    Tính cả hai là trả lương hai lần. Khách tập hai buổi thật trong một ngày
+    //    rất hiếm, và khi đó Admin là người quyết.
+    if (auth.role !== "ADMIN") {
+      const day = vnDay(log.sessionDate);
+      const others = await prisma.workoutLog.findMany({
+        where: {
+          clientId: params.id,
+          id: { not: log.id },
+          status: "COMPLETED",
+          sessionDate: {
+            gte: new Date(log.sessionDate.getTime() - 36 * 3600_000),
+            lte: new Date(log.sessionDate.getTime() + 36 * 3600_000),
+          },
+        },
+        select: { sessionDate: true },
+      });
+      if (others.some((o) => vnDay(o.sessionDate) === day)) {
+        return NextResponse.json(
+          { error: "Ngày này khách đã có một buổi được tính rồi. Hai buổi cùng ngày thường là check-in lại cùng một lần tập — nhờ Admin đối soát nếu khách tập hai buổi thật." },
+          { status: 409 }
+        );
+      }
     }
 
     const updated = await prisma.workoutLog.update({
