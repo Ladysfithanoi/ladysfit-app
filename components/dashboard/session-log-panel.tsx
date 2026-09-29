@@ -33,6 +33,35 @@ const RECOVERY_OPTIONS: { value: SurveyRecovery; label: string; icon: string }[]
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// ── Gọi server có hạn chót ─────────────────────────────────────────────────
+//
+// fetch() của trình duyệt KHÔNG có hạn chót. Mạng chập chờn, hay tên miền không
+// tra được DNS (29/09/2026: máy chủ DNS của nhà cung cấp tên miền không trả lời)
+// thì lời gọi cứ treo đó: dòng "Đang tự động lưu..." quay mãi, nút đóng buổi
+// khoá mãi mà PT không biết vì sao. Có hạn chót thì hết giờ là báo lỗi rõ ràng
+// và PT bấm lại được.
+
+const AUTOSAVE_TIMEOUT_MS = 20_000;
+/** Check-out mang theo ảnh (~80KB) — cho rộng tay hơn trên mạng di động yếu. */
+const CHECKOUT_TIMEOUT_MS = 60_000;
+
+const NETWORK_ERROR =
+  "Không kết nối được tới máy chủ (mạng yếu hoặc mất kết nối). Kiểm tra mạng rồi bấm lại — " +
+  "số liệu đã nhập vẫn còn nguyên trên màn hình.";
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch {
+    // Hết giờ (AbortError) hay không tới được máy chủ (TypeError) đều là lỗi mạng.
+    throw new Error(NETWORK_ERROR);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
@@ -866,11 +895,11 @@ export function LiveSessionPanel({
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+      const res = await fetchWithTimeout(`/api/clients/${clientId}/workout-logs/${log.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
-      });
+      }, AUTOSAVE_TIMEOUT_MS);
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       const updated = (await res.json()) as WorkoutLogRow;
       onUpdated(updated);
@@ -948,11 +977,11 @@ export function LiveSessionPanel({
     setAutoSaved(false);
     const handle = setTimeout(() => {
       setAutoSaving(true);
-      fetch(`/api/clients/${clientId}/workout-logs/${log.id}`, {
+      fetchWithTimeout(`/api/clients/${clientId}/workout-logs/${log.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
-      })
+      }, AUTOSAVE_TIMEOUT_MS)
         .then((res) => (res.ok ? res.json() : null))
         .then((updated) => {
           if (updated) {
@@ -971,7 +1000,7 @@ export function LiveSessionPanel({
     setFinishing(true);
     setError("");
     try {
-      const res = await fetch(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
+      const res = await fetchWithTimeout(`/api/clients/${clientId}/workout-logs/${log.id}/check-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -984,7 +1013,7 @@ export function LiveSessionPanel({
           // tồn dư không có survey — server bỏ qua yêu cầu này cho luồng đó.
           survey: surveyComplete ? survey : null,
         }),
-      });
+      }, CHECKOUT_TIMEOUT_MS);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error ?? "Có lỗi xảy ra");
@@ -1522,8 +1551,11 @@ export function LiveSessionPanel({
         {surveyComplete ? (
           <div className="pt-1">
             <button
-              onClick={async () => { setError(""); await saveProgress(); setShowPhoto(true); }}
-              disabled={finishing || saving || !canFinish}
+              // Mở camera NGAY, không chờ lưu trước: lệnh check-out đã gửi kèm toàn
+              // bộ số liệu + ghi chú. Chờ lưu trước từng làm nút khoá cứng khi mạng
+              // treo — PT không chụp được ảnh mà cũng không có thông báo gì.
+              onClick={() => { setError(""); setShowPhoto(true); }}
+              disabled={finishing || !canFinish}
               title="Chụp ảnh cùng khách để đóng buổi tập"
               className="w-full h-11 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
               style={{ backgroundColor: "#f15b5c" }}
@@ -1557,6 +1589,7 @@ export function LiveSessionPanel({
       {showPhoto && (
         <CheckOutPhotoCapture
           saving={finishing}
+          submitError={error}
           onCancel={() => { if (!finishing) setShowPhoto(false); }}
           onConfirm={(photoUrl) => checkOut("signature", "", photoUrl)}
         />

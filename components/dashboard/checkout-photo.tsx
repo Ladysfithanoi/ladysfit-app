@@ -244,10 +244,13 @@ function drawToDataUrl(
  */
 export function CheckOutPhotoCapture({
   saving = false,
+  submitError = "",
   onConfirm,
   onCancel,
 }: {
   saving?: boolean;
+  /** Lỗi khi gửi ảnh lên (vd mất mạng) — hiện ngay trong hộp, không bị che phía sau. */
+  submitError?: string;
   onConfirm: (dataUrl: string) => void;
   onCancel: () => void;
 }) {
@@ -700,6 +703,9 @@ export function CheckOutPhotoCapture({
           )}
 
           {error && <p className="text-xs text-[#f15b5c] font-medium leading-relaxed">{error}</p>}
+          {shot && submitError && !saving && (
+            <p className="text-xs text-[#f15b5c] font-medium leading-relaxed">{submitError}</p>
+          )}
 
           {shot ? (
             <div className="flex gap-3">
