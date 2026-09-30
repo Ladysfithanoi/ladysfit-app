@@ -303,8 +303,40 @@ function Field({ label, children, half }: { label: string; children: React.React
  *   • KH đi tập  — số buổi khách đã check-in (= số buổi đã trừ vào lộ trình).
  *   • Số buổi PT — số buổi PT đã check-out có chữ ký kèm nhật ký buổi tập.
  */
-function PackageProgressBars({ sessionsUsed, ptSessions, total, amber }: {
+type PackageTeacher = { name: string; count: number; substitute: boolean };
+
+/**
+ * "Số buổi PT" gồm những ai dạy. Buổi dạy hộ được ghi công (và tính lương) cho
+ * người dạy hộ, nên chỉ nhìn tổng thì PT phụ trách sẽ tưởng lương bị thiếu buổi.
+ * Chỉ hiện khi có người dạy hộ hoặc phần chỉnh tay — lộ trình một mình PT phụ
+ * trách dạy thì tổng đã nói đủ.
+ */
+function TeacherBreakdown({ teachers }: { teachers?: PackageTeacher[] }) {
+  if (!teachers || !teachers.some((t) => t.substitute || t.name === "Chỉnh tay")) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {teachers.map((t) => (
+        <span
+          key={t.name}
+          title={t.substitute ? `${t.name} dạy hộ ${t.count} buổi — tính vào lương của ${t.name}` : undefined}
+          className={cn(
+            "inline-flex items-center gap-1 max-w-full rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+            t.substitute ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200" : "bg-gray-100 text-gray-600"
+          )}
+        >
+          <span className="truncate">{t.name}</span>
+          <span className="font-extrabold">{t.count}</span>
+          {t.substitute && <span className="font-bold">· dạy hộ</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PackageProgressBars({ sessionsUsed, ptSessions, total, amber, teachers }: {
   sessionsUsed: number; ptSessions: number; total: number; amber?: boolean;
+  /** Tách "Số buổi PT" theo người dạy — xem TeacherBreakdown. */
+  teachers?: PackageTeacher[];
 }) {
   const bars = [
     {
@@ -339,6 +371,7 @@ function PackageProgressBars({ sessionsUsed, ptSessions, total, amber }: {
               style={{ width: `${total > 0 ? Math.min(100, (b.value / total) * 100) : 0}%` }}
             />
           </div>
+          {b.label === "Số buổi PT" && <TeacherBreakdown teachers={teachers} />}
         </div>
       ))}
     </div>
@@ -351,6 +384,7 @@ export function ClientDetailPage({
   staffList,
   packages: initialPackages,
   ptSessionsByPackage: initialPTSessions = {},
+  ptTeachersByPackage = {},
   workoutPrograms: initialWorkoutPrograms,
   workoutLogs: initialWorkoutLogs,
   mealPlans: initialMealPlans,
@@ -366,6 +400,8 @@ export function ClientDetailPage({
   packages: PackageEnrollment[];
   /** Số buổi PT của từng lộ trình (đếm tự động + phần Admin/FM chỉnh tay). */
   ptSessionsByPackage?: Record<string, number>;
+  /** "Số buổi PT" của từng lộ trình tách theo người dạy, đánh dấu buổi dạy hộ. */
+  ptTeachersByPackage?: Record<string, PackageTeacher[]>;
   workoutPrograms: WorkoutProgram[];
   workoutLogs?: WorkoutLogRow[];
   mealPlans?: MealPlanRow[];
@@ -1667,6 +1703,7 @@ export function ClientDetailPage({
                           ptSessions={ptSessionsByPackage[pkg.id] ?? 0}
                           total={pkg.sessions}
                           amber
+                          teachers={ptTeachersByPackage[pkg.id]}
                         />
                         <div className="text-[11px] text-amber-700 space-y-0.5 mt-1">
                           {pkg.startDate ? (
@@ -1727,6 +1764,7 @@ export function ClientDetailPage({
                         sessionsUsed={pkg.sessionsUsed}
                         ptSessions={ptSessionsByPackage[pkg.id] ?? 0}
                         total={pkg.sessions}
+                        teachers={ptTeachersByPackage[pkg.id]}
                       />
                       <div className="text-xs text-gray-400 space-y-0.5 mt-1">
                         {pkg.startDate ? (
@@ -2120,6 +2158,7 @@ export function ClientDetailPage({
                             <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <div className="h-full rounded-full bg-green-500" style={{ width: `${ptPct}%` }} />
                             </div>
+                            <TeacherBreakdown teachers={ptTeachersByPackage[pkg.id]} />
                           </td>
                           <td className="px-4 py-3">
                             {editingPkgId === pkg.id ? (

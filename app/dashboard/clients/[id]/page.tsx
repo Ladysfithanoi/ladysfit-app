@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 import { closeFinishedPackages, reopenExtendedPackages } from "@/lib/package-status";
 import { refreshClientChurnStatus, reactivateClientOnNewPackage } from "@/lib/client-status";
-import { getEnrollmentTaughtCounts, getAdjustmentTotals } from "@/lib/pt-session-count";
+import { getEnrollmentTeacherCounts, sumTeacherCounts, getAdjustmentTotals, type TeacherCount } from "@/lib/pt-session-count";
 import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -226,13 +226,26 @@ export default async function ClientPage({ params }: { params: { id: string } })
   // buổi tập, cộng phần Admin/FM chỉnh tay. Tính ở server để khớp đúng con số
   // mà API sửa số buổi PT dùng làm mốc tính chênh.
   const enrollmentIds = serializedPackages.map((p) => p.id);
-  const [autoPTCounts, adjustmentTotals] = await Promise.all([
-    getEnrollmentTaughtCounts(params.id).catch(() => ({} as Record<string, number>)),
+  const [teacherCounts, adjustmentTotals] = await Promise.all([
+    getEnrollmentTeacherCounts(params.id).catch(() => ({} as Record<string, TeacherCount[]>)),
     getAdjustmentTotals(enrollmentIds).catch(() => ({} as Record<string, number>)),
   ]);
+  const autoPTCounts = sumTeacherCounts(teacherCounts);
   const ptSessionsByPackage: Record<string, number> = {};
+  // Tổng đó gồm những ai dạy — để PT phụ trách thấy ngay buổi nào là người khác
+  // dạy hộ (ghi công cho người dạy hộ, không vào lương của mình). Phần Admin/FM
+  // chỉnh tay kiểu cũ không gắn với người dạy nên đi riêng một mục.
+  const ptTeachersByPackage: Record<string, { name: string; count: number; substitute: boolean }[]> = {};
   for (const id of enrollmentIds) {
-    ptSessionsByPackage[id] = Math.max(0, (autoPTCounts[id] ?? 0) + (adjustmentTotals[id] ?? 0));
+    const adjust = adjustmentTotals[id] ?? 0;
+    ptSessionsByPackage[id] = Math.max(0, (autoPTCounts[id] ?? 0) + adjust);
+    const teachers = (teacherCounts[id] ?? []).map((t) => ({
+      name:       t.name,
+      count:      t.count,
+      substitute: t.ptId !== client.assignedPTId,
+    }));
+    if (adjust !== 0) teachers.push({ name: "Chỉnh tay", count: adjust, substitute: false });
+    ptTeachersByPackage[id] = teachers;
   }
 
   const serializedPrograms = programs.map((p) => ({
@@ -320,6 +333,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       staffList={staff}
       packages={serializedPackages}
       ptSessionsByPackage={ptSessionsByPackage}
+      ptTeachersByPackage={ptTeachersByPackage}
       workoutPrograms={serializedPrograms}
       workoutLogs={serializedLogs}
       mealPlans={mealPlans.map((p) => ({

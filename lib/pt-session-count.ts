@@ -128,35 +128,73 @@ export function countByEnrollment(rows: TaughtSessionRow[]): Map<string, number>
   return counts;
 }
 
+/** Một người dạy trong một lộ trình và số buổi được ghi công cho người đó. */
+export type TeacherCount = { ptId: string; name: string; count: number };
+
 /**
- * Số buổi PT TỰ ĐẾM của từng lộ trình của một khách, tính cả đời gói (không
- * giới hạn tháng, không giới hạn người dạy — buổi dạy hộ vẫn thuộc lộ trình
- * này). Dùng cho thanh tiến độ ở hồ sơ khách và làm mốc tính phần chênh khi
- * Admin/FM sửa tay, nên hai chỗ luôn khớp nhau.
+ * Số buổi PT TỰ ĐẾM của từng lộ trình của một khách, TÁCH THEO NGƯỜI DẠY, tính
+ * cả đời gói (không giới hạn tháng). Buổi dạy hộ vẫn thuộc lộ trình này nhưng
+ * được ghi công cho người dạy hộ — cùng luật với bảng lương — nên hồ sơ khách
+ * phải cho thấy tổng đó gồm những ai, không thì PT phụ trách nhìn "13 buổi" mà
+ * lương chỉ có 12 sẽ tưởng bị thiếu.
+ *
+ * Người dạy xếp theo số buổi giảm dần.
  */
-export async function getEnrollmentTaughtCounts(clientId: string): Promise<Record<string, number>> {
+export async function getEnrollmentTeacherCounts(
+  clientId: string,
+): Promise<Record<string, TeacherCount[]>> {
   const manual = await getManualSheetSessions({ clientId });
 
-  const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string | null; n: number }[]>(
+  const rows = await prisma.$queryRawUnsafe<{ enrollmentId: string | null; ptId: string; n: number }[]>(
     `
-    SELECT ${ENROLLMENT_ID} AS "enrollmentId", COUNT(*)::int AS n
+    SELECT ${ENROLLMENT_ID} AS "enrollmentId", wl."createdById" AS "ptId", COUNT(*)::int AS n
     FROM workout_logs wl
     ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."clientId" = $1
       AND ${TAUGHT_SESSION_WHERE}
-    GROUP BY 1
+    GROUP BY 1, 2
     `,
     clientId,
   );
 
-  const counts: Record<string, number> = {};
+  // enrollmentId → ptId → số buổi
+  const tally = new Map<string, Map<string, number>>();
+  const add = (enrollmentId: string, ptId: string, n: number) => {
+    const byPt = tally.get(enrollmentId) ?? new Map<string, number>();
+    byPt.set(ptId, (byPt.get(ptId) ?? 0) + n);
+    tally.set(enrollmentId, byPt);
+  };
   for (const r of rows) {
-    if (r.enrollmentId) counts[r.enrollmentId] = Number(r.n);
+    if (r.enrollmentId) add(r.enrollmentId, r.ptId, Number(r.n));
   }
   // Buổi ghi tay trên phiếu tính chung một rổ — thanh tiến độ ở hồ sơ khách và
   // bảng lương phải thấy cùng một con số.
-  for (const m of manual) {
-    counts[m.enrollmentId] = (counts[m.enrollmentId] ?? 0) + 1;
+  for (const m of manual) add(m.enrollmentId, m.ptId, 1);
+
+  const ptIds = new Set<string>();
+  tally.forEach((byPt) => byPt.forEach((_, id) => ptIds.add(id)));
+  const users = ptIds.size === 0 ? [] : await prisma.user.findMany({
+    where:  { id: { in: Array.from(ptIds) } },
+    select: { id: true, name: true, email: true },
+  });
+  const nameOf = new Map(users.map((u) => [u.id, (u.name ?? "").trim() || u.email || "—"]));
+
+  const out: Record<string, TeacherCount[]> = {};
+  tally.forEach((byPt, enrollmentId) => {
+    out[enrollmentId] = Array.from(byPt, ([ptId, count]) => ({ ptId, name: nameOf.get(ptId) ?? "—", count }))
+      .sort((a, b) => b.count - a.count);
+  });
+  return out;
+}
+
+/**
+ * Tổng số buổi PT tự đếm của từng lộ trình — cộng từ bản tách theo người dạy,
+ * nên tổng và phần tách không thể lệch nhau.
+ */
+export function sumTeacherCounts(byEnrollment: Record<string, TeacherCount[]>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [id, list] of Object.entries(byEnrollment)) {
+    counts[id] = list.reduce((s, t) => s + t.count, 0);
   }
   return counts;
 }
