@@ -333,6 +333,95 @@ function TeacherBreakdown({ teachers }: { teachers?: PackageTeacher[] }) {
   );
 }
 
+type AdjustmentItem = {
+  id: string; month: number; year: number; delta: number;
+  ptName: string; createdBy: string; createdAt: string;
+};
+
+/**
+ * Các bản ghi "chỉnh tay số buổi PT" kiểu cũ của một lộ trình — Admin gỡ được
+ * bản ghi bị cộng trùng mà không phải vào database. Đường cộng tay đã đóng nên
+ * ở đây chỉ có xoá; bản ghi vào thùng rác nên bấm nhầm vẫn khôi phục được.
+ */
+function LegacyAdjustments({ clientId, packageId, items, onDeleted }: {
+  clientId: string; packageId: string; items: AdjustmentItem[]; onDeleted: () => void;
+}) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  if (items.length === 0) return null;
+
+  async function remove(id: string) {
+    setBusyId(id);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/clients/${clientId}/packages/${packageId}/pt-sessions?adjustmentId=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Xoá không thành công");
+      }
+      setConfirmId(null);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Xoá không thành công");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 space-y-1.5">
+      <p className="text-[11px] font-bold text-amber-800">Chỉnh tay số buổi PT (kiểu cũ)</p>
+      <p className="text-[10px] text-amber-700">
+        Đã cộng vào &ldquo;Số buổi PT&rdquo; ở trên. Nếu trùng với buổi ghi tay trên phiếu check-in thì xoá đi.
+        Xoá không tự trừ tiền đã trả ở bảng lương đã chốt.
+      </p>
+      {items.map((a) => (
+        <div key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-700">
+          <span className={cn("font-extrabold whitespace-nowrap", a.delta >= 0 ? "text-green-700" : "text-red-600")}>
+            {a.delta > 0 ? "+" : ""}{a.delta} buổi
+          </span>
+          <span className="whitespace-nowrap">T{a.month}/{a.year}</span>
+          <span className="text-gray-500 min-w-0 truncate">
+            ghi công {a.ptName} · {a.createdBy} nhập {formatDate(a.createdAt)}
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            {confirmId === a.id ? (
+              <>
+                <button
+                  onClick={() => remove(a.id)}
+                  disabled={busyId === a.id}
+                  className="h-6 px-2 rounded-md bg-red-500 text-white text-[11px] font-bold disabled:opacity-50 whitespace-nowrap"
+                >
+                  {busyId === a.id ? "..." : "Xác nhận xoá"}
+                </button>
+                <button
+                  onClick={() => setConfirmId(null)}
+                  className="h-6 px-2 rounded-md border border-gray-200 bg-white text-[11px] font-semibold text-gray-600"
+                >
+                  Huỷ
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => { setError(""); setConfirmId(a.id); }}
+                className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Xoá bản ghi chỉnh tay này"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+      {error && <p className="text-[11px] font-semibold text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 function PackageProgressBars({ sessionsUsed, ptSessions, total, amber, teachers }: {
   sessionsUsed: number; ptSessions: number; total: number; amber?: boolean;
   /** Tách "Số buổi PT" theo người dạy — xem TeacherBreakdown. */
@@ -385,6 +474,7 @@ export function ClientDetailPage({
   packages: initialPackages,
   ptSessionsByPackage: initialPTSessions = {},
   ptTeachersByPackage = {},
+  adjustmentsByPackage = {},
   workoutPrograms: initialWorkoutPrograms,
   workoutLogs: initialWorkoutLogs,
   mealPlans: initialMealPlans,
@@ -402,6 +492,8 @@ export function ClientDetailPage({
   ptSessionsByPackage?: Record<string, number>;
   /** "Số buổi PT" của từng lộ trình tách theo người dạy, đánh dấu buổi dạy hộ. */
   ptTeachersByPackage?: Record<string, PackageTeacher[]>;
+  /** Bản ghi chỉnh tay số buổi PT kiểu cũ của từng lộ trình — chỉ có với Admin. */
+  adjustmentsByPackage?: Record<string, AdjustmentItem[]>;
   workoutPrograms: WorkoutProgram[];
   workoutLogs?: WorkoutLogRow[];
   mealPlans?: MealPlanRow[];
@@ -2904,6 +2996,18 @@ export function ClientDetailPage({
                       {ptSessionsByPackage[pkg.id] ?? 0}/{pkg.sessions} buổi
                     </span>
                   </div>
+                  {isAdmin && (
+                    <LegacyAdjustments
+                      clientId={client.id}
+                      packageId={pkg.id}
+                      items={adjustmentsByPackage[pkg.id] ?? []}
+                      onDeleted={() => {
+                        setToastMsg("Đã xoá phần chỉnh tay ✓");
+                        setTimeout(() => setToastMsg(null), 3000);
+                        router.refresh();
+                      }}
+                    />
+                  )}
                   {/* Ô gõ tổng ở đây đã bỏ. Nó ghi một con số trần không ngày không
                       người dạy: ra tiền nhưng không in được lên phiếu check-in, nên
                       bảng lương và phiếu của cùng một khách không bao giờ khớp. Nay

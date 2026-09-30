@@ -578,6 +578,34 @@ export const TRASH_TYPES: Record<string, TrashTypeDef> = {
     },
   },
 
+  PT_SESSION_ADJUSTMENT: {
+    label: "Chỉnh tay số buổi PT",
+    collect: async (id) => {
+      const adj = await prisma.pTSessionAdjustment.findUnique({
+        where: { id },
+        include: {
+          pt: { select: { name: true } },
+          enrollment: {
+            select: {
+              packageName: true,
+              client: { select: { fullName: true, branch: { select: { id: true, name: true } } } },
+            },
+          },
+        },
+      });
+      if (!adj) return null;
+      const { pt, enrollment, ...row } = adj;
+      const sign = adj.delta > 0 ? "+" : "";
+      return {
+        label: `Chỉnh tay số buổi PT — ${enrollment.client.fullName}`,
+        summary: `${sign}${adj.delta} buổi · ${enrollment.packageName} · T${adj.month}/${adj.year} · ${pt.name ?? ""}`,
+        branchId: enrollment.client.branch?.id ?? null,
+        branchName: enrollment.client.branch?.name ?? null,
+        snapshot: { pTSessionAdjustment: [row as Row] },
+      };
+    },
+  },
+
   SALES_LEAD: {
     label: "Data khách (Setup doanh số)",
     collect: async (id) => {

@@ -255,3 +255,51 @@ export async function getAdjustmentTotals(
   for (const r of rows) totals[r.enrollmentId] = Number(r.total);
   return totals;
 }
+
+/** Một bản ghi chỉnh tay cũ, đủ để Admin nhận ra và gỡ nếu bị cộng trùng. */
+export type AdjustmentItem = {
+  id:        string;
+  month:     number;
+  year:      number;
+  delta:     number;
+  ptName:    string;
+  createdBy: string;
+  createdAt: string;
+};
+
+/** Các bản ghi chỉnh tay của từng lộ trình, mới nhất trước. */
+export async function getAdjustmentList(
+  enrollmentIds: string[],
+): Promise<Record<string, AdjustmentItem[]>> {
+  if (enrollmentIds.length === 0) return {};
+
+  const rows = await prisma.$queryRawUnsafe<{
+    id: string; enrollmentId: string; month: number; year: number; delta: number;
+    ptName: string | null; createdBy: string | null; createdAt: Date;
+  }[]>(
+    `
+    SELECT a.id, a."enrollmentId", a.month, a.year, a.delta, a."createdAt",
+           pt.name AS "ptName", cb.name AS "createdBy"
+    FROM pt_session_adjustments a
+    LEFT JOIN users pt ON pt.id = a."ptId"
+    LEFT JOIN users cb ON cb.id = a."createdById"
+    WHERE a."enrollmentId" = ANY($1::text[])
+    ORDER BY a.year DESC, a.month DESC
+    `,
+    enrollmentIds,
+  );
+
+  const out: Record<string, AdjustmentItem[]> = {};
+  for (const r of rows) {
+    (out[r.enrollmentId] ??= []).push({
+      id:        r.id,
+      month:     Number(r.month),
+      year:      Number(r.year),
+      delta:     Number(r.delta),
+      ptName:    r.ptName ?? "—",
+      createdBy: r.createdBy ?? "—",
+      createdAt: r.createdAt.toISOString(),
+    });
+  }
+  return out;
+}

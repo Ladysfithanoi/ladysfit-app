@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { captureTrash } from "@/lib/trash";
 
 // PUT /api/clients/[id]/packages/[packageId]/pt-sessions — ĐƯỜNG NÀY ĐÃ ĐÓNG.
 //
@@ -35,4 +37,42 @@ export async function PUT() {
     },
     { status: 410 }
   );
+}
+
+// DELETE ?adjustmentId=… — Admin xoá một bản ghi delta cũ.
+//
+// Đường cộng tay đã đóng nhưng bản ghi cũ vẫn cộng vào "Số buổi PT" của lộ trình.
+// Có bản ghi bị trùng với buổi ghi tay trên phiếu (cùng những buổi trước khi có
+// app, cộng hai lần), nên Admin cần gỡ được mà không phải vào database. Chỉ
+// Admin: FM từng tự cộng buổi cho chính mình bằng đường này. Bản ghi vào thùng
+// rác trước khi xoá để khôi phục được nếu bấm nhầm.
+//
+// Xoá KHÔNG tự trừ lại tiền đã trả: bảng lương PT tính lại theo thời gian thực
+// nên tháng đó tự giảm, còn bảng lương FM/Admin giữ số đã chốt.
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string; packageId: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Chỉ Admin xoá được phần chỉnh tay số buổi PT" }, { status: 403 });
+  }
+
+  const adjustmentId = new URL(req.url).searchParams.get("adjustmentId");
+  if (!adjustmentId) return NextResponse.json({ error: "Thiếu bản ghi cần xoá" }, { status: 400 });
+
+  const adj = await prisma.pTSessionAdjustment.findFirst({
+    where: {
+      id: adjustmentId,
+      enrollmentId: params.packageId,
+      enrollment: { clientId: params.id },
+    },
+    select: { id: true },
+  });
+  if (!adj) return NextResponse.json({ error: "Không tìm thấy bản ghi" }, { status: 404 });
+
+  await captureTrash("PT_SESSION_ADJUSTMENT", adj.id, session.user);
+  await prisma.pTSessionAdjustment.delete({ where: { id: adj.id } });
+  return NextResponse.json({ ok: true });
 }

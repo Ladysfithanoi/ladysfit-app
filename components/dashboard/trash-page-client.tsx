@@ -48,6 +48,7 @@ const TYPE_COLOR: Record<string, string> = {
   WORKOUT_LOG: "bg-teal-50 text-teal-700",
   WEIGHT_LOG: "bg-lime-50 text-lime-700",
   BODY_MEASUREMENT: "bg-lime-50 text-lime-700",
+  PT_SESSION_ADJUSTMENT: "bg-green-50 text-green-700",
   SALES_LEAD: "bg-blue-50 text-blue-700",
   TRANSACTION: "bg-emerald-50 text-emerald-700",
   STAFF: "bg-violet-50 text-violet-700",

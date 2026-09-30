@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ClientDetailPage } from "@/components/dashboard/client-detail-page";
 import { closeFinishedPackages, reopenExtendedPackages } from "@/lib/package-status";
 import { refreshClientChurnStatus, reactivateClientOnNewPackage } from "@/lib/client-status";
-import { getEnrollmentTeacherCounts, sumTeacherCounts, getAdjustmentTotals, type TeacherCount } from "@/lib/pt-session-count";
+import { getEnrollmentTeacherCounts, sumTeacherCounts, getAdjustmentTotals, getAdjustmentList, type TeacherCount, type AdjustmentItem } from "@/lib/pt-session-count";
 import type { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -226,9 +226,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
   // buổi tập, cộng phần Admin/FM chỉnh tay. Tính ở server để khớp đúng con số
   // mà API sửa số buổi PT dùng làm mốc tính chênh.
   const enrollmentIds = serializedPackages.map((p) => p.id);
-  const [teacherCounts, adjustmentTotals] = await Promise.all([
+  const [teacherCounts, adjustmentTotals, adjustmentsByPackage] = await Promise.all([
     getEnrollmentTeacherCounts(params.id).catch(() => ({} as Record<string, TeacherCount[]>)),
     getAdjustmentTotals(enrollmentIds).catch(() => ({} as Record<string, number>)),
+    // Chỉ Admin gỡ được bản ghi chỉnh tay cũ, nên chỉ Admin cần danh sách.
+    session.user.role === "ADMIN"
+      ? getAdjustmentList(enrollmentIds).catch(() => ({} as Record<string, AdjustmentItem[]>))
+      : Promise.resolve({} as Record<string, AdjustmentItem[]>),
   ]);
   const autoPTCounts = sumTeacherCounts(teacherCounts);
   const ptSessionsByPackage: Record<string, number> = {};
@@ -334,6 +338,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       packages={serializedPackages}
       ptSessionsByPackage={ptSessionsByPackage}
       ptTeachersByPackage={ptTeachersByPackage}
+      adjustmentsByPackage={adjustmentsByPackage}
       workoutPrograms={serializedPrograms}
       workoutLogs={serializedLogs}
       mealPlans={mealPlans.map((p) => ({
