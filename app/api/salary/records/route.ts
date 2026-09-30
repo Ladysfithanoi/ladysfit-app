@@ -307,9 +307,11 @@ export async function POST(req: Request) {
 
       const googleBonus = entry.googleReviews * 100_000;
       const renewBonus  = entry.renewContracts * 150_000;
+      // Buổi dạy khách KOL / hợp đồng KOC của chính FM — ngoài trần 60 show.
+      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       const totalSalary = computeTotalSalary({
         role: "FM", baseSalary, fixedAllowances, seniorityBonus, commissionAmount,
-        showPay, goalBonus: 0, googleBonus, renewBonus, kocCommission: 0, kolCommission: 0,
+        showPay, goalBonus: 0, googleBonus, renewBonus, kocCommission, kolCommission,
         standardWorkDays: stdDays, actualWorkDays: actDays,
       });
 
@@ -326,7 +328,7 @@ export async function POST(req: Request) {
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
           renewBonus, renewContracts: entry.renewContracts,
-          bhxh: baseSalary, kocCommission: 0 as unknown as never, kolCommission: 0 as unknown as never,
+          bhxh: baseSalary, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
           totalSalary, advancePaid: 0, remainingPayment: totalSalary,
         },
       });

@@ -915,7 +915,17 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             </span>
                           ) : <span className="text-gray-400">—</span>}
                         </td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.showPay)}</td>
+                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                          {vnd(r.showPay)}
+                          {/* Buổi dạy khách KOL / thưởng KOC — trả riêng, ngoài trần 60 show. */}
+                          {(r.kolCommission ?? 0) + (r.kocCommission ?? 0) > 0 && (
+                            <span className="block text-[10px] font-semibold text-blue-600">
+                              {(r.kolCommission ?? 0) > 0 && `+ ${vnd(r.kolCommission)} KOL`}
+                              {(r.kolCommission ?? 0) > 0 && (r.kocCommission ?? 0) > 0 && " · "}
+                              {(r.kocCommission ?? 0) > 0 && `+ ${vnd(r.kocCommission)} KOC`}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.googleBonus)}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.renewBonus)}</td>
                         <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>

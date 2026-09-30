@@ -197,7 +197,9 @@ export async function recalcSalary(args: {
   const commissionRate   = rate * 100;
   const commissionAmount = totalRevenue * rate;
 
-  const { kocCommission, kolCommission } = role !== "FM" && !isStaff
+  // KOC/KOL trả cho người dạy, kể cả FM — tính lại theo thời gian thực, nằm
+  // ngoài trần 60 show vì không phải tiền buổi dạy thường.
+  const { kocCommission, kolCommission } = !isStaff
     ? await fetchKOCKOLCommission(r.userId, month, year)
     : { kocCommission: 0, kolCommission: 0 };
 

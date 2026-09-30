@@ -271,7 +271,7 @@ export async function POST(req: Request) {
       const kocC = Number(rec.kocCommission ?? 0);
       const kolC = Number(rec.kolCommission ?? 0);
       const thưởng =
-        role === "FM"    ? (Number(rec.googleBonus ?? 0) + Number(rec.renewBonus ?? 0))
+        role === "FM"    ? (Number(rec.googleBonus ?? 0) + Number(rec.renewBonus ?? 0) + kocC + kolC)
         : role === "ADMIN" ? (kocC + kolC)
         :                    (Number(rec.goalBonus ?? 0) + kocC + kolC);
 

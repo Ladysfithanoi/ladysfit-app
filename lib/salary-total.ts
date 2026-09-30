@@ -39,9 +39,12 @@ export function computeTotalSalary(p: SalaryParts): number {
   // cứng theo ngày công.
   if (p.role === "STAFF") return fixedPay;
 
+  // FM cũng đi dạy: buổi dạy khách KOL (60k/buổi) và thưởng hợp đồng KOC trả
+  // cho NGƯỜI DẠY như PT. Trước đây công thức FM bỏ hai khoản này, nên FM dạy
+  // khách KOL không được đồng nào cho những buổi đó.
   if (p.role === "FM") {
     return fixedPay + p.seniorityBonus + p.commissionAmount + p.showPay
-         + p.googleBonus + p.renewBonus;
+         + p.googleBonus + p.renewBonus + p.kocCommission + p.kolCommission;
   }
 
   // PT
