@@ -2087,7 +2087,7 @@ export function ClientDetailPage({
                       const ptPct = pkg.sessions > 0 ? Math.min(100, (ptSessions / pkg.sessions) * 100) : 0;
                       return (
                         <tr key={pkg.id} className="border-b border-gray-50 last:border-0">
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <span className="text-sm font-extrabold text-gray-900">{pkg.packageName}</span>
                               {(pkg.contractType === "KOC" || pkg.packageName === "KOC") && (
@@ -2100,9 +2100,6 @@ export function ClientDetailPage({
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Chuyển giao</span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {isFreePackage(pkg) ? "Miễn phí" : formatPrice(pkg.price)}
-                            </p>
                           </td>
                           <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                             {pkg.contractCode ?? "—"}
@@ -2222,29 +2219,29 @@ export function ClientDetailPage({
 
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-400 font-semibold mb-1">TB tuần này</p>
-                <p className="text-lg font-extrabold text-gray-900">
+              <div className="bg-gray-50 rounded-xl p-2.5 sm:p-3 min-w-0">
+                <p className="text-[11px] sm:text-xs text-gray-400 font-semibold mb-1 whitespace-nowrap truncate">TB tuần này</p>
+                <p className="text-sm sm:text-lg font-extrabold text-gray-900 whitespace-nowrap">
                   {thisWeekAvg !== null ? `${thisWeekAvg.toFixed(1)} kg` : "—"}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-xs text-gray-400 font-semibold mb-1">Thay đổi</p>
+              <div className="bg-gray-50 rounded-xl p-2.5 sm:p-3 min-w-0">
+                <p className="text-[11px] sm:text-xs text-gray-400 font-semibold mb-1 whitespace-nowrap truncate">Thay đổi</p>
                 {weekChange !== null ? (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 whitespace-nowrap">
                     {weekChange < 0
-                      ? <TrendingDown className="w-4 h-4 text-emerald-500" />
-                      : <TrendingUp className="w-4 h-4 text-red-400" />
+                      ? <TrendingDown className="w-4 h-4 flex-shrink-0 text-emerald-500" />
+                      : <TrendingUp className="w-4 h-4 flex-shrink-0 text-red-400" />
                     }
                     <p className={cn(
-                      "text-lg font-extrabold",
+                      "text-sm sm:text-lg font-extrabold",
                       weekChange < 0 ? "text-emerald-500" : weekChange > 0 ? "text-red-400" : "text-gray-500"
                     )}>
                       {weekChange > 0 ? "+" : ""}{weekChange.toFixed(1)} kg
                     </p>
                   </div>
                 ) : (
-                  <p className="text-lg font-extrabold text-gray-300">—</p>
+                  <p className="text-sm sm:text-lg font-extrabold text-gray-300">—</p>
                 )}
               </div>
               <button
@@ -2253,14 +2250,14 @@ export function ClientDetailPage({
                 disabled={weeklyLossRows.length === 0}
                 title="Bấm để xem % giảm theo từng tuần"
                 className={cn(
-                  "group text-left bg-gray-50 rounded-xl p-3 transition-all",
+                  "group text-left bg-gray-50 rounded-xl p-2.5 sm:p-3 min-w-0 transition-all",
                   weeklyLossRows.length > 0
                     ? "cursor-pointer hover:bg-[#f15b5c]/5 hover:ring-2 hover:ring-[#f15b5c]/30 hover:shadow-sm"
                     : "cursor-default"
                 )}
               >
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <p className="text-xs text-gray-400 font-semibold">Tốc độ giảm</p>
+                  <p className="text-[11px] sm:text-xs text-gray-400 font-semibold whitespace-nowrap truncate">Tốc độ giảm</p>
                   {weeklyLossRows.length > 0 && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#f15b5c] opacity-60 group-hover:opacity-100 transition-opacity">
                       <BarChart2 className="w-3 h-3" />
@@ -2269,10 +2266,10 @@ export function ClientDetailPage({
                   )}
                 </div>
                 <p className={cn(
-                  "text-lg font-extrabold",
+                  "text-sm sm:text-lg font-extrabold whitespace-nowrap",
                   lossRatePct !== null && lossRatePct > 0 ? "text-emerald-500" : "text-gray-300"
                 )}>
-                  {lossRatePct !== null ? `${lossRatePct.toFixed(2)} %/tuần` : "—"}
+                  {lossRatePct !== null ? `${lossRatePct.toFixed(2)}%/tuần` : "—"}
                 </p>
               </button>
             </div>
@@ -2286,11 +2283,16 @@ export function ClientDetailPage({
               </div>
             ) : (
               <div className="w-full overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                <table className="w-full">
+                {/* Trên điện thoại: mọi ô nằm một dòng, bảng rộng hơn màn hình thì lướt
+                    ngang; cột Ngày ghim bên trái để lướt tới đâu cũng biết dòng nào. */}
+                <table className="w-full whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {["Ngày", "Cân nặng", "Thay đổi", "Ghi chú", "Thao tác"].map((h) => (
-                        <th key={h} className="pb-2 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
+                      {["Ngày", "Cân nặng", "Thay đổi", "Ghi chú", "Thao tác"].map((h, idx) => (
+                        <th key={h} className={cn(
+                          "pb-2 pr-4 text-left text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wide",
+                          idx === 0 && "sticky left-0 z-10 bg-white"
+                        )}>
                           {h}
                         </th>
                       ))}
@@ -2304,12 +2306,12 @@ export function ClientDetailPage({
                       const change = prev ? log.weight - prev.weight : null;
                       return (
                         <tr key={log.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
-                          <td className="py-2.5 text-sm text-gray-600 font-medium">{formatDate(log.date)}</td>
-                          <td className="py-2.5 text-sm font-bold text-gray-800">{parseFloat(log.weight.toFixed(2))} kg</td>
-                          <td className="py-2.5">
+                          <td className="sticky left-0 z-10 bg-white py-2.5 pr-4 text-[13px] sm:text-sm text-gray-600 font-medium">{formatDate(log.date)}</td>
+                          <td className="py-2.5 pr-4 text-[13px] sm:text-sm font-bold text-gray-800">{parseFloat(log.weight.toFixed(2))} kg</td>
+                          <td className="py-2.5 pr-4">
                             {change !== null ? (
                               <span className={cn(
-                                "text-sm font-bold",
+                                "text-[13px] sm:text-sm font-bold",
                                 change < 0 ? "text-emerald-500" : change > 0 ? "text-red-400" : "text-gray-400"
                               )}>
                                 {change < 0 ? "▼" : change > 0 ? "▲" : ""}
@@ -2319,7 +2321,7 @@ export function ClientDetailPage({
                               <span className="text-sm text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="py-2.5 text-sm text-gray-400">{log.note ?? "—"}</td>
+                          <td className="py-2.5 pr-4 text-[13px] sm:text-sm text-gray-400">{log.note ?? "—"}</td>
                           <td className="py-2.5">
                             <div className="flex items-center gap-1">
                               <button
