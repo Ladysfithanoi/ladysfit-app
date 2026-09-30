@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Camera, X, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { Camera, X, ChevronLeft, ChevronRight, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 
@@ -47,8 +47,11 @@ type SessionRow = {
   photo: PhotoData | null;
 };
 
-type LightboxState = { images: string[]; index: number };
-type UploadTarget  = { row: SessionRow; type: "checkin" | "transform"; images: string[] };
+type PhotoType     = "checkin" | "transform";
+// Lightbox giữ ĐỊA CHỈ ảnh (lộ trình + loại + vị trí) chứ không giữ bản sao mảng
+// ảnh: đổi / xoá ngay trong lightbox thì ảnh đang xem cập nhật theo rows luôn.
+type LightboxState = { enrollmentId: string; type: PhotoType; index: number };
+type UploadTarget  = { row: SessionRow; type: PhotoType; images: string[] };
 
 type Props = {
   ptId:    string;
@@ -61,6 +64,18 @@ type Props = {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
+
+/** Số ảnh tối đa mỗi loại. Check-in 4: phiếu gói dài ra 3 tờ, mỗi tờ một ảnh. */
+const MAX_IMAGES: Record<PhotoType, number> = { checkin: 4, transform: 3 };
+
+function readAsDataURL(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
 
 // Nhãn "dạy hộ": khách này không thuộc PT nhưng PT dạy hộ, buổi được ghi công cho PT.
 function SubstituteBadge() {
@@ -117,6 +132,9 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
   const [uploading, setUploading] = useState<UploadTarget | null>(null);
   const [saving, setSaving]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Ô chọn file dùng chung cho nút "Đổi ảnh" (trong màn sửa lẫn lightbox).
+  const replaceRef = useRef<HTMLInputElement>(null);
+  const replaceTarget = useRef<{ where: "draft" | "lightbox"; index: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,7 +155,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
     setRows(prev => prev.map(r => r.enrollmentId === enrollmentId ? { ...r, photo } : r));
   }
 
-  async function savePhoto(row: SessionRow, type: "checkin" | "transform", images: string[]) {
+  async function savePhoto(row: SessionRow, type: PhotoType, images: string[]): Promise<boolean> {
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
@@ -152,7 +170,12 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (res.ok) patchPhoto(row.enrollmentId, await res.json() as PhotoData);
+      if (!res.ok) {
+        alert("Không lưu được ảnh, vui lòng thử lại.");
+        return false;
+      }
+      patchPhoto(row.enrollmentId, await res.json() as PhotoData);
+      return true;
     } finally {
       setSaving(false);
     }
@@ -171,7 +194,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
     if (res.ok) patchPhoto(row.enrollmentId, await res.json() as PhotoData);
   }
 
-  function openUpload(row: SessionRow, type: "checkin" | "transform") {
+  function openUpload(row: SessionRow, type: PhotoType) {
     const images = type === "checkin"
       ? (row.photo?.checkinImages ?? [])
       : (row.photo?.transformImages ?? []);
@@ -180,26 +203,54 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
 
   async function handleFiles(files: FileList | null) {
     if (!files || !uploading) return;
-    const max = uploading.type === "checkin" ? 2 : 3;
+    const max = MAX_IMAGES[uploading.type];
     const toAdd: string[] = [];
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/")) continue;
       if (uploading.images.length + toAdd.length >= max) break;
-      const b64 = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload  = () => res(r.result as string);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-      toAdd.push(b64);
+      toAdd.push(await readAsDataURL(file));
     }
     setUploading(u => u ? { ...u, images: [...u.images, ...toAdd] } : u);
   }
 
   async function handleSaveUpload() {
     if (!uploading) return;
-    await savePhoto(uploading.row, uploading.type, uploading.images);
-    setUploading(null);
+    if (await savePhoto(uploading.row, uploading.type, uploading.images)) setUploading(null);
+  }
+
+  // Ảnh đang mở trong lightbox, đọc sống từ rows.
+  const lightboxRow = lightbox ? rows.find(r => r.enrollmentId === lightbox.enrollmentId) : undefined;
+  const lightboxImages = lightbox && lightboxRow
+    ? (lightbox.type === "checkin" ? lightboxRow.photo?.checkinImages : lightboxRow.photo?.transformImages) ?? []
+    : [];
+
+  function pickReplacement(where: "draft" | "lightbox", index: number) {
+    replaceTarget.current = { where, index };
+    if (replaceRef.current) replaceRef.current.value = "";
+    replaceRef.current?.click();
+  }
+
+  async function handleReplaceFile(files: FileList | null) {
+    const target = replaceTarget.current;
+    const file = files?.[0];
+    if (!target || !file || !file.type.startsWith("image/")) return;
+    const b64 = await readAsDataURL(file);
+    if (target.where === "draft") {
+      // Trong màn sửa: chỉ đổi bản nháp, bấm "Lưu ảnh" mới ghi.
+      setUploading(u => u ? { ...u, images: u.images.map((img, j) => j === target.index ? b64 : img) } : u);
+    } else if (lightbox && lightboxRow) {
+      // Trong lightbox: không có nút Lưu nên ghi luôn.
+      await savePhoto(lightboxRow, lightbox.type, lightboxImages.map((img, j) => j === target.index ? b64 : img));
+    }
+  }
+
+  async function deleteLightboxImage() {
+    if (!lightbox || !lightboxRow) return;
+    if (!confirm("Xoá ảnh này khỏi phiếu lương?")) return;
+    const next = lightboxImages.filter((_, j) => j !== lightbox.index);
+    if (!(await savePhoto(lightboxRow, lightbox.type, next))) return;
+    if (next.length === 0) setLightbox(null);
+    else setLightbox(l => l ? { ...l, index: Math.min(l.index, next.length - 1) } : l);
   }
 
   useEffect(() => {
@@ -207,11 +258,11 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape")     setLightbox(null);
       if (e.key === "ArrowLeft")  setLightbox(l => l && l.index > 0 ? { ...l, index: l.index - 1 } : l);
-      if (e.key === "ArrowRight") setLightbox(l => l && l.index < l.images.length - 1 ? { ...l, index: l.index + 1 } : l);
+      if (e.key === "ArrowRight") setLightbox(l => l && l.index < lightboxImages.length - 1 ? { ...l, index: l.index + 1 } : l);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  }, [lightbox, lightboxImages.length]);
 
   const normalRows = rows.filter(r => r.contractType === "NORMAL" || r.contractType === "TRANSFER");
   const kocRows    = rows.filter(r => r.contractType === "KOC");
@@ -260,7 +311,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                       key={row.enrollmentId}
                       row={row}
                       canEdit={canEdit}
-                      onViewImage={(imgs, idx) => setLightbox({ images: imgs, index: idx })}
+                      onViewImage={(type, idx) => setLightbox({ enrollmentId: row.enrollmentId, type, index: idx })}
                       onUpload={(type) => openUpload(row, type)}
                       onToggleTransform={() => toggleTransform(row)}
                     />
@@ -301,7 +352,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                         key={row.enrollmentId}
                         row={row}
                         canEdit={canEdit}
-                        onViewImage={(imgs, idx) => setLightbox({ images: imgs, index: idx })}
+                        onViewImage={(type, idx) => setLightbox({ enrollmentId: row.enrollmentId, type, index: idx })}
                         onUpload={(type) => openUpload(row, type)}
                         onToggleTransform={() => toggleTransform(row)}
                       />
@@ -343,7 +394,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                         key={row.enrollmentId}
                         row={row}
                         canEdit={canEdit}
-                        onViewImage={(imgs, idx) => setLightbox({ images: imgs, index: idx })}
+                        onViewImage={(type, idx) => setLightbox({ enrollmentId: row.enrollmentId, type, index: idx })}
                         onUpload={(type) => openUpload(row, type)}
                         onToggleTransform={() => toggleTransform(row)}
                       />
@@ -357,7 +408,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
       </div>
 
       {/* Lightbox */}
-      {lightbox && (
+      {lightbox && lightboxImages.length > 0 && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center select-none"
           style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
@@ -368,11 +419,29 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
           </button>
           <div className="flex items-center justify-center px-16 py-16 w-full h-full" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightbox.images[lightbox.index]} alt="" className="max-w-[90vw] max-h-[80vh] object-contain rounded-xl shadow-2xl" />
+            <img src={lightboxImages[lightbox.index]} alt="" className="max-w-[90vw] max-h-[80vh] object-contain rounded-xl shadow-2xl" />
           </div>
           <span className="absolute top-4 left-1/2 -translate-x-1/2 text-white/50 text-sm">
-            {lightbox.index + 1} / {lightbox.images.length}
+            {lightbox.index + 1} / {lightboxImages.length}
           </span>
+          {canEdit && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => pickReplacement("lightbox", lightbox.index)}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                <RefreshCw className="w-4 h-4" /> Đổi ảnh
+              </button>
+              <button
+                onClick={deleteLightboxImage}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500/90 hover:bg-red-500 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" /> {saving ? "Đang lưu..." : "Xoá ảnh"}
+              </button>
+            </div>
+          )}
           {lightbox.index > 0 && (
             <button
               onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, index: l.index - 1 } : l); }}
@@ -381,7 +450,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
               <ChevronLeft className="w-6 h-6" />
             </button>
           )}
-          {lightbox.index < lightbox.images.length - 1 && (
+          {lightbox.index < lightboxImages.length - 1 && (
             <button
               onClick={e => { e.stopPropagation(); setLightbox(l => l ? { ...l, index: l.index + 1 } : l); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white"
@@ -391,6 +460,8 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
           )}
         </div>
       )}
+
+      <input ref={replaceRef} type="file" accept="image/*" className="hidden" onChange={e => handleReplaceFile(e.target.files)} />
 
       {/* Upload modal */}
       {uploading && (
@@ -411,9 +482,16 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
               {uploading.images.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {uploading.images.map((img, i) => (
-                    <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-200">
+                    <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => pickReplacement("draft", i)}
+                        title="Đổi ảnh này"
+                        className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-1 bg-black/55 py-0.5 text-[10px] font-semibold text-white"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Đổi
+                      </button>
                       {/* Hiện sẵn, không đợi rê chuột: PT thao tác trên điện
                           thoại, mà màn cảm ứng thì không có "hover" — nút ẩn
                           tới khi rê chuột là nút không tồn tại. */}
@@ -428,7 +506,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                   ))}
                 </div>
               )}
-              {uploading.images.length < (uploading.type === "checkin" ? 2 : 3) && (
+              {uploading.images.length < MAX_IMAGES[uploading.type] && (
                 <div
                   className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-[#f15b5c]/40 hover:bg-red-50/30 transition-colors"
                   onClick={() => fileRef.current?.click()}
@@ -436,7 +514,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                   <Camera className="w-6 h-6 text-gray-300 mx-auto mb-1.5" />
                   <p className="text-xs font-semibold text-gray-500">Click để thêm ảnh</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">
-                    Tối đa {uploading.type === "checkin" ? 2 : 3} ảnh ({(uploading.type === "checkin" ? 2 : 3) - uploading.images.length} còn lại)
+                    Tối đa {MAX_IMAGES[uploading.type]} ảnh ({MAX_IMAGES[uploading.type] - uploading.images.length} còn lại)
                   </p>
                   <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
                 </div>
@@ -460,8 +538,8 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
 function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
   row: SessionRow;
   canEdit: boolean;
-  onViewImage: (imgs: string[], idx: number) => void;
-  onUpload: (type: "checkin" | "transform") => void;
+  onViewImage: (type: PhotoType, idx: number) => void;
+  onUpload: (type: PhotoType) => void;
   onToggleTransform: () => void;
 }) {
   return (
@@ -491,7 +569,7 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       </td>
       <td className={TD}>
         <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage(row.photo!.checkinImages, idx)} onUpload={() => onUpload("checkin")} />
+          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -499,7 +577,7 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
           transformImages={row.photo?.transformImages ?? []}
           canEdit={canEdit}
           onToggle={onToggleTransform}
-          onView={idx => onViewImage(row.photo!.transformImages, idx)}
+          onView={idx => onViewImage("transform", idx)}
           onUpload={() => onUpload("transform")}
         />
       </td>
@@ -510,8 +588,8 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
 function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
   row: SessionRow;
   canEdit: boolean;
-  onViewImage: (imgs: string[], idx: number) => void;
-  onUpload: (type: "checkin" | "transform") => void;
+  onViewImage: (type: PhotoType, idx: number) => void;
+  onUpload: (type: PhotoType) => void;
   onToggleTransform: () => void;
 }) {
   const koc = row.koc;
@@ -548,7 +626,7 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       </td>
       <td className={TD}>
         <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage(row.photo!.checkinImages, idx)} onUpload={() => onUpload("checkin")} />
+          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -556,7 +634,7 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
           transformImages={row.photo?.transformImages ?? []}
           canEdit={canEdit}
           onToggle={onToggleTransform}
-          onView={idx => onViewImage(row.photo!.transformImages, idx)}
+          onView={idx => onViewImage("transform", idx)}
           onUpload={() => onUpload("transform")}
         />
       </td>
@@ -567,8 +645,8 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
 function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
   row: SessionRow;
   canEdit: boolean;
-  onViewImage: (imgs: string[], idx: number) => void;
-  onUpload: (type: "checkin" | "transform") => void;
+  onViewImage: (type: PhotoType, idx: number) => void;
+  onUpload: (type: PhotoType) => void;
   onToggleTransform: () => void;
 }) {
   return (
@@ -588,7 +666,7 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
       </td>
       <td className={TD}>
         <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage(row.photo!.checkinImages, idx)} onUpload={() => onUpload("checkin")} />
+          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -596,7 +674,7 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
           transformImages={row.photo?.transformImages ?? []}
           canEdit={canEdit}
           onToggle={onToggleTransform}
-          onView={idx => onViewImage(row.photo!.transformImages, idx)}
+          onView={idx => onViewImage("transform", idx)}
           onUpload={() => onUpload("transform")}
         />
       </td>
@@ -634,10 +712,10 @@ function CheckinCell({ images, canEdit, onView, onUpload }: {
       {canEdit && (
         <button
           onClick={onUpload}
-          title={images.length < 2 ? "Thêm ảnh" : "Sửa / thay ảnh"}
+          title={images.length < MAX_IMAGES.checkin ? "Thêm ảnh" : "Sửa / thay ảnh"}
           className="w-12 h-12 rounded-lg border-2 border-dashed border-gray-200 hover:border-[#f15b5c] flex items-center justify-center text-gray-400 hover:text-[#f15b5c] transition-colors flex-shrink-0"
         >
-          {images.length < 2 ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+          {images.length < MAX_IMAGES.checkin ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
         </button>
       )}
     </div>
@@ -677,10 +755,10 @@ function TransformCell({ hasTransformed, transformImages, canEdit, onToggle, onV
           {canEdit && (
             <button
               onClick={onUpload}
-              title={transformImages.length < 3 ? "Thêm ảnh" : "Sửa / thay ảnh"}
+              title={transformImages.length < MAX_IMAGES.transform ? "Thêm ảnh" : "Sửa / thay ảnh"}
               className="w-12 h-12 rounded-lg border-2 border-dashed border-green-200 hover:border-green-400 flex items-center justify-center text-green-400 hover:text-green-600 transition-colors flex-shrink-0"
             >
-              {transformImages.length < 3 ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+              {transformImages.length < MAX_IMAGES.transform ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
             </button>
           )}
         </div>

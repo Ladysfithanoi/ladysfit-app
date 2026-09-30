@@ -587,16 +587,36 @@ export function CheckinSheetModal({
     return `Phieu-check-in-${safe}-${packageName}${suffix}.png`;
   }
 
+  /**
+   * Lưu canvas thành file PNG.
+   *
+   * Hai chỗ từng làm tờ thứ hai "Không thể tải xuống":
+   *   • Thu hồi blob URL NGAY sau a.click(): trình duyệt nhận lệnh tải nhưng tới
+   *     lúc thật sự đọc file thì URL đã chết. Tờ trống vẽ xong tức thì nên lệnh
+   *     tải thứ hai chồng sát lệnh đầu, lộ ra đúng lỗi này. Giờ để URL sống một
+   *     phút rồi mới thu hồi.
+   *   • toBlob trả null (canvas lỗi) thì trước đây im lặng bỏ qua — giờ rơi về
+   *     toDataURL, vẫn ra được file.
+   */
   function saveCanvas(canvas: HTMLCanvasElement, name: string): Promise<void> {
     return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        if (!blob) return resolve();
-        const url = URL.createObjectURL(blob);
+      const trigger = (href: string) => {
         const a = document.createElement("a");
-        a.href = url;
+        a.href = href;
         a.download = name;
+        a.rel = "noopener";
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(url);
+        a.remove();
+      };
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          trigger(url);
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } else {
+          trigger(canvas.toDataURL("image/png"));
+        }
         resolve();
       }, "image/png");
     });
@@ -612,12 +632,17 @@ export function CheckinSheetModal({
    *
    * Xong thì trả canvas về đúng tờ PT đang xem.
    */
-  async function download() {
+  async function download(onlyPage?: number) {
     const canvas = canvasRef.current;
     if (!canvas || !data || downloading) return;
     setDownloading(true);
     try {
-      for (let p = 0; p < data.pageCount; p++) {
+      const pages = onlyPage != null ? [onlyPage] : Array.from({ length: data.pageCount }, (_, p) => p);
+      for (let n = 0; n < pages.length; n++) {
+        const p = pages[n];
+        // Giãn giữa các lần tải: Chrome/Safari chặn hoặc nuốt mất lệnh tải
+        // bắn liên tiếp trong cùng một khoảnh khắc.
+        if (n > 0) await new Promise((r) => setTimeout(r, 600));
         await draw(data, p);
         await saveCanvas(canvas, fileName(data, p));
       }
@@ -744,7 +769,7 @@ export function CheckinSheetModal({
         {!editing && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
             <button
-              onClick={download}
+              onClick={() => download()}
               disabled={loading || !data || downloading}
               className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
               style={{ backgroundColor: BRAND }}
@@ -754,6 +779,19 @@ export function CheckinSheetModal({
                 : <Download className="h-4 w-4" />}
               {pageCount > 1 ? `Tải cả ${pageCount} tờ` : "Tải ảnh phiếu"}
             </button>
+            {/* Lối dự phòng: điện thoại (nhất là iPhone) thường chỉ nhận một file
+                cho mỗi lần bấm, tải từng tờ thì lúc nào cũng được. */}
+            {pageCount > 1 && (
+              <button
+                onClick={() => download(page)}
+                disabled={loading || !data || downloading}
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold disabled:opacity-40 sm:flex-none"
+                style={{ borderColor: BRAND, color: BRAND }}
+              >
+                <Download className="h-4 w-4" />
+                Tải tờ {page + 1}
+              </button>
+            )}
             <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
               {pageCount > 1
                 ? `Tải về ${pageCount} ảnh PNG — mỗi tờ một ảnh — để lưu vào hồ sơ lương của buổi dạy.`

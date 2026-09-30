@@ -27,7 +27,7 @@ export async function PUT(req: Request) {
   const updateData: Record<string, unknown> = {};
   if (body.checkinImages !== undefined) {
     updateData.checkinImages = body.checkinImages.length > 0
-      ? JSON.stringify(body.checkinImages.slice(0, 2))
+      ? JSON.stringify(body.checkinImages.slice(0, 4))
       : null;
   }
   if (body.transformImages !== undefined) {
