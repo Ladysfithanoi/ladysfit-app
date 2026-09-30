@@ -107,6 +107,10 @@ export async function GET(req: Request) {
     // "Còn chạy" tính sống bằng chargeablePackageSql, KHÔNG đọc cờ status: gói
     // đã hết hạn hoặc hết buổi mà lưới quét đêm chưa kịp đóng thì vẫn đang mang
     // cờ ACTIVE, và phiếu lương sẽ liệt kê khách đã nghỉ như khách đang tập.
+    //
+    // Thêm vế c.status = 'ACTIVE': "Bảo lưu" / "Nghỉ tập" là trạng thái của KHÁCH,
+    // gói vẫn để nguyên ACTIVE — không lọc thì khách bảo lưu vẫn hiện như đang tập.
+    // Gói đã có buổi dạy tháng này thì vẫn hiện bất kể trạng thái (khớp tiền trả).
     const assignedEnrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
       `
       SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
@@ -114,7 +118,7 @@ export async function GET(req: Request) {
              c."fullName"
       FROM package_enrollments pe
       JOIN clients c ON c.id = pe."clientId"
-      WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
+      WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
       ORDER BY c."fullName" ASC, pe."createdAt" ASC
       `,
       ptId, taughtEnrollmentIds
@@ -134,7 +138,7 @@ export async function GET(req: Request) {
                  c."fullName"
           FROM package_enrollments pe
           JOIN clients c ON c.id = pe."clientId"
-          WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
+          WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
           ORDER BY c."fullName" ASC, pe."createdAt" ASC
           `,
           substituteClientIds, taughtEnrollmentIds

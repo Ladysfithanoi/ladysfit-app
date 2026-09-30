@@ -142,14 +142,15 @@ export async function POST(req: Request) {
       // Lộ trình đã có buổi dạy tháng này vẫn hiện kể cả khi gói vừa đóng giữa
       // tháng (hết buổi / hết hạn), để file Excel khớp với tiền buổi dạy thực trả.
       // Ngoài nhóm đó chỉ lấy gói CÒN CHẠY tính sống — cùng một luật với bảng
-      // trên màn hình, xem chargeablePackageSql.
+      // trên màn hình, xem chargeablePackageSql. Khách Bảo lưu / Nghỉ tập bị loại
+      // (c.status = 'ACTIVE') trừ khi tháng này có buổi dạy.
       const enrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
         `SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName",
                 pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
                 c."fullName"
          FROM package_enrollments pe
          JOIN clients c ON c.id = pe."clientId"
-         WHERE (${chargeablePackageSql()} OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
+         WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
          ORDER BY c."fullName" ASC, pe."createdAt" ASC`,
         r.userId, Array.from(logCount.keys())
       );
