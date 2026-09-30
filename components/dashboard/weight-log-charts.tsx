@@ -74,14 +74,20 @@ export function DetailWeightChart({
   const maxY = Math.ceil(Math.max(...data.map((d) => d.weight)) + 1);
 
   return (
-    <ResponsiveContainer width="100%" height={250}>
-      <LineChart data={data} margin={{ top: 20, right: 56, left: -8, bottom: 0 }}>
+    // Trục ngày đẩy xuống (tickMargin) và chừa đáy, để mốc kg thấp nhất không
+    // dính vào hàng ngày tháng. Nhãn "Mục tiêu" nằm trong vùng vẽ, sát trên
+    // đường mục tiêu — đặt bên phải thì màn điện thoại cắt mất nửa chữ.
+    <ResponsiveContainer width="100%" height={280}>
+      <LineChart data={data} margin={{ top: 20, right: 16, left: -8, bottom: 12 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
         <XAxis
           dataKey="date"
           axisLine={false}
           tickLine={false}
           tick={{ fontSize: 11, fill: "#9ca3af", fontWeight: 600 }}
+          tickMargin={14}
+          height={36}
+          minTickGap={16}
           interval="preserveStartEnd"
         />
         <YAxis
@@ -91,7 +97,8 @@ export function DetailWeightChart({
           tickLine={false}
           tick={{ fontSize: 11, fill: "#9ca3af" }}
           unit="kg"
-          width={42}
+          width={46}
+          tickMargin={6}
         />
         <Tooltip content={<CustomTooltip />} />
         <ReferenceLine
@@ -101,7 +108,7 @@ export function DetailWeightChart({
           strokeWidth={1.5}
           label={{
             value: `Mục tiêu ${targetWeight}kg`,
-            position: "right",
+            position: "insideTopRight",
             fontSize: 10,
             fill: "#9ca3af",
             fontWeight: 600,
