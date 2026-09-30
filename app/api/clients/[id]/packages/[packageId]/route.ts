@@ -26,7 +26,18 @@ export async function PUT(
 
   const data: Record<string, unknown> = {};
 
-  if (sessionsUsed !== undefined) data.sessionsUsed = Number(sessionsUsed);
+  // Số buổi KH đi tập quyết định gói hết buổi hay chưa — chỉ Admin sửa tay.
+  // FM/PT chỉ xem; số này tự tăng qua check-in.
+  if (sessionsUsed !== undefined) {
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ Admin sửa được số buổi KH đi tập" }, { status: 403 });
+    }
+    const n = Number(sessionsUsed);
+    if (!Number.isInteger(n) || n < 0) {
+      return NextResponse.json({ error: "Số buổi không hợp lệ" }, { status: 400 });
+    }
+    data.sessionsUsed = n;
+  }
   if (status !== undefined) data.status = status;
   if (notes !== undefined) data.notes = notes || null;
   if (contractCode !== undefined) data.contractCode = contractCode || null;

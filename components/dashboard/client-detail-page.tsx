@@ -2826,7 +2826,9 @@ export function ClientDetailPage({
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-blue-400 w-16 flex-shrink-0">KH đi tập:</span>
-                    {canEditSessions ? (
+                    {/* Số buổi KH đi tập quyết định gói hết buổi hay chưa, nên chỉ
+                        Admin sửa tay được — FM/PT chỉ xem. */}
+                    {isAdmin ? (
                       <div className="flex items-center gap-1 flex-1">
                         <input
                           type="number"
