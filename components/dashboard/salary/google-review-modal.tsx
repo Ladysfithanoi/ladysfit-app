@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Upload, Trash2, RefreshCw, Pencil, Check, Loader2 } from "lucide-react";
+import { MAX_GOOGLE_REVIEW_IMAGES } from "@/lib/google-review-bonus";
 
-// Ảnh đánh giá Google Business của một cơ sở trong một tháng. Mỗi ảnh = một
-// đánh giá được thưởng (lib/google-review-bonus) — thêm, thay ảnh, sửa tên
-// khách / ghi chú hay xoá ở đây là thưởng Google trên bảng lương đổi theo.
+// Ảnh đánh giá Google Business của một cơ sở trong một tháng — để ĐỐI CHIẾU với
+// số review FM nhập ở bảng lương. Thưởng tính theo số nhập (lib/google-review-
+// bonus), không theo số ảnh: một ảnh chụp có thể gồm nhiều đánh giá.
 
 type Proof = {
   id: string;
@@ -20,6 +21,8 @@ type Props = {
   month:      number;
   year:       number;
   canEdit:    boolean;
+  /** Số review đã nhập ở bảng lương của cơ sở — hiện cạnh số ảnh để đối chiếu. */
+  enteredCount?: number;
   onClose:    () => void;
   /** Gọi khi danh sách ảnh đổi — để bảng lương tính lại thưởng. */
   onChanged:  () => void;
@@ -38,7 +41,7 @@ async function uploadImage(file: File): Promise<string> {
   return data.url as string;
 }
 
-export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, onClose, onChanged }: Props) {
+export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, enteredCount, onClose, onChanged }: Props) {
   const [proofs, setProofs]   = useState<Proof[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]       = useState<string | null>(null); // "add" | proof id
@@ -90,12 +93,16 @@ export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, 
     }
   }
 
+  const remaining = MAX_GOOGLE_REVIEW_IMAGES - proofs.length;
+
   function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const list = Array.from(files);
+    const all = Array.from(files);
+    const list = all.slice(0, Math.max(0, remaining));
     run("add", async () => {
-      for (const file of list) {
-        const imageUrl = await uploadImage(file);
+      // Tải song song cho nhanh, nhưng lưu theo đúng thứ tự đã chọn.
+      const urls = await Promise.all(list.map(uploadImage));
+      for (const imageUrl of urls) {
         const res = await fetch("/api/salary/google-reviews", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -104,6 +111,9 @@ export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Lưu ảnh không thành công");
         setProofs(prev => [...prev, data]);
+      }
+      if (all.length > list.length) {
+        throw new Error(`Chỉ tải được tối đa ${MAX_GOOGLE_REVIEW_IMAGES} ảnh mỗi tháng — đã bỏ ${all.length - list.length} ảnh dư.`);
       }
     });
   }
@@ -146,7 +156,6 @@ export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, 
     });
   }
 
-  const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -158,7 +167,8 @@ export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, 
           <div className="min-w-0">
             <p className="text-sm font-extrabold text-gray-800">Đánh giá Google Business</p>
             <p className="text-xs text-gray-400 truncate">
-              {branchName} · Tháng {month}/{year} · {proofs.length} đánh giá = {vnd(proofs.length * 100_000)}
+              {branchName} · Tháng {month}/{year} · {proofs.length}/{MAX_GOOGLE_REVIEW_IMAGES} ảnh
+              {enteredCount !== undefined && <> · đã nhập {enteredCount} review</>}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0">
@@ -167,18 +177,21 @@ export function GoogleReviewModal({ branchId, branchName, month, year, canEdit, 
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {canEdit && (
+          {canEdit && remaining > 0 && (
             <button
               onClick={() => addInput.current?.click()}
               disabled={busy !== null}
               className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 hover:border-[#f15b5c] hover:bg-red-50/40 py-5 text-sm font-semibold text-gray-500 disabled:opacity-50 transition-colors"
             >
               {busy === "add" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {busy === "add" ? "Đang tải ảnh lên..." : "Tải ảnh đánh giá lên (chọn được nhiều ảnh)"}
+              {busy === "add"
+                ? "Đang tải ảnh lên..."
+                : `Tải ảnh đánh giá lên — chọn nhiều ảnh một lúc (còn ${remaining} ảnh)`}
             </button>
           )}
           <p className="text-[11px] text-gray-400">
-            Mỗi ảnh là một đánh giá, thưởng 100.000đ cho FM hưởng hoa hồng doanh số phòng.
+            Ảnh để đối chiếu với số review đã nhập ở bảng lương (bấm &ldquo;Sửa&rdquo; ở dòng FM để đổi số).
+            Thưởng 100.000đ / review tính theo số nhập. Tối đa {MAX_GOOGLE_REVIEW_IMAGES} ảnh mỗi tháng.
           </p>
 
           {error && <p className="text-xs font-semibold text-red-600">{error}</p>}

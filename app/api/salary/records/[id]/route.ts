@@ -6,6 +6,7 @@ import type { SalaryStatus } from "@prisma/client";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
+import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -27,6 +28,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     status?: SalaryStatus; advancePaid?: number; notes?: string; actualWorkDays?: number;
     /** Lương cơ bản FM đặt tay cho người này ngay trong bảng lương. */
     baseSalary?: number;
+    /** FM: số lượt đánh giá Google Business — thưởng theo số này. */
+    googleReviews?: number;
   };
 
   if (body.baseSalary !== undefined && !(Number.isFinite(body.baseSalary) && body.baseSalary >= 0)) {
@@ -36,6 +39,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const baseSalary = body.baseSalary !== undefined && record.user.role !== "ADMIN"
     ? body.baseSalary
     : record.baseSalary;
+
+  // Thưởng Google chỉ có ở FM: sửa số lượt là thưởng đổi theo.
+  const editsGoogle   = body.googleReviews !== undefined && record.user.role === "FM";
+  const googleReviews = editsGoogle ? normalizeReviewCount(body.googleReviews) : record.googleReviews;
+  const googleBonus   = editsGoogle ? googleReviews * GOOGLE_BONUS_AMOUNT : record.googleBonus;
 
   const oldStatus    = record.status;
   const newStatus    = body.status ?? oldStatus;
@@ -64,7 +72,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     commissionAmount: record.commissionAmount,
     showPay:          record.showPay,
     goalBonus:        record.goalBonus,
-    googleBonus:      record.googleBonus,
+    googleBonus,
     renewBonus:       record.renewBonus,
     kocCommission:    record.kocCommission,
     kolCommission:    record.kolCommission,
@@ -79,6 +87,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(body.status && { status: body.status }),
       advancePaid,
       baseSalary,
+      googleReviews,
+      googleBonus,
       // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng đổi theo.
       bhxh:             bhxhBaseOf(record.user.role, baseSalary),
       standardWorkDays: standardDays as unknown as never,

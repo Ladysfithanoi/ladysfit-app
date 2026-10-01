@@ -12,7 +12,7 @@ import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
 import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
-import { getBranchGoogleReviewCount, GOOGLE_BONUS_AMOUNT } from "@/lib/google-review-bonus";
+import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -135,7 +135,7 @@ type GenEntry = {
   branchCommission?:    boolean;
   /** Bỏ qua — thưởng transform nay tự tính (lib/transform-bonus). */
   clientsAchievedGoal?: number;
-  /** Bỏ qua — thưởng Google nay đếm từ ảnh đánh giá đã tải lên (lib/google-review-bonus). */
+  /** FM: số lượt đánh giá Google Business nhập tay — thưởng theo số này. */
   googleReviews?:       number;
   /** Bỏ qua — thưởng Renew nay tự đếm từ Setup doanh số (lib/renew-bonus). */
   renewContracts?:      number;
@@ -309,16 +309,14 @@ export async function POST(req: Request) {
         showsResident: residentShows, showsL0: l0Shows, showsTransfer: transferShows,
       });
 
-      // Thưởng Renew tự đếm từ Setup doanh số của cơ sở, thưởng Google đếm từ
-      // ảnh đánh giá đã tải lên. Cả hai đi cùng ô "hưởng hoa hồng doanh số cả
-      // phòng": cơ sở nhiều FM thì chỉ người được tích nhận, không thì một gói
-      // renew / một đánh giá bị thưởng nhiều lần.
+      // Thưởng Renew tự đếm từ Setup doanh số của cơ sở, đi cùng ô "hưởng hoa
+      // hồng doanh số cả phòng": cơ sở nhiều FM thì chỉ người được tích nhận,
+      // không thì một gói renew bị thưởng nhiều lần.
       const renewContracts = takesBranchCommission
         ? await getBranchRenewCount(body.branchId, body.month, body.year)
         : 0;
-      const googleReviews = takesBranchCommission
-        ? await getBranchGoogleReviewCount(body.branchId, body.month, body.year)
-        : 0;
+      // Thưởng Google: nhập số lượt đánh giá như nhập show, ảnh chỉ để đối chiếu.
+      const googleReviews = normalizeReviewCount(entry.googleReviews);
       const googleBonus = googleReviews * GOOGLE_BONUS_AMOUNT;
       const renewBonus  = renewContracts * RENEW_BONUS_AMOUNT;
       // Buổi dạy khách KOL / hợp đồng KOC của chính FM — ngoài trần 60 show.

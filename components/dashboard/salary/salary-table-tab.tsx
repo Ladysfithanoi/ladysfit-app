@@ -142,6 +142,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [editWorkDays, setEditWorkDays] = useState("");
   // Lương cơ bản của riêng người này — FM đặt tay ngay trong bảng lương.
   const [editBase, setEditBase]       = useState("");
+  // FM: số lượt đánh giá Google Business — thưởng theo số này, như nhập show.
+  const [editGoogle, setEditGoogle]   = useState("");
   const [saving, setSaving]           = useState(false);
 
   /** Mở/đóng dòng sửa của một bản ghi. */
@@ -152,6 +154,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     setEditNotes(r.notes ?? "");
     setEditWorkDays(String(r.actualWorkDays ?? standardWorkDays(month, year)));
     setEditBase(String(r.baseSalary ?? 0));
+    setEditGoogle(String(r.googleReviews ?? 0));
   }
 
   // Generate modal state
@@ -373,6 +376,10 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           actualWorkDays: parseFloat(editWorkDays) || 0,
           // Admin dạy thêm không có lương cứng — server bỏ qua trường này.
           baseSalary:     Math.max(0, parseFloat(editBase) || 0),
+          // Chỉ dòng FM có thưởng Google — server bỏ qua với vai trò khác.
+          ...(records.find(r => r.id === editingId)?.user.role === "FM"
+            ? { googleReviews: Math.max(0, parseInt(editGoogle) || 0) }
+            : {}),
         }),
       });
       if (res.ok) {
@@ -952,13 +959,12 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                               branchId:   r.branchId,
                               branchName: branches.find(b => b.id === r.branchId)?.name ?? "",
                             })}
-                            title="Xem / tải ảnh đánh giá Google Business"
+                            title="Xem / tải ảnh đối chiếu đánh giá Google Business"
                             className="inline-flex flex-col items-start gap-0.5 text-left group"
                           >
                             <span className="text-gray-600 group-hover:text-blue-600">{vnd(r.googleBonus)}</span>
-                            <span className="text-[10px] font-semibold text-blue-500 group-hover:text-blue-600">
-                              {(r.googleReviews ?? 0) > 0 ? `🖼️ ${r.googleReviews} ảnh` : "📎 Thêm ảnh"}
-                            </span>
+                            <span className="text-[10px] text-gray-400">{r.googleReviews ?? 0} review</span>
+                            <span className="text-[10px] font-semibold text-blue-500 group-hover:text-blue-600">🖼️ Ảnh đối chiếu</span>
                           </button>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap" title="Tự đếm từ Setup doanh số của cơ sở">
@@ -998,6 +1004,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                       </tr>
                       {editingId === r.id && (
                         <EditRow colSpan={18} editAdvance={editAdvance} editNotes={editNotes}
+                          editGoogle={editGoogle} onGoogle={setEditGoogle}
                           editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
                           leaveDays={r.leaveDays ?? 0}
                           saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
@@ -1165,9 +1172,19 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   {/* FM-specific extra inputs */}
                   {entry.userRole === "FM" && (
                     <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
-                      <p className="col-span-2 text-[10px] text-gray-400">
-                        Thưởng Renew tự đếm từ Setup doanh số, thưởng Google đếm từ ảnh đánh giá đã tải lên
-                        (bấm vào cột Google trên bảng lương) — không cần nhập.
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-500">Review Google</label>
+                        <input
+                          type="number" min={0}
+                          value={entry.googleReviews}
+                          onFocus={(e) => e.target.select()}
+                          onChange={e => updateEntry(entry.userId, "googleReviews", parseInt(e.target.value) || 0)}
+                          className={numInput + " w-full text-left"}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 self-end">
+                        100.000đ / review. Tải ảnh đối chiếu ở nút &ldquo;Ảnh đánh giá Google&rdquo;.
+                        Thưởng Renew tự đếm từ Setup doanh số — không cần nhập.
                       </p>
                       <p className="col-span-2 text-[10px] text-gray-400">Tối đa 60 show dạy/tháng</p>
                       <label className="col-span-2 flex items-start gap-2 cursor-pointer select-none">
@@ -1250,6 +1267,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           month={month}
           year={year}
           canEdit={!isCOO}
+          enteredCount={records
+            .filter(r => r.branchId === googleModal.branchId && r.user.role === "FM")
+            .reduce((s, r) => s + (r.googleReviews ?? 0), 0)}
           onClose={() => setGoogleModal(null)}
           onChanged={fetchRecords}
         />
@@ -1296,8 +1316,10 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
   );
 }
 
-function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onBase, onSave }: {
+function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, editGoogle, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onBase, onGoogle, onSave }: {
   colSpan: number; editAdvance: string; editNotes: string; editWorkDays: string;
+  /** FM: số lượt đánh giá Google Business. Không truyền = vai trò không có khoản này. */
+  editGoogle?: string; onGoogle?: (v: string) => void;
   /** Lương cơ bản — chỉ hiện với vai trò có lương cứng (cùng điều kiện với ô ngày công). */
   editBase: string; onBase: (v: string) => void;
   /** Ngày công chuẩn của tháng; 0 = vai trò không có lương cứng → ẩn ô ngày công. */
@@ -1334,6 +1356,15 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, stan
                   Đã trừ {formatDays(leaveDays)} ngày công theo lịch nghỉ / ngày vào làm
                 </p>
               )}
+            </div>
+          )}
+          {onGoogle && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500">Số review Google</label>
+              <input type="number" min={0} step={1} inputMode="numeric" value={editGoogle ?? ""}
+                onFocus={(e) => e.target.select()} onChange={e => onGoogle(e.target.value)}
+                className="h-9 w-28 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+              <p className="text-[10px] text-gray-400">100.000đ / review</p>
             </div>
           )}
           <div className="space-y-1">

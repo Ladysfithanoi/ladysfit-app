@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { MAX_GOOGLE_REVIEW_IMAGES } from "@/lib/google-review-bonus";
 
-// Ảnh đánh giá Google Business của một cơ sở trong một tháng — nguồn của thưởng
-// Google cho FM (lib/google-review-bonus). FM quản cơ sở được thêm/sửa/xoá,
-// COO chỉ xem.
+// Ảnh đánh giá Google Business của một cơ sở trong một tháng — để ĐỐI CHIẾU với
+// số lượt đánh giá FM nhập ở bảng lương (lib/google-review-bonus). Tối đa
+// MAX_GOOGLE_REVIEW_IMAGES ảnh. FM quản cơ sở được thêm/sửa/xoá, COO chỉ xem.
 
 async function access(branchId: string) {
   const session = await getServerSession(authOptions);
@@ -52,6 +53,16 @@ export async function POST(req: Request) {
   const a = await access(body.branchId);
   if (a.error) return a.error;
   if (!a.canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const existing = await prisma.googleReviewProof.count({
+    where: { branchId: body.branchId, month: Number(body.month), year: Number(body.year) },
+  });
+  if (existing >= MAX_GOOGLE_REVIEW_IMAGES) {
+    return NextResponse.json(
+      { error: `Mỗi tháng tối đa ${MAX_GOOGLE_REVIEW_IMAGES} ảnh — xoá bớt hoặc thay ảnh cũ.` },
+      { status: 400 },
+    );
+  }
 
   const proof = await prisma.googleReviewProof.create({
     data: {

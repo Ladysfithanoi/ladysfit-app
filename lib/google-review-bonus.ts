@@ -1,16 +1,16 @@
-import { prisma } from "@/lib/prisma";
-
-// ── Thưởng Google Business của FM — đếm từ ảnh đánh giá đã tải lên ──────────
+// ── Thưởng Google Business của FM ───────────────────────────────────────────
 //
-// Mỗi ảnh trong google_review_proofs là bằng chứng cho MỘT đánh giá, nên số ảnh
-// của cơ sở trong tháng chính là số đánh giá được thưởng. Không còn ô nhập tay:
-// con số không kèm ảnh thì không ai đối chiếu được.
-//
-// Đi theo ô "hưởng hoa hồng doanh số cả phòng" giống thưởng Renew
-// (lib/renew-bonus): cơ sở nhiều FM thì chỉ người được tích nhận.
+// Giống tiền show: người tạo bảng lương NHẬP số lượt đánh giá, thưởng = số lượt ×
+// đơn giá. Ảnh đánh giá (google_review_proofs) chỉ để ĐỐI CHIẾU — một ảnh chụp có
+// thể gồm nhiều đánh giá nên không đếm ảnh ra tiền.
 
 export const GOOGLE_BONUS_AMOUNT = 100_000;
 
-export async function getBranchGoogleReviewCount(branchId: string, month: number, year: number): Promise<number> {
-  return prisma.googleReviewProof.count({ where: { branchId, month, year } });
+/** Số ảnh đối chiếu tối đa của một cơ sở trong một tháng. */
+export const MAX_GOOGLE_REVIEW_IMAGES = 10;
+
+/** Số lượt nhập tay → số nguyên không âm. */
+export function normalizeReviewCount(v: unknown): number {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
