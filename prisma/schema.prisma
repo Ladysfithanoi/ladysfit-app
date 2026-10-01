@@ -152,6 +152,7 @@ model User {
   createdLeaveDays           LeaveDay[]                   @relation("LeaveDayCreator")
   clientAssignments          ClientPTAssignment[]         @relation("PTClientAssignments")
   packageProgressNotifs      PackageProgressNotification[] @relation("FMPackageProgressNotifs")
+  slowProgressNotifs         SlowProgressNotification[]
 
   pushSubscriptions     PushSubscription[]
   @@map("users")
@@ -252,6 +253,7 @@ model Client {
   substituteRequests           SubstituteRequest[]
   ptAssignments                ClientPTAssignment[]
   packageProgressNotifs        PackageProgressNotification[]
+  slowProgressNotifs           SlowProgressNotification[]
 
   @@map("clients")
 }
@@ -1371,8 +1373,30 @@ model PerformanceAlert {
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   pt     User   @relation("PTPerformanceAlerts", fields: [ptId], references: [id])
+  slowProgressNotifs SlowProgressNotification[]
 
   @@map("performance_alerts")
+}
+
+// Thông báo "khách chậm tiến độ giảm cân" gửi FM của cơ sở + Admin — mỗi người
+// một dòng để ai đọc người nấy. Sinh ra cùng lúc với PerformanceAlert
+// SLOW_PROGRESS trong lib/performance-check.ts.
+model SlowProgressNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  alertId   String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  alert  PerformanceAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, alertId])
+  @@index([userId, isRead])
+  @@map("slow_progress_notifications")
 }
 
 model WorkoutSetLog {

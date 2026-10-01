@@ -162,7 +162,7 @@ export function buildMessage(
 
 /** FM phụ trách từng cơ sở: theo phân công fm_branch_assignments, và theo cơ sở
  *  ghi thẳng trên hồ sơ nhân sự cho FM chưa được phân công bảng riêng. */
-async function fmsByBranch(): Promise<Map<string, string[]>> {
+export async function fmsByBranch(): Promise<Map<string, string[]>> {
   const [assignments, fms] = await Promise.all([
     prisma.fMBranchAssignment.findMany({
       where: { user: { role: "FM", deletedAt: null } },

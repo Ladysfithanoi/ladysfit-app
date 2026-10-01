@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
-  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, TrendingUp, Menu,
+  LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, TrendingUp, TrendingDown, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChecklistReportModal } from "@/components/dashboard/checklist-notif-modal";
@@ -105,6 +105,14 @@ type PackageProgressNotif = {
   id: string;
   message: string;
   milestone: string;
+  isRead: boolean;
+  createdAt: string;
+  client: { id: string; fullName: string };
+};
+
+type SlowProgressNotif = {
+  id: string;
+  message: string;
   isRead: boolean;
   createdAt: string;
   client: { id: string; fullName: string };
@@ -248,6 +256,12 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const [pkgUnread,      setPkgUnread]      = useState(0);
   const [pkgLoaded,      setPkgLoaded]      = useState(false);
 
+  // Khách chậm tiến độ giảm cân (FM + Admin) — lib/performance-check.ts, 8h thứ Hai.
+  const [slowBellOpen,   setSlowBellOpen]   = useState(false);
+  const slowBellRef                         = useRef<HTMLDivElement>(null);
+  const [slowNotifs,     setSlowNotifs]     = useState<SlowProgressNotif[]>([]);
+  const [slowUnread,     setSlowUnread]     = useState(0);
+
   // Info slide-over
   const [infoOpen, setInfoOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -286,12 +300,15 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
       if (pkgBellRef.current && !pkgBellRef.current.contains(e.target as Node)) {
         setPkgBellOpen(false);
       }
+      if (slowBellRef.current && !slowBellRef.current.contains(e.target as Node)) {
+        setSlowBellOpen(false);
+      }
     }
-    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen || checklistBellOpen || measBellOpen || pkgBellOpen) {
+    if (dropdownOpen || bellOpen || perfBellOpen || complaintBellOpen || checklistBellOpen || measBellOpen || pkgBellOpen || slowBellOpen) {
       document.addEventListener("mousedown", handleClick);
     }
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen, checklistBellOpen, measBellOpen, pkgBellOpen]);
+  }, [dropdownOpen, bellOpen, perfBellOpen, complaintBellOpen, checklistBellOpen, measBellOpen, pkgBellOpen, slowBellOpen]);
 
   // Poll unread count for admin
   useEffect(() => {
@@ -455,6 +472,43 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         }
       } catch { /* ignore */ }
     }
+  }
+
+  // Poll khách chậm tiến độ (FM + Admin)
+  useEffect(() => {
+    if (!isFM && !isAdmin) return;
+    async function fetchSlowUnread() {
+      try {
+        const res = await fetch("/api/notifications/slow-progress");
+        if (res.ok) {
+          const data = await res.json();
+          setSlowUnread(data.unreadCount ?? 0);
+        }
+      } catch { /* ignore */ }
+    }
+    fetchSlowUnread();
+    const interval = setInterval(fetchSlowUnread, 60000);
+    return () => clearInterval(interval);
+  }, [isFM, isAdmin]);
+
+  async function openSlowBell() {
+    const opening = !slowBellOpen;
+    setSlowBellOpen(opening);
+    if (!opening) return;
+    try {
+      const res = await fetch("/api/notifications/slow-progress");
+      if (res.ok) {
+        const data = await res.json();
+        setSlowNotifs(data.notifications ?? []);
+        setSlowUnread(data.unreadCount ?? 0);
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function markSlowRead() {
+    await fetch("/api/notifications/slow-progress", { method: "PATCH" });
+    setSlowNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setSlowUnread(0);
   }
 
   async function markPkgRead() {
@@ -1014,6 +1068,88 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         </a>
                       );
                     })}
+                  </div>
+                )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Khách chậm tiến độ giảm cân — FM của cơ sở + Admin */}
+        {(isFM || isAdmin) && (
+          <div ref={slowBellRef} className="relative">
+            <button
+              onClick={openSlowBell}
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Khách chậm tiến độ giảm cân"
+            >
+              <TrendingDown className="w-5 h-5" />
+              {slowUnread > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                  {slowUnread > 9 ? "9+" : slowUnread}
+                </span>
+              )}
+            </button>
+
+            {slowBellOpen && (
+              <>
+                <div className="fixed inset-0 bg-black/30 z-40 sm:hidden" onClick={() => setSlowBellOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-50 sm:absolute sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-2 sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:shadow-xl border border-gray-100 overflow-hidden">
+                <div className="sm:hidden w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1" />
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-bold text-gray-900">Khách chậm tiến độ giảm cân</p>
+                  {slowUnread > 0 && (
+                    <button onClick={markSlowRead} className="text-xs font-semibold text-[#f15b5c] hover:opacity-80">
+                      Đánh dấu đã đọc
+                    </button>
+                  )}
+                </div>
+                {slowNotifs.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <TrendingDown className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+                    <p className="text-xs text-gray-300 font-semibold">Không có thông báo</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+                    {slowNotifs.map((n) => (
+                      <a
+                        key={n.id}
+                        href={`/dashboard/clients/${n.client.id}`}
+                        onClick={() => {
+                          setSlowBellOpen(false);
+                          if (!n.isRead) {
+                            fetch("/api/notifications/slow-progress", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ ids: [n.id] }),
+                            });
+                            setSlowNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+                            setSlowUnread((c) => Math.max(0, c - 1));
+                          }
+                        }}
+                        className={cn(
+                          "flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors",
+                          !n.isRead && "bg-orange-50/60"
+                        )}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0 mt-0.5">
+                          <TrendingDown className="w-3.5 h-3.5 text-orange-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-xs leading-snug", !n.isRead ? "font-bold text-gray-800" : "font-semibold text-gray-500")}>
+                            {n.message}
+                          </p>
+                          <p className="text-[10px] mt-0.5 font-semibold text-orange-500">Nhấn để xem hồ sơ khách →</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {new Date(n.createdAt).toLocaleString("vi-VN", {
+                              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        {!n.isRead && <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-orange-500" />}
+                      </a>
+                    ))}
                   </div>
                 )}
                 </div>
