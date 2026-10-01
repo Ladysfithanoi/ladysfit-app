@@ -2371,3 +2371,20 @@ model GoogleReviewProof {
   @@index([branchId, year, month])
   @@map("google_review_proofs")
 }
+
+/// LỖI GIAO DIỆN phía trình duyệt — màn "Đã xảy ra lỗi" gửi về đây. Không có bảng
+/// này thì lỗi chỉ nằm trên điện thoại của PT, không ai đọc được nguyên nhân.
+/// Cố tình không khoá ngoại: người dùng bị xoá thì dòng lỗi vẫn giữ để đối chiếu.
+model ClientErrorLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  message   String   @db.Text
+  stack     String?  @db.Text
+  digest    String?
+  url       String?  @db.Text
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("client_error_logs")
+}
