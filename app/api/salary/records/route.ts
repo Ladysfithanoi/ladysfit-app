@@ -6,7 +6,7 @@ import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { showPayOf } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { computeTotalSalary } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
 import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
@@ -328,7 +328,7 @@ export async function POST(req: Request) {
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
           renewBonus, renewContracts: entry.renewContracts,
-          bhxh: baseSalary, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          bhxh: bhxhBaseOf("FM", baseSalary), kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
           totalSalary, advancePaid: 0, remainingPayment: totalSalary,
         },
       });
@@ -364,7 +364,7 @@ export async function POST(req: Request) {
           showsTransfer: (entry.showsTransfer ?? 0) as unknown as never, showPay,
           goalBonus, clientsAchievedGoal,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
-          bhxh: 4_960_000, kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          bhxh: bhxhBaseOf("PT", baseSalary), kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
           totalSalary, advancePaid: 0, remainingPayment: totalSalary,
         },
       });

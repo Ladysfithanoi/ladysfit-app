@@ -657,7 +657,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Ngày công","Thâm niên","Doanh số","% HH","Tiền HH","Thưởng Transform","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương CB","Ngày công","Lương cộng thêm","Doanh số","% HH","Tiền HH","Thưởng Transform","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -870,7 +870,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương cố định","Ngày công","Thâm niên","DS phòng","% HH","Tiền HH","Show dạy","Tiền buổi dạy","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương cố định","Ngày công","Lương cộng thêm","DS phòng","% HH","Tiền HH","Show dạy","Tiền buổi dạy","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>

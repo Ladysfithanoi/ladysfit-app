@@ -169,7 +169,7 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
               )}
 
               {record.seniorityBonus > 0 && (
-                <Row label="Lương thâm niên" value={vnd(record.seniorityBonus)} />
+                <Row label="Lương cộng thêm (thâm niên)" value={vnd(record.seniorityBonus)} />
               )}
 
               {!isStaff && (
@@ -235,7 +235,8 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
             {/* BHXH note */}
             <div className="mt-4 px-4 py-3 bg-blue-50 rounded-xl">
               <p className="text-xs font-semibold text-blue-600">
-                BHXH: {vnd(record.bhxh)} <span className="font-normal text-blue-400">(đóng theo mức đã đăng ký)</span>
+                BHXH đóng trên lương cơ bản: {vnd(record.bhxh)}{" "}
+                <span className="font-normal text-blue-400">(không tính lương cộng thêm)</span>
               </p>
             </div>
 

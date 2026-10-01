@@ -51,3 +51,14 @@ export function computeTotalSalary(p: SalaryParts): number {
   return fixedPay + p.seniorityBonus + p.commissionAmount + p.showPay
        + p.goalBonus + p.kocCommission + p.kolCommission;
 }
+
+/**
+ * Mức đóng BHXH = LƯƠNG CƠ BẢN (PT mặc định 5.310.000đ). Lương thâm niên là
+ * phần LƯƠNG CỘNG THÊM nên không nằm trong mức đóng, phụ cấp cũng vậy. Trước
+ * đây mức đóng của PT ghi cứng 4.960.000đ, lệch khỏi lương cơ bản thật.
+ *
+ * STAFF và Admin dạy thêm không đóng BHXH qua bảng lương này.
+ */
+export function bhxhBaseOf(role: string, baseSalary: number): number {
+  return role === "PT" || role === "FM" ? baseSalary : 0;
+}

@@ -250,9 +250,9 @@ export async function POST(req: Request) {
 
     // Header row
     const S1_HEADERS = [
-      "STT","Họ tên","Vị trí","Lương CB","Phụ cấp","Ngày công","Thâm niên",
+      "STT","Họ tên","Vị trí","Lương CB","Phụ cấp","Ngày công","Lương cộng thêm",
       "Doanh số","% HH","Tiền HH","Tiền buổi dạy","Thưởng",
-      "Tổng lương","Tạm ứng","Còn lại","BHXH","Trạng thái",
+      "Tổng lương","Tạm ứng","Còn lại","Mức đóng BHXH","Trạng thái",
     ];
     const hdrRow1 = ws1.addRow(S1_HEADERS);
     applyHeaderStyle(hdrRow1);

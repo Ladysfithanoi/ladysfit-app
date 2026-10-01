@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import type { SalaryStatus } from "@prisma/client";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { computeTotalSalary } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -79,6 +79,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(body.status && { status: body.status }),
       advancePaid,
       baseSalary,
+      // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng đổi theo.
+      bhxh:             bhxhBaseOf(record.user.role, baseSalary),
       standardWorkDays: standardDays as unknown as never,
       actualWorkDays:   actualDays   as unknown as never,
       leaveDays:        leaveCount   as unknown as never,
