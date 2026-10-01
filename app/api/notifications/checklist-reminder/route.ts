@@ -3,8 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
 
+// Vercel Cron gọi bằng GET kèm "Authorization: Bearer <CRON_SECRET>"; nút
+// "Test thông báo" của Admin gọi POST bằng phiên đăng nhập. Trước đây route chỉ
+// có POST và chỉ đọc header x-cron-secret, nên cron của Vercel chưa lần nào lọt qua.
 function authorized(req: Request, role?: string): boolean {
   const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.get("authorization") === `Bearer ${secret}`) return true;
   if (secret && req.headers.get("x-cron-secret") === secret) return true;
   return role === "ADMIN";
 }
@@ -57,3 +61,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ created: toRemind.length });
 }
+
+export const GET = POST;
