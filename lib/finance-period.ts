@@ -55,3 +55,11 @@ export function transactionDateFor(lead: {
   // 12h trưa: giờ nào trong ngày cũng ra đúng ngày đó ở cả giờ máy chủ lẫn UTC.
   return new Date(year, month - 1, day, 12, 0, 0, 0);
 }
+
+/**
+ * Kỳ (tháng/năm) mà một ngày rơi vào — đọc bằng đúng các getter mà
+ * transactionDateFor() dùng để soát "trong kỳ", để hai bên không bao giờ lệch.
+ */
+export function periodOf(d: Date): { month: number; year: number } {
+  return { month: d.getMonth() + 1, year: d.getFullYear() };
+}

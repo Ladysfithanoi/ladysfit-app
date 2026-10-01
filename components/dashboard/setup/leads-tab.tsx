@@ -285,8 +285,14 @@ export function LeadsTab({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Lỗi");
+      const saved = await res.json().catch(() => null) as { month?: number; year?: number; customerName?: string } | null;
       closeForm();
       fetchLeads();
+      // Đợt Thanh toán nốt đi theo kỳ tiền về — báo cho người nhập biết dòng đã
+      // sang tháng khác, kẻo tưởng bị mất.
+      if (saved?.month && saved?.year && (saved.month !== month || saved.year !== year)) {
+        showToast(`Đã ghi ${saved.customerName ?? "lead"} vào kỳ ${saved.month}/${saved.year} theo ngày tiền về`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {

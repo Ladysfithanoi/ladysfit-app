@@ -133,7 +133,7 @@ export function SetupPage({ branches, currentUserId, currentUserRole, userName, 
           {/* Tháng & Năm — ẩn ở tab Thống kê quý / năm / Hiệu suất (các tab này có bộ lọc kỳ riêng trong bảng) */}
           {tab !== "quarterStats" && tab !== "yearStats" && tab !== "performance" && (
             <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto md:gap-2">
-              <div className="w-full md:w-[100px]">
+              <div className="w-full md:w-[120px]">
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className={selectCls}>
                   {months.map((m) => (
                     <option key={m} value={m}>Tháng {m}</option>

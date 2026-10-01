@@ -93,8 +93,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       packageRegistered: lead.packageRegistered,
       fitpartnerRevenue: lead.fitpartnerRevenue,
       remark:            lead.remark,
-      // Cùng kỳ với khoản cọc nên hiện ngay trong bảng nhân sự đang mở. Thu sang
-      // tháng khác thì sửa lại như mọi lead bình thường.
+      // Cùng kỳ với khoản cọc nên hiện ngay trong bảng nhân sự đang mở. Khi điền
+      // tiền thu nốt, PUT /api/setup/leads/[id] dời kỳ theo Ngày ký.
       month:             lead.month,
       year:              lead.year,
       status:            "PB",

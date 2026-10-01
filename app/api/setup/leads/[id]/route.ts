@@ -8,6 +8,7 @@ import { syncLeadToTransaction } from "@/lib/sync-finance";
 import { syncLeadToClient } from "@/lib/sync-lead-to-client";
 import { validateLeadFinance, fieldLocks, type LeadFinanceStatus } from "@/lib/lead-pricing";
 import { getActivePromos } from "@/lib/package-promos-server";
+import { periodOf } from "@/lib/finance-period";
 
 /** Các trường quyết định luật tiền — chỉ khi body đụng tới chúng mới kiểm tra lại. */
 const FINANCE_FIELDS = ["status", "source", "packageRegistered", "actualRevenue", "remainingPayment"];
@@ -116,6 +117,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     ? (nextRevenue ? (requestedSignDate ?? new Date()) : null)
     : lead.signDate;
 
+  // Đợt THANH TOÁN NỐT nằm ở kỳ mà tiền thu nốt thật sự về, không phải kỳ của
+  // khoản cọc. Dòng này được sinh ra ở kỳ của khoản cọc (để hiện ngay trong bảng
+  // đang mở), nhưng tiền thường về ở tháng sau: cọc 18/09, thu nốt 01/10. Giữ kỳ
+  // 9 thì Setup doanh số cộng 10 triệu vào tháng 9 trong khi Ngày ký ghi 01/10,
+  // còn Bảng thu bị kẹp về 01/09 — ba chỗ ba ngày khác nhau.
+  // Nên: có Ngày ký thì kỳ của dòng thu nốt đi theo Ngày ký.
+  const nextPeriod = isPayoffRow && nextSignDate
+    ? periodOf(nextSignDate)
+    : { month: lead.month, year: lead.year };
+  const periodMoved = nextPeriod.month !== lead.month || nextPeriod.year !== lead.year;
+
   const updated = await prisma.salesLead.update({
     where: { id: params.id },
     data: {
@@ -133,6 +145,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       remainingPayment: nextRemaining,
       fitpartnerRevenue: "fitpartnerRevenue" in body ? (body.fitpartnerRevenue != null ? parseFloat(String(body.fitpartnerRevenue)) : null) : lead.fitpartnerRevenue,
       signDate: nextSignDate,
+      month: nextPeriod.month,
+      year: nextPeriod.year,
       remark: "remark" in body ? (body.remark ? String(body.remark) : null) : lead.remark,
     },
     include: {
@@ -143,11 +157,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   if (["PIF", "DE", "PB"].includes(updated.status) && updated.signDate) {
     if (newAssignedPTId) {
-      await syncLeadRevenueToWeeklyActuals(newAssignedPTId, lead.branchId, lead.month, lead.year);
+      await syncLeadRevenueToWeeklyActuals(newAssignedPTId, lead.branchId, updated.month, updated.year);
     }
     if (newAssignedPTId !== lead.assignedPTId && lead.assignedPTId) {
-      await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, lead.month, lead.year);
+      await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, updated.month, updated.year);
     }
+  }
+  // Dòng vừa rời kỳ cũ thì kỳ cũ cũng phải tính lại, không thì doanh số tuần của
+  // tháng đó vẫn còn giữ số tiền đã chuyển đi.
+  if (periodMoved && lead.assignedPTId) {
+    await syncLeadRevenueToWeeklyActuals(lead.assignedPTId, lead.branchId, lead.month, lead.year);
   }
   await syncLeadToTransaction(updated);
 
