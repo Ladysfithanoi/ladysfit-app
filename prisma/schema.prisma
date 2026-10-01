@@ -153,6 +153,7 @@ model User {
   clientAssignments          ClientPTAssignment[]         @relation("PTClientAssignments")
   packageProgressNotifs      PackageProgressNotification[] @relation("FMPackageProgressNotifs")
 
+  pushSubscriptions     PushSubscription[]
   @@map("users")
 }
 
@@ -1245,6 +1246,10 @@ model WorkoutLog {
   surveyRecovery        String?
   nextSessionSuggestion String? @db.Text
 
+  // Số lần đã đẩy thông báo nhắc ký check-out (0 → chưa nhắc; 1 → đã nhắc ở
+  // phút 90; 2 → đã nhắc lần cuối trước mốc huỷ). Xem lib/checkout-push.ts.
+  checkoutPushCount Int @default(0)
+
   client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   program   WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
   week      WorkoutWeek    @relation(fields: [weekId], references: [id], onDelete: Cascade)
@@ -2300,4 +2305,23 @@ model LoginOtp {
 
   @@index([accountType, accountId, deviceHash])
   @@map("login_otps")
+}
+
+// ── Web Push ──────────────────────────────────────────────────────────────
+// Mỗi trình duyệt/điện thoại mà nhân sự bấm "Bật thông báo" là một dòng. Máy
+// chủ đẩy thông báo tới endpoint này kể cả khi app đang đóng/khoá màn hình.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique @db.Text
+  p256dh    String
+  auth      String
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

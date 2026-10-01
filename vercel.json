@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/trash-cleanup",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/checkout-push",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

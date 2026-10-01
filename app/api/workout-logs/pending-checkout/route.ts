@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MAX_SESSION_MINUTES, voidOverCapSessions } from "@/lib/workout-session";
+import { sendCheckoutReminders } from "@/lib/checkout-push";
 
 // GET /api/workout-logs/pending-checkout
 // Sessions that were checked in (client signed in → package deducted) but have
@@ -23,6 +24,10 @@ export async function GET() {
   // show here nor keep counting. This endpoint is polled by every open dashboard,
   // so over-cap sessions get cleaned up promptly even between cron runs.
   await voidOverCapSessions();
+  // Cùng lý do: đẩy thông báo nhắc check-out ngay từ đây, không phải chờ cron.
+  // Mỗi buổi được "giành" bằng checkoutPushCount nên nhiều máy gọi cùng lúc vẫn
+  // chỉ gửi một lần. Lỗi gửi không được làm hỏng danh sách.
+  await sendCheckoutReminders().catch(() => {});
 
   const role = session.user.role;
   const overdue = new Date(Date.now() - OVERDUE_MINUTES * 60_000);

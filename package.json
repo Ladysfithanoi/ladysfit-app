@@ -35,6 +35,7 @@
     "recharts": "^3.8.1",
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.5.0",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -44,6 +45,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/sharp": "^0.31.1",
+    "@types/web-push": "^3.6.4",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "pg": "^8.20.0",
