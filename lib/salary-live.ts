@@ -7,6 +7,7 @@ import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
+import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 
 /**
  * MỘT ĐƯỜNG TÍNH LẠI BẢNG LƯƠNG THEO THỜI GIAN THỰC.
@@ -147,6 +148,9 @@ export type SalaryPatch = {
   kocCommission:    number;
   kolCommission:    number;
   goalBonus:        number;
+  /** Chỉ FM — số gói renew của cơ sở và tiền thưởng tương ứng. */
+  renewContracts?:  number;
+  renewBonus?:      number;
   /** Chỉ PT — số hợp đồng đạt mốc thưởng transform trong tháng. */
   clientsAchievedGoal?: number;
   showPay:          number;
@@ -224,6 +228,16 @@ export async function recalcSalary(args: {
     }
   }
 
+  // THƯỞNG RENEW CỦA FM — tự đếm từ Setup doanh số của cơ sở, nên lead chốt
+  // thêm trong tháng là bảng lương thấy ngay. Đi cùng ô hưởng hoa hồng phòng
+  // (xem POST /api/salary/records). Các vai trò khác giữ nguyên số đã ghi.
+  let renewBonus = r.renewBonus;
+  let renewContracts: number | undefined;
+  if (role === "FM") {
+    renewContracts = r.branchCommission === false ? 0 : await getBranchRenewCount(r.branchId, month, year);
+    renewBonus = renewContracts * RENEW_BONUS_AMOUNT;
+  }
+
   const shows: ShowBuckets | null = role === "PT"
     ? await liveShowsForUser(r.userId, month, year)
     : null;
@@ -252,7 +266,7 @@ export async function recalcSalary(args: {
     showPay,
     goalBonus,
     googleBonus:     r.googleBonus,
-    renewBonus:      r.renewBonus,
+    renewBonus,
     kocCommission,
     kolCommission,
     standardWorkDays: standardDays,
@@ -269,7 +283,8 @@ export async function recalcSalary(args: {
     Math.abs(r.showPay          - showPay)          > 0.01 ||
     Math.abs(r.kocCommission    - kocCommission)    > 0.01 ||
     Math.abs(r.kolCommission    - kolCommission)    > 0.01 ||
-    Math.abs(r.goalBonus        - goalBonus)        > 0.01;
+    Math.abs(r.goalBonus        - goalBonus)        > 0.01 ||
+    Math.abs(r.renewBonus       - renewBonus)       > 0.01;
 
   return {
     changed,
@@ -280,6 +295,7 @@ export async function recalcSalary(args: {
       kocCommission,
       kolCommission,
       ...(role === "PT" ? { goalBonus, clientsAchievedGoal } : { goalBonus: r.goalBonus }),
+      ...(role === "FM" ? { renewContracts, renewBonus } : {}),
       showPay,
       standardWorkDays: standardDays,
       actualWorkDays:   actualDays,

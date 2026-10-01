@@ -37,6 +37,8 @@ type SalaryRecord = {
   clientsAchievedGoal?: number;
   googleBonus: number;
   renewBonus: number;
+  /** FM: số gói renew của cơ sở — tự đếm từ Setup doanh số. */
+  renewContracts?: number;
   fixedAllowances: number;
   standardWorkDays: number;
   /** Có thể lẻ .5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */
@@ -927,7 +929,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           )}
                         </td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.googleBonus)}</td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.renewBonus)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap" title="Tự đếm từ Setup doanh số của cơ sở">
+                          {r.renewBonus > 0 ? (
+                            <span className="inline-flex flex-col gap-0.5">
+                              <span className="text-gray-600">{vnd(r.renewBonus)}</span>
+                              <span className="text-[10px] text-gray-400">{r.renewContracts ?? 0} gói</span>
+                            </span>
+                          ) : <span className="text-gray-600">{vnd(0)}</span>}
+                        </td>
                         <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
                         <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
@@ -981,8 +990,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
-                * Giới hạn 60 show dạy/tháng | Thưởng Renew từ lần mua thứ 2 trở đi
-                {fmRecords.length > 1 && " | Cơ sở nhiều FM: hoa hồng doanh số phòng chỉ tính cho FM được tích khi tạo bảng lương"}
+                * Giới hạn 60 show dạy/tháng | Thưởng Renew 150k/gói, tự đếm từ Setup doanh số: từ gói thứ 2 trở đi (combo L0 + 1 gói không tính)
+                {fmRecords.length > 1 && " | Cơ sở nhiều FM: hoa hồng doanh số phòng và thưởng Renew chỉ tính cho FM được tích khi tạo bảng lương"}
               </p>
             </div>
           )}
@@ -1126,7 +1135,6 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
                       {([
                         { label: "Google Review",   field: "googleReviews"  as const },
-                        { label: "Hợp đồng Renew",  field: "renewContracts" as const },
                       ] as const).map(({ label, field }) => (
                         <div key={field} className="space-y-1">
                           <label className="text-xs font-semibold text-gray-500">{label}</label>
@@ -1139,6 +1147,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           />
                         </div>
                       ))}
+                      <p className="text-[10px] text-gray-400 self-end">
+                        Thưởng Renew tự đếm từ Setup doanh số của cơ sở — không cần nhập.
+                      </p>
                       <p className="col-span-2 text-[10px] text-gray-400">Tối đa 60 show dạy/tháng</p>
                       <label className="col-span-2 flex items-start gap-2 cursor-pointer select-none">
                         <input
@@ -1150,8 +1161,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         <span className="text-[11px] text-gray-500 leading-relaxed">
                           Hưởng hoa hồng doanh số cả phòng
                           <span className="block text-[10px] text-gray-400">
-                            Bỏ tích thì FM này chỉ nhận lương cứng + tiền buổi dạy. Cơ sở có nhiều FM
-                            nên chỉ tích cho người được hưởng, không thì phòng trả hoa hồng nhiều lần.
+                            Kèm thưởng Renew của cả phòng. Bỏ tích thì FM này chỉ nhận lương cứng + tiền
+                            buổi dạy. Cơ sở có nhiều FM nên chỉ tích cho người được hưởng, không thì phòng
+                            trả hoa hồng và thưởng Renew nhiều lần.
                           </span>
                         </span>
                       </label>

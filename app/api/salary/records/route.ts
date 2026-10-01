@@ -11,6 +11,7 @@ import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
 import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
+import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -134,7 +135,8 @@ type GenEntry = {
   /** Bỏ qua — thưởng transform nay tự tính (lib/transform-bonus). */
   clientsAchievedGoal?: number;
   googleReviews:        number;
-  renewContracts:       number;
+  /** Bỏ qua — thưởng Renew nay tự đếm từ Setup doanh số (lib/renew-bonus). */
+  renewContracts?:      number;
   /** Ngày công thực tế FM nhập; bỏ trống = đi làm đủ ngày công chuẩn. */
   actualWorkDays?:      number;
 };
@@ -306,7 +308,13 @@ export async function POST(req: Request) {
       });
 
       const googleBonus = entry.googleReviews * 100_000;
-      const renewBonus  = entry.renewContracts * 150_000;
+      // Thưởng Renew tự đếm từ Setup doanh số của cơ sở. Đi cùng ô "hưởng hoa
+      // hồng doanh số cả phòng": cơ sở nhiều FM thì chỉ người được tích nhận,
+      // không thì một gói renew bị thưởng nhiều lần.
+      const renewContracts = takesBranchCommission
+        ? await getBranchRenewCount(body.branchId, body.month, body.year)
+        : 0;
+      const renewBonus  = renewContracts * RENEW_BONUS_AMOUNT;
       // Buổi dạy khách KOL / hợp đồng KOC của chính FM — ngoài trần 60 show.
       const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
       const totalSalary = computeTotalSalary({
@@ -327,7 +335,7 @@ export async function POST(req: Request) {
           branchCommission: takesBranchCommission,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews: entry.googleReviews,
-          renewBonus, renewContracts: entry.renewContracts,
+          renewBonus, renewContracts,
           bhxh: bhxhBaseOf("FM", baseSalary), kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
           totalSalary, advancePaid: 0, remainingPayment: totalSalary,
         },
