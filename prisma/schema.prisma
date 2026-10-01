@@ -14,13 +14,13 @@ model Branch {
   address   String?
   createdAt DateTime @default(now())
 
-  users           User[]
-  clients         Client[]
-  consultations   Consultation[]
-  fmAssignments   FMBranchAssignment[]
-  complaints      Complaint[]
-  salesLeads      SalesLead[]
-  monthlyTargets  MonthlyTarget[]
+  users                User[]
+  clients              Client[]
+  consultations        Consultation[]
+  fmAssignments        FMBranchAssignment[]
+  complaints           Complaint[]
+  salesLeads           SalesLead[]
+  monthlyTargets       MonthlyTarget[]
   weeklyReports        WeeklyReport[]
   monthlyBranchReports MonthlyBranchReport[]
   salaryConfigs        SalaryConfig[]
@@ -38,23 +38,23 @@ model Branch {
 /// là các đợt bán hàng riêng, tự hết hiệu lực khi qua ngày — không ai phải nhớ
 /// đi tắt thủ công.
 model PackagePromo {
-  id         String   @id @default(cuid())
+  id               String   @id @default(cuid())
   /// Tên đợt, hiện cho tư vấn viên thấy đang áp chương trình nào.
-  name       String
+  name             String
   /// Nhãn ngắn đứng cạnh giá, vd "Presale −30%".
-  shortLabel String
-  branchId   String
+  shortLabel       String
+  branchId         String
   /// Thời điểm bắt đầu áp (đầu ngày theo giờ Việt Nam).
-  startsAt   DateTime
+  startsAt         DateTime
   /// Thời điểm cuối cùng còn áp (cuối ngày cuối cùng, giờ Việt Nam) — tính CẢ mốc này.
-  endsAt     DateTime
+  endsAt           DateTime
   /// Admin tắt tay mà không cần xoá đợt.
-  isActive   Boolean  @default(true)
+  isActive         Boolean  @default(true)
   /// % trợ giá tái ký (gói L3/L4/L5 mua thêm) trong thời gian đợt chạy.
   /// NULL = không đổi, dùng mức mặc định 10% — xem renewDiscountFor ở lib/package-promos.
   renewDiscountPct Float?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   branch Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
   items  PackagePromoItem[]
@@ -97,64 +97,65 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  dateOfBirth           DateTime?
+  dateOfBirth         DateTime?
   // NGÀY BẮT ĐẦU LÀM VIỆC — mặc định là ngày tài khoản được tạo, FM/Admin sửa
   // lại được trong thông tin nhân sự. Lịch nghỉ khoá mọi ngày trước mốc này và
   // tính quỹ phép năm từ đây. Khác hai mốc bên bảng lương: officialStartDate
   // (thâm niên) và insuranceStartDate (BHXH).
-  employmentStartDate   DateTime?
-  ptLevelId             String?
-  deletedAt             DateTime?
-  ptLevel               PTLevel?             @relation("UserPTLevel", fields: [ptLevelId], references: [id])
-  jobPosition           JobPosition?         @relation(fields: [jobPositionId], references: [id], onDelete: SetNull)
+  employmentStartDate DateTime?
+  ptLevelId           String?
+  deletedAt           DateTime?
+  ptLevel             PTLevel?     @relation("UserPTLevel", fields: [ptLevelId], references: [id])
+  jobPosition         JobPosition? @relation(fields: [jobPositionId], references: [id], onDelete: SetNull)
 
-  branch                Branch?              @relation(fields: [branchId], references: [id])
-  accounts              Account[]
-  sessions              Session[]
-  clients               Client[]
-  consultations         Consultation[]
-  managedBranches       FMBranchAssignment[]
-  workoutPrograms       WorkoutProgram[]
-  workoutLogs           WorkoutLog[]
-  examAttempts          ExamAttempt[]
-  examSessions          ExamSession[]
-  examBlocks            ExamBlock[]
-  examRequirement       ExamRequiredFM?      @relation("RequiredExamFM")
-  upgradeNotifications  UpgradeNotification[]
-  mealPlans             MealPlan[]
-  ptAlerts              PerformanceAlert[] @relation("PTPerformanceAlerts")
-  assignedComplaints    Complaint[]        @relation("FMComplaints")
-  assignedLeads         SalesLead[]        @relation("AssignedPTLeads")
-  createdLeads          SalesLead[]        @relation("CreatedLeads")
-  monthlyTargets        MonthlyTarget[]    @relation("PTMonthlyTargets")
-  weeklyReports         WeeklyReport[]        @relation("FMWeeklyReports")
-  monthlyBranchReports  MonthlyBranchReport[] @relation("FMMonthlyReports")
-  ownedWeeklyReports        WeeklyReport[]        @relation("UserWeeklyReports")
-  ownedMonthlyBranchReports MonthlyBranchReport[] @relation("UserMonthlyReports")
-  dailyChecklists       DailyChecklist[]      @relation("UserDailyChecklists")
-  reviewedChecklists    DailyChecklist[]      @relation("FMChecklistReviews")
-  weeklyMonthlyReports  WeeklyMonthlyReport[] @relation("UserWeeklyMonthlyReports")
-  salaryConfigs         SalaryConfig[]        @relation("UserSalaryConfigs")
-  salaryRecords         SalaryRecord[]        @relation("UserSalaryRecords")
-  ptSessionAdjustments  PTSessionAdjustment[] @relation("PTSessionAdjustments")
-  checkinSheetOverrides CheckinSheetOverride[] @relation("CheckinSheetOverrides")
-  transactions          Transaction[]         @relation("TransactionCreator")
-  checklistNotifications  ChecklistNotification[]
-  measuredBodyLogs        BodyMeasurementLog[]         @relation("MeasuredByUser")
-  measurementNotifications MeasurementNotification[]   @relation("PTMeasurementNotifs")
-  ptSessionPhotos         SessionPhoto[]               @relation("PTSessionPhotos")
-  kocContracts            KOCContract[]                @relation("PTKOCContracts")
-  substituteRequestsMade     SubstituteRequest[]          @relation("RequesterSub")
-  substituteRequestsReceived SubstituteRequest[]          @relation("SubstituteSub")
-  practicalAssessments       PracticalAssessment[]        @relation("PTPracticalAssessments")
-  assessedPracticals         PracticalAssessment[]        @relation("AssessorPracticals")
-  leaveDays                  LeaveDay[]                   @relation("UserLeaveDays")
-  createdLeaveDays           LeaveDay[]                   @relation("LeaveDayCreator")
-  clientAssignments          ClientPTAssignment[]         @relation("PTClientAssignments")
+  branch                     Branch?                       @relation(fields: [branchId], references: [id])
+  accounts                   Account[]
+  sessions                   Session[]
+  clients                    Client[]
+  consultations              Consultation[]
+  managedBranches            FMBranchAssignment[]
+  workoutPrograms            WorkoutProgram[]
+  workoutLogs                WorkoutLog[]
+  examAttempts               ExamAttempt[]
+  examSessions               ExamSession[]
+  examBlocks                 ExamBlock[]
+  examRequirement            ExamRequiredFM?               @relation("RequiredExamFM")
+  upgradeNotifications       UpgradeNotification[]
+  mealPlans                  MealPlan[]
+  ptAlerts                   PerformanceAlert[]            @relation("PTPerformanceAlerts")
+  assignedComplaints         Complaint[]                   @relation("FMComplaints")
+  assignedLeads              SalesLead[]                   @relation("AssignedPTLeads")
+  createdLeads               SalesLead[]                   @relation("CreatedLeads")
+  monthlyTargets             MonthlyTarget[]               @relation("PTMonthlyTargets")
+  weeklyReports              WeeklyReport[]                @relation("FMWeeklyReports")
+  monthlyBranchReports       MonthlyBranchReport[]         @relation("FMMonthlyReports")
+  ownedWeeklyReports         WeeklyReport[]                @relation("UserWeeklyReports")
+  ownedMonthlyBranchReports  MonthlyBranchReport[]         @relation("UserMonthlyReports")
+  dailyChecklists            DailyChecklist[]              @relation("UserDailyChecklists")
+  reviewedChecklists         DailyChecklist[]              @relation("FMChecklistReviews")
+  weeklyMonthlyReports       WeeklyMonthlyReport[]         @relation("UserWeeklyMonthlyReports")
+  salaryConfigs              SalaryConfig[]                @relation("UserSalaryConfigs")
+  salaryRecords              SalaryRecord[]                @relation("UserSalaryRecords")
+  ptSessionAdjustments       PTSessionAdjustment[]         @relation("PTSessionAdjustments")
+  checkinSheetOverrides      CheckinSheetOverride[]        @relation("CheckinSheetOverrides")
+  transactions               Transaction[]                 @relation("TransactionCreator")
+  checklistNotifications     ChecklistNotification[]
+  measuredBodyLogs           BodyMeasurementLog[]          @relation("MeasuredByUser")
+  measurementNotifications   MeasurementNotification[]     @relation("PTMeasurementNotifs")
+  ptSessionPhotos            SessionPhoto[]                @relation("PTSessionPhotos")
+  kocContracts               KOCContract[]                 @relation("PTKOCContracts")
+  substituteRequestsMade     SubstituteRequest[]           @relation("RequesterSub")
+  substituteRequestsReceived SubstituteRequest[]           @relation("SubstituteSub")
+  practicalAssessments       PracticalAssessment[]         @relation("PTPracticalAssessments")
+  assessedPracticals         PracticalAssessment[]         @relation("AssessorPracticals")
+  leaveDays                  LeaveDay[]                    @relation("UserLeaveDays")
+  createdLeaveDays           LeaveDay[]                    @relation("LeaveDayCreator")
+  clientAssignments          ClientPTAssignment[]          @relation("PTClientAssignments")
   packageProgressNotifs      PackageProgressNotification[] @relation("FMPackageProgressNotifs")
   slowProgressNotifs         SlowProgressNotification[]
 
-  pushSubscriptions     PushSubscription[]
+  pushSubscriptions PushSubscription[]
+
   @@map("users")
 }
 
@@ -233,27 +234,27 @@ model Client {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  assignedPT    User           @relation(fields: [assignedPTId], references: [id])
-  branch        Branch         @relation(fields: [branchId], references: [id])
-  weightLogs          WeightLog[]
-  activityLogs        ActivityLog[]
-  consultations       Consultation[]
-  packageEnrollments  PackageEnrollment[]
-  workoutPrograms     WorkoutProgram[]
-  workoutLogs         WorkoutLog[]
-  mealPlans             MealPlan[]
-  foodScanLogs          FoodScanLog[]
-  performanceAlerts     PerformanceAlert[]
-  workoutNotifications  WorkoutNotification[]
-  complaints                   Complaint[]
-  bodyMeasurementLogs          BodyMeasurementLog[]
-  measurementNotifications     MeasurementNotification[]
-  sessionPhotos                SessionPhoto[]              @relation("ClientSessionPhotos")
-  kocContracts                 KOCContract[]
-  substituteRequests           SubstituteRequest[]
-  ptAssignments                ClientPTAssignment[]
-  packageProgressNotifs        PackageProgressNotification[]
-  slowProgressNotifs           SlowProgressNotification[]
+  assignedPT               User                          @relation(fields: [assignedPTId], references: [id])
+  branch                   Branch                        @relation(fields: [branchId], references: [id])
+  weightLogs               WeightLog[]
+  activityLogs             ActivityLog[]
+  consultations            Consultation[]
+  packageEnrollments       PackageEnrollment[]
+  workoutPrograms          WorkoutProgram[]
+  workoutLogs              WorkoutLog[]
+  mealPlans                MealPlan[]
+  foodScanLogs             FoodScanLog[]
+  performanceAlerts        PerformanceAlert[]
+  workoutNotifications     WorkoutNotification[]
+  complaints               Complaint[]
+  bodyMeasurementLogs      BodyMeasurementLog[]
+  measurementNotifications MeasurementNotification[]
+  sessionPhotos            SessionPhoto[]                @relation("ClientSessionPhotos")
+  kocContracts             KOCContract[]
+  substituteRequests       SubstituteRequest[]
+  ptAssignments            ClientPTAssignment[]
+  packageProgressNotifs    PackageProgressNotification[]
+  slowProgressNotifs       SlowProgressNotification[]
 
   @@map("clients")
 }
@@ -311,45 +312,45 @@ model Consultation {
 }
 
 model ConsultationInfo {
-  id             String   @id @default(cuid())
-  consultationId String   @unique
-  fullName       String   @default("")
-  phone          String   @default("")
-  address        String?
-  dateOfBirth    DateTime?
-  email          String?
-  consultDate    DateTime @default(now())
-  knowLDFVia     String?
-  referralSource String?
-  familyStatus   String?
-  height         Float    @default(0)
-  currentWeight  Float    @default(0)
-  targetWeight   Float    @default(0)
-  timeToAchieve  String?
-  previousAttempts String?
-  currentFeeling String?
-  whyNow         String?
-  familySupport  String?
-  motivationLevel Int?
-  barriers       String?
+  id                 String    @id @default(cuid())
+  consultationId     String    @unique
+  fullName           String    @default("")
+  phone              String    @default("")
+  address            String?
+  dateOfBirth        DateTime?
+  email              String?
+  consultDate        DateTime  @default(now())
+  knowLDFVia         String?
+  referralSource     String?
+  familyStatus       String?
+  height             Float     @default(0)
+  currentWeight      Float     @default(0)
+  targetWeight       Float     @default(0)
+  timeToAchieve      String?
+  previousAttempts   String?
+  currentFeeling     String?
+  whyNow             String?
+  familySupport      String?
+  motivationLevel    Int?
+  barriers           String?
   exerciseExperience String?
-  currentDiet    String?
-  mealsPerDay    Int?
-  typicalMeals   String?
-  snacking       String?
-  diningOut      String?
-  foodPreferences String?
-  foodAllergies  String?
-  workoutsPerWeek Int?
-  availableTime  String?
-  healthConditions String?
-  injuries       String?
-  stressLevel    Int?
-  sleepQuality   String?
-  goalDescription String?
-  desiredPackage String?
-  budget         String?
-  whoPaysBill    String?
+  currentDiet        String?
+  mealsPerDay        Int?
+  typicalMeals       String?
+  snacking           String?
+  diningOut          String?
+  foodPreferences    String?
+  foodAllergies      String?
+  workoutsPerWeek    Int?
+  availableTime      String?
+  healthConditions   String?
+  injuries           String?
+  stressLevel        Int?
+  sleepQuality       String?
+  goalDescription    String?
+  desiredPackage     String?
+  budget             String?
+  whoPaysBill        String?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 
@@ -375,20 +376,20 @@ model ConsultationAssessment {
 }
 
 model ConsultationPackage {
-  id             String  @id @default(cuid())
-  consultationId String
-  packageName    String
-  packageStage   String
-  sessions       Int
-  durationDays   Int
-  price          Float
+  id              String  @id @default(cuid())
+  consultationId  String
+  packageName     String
+  packageStage    String
+  sessions        Int
+  durationDays    Int
+  price           Float
   discountedPrice Float?
-  order          Int
-  isConfirmed    Boolean @default(false)
+  order           Int
+  isConfirmed     Boolean @default(false)
   /// Bậc của gói trên bậc thang 3 giai đoạn (1/2/3) — xem lib/roadmap-phases.ts.
   /// Gói nào ghép vào bậc nào cũng được nên không suy ngược ra từ tên gói được;
   /// null = lộ trình lưu từ trước khi có bậc thang, lúc đó suy tạm theo stage.
-  roadmapPhase   Int?
+  roadmapPhase    Int?
 
   consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 
@@ -502,40 +503,40 @@ model Complaint {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  client     Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  branch     Branch  @relation(fields: [branchId], references: [id])
-  assignedFM User?   @relation("FMComplaints", fields: [assignedFMId], references: [id])
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  branch     Branch @relation(fields: [branchId], references: [id])
+  assignedFM User?  @relation("FMComplaints", fields: [assignedFMId], references: [id])
 
   @@map("complaints")
 }
 
 model PackageEnrollment {
-  id           String                  @id @default(cuid())
-  clientId     String
-  contractCode String?
-  packageName  String
-  packageStage String
-  sessions     Int
-  sessionsUsed   Int                     @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
-  durationDays   Int
-  reservedDays   Int                     @default(0)
-  extensionDays  Int                     @default(0)
-  price          Float
-  contractType   ContractType            @default(NORMAL)
-  status         PackageEnrollmentStatus @default(ACTIVE)
-  notes          String?                 @db.Text
+  id            String                  @id @default(cuid())
+  clientId      String
+  contractCode  String?
+  packageName   String
+  packageStage  String
+  sessions      Int
+  sessionsUsed  Int                     @default(0)
+  startDate     DateTime?
+  endDate       DateTime?
+  durationDays  Int
+  reservedDays  Int                     @default(0)
+  extensionDays Int                     @default(0)
+  price         Float
+  contractType  ContractType            @default(NORMAL)
+  status        PackageEnrollmentStatus @default(ACTIVE)
+  notes         String?                 @db.Text
   // Mục tiêu giảm (kg) của lộ trình L3/L4 — đạt thì PT được thưởng transform.
   // L1/L2 dùng ngưỡng cố định, không đọc cột này. Xem lib/transform-bonus.ts.
-  goalLossKg     Float?
-  createdAt      DateTime                @default(now())
+  goalLossKg    Float?
+  createdAt     DateTime                @default(now())
 
-  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  workoutPrograms WorkoutProgram[]
-  sessionPhotos   SessionPhoto[]
-  kocContract     KOCContract?
-  ptSessionAdjustments PTSessionAdjustment[]
+  client                Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workoutPrograms       WorkoutProgram[]
+  sessionPhotos         SessionPhoto[]
+  kocContract           KOCContract?
+  ptSessionAdjustments  PTSessionAdjustment[]
   progressNotifications PackageProgressNotification[]
   checkinSheetOverride  CheckinSheetOverride?
 
@@ -595,21 +596,21 @@ enum KOCContractStatus {
 }
 
 model KOCContract {
-  id                    String            @id @default(cuid())
-  enrollmentId          String            @unique
-  clientId              String
-  ptId                  String
-  startWeight           Float
-  endWeight             Float?
-  startWeightConfirmed  Boolean           @default(false)
-  endWeightConfirmed    Boolean           @default(false)
-  contractDate          DateTime          @default(now())
-  endDate               DateTime
-  status                KOCContractStatus @default(ACTIVE)
-  totalSessions         Int               @default(0)
-  notes                 String?           @db.Text
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                   String            @id @default(cuid())
+  enrollmentId         String            @unique
+  clientId             String
+  ptId                 String
+  startWeight          Float
+  endWeight            Float?
+  startWeightConfirmed Boolean           @default(false)
+  endWeightConfirmed   Boolean           @default(false)
+  contractDate         DateTime          @default(now())
+  endDate              DateTime
+  status               KOCContractStatus @default(ACTIVE)
+  totalSessions        Int               @default(0)
+  notes                String?           @db.Text
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   enrollment PackageEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   client     Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -718,7 +719,7 @@ model WorkoutWeek {
   notes      String?  @db.Text
   createdAt  DateTime @default(now())
 
-  program     WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program     WorkoutProgram   @relation(fields: [programId], references: [id], onDelete: Cascade)
   sessions    WorkoutSession[]
   workoutLogs WorkoutLog[]
 
@@ -844,11 +845,11 @@ model ExamRound {
   isActive    Boolean       @default(true)
   createdAt   DateTime      @default(now())
 
-  level      PTLevel           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  level        PTLevel           @relation(fields: [levelId], references: [id], onDelete: Cascade)
   mealBriefs   ExamMealBrief[]
   programCases ExamProgramCase[]
-  sortCards  ExamSortCard[]
-  results    ExamRoundResult[]
+  sortCards    ExamSortCard[]
+  results      ExamRoundResult[]
 
   @@index([levelId, order])
   @@map("exam_rounds")
@@ -867,25 +868,25 @@ enum ExamMealKind {
 }
 
 model ExamMealBrief {
-  id            String  @id @default(cuid())
-  roundId       String
-  order         Int     @default(0)
+  id               String        @id @default(cuid())
+  roundId          String
+  order            Int           @default(0)
   /// Nhóm hồ sơ. Rỗng = coi như CUT.
-  kind          ExamMealKind?
+  kind             ExamMealKind?
   /// Mô tả khách: tuổi, cân nặng, mục tiêu, thói quen…
-  clientProfile String  @db.Text
-  targetCalories Int?
-  targetProtein  Int?
-  targetFat      Int?
-  targetCarbs    Int?
+  clientProfile    String        @db.Text
+  targetCalories   Int?
+  targetProtein    Int?
+  targetFat        Int?
+  targetCarbs      Int?
   /// Sai số cho phép quanh mỗi chỉ tiêu (%).
-  tolerancePercent Int  @default(10)
+  tolerancePercent Int           @default(10)
   /// Món khách KHÔNG được ăn (dị ứng, bệnh lý) — JSON mảng tên món. Dùng phải
   /// một món trong đây là hỏng cả hồ sơ, không có điểm an ủi: dị ứng không
   /// phải chuyện thương lượng.
-  bannedFoods   String? @db.Text
+  bannedFoods      String?       @db.Text
   /// Giảng giải hiện sau khi chấm.
-  explanation   String? @db.Text
+  explanation      String?       @db.Text
 
   round ExamRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
@@ -941,7 +942,7 @@ model ExamProgramCase {
 /// Kết quả từng vòng của một lượt thi — để Admin soi được người này mạnh yếu
 /// vòng nào, chứ nhìn mỗi tổng điểm thì không biết họ hỏng ở đâu.
 model ExamRoundResult {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   attemptId String
   roundId   String
   /// Điểm đạt được và điểm tối đa của vòng (chép lại, vì vòng có thể bị sửa sau).
@@ -949,9 +950,9 @@ model ExamRoundResult {
   maxPoints Int
   passed    Boolean
   /// Điểm bị trừ vì trượt vòng này (0 nếu đạt).
-  penalty   Int    @default(0)
+  penalty   Int     @default(0)
   /// Bài làm chi tiết của vòng — JSON, dạng tuỳ theo loại vòng.
-  detail    String @db.Text
+  detail    String  @db.Text
   /// Nghiêng về trụ nào trong vòng này: SEVERITY | MERCY | BALANCE.
   pillar    String?
 
@@ -985,33 +986,33 @@ model ExamQuestionLevel {
 }
 
 model ExamConfig {
-  id               String   @id @default(cuid())
-  numQuestions     Int      @default(10)
-  passingScore     Int      @default(80)
-  shuffleQuestions Boolean  @default(true)
+  id                  String   @id @default(cuid())
+  numQuestions        Int      @default(10)
+  passingScore        Int      @default(80)
+  shuffleQuestions    Boolean  @default(true)
   // Lịch thi: tắt => không ai vào thi được. Bật => chỉ thi được đúng ngày, trong khung giờ.
   // Ngày/giờ lưu dạng chuỗi theo giờ VN (UTC+7) để không lệch múi giờ server.
-  scheduleEnabled  Boolean  @default(false)
-  examDate         String?
-  examStartTime    String   @default("00:00")
-  examEndTime      String   @default("23:59")
+  scheduleEnabled     Boolean  @default(false)
+  examDate            String?
+  examStartTime       String   @default("00:00")
+  examEndTime         String   @default("23:59")
   // Thời lượng mỗi người được làm bài, tính bằng phút. Khác với khung giờ ở
   // trên: khung giờ là lúc phòng thi MỞ CỬA, còn đây là thời gian mỗi thí sinh
   // được ngồi làm kể từ lúc mở đề. 0 = không giới hạn.
-  durationMinutes  Int      @default(0)
+  durationMinutes     Int      @default(0)
   // Phạt rời khỏi trang thi: mỗi lần thí sinh chuyển tab / thu nhỏ trình duyệt
   // để đi đọc tài liệu thì bị trừ bấy nhiêu phút vào thời lượng làm bài của
   // chính họ. 0 = tắt (chỉ ghi nhận số lần rời trang, không trừ giờ). Chỉ có
   // tác dụng khi durationMinutes > 0, vì không có đồng hồ thì không trừ được gì.
-  focusPenaltyMinutes Int   @default(30)
+  focusPenaltyMinutes Int      @default(30)
   // Trọng số (%) 3 tiêu chí của bảng xếp hạng — tổng phải bằng 100
-  rankWeightExam      Int   @default(30)
-  rankWeightRevenue   Int   @default(40)
-  rankWeightTransform Int   @default(30)
+  rankWeightExam      Int      @default(30)
+  rankWeightRevenue   Int      @default(40)
+  rankWeightTransform Int      @default(30)
   // FM bắt buộc thi làm đề của cấp nào. FM không có cấp độ PT nên không tự suy
   // ra được — Admin chọn trong tab Lịch thi. Bỏ trống = FM chưa vào thi được.
-  fmLevelId        String?
-  updatedAt        DateTime @updatedAt
+  fmLevelId           String?
+  updatedAt           DateTime @updatedAt
 
   fmLevel PTLevel? @relation("ExamConfigFMLevel", fields: [fmLevelId], references: [id], onDelete: SetNull)
 
@@ -1019,20 +1020,20 @@ model ExamConfig {
 }
 
 model ExamAttempt {
-  id        String   @id @default(cuid())
-  userId    String
-  score     Int
-  total     Int
-  passed    Boolean
-  answers   String   @db.Text
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  score       Int
+  total       Int
+  passed      Boolean
+  answers     String   @db.Text
+  createdAt   DateTime @default(now())
   // Số lần thí sinh rời khỏi trang thi trong lượt này — chép lại từ ExamSession
   // lúc nộp bài để Admin còn xem được sau khi kỳ thi đã đóng.
-  violations Int      @default(0)
+  violations  Int      @default(0)
   // Bài này là ĐỀ CỦA CẤP NÀO. Thiếu trường này thì không phân biệt được người
   // đang ở Cấp 2 đã thi đề Cấp 2 hay mới chỉ đậu đề Cấp 1 từ đợt thăng cấp
   // trước — xem lib/pt-promotion.ts, điều kiện lý thuyết soát theo đúng cấp.
-  levelId    String?
+  levelId     String?
   /// Tội thí sinh đã khai ở lượt thi này (đề nhiều vòng). Lưu lại để về sau còn
   /// biết họ đã dám nhận mình yếu ở đâu, và có vượt qua được không.
   declaredSin ExamSin?
@@ -1151,7 +1152,7 @@ model UpgradeNotification {
 }
 
 model WorkoutMovement {
-  id               String @id @default(cuid())
+  id               String  @id @default(cuid())
   sessionId        String
   movementCode     String
   movementName     String
@@ -1166,7 +1167,7 @@ model WorkoutMovement {
   plannedLoad      String?
   plannedReps      String?
 
-  session WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session WorkoutSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   setLogs WorkoutSetLog[]
 
   @@map("workout_movements")
@@ -1206,23 +1207,23 @@ model WorkoutLog {
   createdAt   DateTime @default(now())
 
   // ── Check-in / check-out tracking (server-authoritative timestamps) ──
-  status             WorkoutLogStatus @default(COMPLETED)
-  checkInAt          DateTime?
-  checkOutAt         DateTime?
+  status              WorkoutLogStatus      @default(COMPLETED)
+  checkInAt           DateTime?
+  checkOutAt          DateTime?
   // First time the PT entered any set data; used to enforce the "interaction
   // within 10 minutes of check-in" rule.
-  firstInteractionAt DateTime?
+  firstInteractionAt  DateTime?
   // Client's hand-drawn signature at CHECK-OUT (proof PT taught → counts for salary).
-  signatureUrl       String?          @db.Text
+  signatureUrl        String?               @db.Text
   // Client's hand-drawn signature at CHECK-IN (proof client showed up → deducts package).
-  checkInSignatureUrl String?         @db.Text
+  checkInSignatureUrl String?               @db.Text
   // Ảnh PT chụp CÙNG KHÁCH tại thời điểm check-out — bằng chứng buổi tập có thật,
   // chống ký khống. Bắt buộc khi ký check-out, và chỉ chụp trực tiếp bằng camera
   // (giao diện không có ô tải ảnh từ máy). Lưu dạng data URL JPEG đã nén.
-  checkOutPhotoUrl    String?         @db.Text
+  checkOutPhotoUrl    String?               @db.Text
   // Whether this log has already incremented the package's sessionsUsed. Set at
   // check-in (when the client signs in); used to reverse exactly once on delete/void.
-  packageCounted     Boolean          @default(false)
+  packageCounted      Boolean               @default(false)
   // Which package enrollment this session was charged against (the one whose
   // sessionsUsed was incremented at check-in). Recorded so delete/void reverses
   // the exact same lộ trình even when the client has several active packages.
@@ -1230,14 +1231,14 @@ model WorkoutLog {
   // Client tapped "đồng ý kết thúc buổi sớm" in their own app: lets the PT check
   // out and count the teaching session without the usual min-duration / 6-exercise
   // gates (e.g. khách có việc, chỉ tập được 30' nhưng vẫn đồng ý tính buổi).
-  earlyEndApprovedAt DateTime?
+  earlyEndApprovedAt  DateTime?
   // How/when the client confirmed the session (drives sessionsUsed increment).
-  confirmationMethod WorkoutConfirmMethod?
-  confirmedAt        DateTime?
+  confirmationMethod  WorkoutConfirmMethod?
+  confirmedAt         DateTime?
   // Reason a session was voided (e.g. no interaction within 10 minutes).
-  voidReason         String?
+  voidReason          String?
   // FM/Admin đã bấm "Tính buổi dạy" cho buổi này (confirmationMethod = FM_APPROVAL).
-  creditedById       String?
+  creditedById        String?
 
   // ── Đánh giá buổi tập (autoregulation) — PT bắt buộc làm trước khi ký
   // check-out. 3 trục: hiệu suất / cảm giác nỗ lực (RIR) / hồi phục. Từ đó sinh
@@ -1252,11 +1253,11 @@ model WorkoutLog {
   // phút 90; 2 → đã nhắc lần cuối trước mốc huỷ). Xem lib/checkout-push.ts.
   checkoutPushCount Int @default(0)
 
-  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  program   WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  week      WorkoutWeek    @relation(fields: [weekId], references: [id], onDelete: Cascade)
-  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  createdBy    User                  @relation(fields: [createdById], references: [id])
+  client       Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  program      WorkoutProgram       @relation(fields: [programId], references: [id], onDelete: Cascade)
+  week         WorkoutWeek          @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  session      WorkoutSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy    User                 @relation(fields: [createdById], references: [id])
   setLogs      WorkoutSetLog[]
   notification WorkoutNotification?
 
@@ -1316,16 +1317,16 @@ model MealPlanDay {
 }
 
 model FoodScanLog {
-  id        String   @id @default(cuid())
-  clientId  String
-  scanDate  DateTime @default(now())
-  foodName  String
-  quantity  String
-  calories  Float
-  protein   Float
-  fat       Float
-  carbs     Float
-  imageUrl  String?
+  id       String   @id @default(cuid())
+  clientId String
+  scanDate DateTime @default(now())
+  foodName String
+  quantity String
+  calories Float
+  protein  Float
+  fat      Float
+  carbs    Float
+  imageUrl String?
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -1371,8 +1372,8 @@ model PerformanceAlert {
   isRead        Boolean   @default(false)
   createdAt     DateTime  @default(now())
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  pt     User   @relation("PTPerformanceAlerts", fields: [ptId], references: [id])
+  client             Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pt                 User                       @relation("PTPerformanceAlerts", fields: [ptId], references: [id])
   slowProgressNotifs SlowProgressNotification[]
 
   @@map("performance_alerts")
@@ -1451,11 +1452,11 @@ model SalesLead {
   forecast          String?
   status            LeadStatus @default(TAKECARE)
   packageRegistered String?
-  actualRevenue       Float?
-  remainingPayment    Float?
-  fitpartnerRevenue   Float?
-  signDate            DateTime?
-  remark              String?
+  actualRevenue     Float?
+  remainingPayment  Float?
+  fitpartnerRevenue Float?
+  signDate          DateTime?
+  remark            String?
   month             Int
   year              Int
   consultationId    String?    @unique
@@ -1469,22 +1470,22 @@ model SalesLead {
   /// Lưu THỜI ĐIỂM bấm chứ không phải số thứ tự: "chọn trước thì lên trước"
   /// chính là xếp theo mốc này, và bỏ ưu tiên một khách ở giữa cũng không phải
   /// đánh số lại cả bảng. Rỗng = khách thường.
-  prioritizedAt     DateTime?
+  prioritizedAt DateTime?
 
   /// NHẮC HẸN CHĂM SÓC LẠI — mốc hẹn gọi lại khách, có cả ngày lẫn giờ.
   /// Tới giờ thì hiện một dòng nhắc trên đầu trang, ngay dưới dòng nhắc buổi
   /// tập chưa ký check-out.
-  followUpAt        DateTime?
-  followUpNote      String?
+  followUpAt     DateTime?
+  followUpNote   String?
   /// Ai đặt hẹn. Cần vì FM đặt hộ lead của nhân sự khác thì chính FM cũng phải
   /// thấy dòng nhắc đó. Cố tình KHÔNG đặt khoá ngoại — chỉ đem so với id người
   /// đang đăng nhập, không bao giờ join.
-  followUpById      String?
+  followUpById   String?
   /// Đã chăm xong / đã tắt nhắc. Còn rỗng thì dòng nhắc vẫn hiện khi tới giờ.
-  followUpDoneAt    DateTime?
+  followUpDoneAt DateTime?
 
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   branch       Branch        @relation(fields: [branchId], references: [id])
   assignedPT   User?         @relation("AssignedPTLeads", fields: [assignedPTId], references: [id])
@@ -1497,20 +1498,20 @@ model SalesLead {
 }
 
 model MonthlyTarget {
-  id                 String   @id @default(cuid())
-  branchId           String
-  userId             String
-  month              Int
-  year               Int
-  revenueTarget             Float    @default(0)
-  fitpartnerRevenueTarget   Float    @default(0)
-  fitTarget                 Int      @default(0)
-  cooperationTarget         Int      @default(0)
-  transformTarget           Int      @default(0)
-  googleReviewTarget        Int      @default(0)
-  cvTarget                  Int      @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  branchId                String
+  userId                  String
+  month                   Int
+  year                    Int
+  revenueTarget           Float    @default(0)
+  fitpartnerRevenueTarget Float    @default(0)
+  fitTarget               Int      @default(0)
+  cooperationTarget       Int      @default(0)
+  transformTarget         Int      @default(0)
+  googleReviewTarget      Int      @default(0)
+  cvTarget                Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   branch        Branch         @relation(fields: [branchId], references: [id])
   user          User           @relation("PTMonthlyTargets", fields: [userId], references: [id])
@@ -1572,29 +1573,29 @@ model ExtraTargetWeek {
 }
 
 model WeeklyActual {
-  id                  String   @id @default(cuid())
-  monthlyTargetId     String
-  weekNumber          Int
-  weekStart           DateTime
-  weekEnd             DateTime
-  revenueActual              Float    @default(0)
-  fitpartnerRevenueActual    Float    @default(0)
-  fitActual                  Int      @default(0)
-  cooperationActual          Int      @default(0)
-  transformActual            Int      @default(0)
-  googleReviewActual         Int      @default(0)
-  cvActual                   Int      @default(0)
-  weeklyTaskNotes     String?  @db.Text
+  id                      String   @id @default(cuid())
+  monthlyTargetId         String
+  weekNumber              Int
+  weekStart               DateTime
+  weekEnd                 DateTime
+  revenueActual           Float    @default(0)
+  fitpartnerRevenueActual Float    @default(0)
+  fitActual               Int      @default(0)
+  cooperationActual       Int      @default(0)
+  transformActual         Int      @default(0)
+  googleReviewActual      Int      @default(0)
+  cvActual                Int      @default(0)
+  weeklyTaskNotes         String?  @db.Text
   // Per-week individual targets (set in targets tab, mapped to weekly report)
-  revenueTarget              Float    @default(0)
-  fitpartnerRevenueTarget    Float    @default(0)
-  fitTarget                  Int      @default(0)
-  cooperationTarget          Int      @default(0)
-  transformTarget            Int      @default(0)
-  googleReviewTarget         Int      @default(0)
-  cvTarget                   Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  revenueTarget           Float    @default(0)
+  fitpartnerRevenueTarget Float    @default(0)
+  fitTarget               Int      @default(0)
+  cooperationTarget       Int      @default(0)
+  transformTarget         Int      @default(0)
+  googleReviewTarget      Int      @default(0)
+  cvTarget                Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   monthlyTarget MonthlyTarget @relation(fields: [monthlyTargetId], references: [id], onDelete: Cascade)
 
@@ -1609,10 +1610,10 @@ model WeeklyReport {
   month          Int
   year           Int
   weekNumber     Int
-  importantTasks   String?  @db.Text
-  arisingTasks     String?  @db.Text
-  incompleteWork   String?  @db.Text
-  solutions        String?  @db.Text
+  importantTasks String?  @db.Text
+  arisingTasks   String?  @db.Text
+  incompleteWork String?  @db.Text
+  solutions      String?  @db.Text
   createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -1652,33 +1653,33 @@ enum ReportType {
 }
 
 model DailyChecklist {
-  id               String   @id @default(cuid())
-  userId           String
-  reportDate       DateTime
-  position         String   @default("")
-  targetNote       String?
-  totalTarget      Float?
-  dailyResults     String?  @db.Text
-  dailyCompleted   String?  @db.Text
-  dailyIncomplete  String?  @db.Text
-  dailyNextPlan    String?  @db.Text
+  id              String   @id @default(cuid())
+  userId          String
+  reportDate      DateTime
+  position        String   @default("")
+  targetNote      String?
+  totalTarget     Float?
+  dailyResults    String?  @db.Text
+  dailyCompleted  String?  @db.Text
+  dailyIncomplete String?  @db.Text
+  dailyNextPlan   String?  @db.Text
 
   // ── CHỐT NGÀY LÀM VIỆC ────────────────────────────────────────────────────
   // Nhân sự bấm Check-out khi xong việc. Check-list tự lưu suốt ngày nên mốc
   // này KHÔNG phải "đã lưu" mà là "tôi đã làm xong, mời quản lý đọc" — chính
   // nó bắn thông báo sang FM. Rỗng nghĩa là ngày đó chưa chốt.
-  checkedOutAt     DateTime?
+  checkedOutAt DateTime?
 
   // ── ĐÁNH GIÁ CỦA FM ───────────────────────────────────────────────────────
   // FM đọc tự luận cuối ngày rồi chấm. Điểm 1–5 để tổng kết được theo ngày /
   // tuần / tháng / quý / năm; nhận xét là phần chữ đi kèm.
-  fmRating         Int?
-  fmComment        String?  @db.Text
-  fmReviewedAt     DateTime?
-  fmReviewerId     String?
+  fmRating     Int?
+  fmComment    String?   @db.Text
+  fmReviewedAt DateTime?
+  fmReviewerId String?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user       User            @relation("UserDailyChecklists", fields: [userId], references: [id])
   fmReviewer User?           @relation("FMChecklistReviews", fields: [fmReviewerId], references: [id])
@@ -1689,16 +1690,16 @@ model DailyChecklist {
 }
 
 model ChecklistItem {
-  id                 String   @id @default(cuid())
-  checklistId        String
-  order              Int
-  time               String?
-  task               String
-  kpi                String?
-  actualResult       Float?
-  note               String?
-  isTeachingSession  Boolean  @default(false)
-  createdAt          DateTime @default(now())
+  id                String   @id @default(cuid())
+  checklistId       String
+  order             Int
+  time              String?
+  task              String
+  kpi               String?
+  actualResult      Float?
+  note              String?
+  isTeachingSession Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   checklist DailyChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
 
@@ -1739,7 +1740,7 @@ model WeeklyMonthlyReport {
   month          Int
   year           Int
   weekNumber     Int?
-  importantTasks String     @db.Text @default("[]")
+  importantTasks String     @default("[]") @db.Text
   results        String?    @db.Text
   completed      String?    @db.Text
   incomplete     String?    @db.Text
@@ -1769,7 +1770,7 @@ model SalaryConfig {
   userId             String
   branchId           String
   baseSalary         Float     @default(0)
-  commissionTiers    String    @db.Text @default("[]")
+  commissionTiers    String    @default("[]") @db.Text
   seniorityYears     Int       @default(0)
   // NGÀY LÀM CHÍNH THỨC — mốc bắt đầu tính lương thâm niên.
   officialStartDate  DateTime?
@@ -1863,17 +1864,17 @@ enum LeaveType {
 /// trừ 1 ngày công, nghỉ nửa ngày (HALF_DAY) trừ 0,5 ngày công, phép năm
 /// (ANNUAL) không trừ gì. Chủ nhật không tích được vì vốn không tính công.
 model LeaveDay {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   /// Ngày nghỉ, chỉ phần ngày — luôn dựng bằng UTC để khớp cột DATE của Postgres.
-  date        DateTime @db.Date
+  date        DateTime  @db.Date
   /// Phép năm (đủ lương), nghỉ thường (trừ 1 công) hay nghỉ nửa ngày (trừ 0,5
   /// công). Xem lib/leave-days.ts.
   type        LeaveType @default(UNPAID)
   note        String?
   /// Người tích lịch: chính nhân sự đó, FM của cơ sở hoặc Admin.
   createdById String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user      User @relation("UserLeaveDays", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User @relation("LeaveDayCreator", fields: [createdById], references: [id])
@@ -1949,22 +1950,22 @@ enum PackageProgressMilestone {
 // ── Số đo cơ thể ──────────────────────────────────────────────────────────
 
 model BodyMeasurementLog {
-  id             String    @id @default(cuid())
-  clientId       String
-  measuredById   String?
-  measuredDate   DateTime  @db.Date
-  waist          Float?
-  belly          Float?
-  armSize        Float?
-  armFromElbow   Float?
-  thighSize      Float?
-  thighFromKnee  Float?
-  calfSize       Float?
-  calfFromKnee   Float?
-  hip            Float?   // Hông
-  glute          Float?   // Mông
-  notes          String?   @db.Text
-  createdAt      DateTime  @default(now())
+  id            String   @id @default(cuid())
+  clientId      String
+  measuredById  String?
+  measuredDate  DateTime @db.Date
+  waist         Float?
+  belly         Float?
+  armSize       Float?
+  armFromElbow  Float?
+  thighSize     Float?
+  thighFromKnee Float?
+  calfSize      Float?
+  calfFromKnee  Float?
+  hip           Float? // Hông
+  glute         Float? // Mông
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
 
   client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   measuredBy User?  @relation("MeasuredByUser", fields: [measuredById], references: [id], onDelete: SetNull)
@@ -2026,82 +2027,82 @@ model SessionPhoto {
 // ── PT Level System ───────────────────────────────────────────────────────────
 
 model PTLevel {
-  id                 String               @id @default(cuid())
-  name               String
-  order              Int
-  color              String               @default("#6b7280")
-  retestIntervalDays Int                  @default(30)
+  id                       String               @id @default(cuid())
+  name                     String
+  order                    Int
+  color                    String               @default("#6b7280")
+  retestIntervalDays       Int                  @default(30)
   // KPI doanh số/tháng (triệu) của cấp độ — dùng để tính hiệu suất doanh số (hiệu suất = doanh số thực / KPI).
   // Cấp độ "Thử việc" đặt 15, các cấp PT chính thức để 38.
-  monthlyTarget      Int                  @default(38)
+  monthlyTarget            Int                  @default(38)
   // Điều kiện để PT ở cấp này được THĂNG lên cấp kế tiếp:
   // - promoteMinAvgRevenue: TB doanh số/tháng tối thiểu (triệu). VD Thử việc 15, Cấp 1-3 = 80%×38 = 30.4
   // - promoteMinTransform: số khách đạt transform tối thiểu. VD Thử việc 0, Cấp 1-3 = 1
-  promoteMinAvgRevenue Float              @default(0)
-  promoteMinTransform  Int                @default(0)
+  promoteMinAvgRevenue     Float                @default(0)
+  promoteMinTransform      Int                  @default(0)
   // Đề lý thuyết riêng của cấp này: số câu bốc ra và điểm đạt (%). Bỏ trống =
   // dùng số chung trong ExamConfig. Có riêng vì đề của cấp cao khó hơn hẳn thì
   // không có lý gì phải chung một ngưỡng đạt với đề Thử việc.
-  examNumQuestions     Int?
-  examPassingScore     Int?
+  examNumQuestions         Int?
+  examPassingScore         Int?
   // Đề của cấp này thuộc dạng nào: trắc nghiệm phẳng, hay nhiều vòng chơi.
   // Đổi dạng là đổi hẳn trang làm bài — xem enum ExamFormat.
-  examFormat           ExamFormat         @default(FLAT)
+  examFormat               ExamFormat           @default(FLAT)
   // ── Cấu hình đề THỬ THÁCH của cấp này ────────────────────────────────────
   // Bốn con số quyết định một lượt thi dài bao nhiêu và gồm những gì. Bỏ trống =
   // dùng số mặc định trong lib/exam-trial.ts. Xem trialSetupFor().
   /// Mỗi lượt thi bốc bao nhiêu đại tội.
-  trialRoundsPerAttempt Int?
+  trialRoundsPerAttempt    Int?
   /// Trong số đó bao nhiêu vòng là CASE STUDY; phần còn lại là vòng phân loại.
-  trialCaseRounds       Int?
+  trialCaseRounds          Int?
   /// Số thẻ phát ra ở mỗi vòng phân loại.
-  trialCardsPerRound    Int?
+  trialCardsPerRound       Int?
   /// Số hồ sơ phát ra ở mỗi vòng case study.
-  trialItemsPerCase     Int?
+  trialItemsPerCase        Int?
   /// Thanh danh khởi điểm của một vòng phân loại (mặc định 100).
-  trialHonorStart       Int?
+  trialHonorStart          Int?
   /// Hao Thanh danh khi lệch một bậc ở vòng phân loại thường (mặc định 8).
-  trialCostNear         Int?
+  trialCostNear            Int?
   /// Hao Thanh danh khi lệch hai bậc ở vòng phân loại thường (mặc định 25).
-  trialCostFar          Int?
+  trialCostFar             Int?
   /// Mốc trừ Thanh danh khi SAI LIÊN TIẾP ở vòng phân loại thẻ — JSON mảng
   /// [{"streak":2,"penalty":10},{"streak":3,"penalty":20}]: sai liên tiếp bấy
   /// nhiêu thẻ thì trừ thêm bấy nhiêu. Bỏ trống = không phạt liên tiếp.
   /// Luật đếm và cách cộng dồn: xem lib/exam-trial.ts.
-  trialStreakTiers      String?            @db.Text
+  trialStreakTiers         String?              @db.Text
   // ── Độ gắt riêng của VÒNG ĐÃ KHAI ────────────────────────────────────────
   // Vòng của tội thí sinh tự khai là chỗ đắt nhất của bài thi — trượt nó là rớt
   // cả kỳ — nên nó có thang riêng, không dùng chung với các vòng bốc ngẫu nhiên.
   // Bỏ trống = dùng số mặc định trong lib/exam-trial.ts. Xem declaredSetupFor().
   /// Điểm tối đa của vòng khai nhân bấy nhiêu lần (mặc định 2).
-  trialDeclaredMultiplier Int?
+  trialDeclaredMultiplier  Int?
   /// Trượt vòng khai có đánh rớt cả kỳ không (mặc định có). Tắt thì vòng khai
   /// chỉ còn là một vòng nặng điểm hơn, đậu hay không tính bằng tổng.
-  trialDeclaredMustPass   Boolean?
+  trialDeclaredMustPass    Boolean?
   /// Ngưỡng đạt của vòng khai cộng thêm bấy nhiêu % (mặc định 15).
-  trialDeclaredPassBonus  Int?
+  trialDeclaredPassBonus   Int?
   /// Trần ngưỡng đạt của vòng khai (mặc định 95).
-  trialDeclaredPassCap    Int?
+  trialDeclaredPassCap     Int?
   /// Thanh danh khởi điểm của vòng khai. Bỏ trống = theo vòng thường.
-  trialDeclaredHonorStart Int?
+  trialDeclaredHonorStart  Int?
   /// Hao Thanh danh khi lệch một bậc ở vòng khai (mặc định 8).
-  trialDeclaredCostNear   Int?
+  trialDeclaredCostNear    Int?
   /// Hao Thanh danh khi lệch hai bậc ở vòng khai (mặc định 25).
-  trialDeclaredCostFar    Int?
+  trialDeclaredCostFar     Int?
   /// Bảng mốc phạt sai liên tiếp riêng cho vòng khai, cùng dạng JSON với
   /// trialStreakTiers. Bỏ trống = vòng khai dùng chung bảng của cấp.
-  trialDeclaredStreakTiers String?          @db.Text
-  isDefault          Boolean              @default(false)
-  isActive           Boolean              @default(true)
-  phaseAccess        PTLevelPhaseAccess[]
-  users              User[]               @relation("UserPTLevel")
-  examQuestions      ExamQuestionLevel[]
-  examRounds         ExamRound[]
-  examAttempts       ExamAttempt[]
-  examSessions       ExamSession[]
-  examConfigsForFM   ExamConfig[]         @relation("ExamConfigFMLevel")
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  trialDeclaredStreakTiers String?              @db.Text
+  isDefault                Boolean              @default(false)
+  isActive                 Boolean              @default(true)
+  phaseAccess              PTLevelPhaseAccess[]
+  users                    User[]               @relation("UserPTLevel")
+  examQuestions            ExamQuestionLevel[]
+  examRounds               ExamRound[]
+  examAttempts             ExamAttempt[]
+  examSessions             ExamSession[]
+  examConfigsForFM         ExamConfig[]         @relation("ExamConfigFMLevel")
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
 
   @@map("pt_levels")
 }
@@ -2119,18 +2120,18 @@ model PTLevelPhaseAccess {
 }
 
 model SystemConfig {
-  id                String   @id
-  enableLevelSystem Boolean  @default(true)
+  id                     String   @id
+  enableLevelSystem      Boolean  @default(true)
   // Minimum minutes between check-in and signature for a session to count.
-  minSessionMinutes Int      @default(30)
+  minSessionMinutes      Int      @default(30)
   // Ngưỡng % điểm để ĐẠT bài kiểm tra thực hành (rubric FM chấm).
-  practicalPassPercent Int   @default(70)
+  practicalPassPercent   Int      @default(70)
   // Số ngày giữ dữ liệu trong Thùng rác trước khi tự động xóa vĩnh viễn.
   // 0 = giữ mãi (không tự dọn). Admin chỉnh ngay trong mục Thùng rác.
-  trashRetentionDays Int    @default(30)
+  trashRetentionDays     Int      @default(30)
   // Cho FM/PT sửa tay phiếu check-in. Mặc định TẮT — xem CheckinSheetOverride.
-  enableCheckinSheetEdit Boolean @default(false)
-  updatedAt         DateTime @updatedAt
+  enableCheckinSheetEdit Boolean  @default(false)
+  updatedAt              DateTime @updatedAt
 
   @@map("system_config")
 }
@@ -2152,14 +2153,14 @@ model SystemConfig {
 // đó là bằng chứng buổi tập có thật — cho sửa là mở đúng cánh cửa mà cặp chữ
 // ký/ảnh sinh ra để đóng.
 model CheckinSheetOverride {
-  id           String @id @default(cuid())
-  enrollmentId String @unique
+  id           String   @id @default(cuid())
+  enrollmentId String   @unique
   // JSON các ô tiêu đề được sửa tay. Khoá vắng mặt = giữ số gốc của lộ trình.
-  header       String? @db.Text
+  header       String?  @db.Text
   // JSON sửa tay theo từng buổi CÓ THẬT, khoá = workoutLogId.
-  rows         String? @db.Text
+  rows         String?  @db.Text
   // JSON các buổi ghi tay (buổi tập trước khi có app) — không chữ ký, không ảnh.
-  extraRows    String? @db.Text
+  extraRows    String?  @db.Text
   updatedById  String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -2175,7 +2176,7 @@ model PracticalAssessment {
   id             String   @id @default(cuid())
   ptId           String
   assessorId     String
-  levelName      String?  // cấp độ của PT tại thời điểm chấm (lưu vết)
+  levelName      String? // cấp độ của PT tại thời điểm chấm (lưu vết)
   exercisesCount Int      @default(6)
   scores         String   @db.Text // JSON các tiêu chí cố định: { [code]: 1|3|5 }
   exercises      String   @db.Text // JSON các bài tập: [{ name, scores: { [code]: 1|3|5 } }]
@@ -2303,7 +2304,7 @@ model TrashItem {
 // cookie gốc. Xoá dòng = đá phiên của máy đó ra (xem lib/login-device.ts).
 model TrustedDevice {
   id          String   @id @default(cuid())
-  accountType String   // "STAFF" | "CLIENT"
+  accountType String // "STAFF" | "CLIENT"
   accountId   String
   deviceHash  String
   userAgent   String?
@@ -2348,4 +2349,25 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/// ẢNH ĐÁNH GIÁ GOOGLE BUSINESS — mỗi ảnh là bằng chứng cho MỘT đánh giá của
+/// khách, và là nguồn duy nhất của thưởng Google cho FM (lib/google-review-bonus).
+/// Gắn theo cơ sở + tháng chứ không theo dòng lương: tạo lại bảng lương là xoá
+/// dòng cũ, ảnh vẫn phải còn. Cố tình KHÔNG đặt khoá ngoại — giống SalesLead.
+model GoogleReviewProof {
+  id           String   @id @default(cuid())
+  branchId     String
+  month        Int
+  year         Int
+  imageUrl     String   @db.Text
+  /// Tên khách để đối chiếu, không bắt buộc.
+  customerName String?
+  note         String?  @db.Text
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([branchId, year, month])
+  @@map("google_review_proofs")
 }

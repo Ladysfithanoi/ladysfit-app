@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { RefreshCw, X, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { RefreshCw, X, ChevronDown, ChevronUp, Download, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDays } from "@/lib/work-days";
 import { showPayOf } from "@/lib/session-pay";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
+import { GoogleReviewModal } from "./google-review-modal";
 import { SessionDetailTable } from "./session-detail-table";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ type SalaryRecord = {
   goalBonus: number;
   clientsAchievedGoal?: number;
   googleBonus: number;
+  /** FM: số ảnh đánh giá Google của cơ sở — đếm từ ảnh đã tải lên. */
+  googleReviews?: number;
   renewBonus: number;
   /** FM: số gói renew của cơ sở — tự đếm từ Setup doanh số. */
   renewContracts?: number;
@@ -164,6 +167,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   // Session image modal
   const [imgModal, setImgModal] = useState<ImgModalState | null>(null);
+
+  // Ảnh đánh giá Google Business của cơ sở — nguồn của thưởng Google cho FM.
+  const [googleModal, setGoogleModal] = useState<{ branchId: string; branchName: string } | null>(null);
 
   // Expanded detail rows (by record id)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -611,6 +617,18 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </button>
             )}
             {!isCOO && (
+              <button
+                onClick={() => setGoogleModal({
+                  branchId:   selectedBranchId,
+                  branchName: branches.find(b => b.id === selectedBranchId)?.name ?? "",
+                })}
+                disabled={!selectedBranchId}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-60 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
+                <Star className="w-4 h-4" />
+                Ảnh đánh giá Google
+              </button>
+            )}
+            {!isCOO && (
               <button onClick={openGenModal} disabled={!selectedBranchId}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
                 style={{ backgroundColor: "#f15b5c" }}>
@@ -928,7 +946,21 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.googleBonus)}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <button
+                            onClick={() => setGoogleModal({
+                              branchId:   r.branchId,
+                              branchName: branches.find(b => b.id === r.branchId)?.name ?? "",
+                            })}
+                            title="Xem / tải ảnh đánh giá Google Business"
+                            className="inline-flex flex-col items-start gap-0.5 text-left group"
+                          >
+                            <span className="text-gray-600 group-hover:text-blue-600">{vnd(r.googleBonus)}</span>
+                            <span className="text-[10px] font-semibold text-blue-500 group-hover:text-blue-600">
+                              {(r.googleReviews ?? 0) > 0 ? `🖼️ ${r.googleReviews} ảnh` : "📎 Thêm ảnh"}
+                            </span>
+                          </button>
+                        </td>
                         <td className="px-3 py-2.5 whitespace-nowrap" title="Tự đếm từ Setup doanh số của cơ sở">
                           {r.renewBonus > 0 ? (
                             <span className="inline-flex flex-col gap-0.5">
@@ -1133,22 +1165,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   {/* FM-specific extra inputs */}
                   {entry.userRole === "FM" && (
                     <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
-                      {([
-                        { label: "Google Review",   field: "googleReviews"  as const },
-                      ] as const).map(({ label, field }) => (
-                        <div key={field} className="space-y-1">
-                          <label className="text-xs font-semibold text-gray-500">{label}</label>
-                          <input
-                            type="number" min={0}
-                            value={entry[field] as number}
-                            onFocus={(e) => e.target.select()}
-                            onChange={e => updateEntry(entry.userId, field, parseInt(e.target.value) || 0)}
-                            className={numInput + " w-full text-left"}
-                          />
-                        </div>
-                      ))}
-                      <p className="text-[10px] text-gray-400 self-end">
-                        Thưởng Renew tự đếm từ Setup doanh số của cơ sở — không cần nhập.
+                      <p className="col-span-2 text-[10px] text-gray-400">
+                        Thưởng Renew tự đếm từ Setup doanh số, thưởng Google đếm từ ảnh đánh giá đã tải lên
+                        (bấm vào cột Google trên bảng lương) — không cần nhập.
                       </p>
                       <p className="col-span-2 text-[10px] text-gray-400">Tối đa 60 show dạy/tháng</p>
                       <label className="col-span-2 flex items-start gap-2 cursor-pointer select-none">
@@ -1221,6 +1240,18 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             ));
             setImgModal(null);
           }}
+        />
+      )}
+
+      {googleModal && (
+        <GoogleReviewModal
+          branchId={googleModal.branchId}
+          branchName={googleModal.branchName}
+          month={month}
+          year={year}
+          canEdit={!isCOO}
+          onClose={() => setGoogleModal(null)}
+          onChanged={fetchRecords}
         />
       )}
 

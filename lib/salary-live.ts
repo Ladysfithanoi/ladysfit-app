@@ -8,6 +8,7 @@ import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { computeTotalSalary } from "@/lib/salary-total";
 import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
+import { getBranchGoogleReviewCount, GOOGLE_BONUS_AMOUNT } from "@/lib/google-review-bonus";
 
 /**
  * MỘT ĐƯỜNG TÍNH LẠI BẢNG LƯƠNG THEO THỜI GIAN THỰC.
@@ -151,6 +152,9 @@ export type SalaryPatch = {
   /** Chỉ FM — số gói renew của cơ sở và tiền thưởng tương ứng. */
   renewContracts?:  number;
   renewBonus?:      number;
+  /** Chỉ FM — số ảnh đánh giá Google của cơ sở và tiền thưởng tương ứng. */
+  googleReviews?:   number;
+  googleBonus?:     number;
   /** Chỉ PT — số hợp đồng đạt mốc thưởng transform trong tháng. */
   clientsAchievedGoal?: number;
   showPay:          number;
@@ -228,14 +232,20 @@ export async function recalcSalary(args: {
     }
   }
 
-  // THƯỞNG RENEW CỦA FM — tự đếm từ Setup doanh số của cơ sở, nên lead chốt
-  // thêm trong tháng là bảng lương thấy ngay. Đi cùng ô hưởng hoa hồng phòng
-  // (xem POST /api/salary/records). Các vai trò khác giữ nguyên số đã ghi.
+  // THƯỞNG RENEW VÀ GOOGLE CỦA FM — Renew tự đếm từ Setup doanh số, Google đếm
+  // từ ảnh đánh giá đã tải lên, nên có gì mới là bảng lương thấy ngay. Đi cùng
+  // ô hưởng hoa hồng phòng (xem POST /api/salary/records). Các vai trò khác giữ
+  // nguyên số đã ghi.
   let renewBonus = r.renewBonus;
   let renewContracts: number | undefined;
+  let googleBonus = r.googleBonus;
+  let googleReviews: number | undefined;
   if (role === "FM") {
-    renewContracts = r.branchCommission === false ? 0 : await getBranchRenewCount(r.branchId, month, year);
+    const takes = r.branchCommission !== false;
+    renewContracts = takes ? await getBranchRenewCount(r.branchId, month, year) : 0;
     renewBonus = renewContracts * RENEW_BONUS_AMOUNT;
+    googleReviews = takes ? await getBranchGoogleReviewCount(r.branchId, month, year) : 0;
+    googleBonus = googleReviews * GOOGLE_BONUS_AMOUNT;
   }
 
   const shows: ShowBuckets | null = role === "PT"
@@ -265,7 +275,7 @@ export async function recalcSalary(args: {
     commissionAmount,
     showPay,
     goalBonus,
-    googleBonus:     r.googleBonus,
+    googleBonus,
     renewBonus,
     kocCommission,
     kolCommission,
@@ -284,7 +294,8 @@ export async function recalcSalary(args: {
     Math.abs(r.kocCommission    - kocCommission)    > 0.01 ||
     Math.abs(r.kolCommission    - kolCommission)    > 0.01 ||
     Math.abs(r.goalBonus        - goalBonus)        > 0.01 ||
-    Math.abs(r.renewBonus       - renewBonus)       > 0.01;
+    Math.abs(r.renewBonus       - renewBonus)       > 0.01 ||
+    Math.abs(r.googleBonus      - googleBonus)      > 0.01;
 
   return {
     changed,
@@ -295,7 +306,7 @@ export async function recalcSalary(args: {
       kocCommission,
       kolCommission,
       ...(role === "PT" ? { goalBonus, clientsAchievedGoal } : { goalBonus: r.goalBonus }),
-      ...(role === "FM" ? { renewContracts, renewBonus } : {}),
+      ...(role === "FM" ? { renewContracts, renewBonus, googleReviews, googleBonus } : {}),
       showPay,
       standardWorkDays: standardDays,
       actualWorkDays:   actualDays,
