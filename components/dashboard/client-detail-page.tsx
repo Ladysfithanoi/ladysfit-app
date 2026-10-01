@@ -113,12 +113,14 @@ const STATUS_LABEL = {
 };
 
 const PKG_STATUS_STYLE = {
+  UPCOMING: "bg-gray-100 text-gray-600",
   ACTIVE: "bg-green-100 text-green-700",
   COMPLETED: "bg-blue-100 text-blue-700",
   PAUSED: "bg-yellow-100 text-yellow-700",
   EXPIRED: "bg-red-100 text-red-700",
 };
 const PKG_STATUS_LABEL = {
+  UPCOMING: "Chưa tập",
   ACTIVE: "Đang tập",
   COMPLETED: "Hoàn thành",
   PAUSED: "Tạm dừng",
@@ -126,9 +128,23 @@ const PKG_STATUS_LABEL = {
 };
 
 // Real-time status override: if DB says ACTIVE but endDate has passed → EXPIRED
-function getEffectiveStatus(pkg: PackageEnrollment): "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED" {
+/** Ngày theo giờ Việt Nam, dạng "2026-10-01". */
+function vnDay(t: number): string {
+  return new Date(t + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+// "Chưa tập": gói ACTIVE chưa tới ngày bắt đầu và khách chưa tập buổi nào. Đã
+// có buổi trừ vào gói (khách tập sớm hơn ngày ghi trên hợp đồng) thì vẫn là
+// "Đang tập". So theo NGÀY giờ Việt Nam: đúng ngày bắt đầu là đã "Đang tập".
+function getEffectiveStatus(pkg: PackageEnrollment): "UPCOMING" | "ACTIVE" | "COMPLETED" | "PAUSED" | "EXPIRED" {
   if (pkg.status === "ACTIVE" && pkg.endDate) {
     if (Date.now() > new Date(pkg.endDate).getTime()) return "EXPIRED";
+  }
+  if (
+    pkg.status === "ACTIVE" && pkg.startDate && pkg.sessionsUsed === 0 &&
+    vnDay(new Date(pkg.startDate).getTime()) > vnDay(Date.now())
+  ) {
+    return "UPCOMING";
   }
   return pkg.status;
 }
