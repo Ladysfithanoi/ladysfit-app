@@ -37,7 +37,7 @@ type Filter = {
   gte?:      Date;
   lt?:       Date;
   /**
-   * Chỉ lấy buổi ĐƯỢC TÍNH LƯƠNG — buổi điền ngay trong tháng của nó (xem
+   * Chỉ lấy buổi ĐƯỢC TÍNH LƯƠNG — buổi điền kịp trước khi chốt lương (xem
    * isPayableManualRow). Bảng lương bật cờ này; phiếu check-in và "Số buổi PT"
    * ở hồ sơ khách thì không, vì buổi điền bù vẫn là buổi khách đã tập.
    */

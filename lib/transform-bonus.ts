@@ -12,9 +12,14 @@ import { ptInChargeAt } from "@/lib/transform-credit";
 //        L3, L4 — giảm đủ "Mục tiêu giảm (kg)" nhập ở phần chỉnh sửa lộ trình
 //
 // Mốc giảm đo từ lần cân gần nhất tính đến NGÀY BẮT ĐẦU lộ trình (không có thì
-// lấy cân đầu tiên của khách), và phải đạt trong thời hạn lộ trình. Thưởng vào
-// lương THÁNG khách đạt mốc, cho người đang phụ trách khách vào ngày đó. Mỗi
-// hợp đồng thưởng đúng một lần. KOC/KOL có hoa hồng riêng nên không tính ở đây.
+// lấy cân đầu tiên của khách), và phải đạt trong thời hạn lộ trình. Người được
+// thưởng là người đang phụ trách khách vào ngày đạt mốc. Mỗi hợp đồng thưởng
+// đúng một lần. KOC/KOL có hoa hồng riêng nên không tính ở đây.
+//
+// THƯỞNG KHI KẾT THÚC GÓI (từ lương T10/2026): đạt mốc giữa chừng chưa được
+// thưởng — tiền vào lương THÁNG gói kết thúc (xem packageEndedAt). Hợp đồng đạt
+// mốc trước 01/10/2026 đã trả theo luật cũ (tháng đạt mốc) nên giữ nguyên, không
+// trả lại lần nữa lúc gói kết thúc.
 
 export const TRANSFORM_BONUS_AMOUNT = 100_000;
 
@@ -23,6 +28,8 @@ const FIXED_GOAL_KG: Record<string, number> = { L1: 2, L2: 5 };
 const CUSTOM_GOAL_PACKAGES = ["L3", "L4"];
 
 const DAY_MS = 86_400_000;
+/** Từ mốc này thưởng chờ tới khi gói kết thúc; đạt mốc trước đó trả theo tháng đạt mốc. */
+const PAY_ON_END_FROM = new Date(2026, 9, 1);
 /** Sai số làm tròn — 80,0 − 78,0 trong số thực có thể ra 1,9999999. */
 const EPS = 0.01;
 
@@ -32,8 +39,10 @@ export type TransformBonus = {
   clientName: string;
   packageName: string;
   ptId: string;
-  /** Ngày cân đạt mốc — quyết định thưởng vào lương tháng nào. */
+  /** Ngày quyết định thưởng vào lương tháng nào — ngày gói kết thúc (luật cũ: ngày đạt mốc). */
   date: Date;
+  /** Ngày cân đạt mốc. */
+  achievedAt: Date;
   goalKg: number;
   lostKg: number;
 };
@@ -56,6 +65,7 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
     },
     select: {
       id: true, clientId: true, packageName: true, goalLossKg: true, startDate: true, endDate: true,
+      status: true, sessions: true, sessionsUsed: true,
       client: { select: { fullName: true, assignedPTId: true, initialWeight: true, createdAt: true } },
     },
   });
@@ -63,7 +73,7 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
   if (eligible.length === 0) return [];
 
   const clientIds = Array.from(new Set(eligible.map((e) => e.clientId)));
-  const [logs, assignments] = await Promise.all([
+  const [logs, assignments, lastSessions] = await Promise.all([
     prisma.weightLog.findMany({
       where: { clientId: { in: clientIds } },
       select: { clientId: true, date: true, weight: true },
@@ -74,7 +84,17 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
       select: { clientId: true, ptId: true, startedAt: true },
       orderBy: { startedAt: "asc" },
     }),
+    // Buổi cuối cùng đã trừ vào từng lộ trình — ngày gói hết buổi.
+    prisma.workoutLog.groupBy({
+      by: ["packageEnrollmentId"],
+      where: { packageEnrollmentId: { in: eligible.map((e) => e.id) }, packageCounted: true },
+      _max: { sessionDate: true },
+    }),
   ]);
+  const lastSessionByEnrollment = new Map(
+    lastSessions.map((r) => [r.packageEnrollmentId!, r._max.sessionDate]),
+  );
+  const now = new Date();
 
   const logsByClient = groupBy(logs, (l) => l.clientId);
   const segmentsByClient = groupBy(assignments, (a) => a.clientId);
@@ -85,7 +105,10 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
     const clientLogs = logsByClient.get(e.clientId) ?? [];
     // Cân ngày bắt đầu (cân buổi đầu tiên) vẫn là mốc gốc, nên tính tới hết ngày đó.
     const baselineCutoff = e.startDate!.getTime() + DAY_MS;
-    const windowEnd = e.endDate ? e.endDate.getTime() + DAY_MS : Infinity;
+    const endedAt = packageEndedAt(e, lastSessionByEnrollment.get(e.id) ?? null, now);
+    // Gói kết thúc sớm (hết buổi trước hạn) thì cân sau ngày đó không còn thuộc gói.
+    const windowEndAt = endedAt ?? e.endDate;
+    const windowEnd = windowEndAt ? windowEndAt.getTime() + DAY_MS : Infinity;
 
     let baseline = e.client.initialWeight;
     let hit: { date: Date; weight: number } | null = null;
@@ -95,7 +118,9 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
       if (t >= windowEnd) break;
       if (baseline - log.weight >= goalKg - EPS) { hit = log; break; }
     }
-    if (!hit || hit.date < range.start || hit.date >= range.end) continue;
+    if (!hit) continue;
+    const payDate = hit.date < PAY_ON_END_FROM ? hit.date : endedAt;
+    if (!payDate || payDate < range.start || payDate >= range.end) continue;
 
     const ptId = ptInChargeAt(
       { id: e.clientId, assignedPTId: e.client.assignedPTId, createdAt: e.client.createdAt },
@@ -108,12 +133,33 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
       clientName: e.client.fullName,
       packageName: e.packageName,
       ptId,
-      date: hit.date,
+      date: payDate,
+      achievedAt: hit.date,
       goalKg,
       lostKg: Math.round((baseline - hit.weight) * 10) / 10,
     });
   }
   return bonuses;
+}
+
+/**
+ * Ngày lộ trình kết thúc; null = gói còn chạy (hoặc đang bảo lưu).
+ *   • Hết buổi (COMPLETED, hoặc đã dùng đủ buổi) — ngày buổi cuối cùng trừ vào
+ *     gói; FM kết thúc sớm mà không có buổi nào trên app thì lấy ngày hết hạn.
+ *   • Hết hạn — ngày hết hạn, kể cả khi cron chưa kịp chuyển sang EXPIRED.
+ */
+function packageEndedAt(
+  e: { status: string; sessions: number; sessionsUsed: number; endDate: Date | null },
+  lastSession: Date | null,
+  now: Date,
+): Date | null {
+  if (e.status === "PAUSED") return null;
+  if (e.status === "COMPLETED" || e.sessionsUsed >= e.sessions) {
+    const end = lastSession ?? e.endDate;
+    return end && end <= now ? end : null;
+  }
+  if (e.endDate && e.endDate < now) return e.endDate;
+  return null;
 }
 
 /** Thưởng transform của một người trong một tháng lương. */

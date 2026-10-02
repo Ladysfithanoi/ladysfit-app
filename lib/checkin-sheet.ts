@@ -259,13 +259,27 @@ function vnMonthKey(iso: string): number {
   return d.getUTCFullYear() * 12 + d.getUTCMonth();
 }
 
+/** Ngày trong tháng (1–31) theo giờ Việt Nam. */
+function vnDayOfMonth(iso: string): number {
+  return new Date(new Date(iso).getTime() + 7 * 3600_000).getUTCDate();
+}
+
 /**
- * Buổi ghi tay có được tính LƯƠNG không: chỉ khi được điền NGAY TRONG THÁNG của
- * buổi đó. Điền bù buổi tháng cũ (tháng đã chốt lương) thì chỉ in lên phiếu —
- * nếu không, mỗi lần FM điền bù là lương tháng đã trả tự đội lên.
+ * Hạn điền bù buổi ghi tay của tháng trước: hết ngày này của tháng sau vẫn được
+ * tính lương (lương tháng trước chưa chốt). Vd buổi 10/09 điền ngày 02/10 → tính
+ * vào lương tháng 9; điền ngày 06/10 → chỉ in lên phiếu.
+ */
+export const MANUAL_BACKFILL_DAYS = 5;
+
+/**
+ * Buổi ghi tay có được tính LƯƠNG không: khi được điền trong tháng của buổi đó,
+ * hoặc điền bù sang tháng sau nhưng chậm nhất ngày MANUAL_BACKFILL_DAYS. Điền bù
+ * muộn hơn (tháng đã chốt lương) thì chỉ in lên phiếu — nếu không, mỗi lần FM
+ * điền bù là lương tháng đã trả tự đội lên.
  *
  * `fallbackAddedAt`: dòng lưu trước khi có addedAt — lấy lúc tạo phiếu sửa làm
- * mốc (dòng không thể được điền trước khi có phiếu).
+ * mốc (dòng không thể được điền trước khi có phiếu). Mốc này có thể SỚM hơn
+ * tháng của buổi (phiếu tạo từ tháng trước, dòng thêm sau) — vẫn là điền kịp.
  */
 export function isPayableManualRow(row: SheetExtraRow, fallbackAddedAt: Date | string | null): boolean {
   const added = row.addedAt ?? (fallbackAddedAt ? new Date(fallbackAddedAt).toISOString() : null);
@@ -273,7 +287,9 @@ export function isPayableManualRow(row: SheetExtraRow, fallbackAddedAt: Date | s
   const key = vnMonthKey(row.date);
   // vnMonthKey = năm*12 + tháng(0–11) → đổi về tháng 1–12 để so với mốc.
   if (!isManualPayMonth(Math.floor(key / 12), (key % 12) + 1)) return false;
-  return vnMonthKey(added) === key;
+  const addedKey = vnMonthKey(added);
+  if (addedKey <= key) return true;
+  return addedKey === key + 1 && vnDayOfMonth(added) <= MANUAL_BACKFILL_DAYS;
 }
 
 export function hasAnyEdit(o: SheetOverride): boolean {

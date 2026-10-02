@@ -350,7 +350,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   // NGÀY ĐIỀN của từng dòng ghi tay do máy chủ gắn, không tin trình duyệt: dòng
   // đã có giữ nguyên ngày điền cũ, dòng mới lấy lúc này. Bảng lương dựa vào nó
-  // để chỉ trả tiền buổi điền ngay trong tháng (isPayableManualRow).
+  // để chỉ trả tiền buổi điền kịp trước khi chốt lương (isPayableManualRow).
   const stored = await prisma.checkinSheetOverride.findUnique({
     where:  { enrollmentId },
     select: { header: true, rows: true, extraRows: true, createdAt: true },
