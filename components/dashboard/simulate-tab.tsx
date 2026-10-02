@@ -29,6 +29,15 @@ const ROLE_LABEL: Record<string, string> = {
   STAFF: "Nhân sự",
 };
 
+type RoleFilter = "ALL" | "FM" | "PT" | "OTHER";
+
+const ROLE_FILTERS: { key: RoleFilter; label: string }[] = [
+  { key: "ALL",   label: "Tất cả" },
+  { key: "FM",    label: "FM" },
+  { key: "PT",    label: "PT" },
+  { key: "OTHER", label: "Khác" },
+];
+
 /** Số tài khoản thật mỗi trang. */
 const PAGE_SIZE = 10;
 
@@ -42,6 +51,7 @@ export function SimulateTab() {
   const [q, setQ]             = useState("");
   const [picked, setPicked]   = useState<Row | null>(null);
   const [page, setPage]       = useState(1);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
 
   const load = useCallback(async () => {
     setError("");
@@ -77,10 +87,22 @@ export function SimulateTab() {
   const filtered = useMemo(() => {
     if (!rows) return [];
     const k = q.trim().toLowerCase();
-    if (!k) return rows;
-    return rows.filter((r) =>
-      [r.name, r.email, ...r.branches].some((v) => v?.toLowerCase().includes(k)));
-  }, [rows, q]);
+    return rows.filter((r) => {
+      if (roleFilter === "OTHER" ? r.role === "FM" || r.role === "PT"
+        : roleFilter !== "ALL" && r.role !== roleFilter) return false;
+      return !k || [r.name, r.email, ...r.branches].some((v) => v?.toLowerCase().includes(k));
+    });
+  }, [rows, q, roleFilter]);
+
+  const roleCounts = useMemo(() => {
+    const c: Record<RoleFilter, number> = { ALL: 0, FM: 0, PT: 0, OTHER: 0 };
+    for (const r of rows ?? []) {
+      c.ALL++;
+      if (r.role === "FM" || r.role === "PT") c[r.role]++;
+      else c.OTHER++;
+    }
+    return c;
+  }, [rows]);
 
   const tests = filtered.filter((r) => r.isTest);
   const real  = filtered.filter((r) => !r.isTest);
@@ -138,6 +160,23 @@ export function SimulateTab() {
             placeholder="Tìm theo tên, email, cơ sở…"
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#f15b5c]"
           />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {ROLE_FILTERS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => { setRoleFilter(key); setPage(1); }}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors",
+                roleFilter === key
+                  ? "bg-[#f15b5c] border-[#f15b5c] text-white"
+                  : "border-gray-200 text-gray-600 hover:border-[#f15b5c] hover:text-[#f15b5c]",
+              )}
+            >
+              {label} ({roleCounts[key]})
+            </button>
+          ))}
         </div>
 
         {rows === null ? (
