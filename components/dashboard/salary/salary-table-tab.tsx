@@ -1029,7 +1029,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
-                * Giới hạn 60 show dạy/tháng | Thưởng Renew 150k/gói, tự đếm từ Setup doanh số: từ gói thứ 2 trở đi (combo L0 + 1 gói không tính)
+                * Giới hạn 60 show dạy/tháng | Thưởng Renew 150k/gói, tự đếm từ Setup doanh số khi khách đã trả đủ tiền (đặt cọc chưa tính): nguồn Renew tính mọi gói, khách mới từ gói thứ 2 (combo L0 + 1 gói không tính)
                 {fmRecords.length > 1 && " | Cơ sở nhiều FM: hoa hồng doanh số phòng và thưởng Renew chỉ tính cho FM được tích khi tạo bảng lương"}
               </p>
             </div>

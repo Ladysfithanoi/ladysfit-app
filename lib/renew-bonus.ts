@@ -13,16 +13,15 @@ import { PACKAGES } from "@/lib/packages";
 //   • Combo L0 + 1 gói tập: L0 không phải gói thật, gói ngay sau L0 là Hậu L0 →
 //     không có renew nào. L0 + 2 gói thì gói thứ hai mới là renew.
 //
-// MỖI HỢP ĐỒNG ĐẾM MỘT LẦN, ở dòng ghi nhận hợp đồng đó:
-//   • Đặt cọc (DE) và Đã thanh toán (PIF): luôn là dòng hợp đồng.
-//   • Thanh toán nốt (PB): THƯỜNG là đợt thu tiếp của một khoản cọc đã đếm rồi —
-//     nhưng dữ liệu thật có cả hợp đồng mới trả đủ một lần mà bị ghi PB (vd combo
-//     Renew L3+L4 63tr, không hề có cọc). Bỏ hết PB thì mất renew của những hợp
-//     đồng đó. Nên PB chỉ bị bỏ khi TÌM THẤY khoản cọc nó trả nốt (isPayoffRow);
-//     không thấy thì tính là hợp đồng.
-//   • Khoản cọc để TRỐNG ô gói thì lúc đó đếm được 0 renew — PB trả nốt nó phải
-//     đếm thay, không thì hợp đồng rơi mất ở cả hai tháng (vd cọc Renew tháng 8
-//     không ghi gói, tháng 9 trả nốt L4 → trước đây không tính renew nào).
+// CHỈ TÍNH KHI HỢP ĐỒNG ĐÃ TRẢ ĐỦ TIỀN, ở dòng trả khoản tiền cuối cùng:
+//   • Đã thanh toán (PIF) không còn thiếu: trả đủ một lần → tính ngay kỳ đó.
+//   • Đặt cọc (DE): CHƯA tính — cọc còn có thể huỷ. Dòng PIF/PB còn ghi "Còn
+//     thiếu" > 0 cũng chưa tính (dữ liệu cũ có cọc ghi nhầm thành PIF/PB).
+//   • Thanh toán nốt (PB) đã ghi doanh thu và hết nợ: hợp đồng hoàn tất → tính ở
+//     kỳ thu nốt. Dòng PB tạo từ nút "Tạo thanh toán nốt" chưa điền doanh thu là
+//     tiền chưa về, chưa tính. PB trống ô gói (ghi tay) thì lấy gói + nguồn của
+//     khoản cọc nó trả nốt (findDeposit).
+// Mỗi hợp đồng vì vậy chỉ đếm đúng một lần, ở dòng trả hết tiền.
 //
 // Kỳ thưởng theo month/year của lead, cùng kỳ với doanh số phòng mà FM hưởng
 // hoa hồng (lib/salary-revenue).
@@ -79,7 +78,7 @@ export function renewCountOfLead(
   return n;
 }
 
-// ── Dòng PB nào là đợt thu nốt ─────────────────────────────────────────────
+// ── Khoản cọc mà một dòng PB trả nốt ──────────────────────────────────────
 
 type LeadRow = {
   id:                string;
@@ -88,8 +87,10 @@ type LeadRow = {
   status:            string;
   month:             number;
   year:              number;
+  source:            string | null;
   packageRegistered: string | null;
   remainingPayment:  number | null;
+  actualRevenue:     number | null;
   payoffOfId:        string | null;
 };
 
@@ -115,59 +116,67 @@ function sameCustomer(a: LeadRow, b: LeadRow): boolean {
   return na.includes(nb) || nb.includes(na);
 }
 
-/** Hai lead có chung ít nhất một gói (lead trống gói thì không loại trừ được). */
-function samePackages(a: LeadRow, b: LeadRow): boolean {
-  const pa = leadPackages(a.packageRegistered), pb = leadPackages(b.packageRegistered);
-  if (pa.length === 0 || pb.length === 0) return true;
-  return pa.some((p) => pb.includes(p));
-}
-
 /**
- * Dòng PB này có phải đợt thu nốt của một khoản cọc ĐÃ ĐƯỢC ĐẾM không. Khoản cọc
- * là lead của CÙNG KHÁCH, CÙNG GÓI, ở cùng kỳ hoặc trước đó, đang còn nợ (Đặt
- * cọc, hoặc dòng còn ghi "Còn thiếu" > 0 — dữ liệu cũ có cọc ghi nhầm thành
- * PIF/PB), và CÓ GHI GÓI — cọc trống gói chưa được đếm renew nào nên PB phải đếm.
+ * Khoản cọc mà dòng PB này trả nốt: dòng gốc của nút "Tạo thanh toán nốt"
+ * (payoffOfId), không có thì lead CÙNG KHÁCH, có ghi gói, ở cùng kỳ hoặc trước đó
+ * và đang còn nợ (Đặt cọc, hoặc "Còn thiếu" > 0) — gần nhất trước.
  */
-export function isPayoffRow(pb: LeadRow, candidates: LeadRow[]): boolean {
-  if (pb.payoffOfId) return true;
+export function findDeposit(pb: LeadRow, candidates: LeadRow[]): LeadRow | null {
+  if (pb.payoffOfId) return candidates.find((c) => c.id === pb.payoffOfId) ?? null;
   const at = pb.year * 12 + pb.month;
-  return candidates.some((c) => {
+  const found = candidates.filter((c) => {
     if (c.id === pb.id) return false;
     const ct = c.year * 12 + c.month;
     if (ct > at || at - ct > PAYOFF_LOOKBACK_MONTHS) return false;
     const owed = c.status === "DE" || (c.remainingPayment ?? 0) > 0;
-    const counted = leadPackages(c.packageRegistered).length > 0;
-    return owed && counted && sameCustomer(pb, c) && samePackages(pb, c);
+    return owed && leadPackages(c.packageRegistered).length > 0 && sameCustomer(pb, c);
   });
+  found.sort((x, y) => (y.year * 12 + y.month) - (x.year * 12 + x.month));
+  return found[0] ?? null;
 }
 
-/** Tổng số gói renew của cả cơ sở trong tháng. */
+/** Dòng này là khoản tiền CUỐI của một hợp đồng đã trả đủ. */
+export function isFullyPaidRow(l: LeadRow): boolean {
+  if ((l.remainingPayment ?? 0) > 0) return false;
+  if (l.status === "PIF") return true;
+  // PB tạo sẵn từ nút thu nốt mà chưa điền doanh thu = tiền chưa về.
+  return l.status === "PB" && (l.actualRevenue ?? 0) > 0;
+}
+
+/** Tổng số gói renew của cả cơ sở trong tháng — chỉ hợp đồng đã trả đủ tiền. */
 export async function getBranchRenewCount(branchId: string, month: number, year: number): Promise<number> {
   const select = {
     id: true, customerName: true, phone: true, status: true, month: true, year: true,
-    packageRegistered: true, remainingPayment: true, payoffOfId: true, source: true,
+    packageRegistered: true, remainingPayment: true, actualRevenue: true, payoffOfId: true, source: true,
   } as const;
-  const leads = await prisma.salesLead.findMany({
-    where: { branchId, month, year, status: { in: ["DE", "PIF", "PB"] } },
+  const leads = (await prisma.salesLead.findMany({
+    where: { branchId, month, year, status: { in: ["PIF", "PB"] } },
     select,
-  });
+  })).filter(isFullyPaidRow);
 
-  const pbs = leads.filter((l) => l.status === "PB" && !l.payoffOfId);
+  // PB ghi tay trống ô gói: cần khoản cọc (có thể ở kỳ trước) để biết gói nào.
+  const needDeposit = leads.filter((l) => l.status === "PB" && leadPackages(l.packageRegistered).length === 0);
   let candidates: LeadRow[] = [];
-  if (pbs.length > 0) {
+  if (needDeposit.length > 0) {
     const from = year * 12 + month - PAYOFF_LOOKBACK_MONTHS;
+    const linked = needDeposit.map((l) => l.payoffOfId).filter((id): id is string => !!id);
     candidates = (await prisma.salesLead.findMany({
       where: {
         branchId,
-        status: { in: ["DE", "PIF", "PB"] },
-        OR: [{ year }, { year: Math.floor((from - 1) / 12) }],
+        OR: [
+          { status: { in: ["DE", "PIF", "PB"] }, year: { in: [year, Math.floor((from - 1) / 12)] } },
+          ...(linked.length ? [{ id: { in: linked } }] : []),
+        ],
       },
       select,
-    })).filter((c) => c.year * 12 + c.month >= from);
+    })).filter((c) => linked.includes(c.id) || c.year * 12 + c.month >= from);
   }
 
   return leads.reduce((sum, l) => {
-    if (l.status === "PB" && isPayoffRow(l, candidates)) return sum;
-    return sum + renewCountOfLead(l.source, l.packageRegistered);
+    const dep = needDeposit.includes(l) ? findDeposit(l, candidates) : null;
+    return sum + renewCountOfLead(
+      l.source?.trim() ? l.source : dep?.source,
+      dep ? dep.packageRegistered : l.packageRegistered,
+    );
   }, 0);
 }
