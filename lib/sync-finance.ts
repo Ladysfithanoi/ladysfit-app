@@ -19,7 +19,6 @@ type LeadForSync = {
   assignedPT?: { name: string | null } | null;
 };
 
-const SUCCESS_STATUSES = ["PIF", "DE", "PB"];
 
 /** Parse "L1+L3" or "L1,L3" or "L1/L3" → ["L1", "L3"] */
 function splitPackages(packageRegistered: string | null): string[] {
@@ -36,11 +35,17 @@ function buildDesc(customerName: string, pkg: string | null, ptName: string, rem
   return parts.join(" | ");
 }
 
+/**
+ * Bảng thu đi theo ĐÚNG định nghĩa "Tổng doanh thu" của Setup doanh số (và của
+ * doanh số tính lương — lib/salary-revenue): lead nào CÓ GHI DOANH THU thì có
+ * dòng thu, bất kể tình trạng. Trước đây chỉ nhận Đặt cọc / Đã thanh toán /
+ * Thanh toán nốt, nên lead "Đang chăm" có doanh thu (thường là hợp đồng import
+ * Excel bị nhận nhầm tình trạng) được Setup cộng mà Bảng thu bỏ sót — rà ngày
+ * 02/10/2026: 57 lead, hai bảng lệch nhau ở 22 kỳ của mọi cơ sở.
+ */
 export async function syncLeadToTransaction(lead: LeadForSync): Promise<void> {
-  const isSuccess = SUCCESS_STATUSES.includes(lead.status);
-
-  // ── Non-success or zero revenue: wipe any existing rows and bail ────────────
-  if (!isSuccess || !lead.actualRevenue || lead.actualRevenue <= 0) {
+  // ── Không có doanh thu: xoá dòng thu cũ (nếu có) rồi thôi ───────────────────
+  if (!lead.actualRevenue || lead.actualRevenue <= 0) {
     await prisma.transaction.deleteMany({ where: { referenceId: lead.id } });
     return;
   }

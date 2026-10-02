@@ -56,6 +56,26 @@ export function showPayOf(b: Partial<ShowBuckets>): number {
        + (b.showsTransfer  ?? 0) * SESSION_PAY_TRANSFER;
 }
 
+/** Trần số buổi dạy được trả tiền mỗi tháng của FM. */
+export const FM_SHOW_CAP = 60;
+
+/**
+ * Áp trần 60 buổi/tháng của FM: ưu tiên giữ lại buổi có đơn giá cao nhất
+ * (100k L3+ → 60k L1/L2/L0 → 50k chuyển giao → 35k Cư dân). Dùng chung cho lúc
+ * tạo bảng lương lẫn lúc tính lại, nên hai bên không thể ra hai con số.
+ */
+export function capFmShows(b: Partial<ShowBuckets>): ShowBuckets {
+  const l3 = b.showsL3L4L5 ?? 0, l1 = b.showsL1L2Loyal ?? 0, l0 = b.showsL0 ?? 0;
+  const tr = b.showsTransfer ?? 0, res = b.showsResident ?? 0;
+  const cap = Math.min(l3 + l1 + l0 + tr + res, FM_SHOW_CAP);
+  const showsL3L4L5    = Math.min(l3, cap);
+  const showsL1L2Loyal = Math.min(l1, cap - showsL3L4L5);
+  const showsL0        = Math.min(l0, cap - showsL3L4L5 - showsL1L2Loyal);
+  const showsTransfer  = Math.min(tr, cap - showsL3L4L5 - showsL1L2Loyal - showsL0);
+  const showsResident  = Math.min(res, cap - showsL3L4L5 - showsL1L2Loyal - showsL0 - showsTransfer);
+  return { showsL1L2Loyal, showsL3L4L5, showsResident, showsL0, showsTransfer };
+}
+
 export function totalShows(b: Partial<ShowBuckets>): number {
   return (b.showsL1L2Loyal ?? 0) + (b.showsL3L4L5 ?? 0)
        + (b.showsResident  ?? 0) + (b.showsL0     ?? 0)

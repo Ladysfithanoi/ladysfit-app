@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const leads = await prisma.salesLead.findMany({
     where: {
       branchId,
-      status:        { in: ["PIF", "DE", "PB"] },
+      // Cùng luật với syncLeadToTransaction: có doanh thu là có dòng thu.
       actualRevenue: { gt: 0 },
     },
     include: { assignedPT: { select: { name: true } } },

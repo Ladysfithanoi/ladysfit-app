@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
-import { showPayOf } from "@/lib/session-pay";
+import { showPayOf, capFmShows } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
@@ -293,22 +293,14 @@ export async function POST(req: Request) {
       const rate             = takesBranchCommission ? fmRate(totalBranchRevenue) : 0;
       const commissionAmount = totalBranchRevenue * rate;
 
-      // Trần 60 show/tháng: ưu tiên giữ lại buổi có đơn giá cao nhất
-      // (100k L3+ → 60k L1/L2/L0 → 50k chuyển giao → 35k Cư dân)
-      const entryTransfer = entry.showsTransfer ?? 0;
-      const totalShows    = Math.min(
-        entry.showsL1L2Loyal + entry.showsL3L4L5 + entry.showsResident + entry.showsL0 + entryTransfer,
-        60
-      );
-      const l3Shows       = Math.min(entry.showsL3L4L5, totalShows);
-      const l1Shows       = Math.min(entry.showsL1L2Loyal, totalShows - l3Shows);
-      const l0Shows       = Math.min(entry.showsL0, totalShows - l3Shows - l1Shows);
-      const transferShows = Math.min(entryTransfer, totalShows - l3Shows - l1Shows - l0Shows);
-      const residentShows = Math.min(entry.showsResident, totalShows - l3Shows - l1Shows - l0Shows - transferShows);
-      const showPay       = showPayOf({
-        showsL1L2Loyal: l1Shows, showsL3L4L5: l3Shows,
-        showsResident: residentShows, showsL0: l0Shows, showsTransfer: transferShows,
-      });
+      // Trần 60 show/tháng — luật viết một lần ở capFmShows (lib/session-pay).
+      const capped        = capFmShows(entry);
+      const l3Shows       = capped.showsL3L4L5;
+      const l1Shows       = capped.showsL1L2Loyal;
+      const l0Shows       = capped.showsL0;
+      const transferShows = capped.showsTransfer;
+      const residentShows = capped.showsResident;
+      const showPay       = showPayOf(capped);
 
       // Thưởng Renew tự đếm từ Setup doanh số của cơ sở, đi cùng ô "hưởng hoa
       // hồng doanh số cả phòng": cơ sở nhiều FM thì chỉ người được tích nhận,

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeSeniorityBonus } from "@/lib/seniority";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
-import { showPayOf, type ShowBuckets } from "@/lib/session-pay";
+import { showPayOf, capFmShows, type ShowBuckets } from "@/lib/session-pay";
 import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
@@ -209,14 +209,14 @@ export async function recalcSalary(args: {
     ? await fetchKOCKOLCommission(r.userId, month, year)
     : { kocCommission: 0, kolCommission: 0 };
 
-  // TIỀN BUỔI DẠY CỦA PT TÍNH LẠI THEO THỜI GIAN THỰC.
+  // TIỀN BUỔI DẠY TÍNH LẠI THEO THỜI GIAN THỰC — PT, FM lẫn Admin dạy thêm.
   //
-  // PT dạy xong một buổi (check-in + check-out đầy đủ) là buổi đó đã đủ điều
-  // kiện tính tiền, nên bảng lương phải thấy ngay chứ không đợi FM tạo lại.
-  //
-  // FM GIỮ NGUYÊN NHƯ CŨ: tiền buổi dạy của FM có trần 60 buổi/tháng và do
-  // người tạo bảng lương chốt, tính lại ở đây sẽ phá trần đó. Admin dạy thêm
-  // cũng giữ nguyên con số đã chốt.
+  // Dạy xong một buổi (check-in + check-out đầy đủ) là buổi đó đã đủ điều kiện
+  // tính tiền, nên bảng lương phải thấy ngay chứ không đợi FM tạo lại. Trước đây
+  // FM và Admin giữ nguyên số chốt lúc tạo bảng lương, nên buổi bị huỷ/thêm sau
+  // đó làm tổng lương lệch khỏi Chi tiết buổi dạy (vd Admin T9/2026: chốt 30
+  // buổi = 2.800.000đ, thực tế 29 buổi = 2.740.000đ). FM vẫn giữ trần 60
+  // buổi/tháng — áp đúng luật lúc tạo (capFmShows).
   // THƯỞNG TRANSFORM (100k/hợp đồng đạt cam kết giảm cân) — tự tính từ nhật
   // ký cân, không nhập tay. Chỉ PT: Admin/FM không có khoản này trong tổng lương.
   let goalBonus = r.goalBonus;
@@ -241,9 +241,10 @@ export async function recalcSalary(args: {
     renewBonus = renewContracts * RENEW_BONUS_AMOUNT;
   }
 
-  const shows: ShowBuckets | null = role === "PT"
+  const liveShows = role === "PT" || role === "FM" || role === "ADMIN"
     ? await liveShowsForUser(r.userId, month, year)
     : null;
+  const shows: ShowBuckets | null = liveShows && role === "FM" ? capFmShows(liveShows) : liveShows;
   const showPay = shows ? showPayOf(shows) : r.showPay;
 
   // Bản ghi tạo trước khi có ngày công: điền ngày công chuẩn của tháng và coi
