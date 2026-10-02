@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, FlaskConical, Eye, RefreshCw, Search, X, AlertTriangle } from "lucide-react";
+import { Loader2, FlaskConical, Eye, RefreshCw, Search, X, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,6 +29,9 @@ const ROLE_LABEL: Record<string, string> = {
   STAFF: "Nhân sự",
 };
 
+/** Số tài khoản thật mỗi trang. */
+const PAGE_SIZE = 10;
+
 export function SimulateTab() {
   const { update } = useSession();
   const [rows, setRows]       = useState<Row[] | null>(null);
@@ -38,6 +41,7 @@ export function SimulateTab() {
   const [switching, setSwitching] = useState<string | null>(null);
   const [q, setQ]             = useState("");
   const [picked, setPicked]   = useState<Row | null>(null);
+  const [page, setPage]       = useState(1);
 
   const load = useCallback(async () => {
     setError("");
@@ -80,6 +84,11 @@ export function SimulateTab() {
 
   const tests = filtered.filter((r) => r.isTest);
   const real  = filtered.filter((r) => !r.isTest);
+
+  // Tài khoản thật nhiều — chia trang. Đổi từ khoá thì về trang 1.
+  const totalPages = Math.max(1, Math.ceil(real.length / PAGE_SIZE));
+  const curPage    = Math.min(page, totalPages);
+  const realPage   = real.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -125,7 +134,7 @@ export function SimulateTab() {
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder="Tìm theo tên, email, cơ sở…"
             className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#f15b5c]"
           />
@@ -141,7 +150,38 @@ export function SimulateTab() {
             {rows.every((r) => !r.isTest) && (
               <p className="text-sm text-gray-400">Chưa có tài khoản test — bấm “Tạo / làm mới dữ liệu test” ở trên.</p>
             )}
-            <Group title="Tài khoản thật" rows={real} switching={switching} onPick={setPicked} />
+            <Group
+              title={`Tài khoản thật (${real.length})`}
+              rows={realPage}
+              switching={switching}
+              onPick={setPicked}
+            />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <p className="text-xs text-gray-400">
+                  {(curPage - 1) * PAGE_SIZE + 1}–{Math.min(curPage * PAGE_SIZE, real.length)} / {real.length}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(curPage - 1)}
+                    disabled={curPage <= 1}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40"
+                    aria-label="Trang trước"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-2 text-sm font-semibold text-gray-700">{curPage} / {totalPages}</span>
+                  <button
+                    onClick={() => setPage(curPage + 1)}
+                    disabled={curPage >= totalPages}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40"
+                    aria-label="Trang sau"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
