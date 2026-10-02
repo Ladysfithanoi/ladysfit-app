@@ -20,6 +20,9 @@ import { PACKAGES } from "@/lib/packages";
 //     Renew L3+L4 63tr, không hề có cọc). Bỏ hết PB thì mất renew của những hợp
 //     đồng đó. Nên PB chỉ bị bỏ khi TÌM THẤY khoản cọc nó trả nốt (isPayoffRow);
 //     không thấy thì tính là hợp đồng.
+//   • Khoản cọc để TRỐNG ô gói thì lúc đó đếm được 0 renew — PB trả nốt nó phải
+//     đếm thay, không thì hợp đồng rơi mất ở cả hai tháng (vd cọc Renew tháng 8
+//     không ghi gói, tháng 9 trả nốt L4 → trước đây không tính renew nào).
 //
 // Kỳ thưởng theo month/year của lead, cùng kỳ với doanh số phòng mà FM hưởng
 // hoa hồng (lib/salary-revenue).
@@ -120,9 +123,10 @@ function samePackages(a: LeadRow, b: LeadRow): boolean {
 }
 
 /**
- * Dòng PB này có phải đợt thu nốt của một khoản cọc không. Khoản cọc là lead của
- * CÙNG KHÁCH, CÙNG GÓI, ở cùng kỳ hoặc trước đó, và đang còn nợ: Đặt cọc, hoặc
- * dòng còn ghi "Còn thiếu" > 0 (dữ liệu cũ có cọc ghi nhầm thành PIF/PB).
+ * Dòng PB này có phải đợt thu nốt của một khoản cọc ĐÃ ĐƯỢC ĐẾM không. Khoản cọc
+ * là lead của CÙNG KHÁCH, CÙNG GÓI, ở cùng kỳ hoặc trước đó, đang còn nợ (Đặt
+ * cọc, hoặc dòng còn ghi "Còn thiếu" > 0 — dữ liệu cũ có cọc ghi nhầm thành
+ * PIF/PB), và CÓ GHI GÓI — cọc trống gói chưa được đếm renew nào nên PB phải đếm.
  */
 export function isPayoffRow(pb: LeadRow, candidates: LeadRow[]): boolean {
   if (pb.payoffOfId) return true;
@@ -132,7 +136,8 @@ export function isPayoffRow(pb: LeadRow, candidates: LeadRow[]): boolean {
     const ct = c.year * 12 + c.month;
     if (ct > at || at - ct > PAYOFF_LOOKBACK_MONTHS) return false;
     const owed = c.status === "DE" || (c.remainingPayment ?? 0) > 0;
-    return owed && sameCustomer(pb, c) && samePackages(pb, c);
+    const counted = leadPackages(c.packageRegistered).length > 0;
+    return owed && counted && sameCustomer(pb, c) && samePackages(pb, c);
   });
 }
 
