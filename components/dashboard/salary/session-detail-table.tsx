@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Camera, X, ChevronLeft, ChevronRight, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Camera, X, ChevronLeft, ChevronRight, Pencil, RefreshCw, Trash2, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
 
@@ -65,7 +66,7 @@ type Props = {
 
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
-/** Số ảnh tối đa mỗi loại. Check-in 4: phiếu gói dài ra 3 tờ, mỗi tờ một ảnh. */
+/** Số ảnh tối đa mỗi loại. Ô ảnh check-in đã đổi thành link hồ sơ KH — chỉ còn ảnh Transform tải lên. */
 const MAX_IMAGES: Record<PhotoType, number> = { checkin: 4, transform: 3 };
 
 function readAsDataURL(file: File): Promise<string> {
@@ -301,7 +302,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                       "STT","Mã HĐ","Tên KH","Gói tập",
                       "Tổng buổi","Còn lại","Buổi dạy tháng",
                       "Giá trị/buổi","Tổng giá trị",
-                      "Ảnh check-in","KH đạt Transform",
+                      "Link","KH đạt Transform",
                     ].map(h => <th key={h} className={TH}>{h}</th>)}
                   </tr>
                 </thead>
@@ -341,7 +342,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-amber-50 border-b border-amber-100">
-                      {["STT","Mã HĐ","Tên KH","Loại","Số buổi (max 60)","Buổi dạy","Cân đầu","Cân cuối","Giá/buổi","Tổng HH","Ảnh","Transform"].map(h => (
+                      {["STT","Mã HĐ","Tên KH","Loại","Số buổi (max 60)","Buổi dạy","Cân đầu","Cân cuối","Giá/buổi","Tổng HH","Link","Transform"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -383,7 +384,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-blue-50 border-b border-blue-100">
-                      {["STT","Mã HĐ","Tên KH","Loại","Buổi dạy","Giá/buổi","Tổng HH","Ảnh","Transform"].map(h => (
+                      {["STT","Mã HĐ","Tên KH","Loại","Buổi dạy","Giá/buổi","Tổng HH","Link","Transform"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -568,8 +569,7 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
+        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -625,8 +625,7 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
+        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -665,8 +664,7 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <CheckinCell images={row.photo?.checkinImages ?? []} canEdit={canEdit}
-          onView={idx => onViewImage("checkin", idx)} onUpload={() => onUpload("checkin")} />
+        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -684,41 +682,23 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
 
 // ── Sub-cells ──────────────────────────────────────────────────────────────
 
-function CheckinCell({ images, canEdit, onView, onUpload }: {
-  images: string[];
-  canEdit: boolean;
-  onView: (idx: number) => void;
-  onUpload: () => void;
-}) {
-  if (images.length === 0) {
-    if (!canEdit) return <span className="text-gray-300 text-xs">—</span>;
-    return (
-      <button onClick={onUpload} className="flex items-center gap-1 text-gray-400 hover:text-[#f15b5c] transition-colors text-[10px] font-semibold whitespace-nowrap">
-        <Camera className="w-3.5 h-3.5" /> Thêm ảnh
-      </button>
-    );
-  }
+/**
+ * Ô "Link": mở hồ sơ của chính khách hàng ở dòng này (thay cho ảnh check-in
+ * trước đây — phiếu buổi tập đã nằm sẵn trong hồ sơ). Khách mua nhiều gói thì
+ * mỗi dòng gói đều dẫn về cùng một hồ sơ. Mở tab mới để không mất bảng lương
+ * đang xem.
+ */
+function ProfileLinkCell({ clientId, clientName }: { clientId: string; clientName: string }) {
   return (
-    <div className="flex items-center gap-1">
-      {images.map((img, i) => (
-        <button key={i} onClick={() => onView(i)} className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 hover:border-[#f15b5c] transition-colors flex-shrink-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={img} alt="" className="w-full h-full object-cover" />
-        </button>
-      ))}
-      {/* Luôn có một lối vào màn sửa khi còn quyền. Trước đây nút này chỉ hiện
-          khi CHƯA đủ ảnh, nên chụp nhầm rồi tải đủ 2 tấm là hết đường thay:
-          bấm vào ảnh chỉ phóng to để xem. Đủ ảnh thì nút đổi thành cây bút. */}
-      {canEdit && (
-        <button
-          onClick={onUpload}
-          title={images.length < MAX_IMAGES.checkin ? "Thêm ảnh" : "Sửa / thay ảnh"}
-          className="w-12 h-12 rounded-lg border-2 border-dashed border-gray-200 hover:border-[#f15b5c] flex items-center justify-center text-gray-400 hover:text-[#f15b5c] transition-colors flex-shrink-0"
-        >
-          {images.length < MAX_IMAGES.checkin ? <Camera className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-        </button>
-      )}
-    </div>
+    <Link
+      href={`/dashboard/clients/${clientId}`}
+      target="_blank"
+      rel="noopener"
+      title={`Mở hồ sơ ${clientName}`}
+      className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#f15b5c] hover:underline whitespace-nowrap"
+    >
+      <ExternalLink className="w-3.5 h-3.5" /> Hồ sơ KH
+    </Link>
   );
 }
 
