@@ -7,7 +7,7 @@ import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { showPayOf, capFmShows } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
 import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
@@ -220,6 +220,13 @@ export async function POST(req: Request) {
       orderBy: { effectiveFrom: "desc" },
     });
 
+    // Mức đóng BHXH + phần người lao động đóng bảo hiểm (trừ vào "Còn lại nhận").
+    const insuranceFields = (role: string, baseSalary: number, totalSalary: number) => {
+      const bhxh = bhxhBaseOf(role, baseSalary);
+      const insuranceDeduction = insuranceDeductionOf(bhxh, config?.insuranceStartDate, body.month, body.year);
+      return { bhxh, insuranceDeduction, remainingPayment: remainingPaymentOf(totalSalary, insuranceDeduction, 0) };
+    };
+
     // Không nhập → lấy ngày công chuẩn trừ ngày nghỉ trên lịch; nhập vượt ngày
     // công chuẩn → chốt ở mức chuẩn.
     const leaveCount = leaveMap[entry.userId] ?? 0;
@@ -248,8 +255,9 @@ export async function POST(req: Request) {
           showsTransfer: 0 as unknown as never, showPay: 0,
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
-          bhxh: 0, kocCommission: 0 as unknown as never, kolCommission: 0 as unknown as never,
-          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+          ...insuranceFields("STAFF", baseSalary, totalSalary),
+          kocCommission: 0 as unknown as never, kolCommission: 0 as unknown as never,
+          totalSalary, advancePaid: 0,
         },
       });
     } else if (entry.userRole === "ADMIN") {
@@ -333,8 +341,9 @@ export async function POST(req: Request) {
           goalBonus: 0, clientsAchievedGoal: 0,
           googleBonus, googleReviews,
           renewBonus, renewContracts,
-          bhxh: bhxhBaseOf("FM", baseSalary), kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
-          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+          ...insuranceFields("FM", baseSalary, totalSalary),
+          kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          totalSalary, advancePaid: 0,
         },
       });
     } else {
@@ -369,8 +378,9 @@ export async function POST(req: Request) {
           showsTransfer: (entry.showsTransfer ?? 0) as unknown as never, showPay,
           goalBonus, clientsAchievedGoal,
           googleBonus: 0, googleReviews: 0, renewBonus: 0, renewContracts: 0,
-          bhxh: bhxhBaseOf("PT", baseSalary), kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
-          totalSalary, advancePaid: 0, remainingPayment: totalSalary,
+          ...insuranceFields("PT", baseSalary, totalSalary),
+          kocCommission: kocCommission as unknown as never, kolCommission: kolCommission as unknown as never,
+          totalSalary, advancePaid: 0,
         },
       });
     }

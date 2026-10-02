@@ -221,7 +221,7 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════════════════════
 
     const ws1 = wb.addWorksheet("Tổng hợp lương");
-    const S1_COLS = 17;
+    const S1_COLS = 18;
 
     // Title row
     const titleRow = ws1.addRow([`BẢNG LƯƠNG THÁNG ${monthStr}/${year}`, ...Array(S1_COLS - 1).fill("")]);
@@ -252,7 +252,7 @@ export async function POST(req: Request) {
     const S1_HEADERS = [
       "STT","Họ tên","Vị trí","Lương CB","Phụ cấp","Ngày công","Lương cộng thêm",
       "Doanh số","% HH","Tiền HH","Tiền buổi dạy","Thưởng",
-      "Tổng lương","Tạm ứng","Còn lại","Mức đóng BHXH","Trạng thái",
+      "Tổng lương","Trừ BH (10,5%)","Tạm ứng","Còn lại","Mức đóng BHXH","Trạng thái",
     ];
     const hdrRow1 = ws1.addRow(S1_HEADERS);
     applyHeaderStyle(hdrRow1);
@@ -264,7 +264,7 @@ export async function POST(req: Request) {
     for (const r of records) {
       stt++;
       const rec = r as typeof r & {
-        kocCommission?: number; kolCommission?: number; bhxh?: number; showPay?: number;
+        kocCommission?: number; kolCommission?: number; bhxh?: number; insuranceDeduction?: number; showPay?: number;
         goalBonus?: number; googleBonus?: number; renewBonus?: number;
         standardWorkDays?: number; actualWorkDays?: number; leaveDays?: number;
       };
@@ -297,6 +297,7 @@ export async function POST(req: Request) {
         Number(rec.showPay ?? 0),
         thưởng,
         r.totalSalary,
+        Number(rec.insuranceDeduction ?? 0),
         r.advancePaid,
         r.remainingPayment,
         Number(rec.bhxh ?? 0),
@@ -309,7 +310,7 @@ export async function POST(req: Request) {
       if (role === "FM") dr.fill = solidFill(BLUE_BG.argb);
 
       // Number formats
-      [4,5,7,8,10,11,12,13,14,15,16].forEach((col: number) => {
+      [4,5,7,8,10,11,12,13,14,15,16,17].forEach((col: number) => {
         const cell = dr.getCell(col);
         cell.numFmt = VND_FMT;
       });
@@ -319,10 +320,10 @@ export async function POST(req: Request) {
         cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       });
 
-      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, ngày công=6, %HH=9, status=17).
+      // Accumulate totals (numeric cols, skip STT=1, name=2, role=3, ngày công=6, %HH=9, status=18).
       // Cột Doanh số (8) KHÔNG cộng dồn: dòng FM là doanh số cả phòng, đã bao gồm doanh
       // số của từng PT/Admin — cộng lại sẽ đếm trùng. Dòng tổng lấy doanh số phòng.
-      [4,5,7,10,11,12,13,14,15,16].forEach(c => {
+      [4,5,7,10,11,12,13,14,15,16,17].forEach(c => {
         if (typeof rowData[c - 1] === "number") totals[c - 1] += rowData[c - 1] as number;
       });
     }
@@ -331,7 +332,7 @@ export async function POST(req: Request) {
     const branchRevenue = await getBranchRevenue(branchId, month, year);
     const totRowData = Array(S1_COLS).fill("") as (string | number)[];
     totRowData[1] = "TỔNG CỘNG";
-    [4,5,7,10,11,12,13,14,15,16].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
+    [4,5,7,10,11,12,13,14,15,16,17].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
     totRowData[7] = branchRevenue;
 
     const totRow = ws1.addRow(totRowData);
@@ -343,14 +344,15 @@ export async function POST(req: Request) {
         left: { style: "thin" }, right: { style: "thin" },
       };
     });
-    [4,5,7,8,10,11,12,13,14,15,16].forEach(c => { totRow.getCell(c).numFmt = VND_FMT; });
+    [4,5,7,8,10,11,12,13,14,15,16,17].forEach(c => { totRow.getCell(c).numFmt = VND_FMT; });
 
     // Note: giải thích cột Doanh số ở dòng tổng
     const noteRow = ws1.addRow([
       "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
       + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn. "
       + "Ngày công = số công được tính trên thang 26 (vd 27/26): lương 1 ngày = (lương CB + phụ cấp)/26, nghỉ ngày nào trừ ngày đó, tháng hơn 26 ngày làm việc (số ngày − Chủ nhật) được cộng thêm ngày dư. "
-      + "Số trong ngoặc là ngày nghỉ thường theo lịch nghỉ; nghỉ phép năm vẫn hưởng đủ lương nên không trừ.",
+      + "Số trong ngoặc là ngày nghỉ thường theo lịch nghỉ; nghỉ phép năm vẫn hưởng đủ lương nên không trừ. "
+      + "Trừ BH = phần người lao động đóng (BHXH 8% + BHYT 1,5% + BHTN 1% × mức đóng), từ tháng có Ngày nhận bảo hiểm; Còn lại = Tổng lương − Trừ BH − Tạm ứng.",
       ...Array(S1_COLS - 1).fill(""),
     ]);
     ws1.mergeCells(noteRow.number, 1, noteRow.number, S1_COLS);
@@ -358,7 +360,7 @@ export async function POST(req: Request) {
     ws1.getCell(noteRow.number, 1).font = { italic: true, size: 9, color: { argb: "FF888888" } };
 
     // Column widths
-    [5,28,8,16,14,11,14,18,7,16,18,16,18,14,14,14,14].forEach((w, i) => {
+    [5,28,8,16,14,11,14,18,7,16,18,16,18,14,14,14,14,14].forEach((w, i) => {
       ws1.getColumn(i + 1).width = w;
     });
 

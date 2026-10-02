@@ -6,7 +6,7 @@ import { showPayOf, capFmShows, type ShowBuckets } from "@/lib/session-pay";
 import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { computeTotalSalary } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 
@@ -139,6 +139,8 @@ export type SalaryRecordSnapshot = {
   actualWorkDays:   number;
   leaveDays:        number;
   totalSalary:      number;
+  bhxh:             number;
+  insuranceDeduction: number;
   advancePaid:      number;
 };
 
@@ -160,6 +162,9 @@ export type SalaryPatch = {
   actualWorkDays:   number;
   leaveDays:        number;
   totalSalary:      number;
+  bhxh:             number;
+  /** Phần người lao động đóng bảo hiểm (10,5%) — trừ vào "Còn lại nhận". */
+  insuranceDeduction: number;
   remainingPayment: number;
   /** Số buổi dạy theo từng nhóm — chỉ có khi PT được tính lại tiền buổi dạy. */
   shows:            ShowBuckets | null;
@@ -280,8 +285,14 @@ export async function recalcSalary(args: {
     actualWorkDays:   actualDays,
   });
 
+  // BẢO HIỂM (phần người lao động) — từ tháng có Ngày nhận bảo hiểm trở đi.
+  const bhxh = bhxhBaseOf(role, r.baseSalary);
+  const insuranceDeduction = await liveInsuranceDeduction(r.userId, bhxh, month, year);
+
   const changed =
     !hasWorkDays ||
+    Math.abs(r.bhxh               - bhxh)               > 0.01 ||
+    Math.abs(r.insuranceDeduction - insuranceDeduction) > 0.01 ||
     leaveCount !== r.leaveDays ||
     Math.abs(r.totalRevenue     - totalRevenue)     > 0.01 ||
     Math.abs(r.commissionRate   - commissionRate)   > 0.001 ||
@@ -310,7 +321,9 @@ export async function recalcSalary(args: {
       actualWorkDays:   actualDays,
       leaveDays:        leaveCount,
       totalSalary,
-      remainingPayment: totalSalary - r.advancePaid,
+      bhxh,
+      insuranceDeduction,
+      remainingPayment: remainingPaymentOf(totalSalary, insuranceDeduction, r.advancePaid),
       shows,
     },
   };
@@ -330,6 +343,17 @@ export async function liveSeniorityBonus(userId: string, role: string, month: nu
     select:  { officialStartDate: true, seniorityYears: true },
   });
   return monthlySeniorityBonus(role, seniorityYearsFor(config, month, year));
+}
+
+/** Bảo hiểm trừ vào lương tháng — Ngày nhận bảo hiểm lấy từ Cấu hình lương mới nhất. */
+export async function liveInsuranceDeduction(userId: string, bhxhBase: number, month: number, year: number): Promise<number> {
+  if (bhxhBase <= 0) return 0;
+  const config = await prisma.salaryConfig.findFirst({
+    where:   { userId },
+    orderBy: { effectiveFrom: "desc" },
+    select:  { insuranceStartDate: true },
+  });
+  return insuranceDeductionOf(bhxhBase, config?.insuranceStartDate, month, year);
 }
 
 export function salaryUpdateData(patch: SalaryPatch) {

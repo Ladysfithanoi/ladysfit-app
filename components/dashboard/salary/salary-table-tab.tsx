@@ -53,6 +53,10 @@ type SalaryRecord = {
   kolCommission: number;
   totalSalary: number;
   advancePaid: number;
+  /** Mức đóng BHXH (= lương cơ bản). */
+  bhxh: number;
+  /** Phần người lao động đóng bảo hiểm (10,5%) — đã trừ trong "Còn lại". */
+  insuranceDeduction: number;
   remainingPayment: number;
   notes: string | null;
   sessionImages: string | null;
@@ -432,6 +436,12 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const totalFund      = records.reduce((s, r) => s + r.totalSalary, 0);
   const totalPaid      = records.filter(r => r.status === "PAID").reduce((s, r) => s + r.totalSalary, 0);
   const totalRemaining = records.reduce((s, r) => s + r.remainingPayment, 0);
+  // Ô "Trừ BH": phần người lao động đóng (10,5% mức đóng), chưa có Ngày nhận bảo hiểm → "—".
+  const insuranceCell = (r: SalaryRecord) => (
+    <td className="px-3 py-2.5 whitespace-nowrap" title={r.insuranceDeduction > 0 ? `10,5% × mức đóng ${vnd(r.bhxh)}` : "Chưa có Ngày nhận bảo hiểm"}>
+      {r.insuranceDeduction > 0 ? <span className="text-red-500">−{vnd(r.insuranceDeduction)}</span> : <span className="text-gray-300">—</span>}
+    </td>
+  );
   // Doanh số phòng nằm ở dòng FM (đã gồm doanh số của toàn bộ PT/Admin trong cơ sở) nên
   // chỉ cộng các dòng FM — cộng cả bảng sẽ đếm trùng doanh số từng người. Một cơ sở
   // có thể có NHIỀU FM, mỗi dòng cùng mang doanh số của chính cơ sở đó, nên gộp
@@ -695,7 +705,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương CB","Ngày công","Lương cộng thêm","Doanh số","% HH","Tiền HH","Thưởng Transform","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương CB","Ngày công","Lương cộng thêm","Doanh số","% HH","Tiền HH","Thưởng Transform","Tổng lương","Trừ BH","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -737,6 +747,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             ) : <span className="text-gray-400">—</span>}
                           </td>
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
+                          {insuranceCell(r)}
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
                           <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
                           <td className="px-3 py-2.5">
@@ -908,7 +919,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Lương cố định","Ngày công","Lương cộng thêm","DS phòng","% HH","Tiền HH","Show dạy","Tiền buổi dạy","Google","Renew","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
+                      {["Nhân viên","Lương cố định","Ngày công","Lương cộng thêm","DS phòng","% HH","Tiền HH","Show dạy","Tiền buổi dạy","Google","Renew","Tổng lương","Trừ BH","Tạm ứng","Còn lại","Trạng thái","Ảnh","Hành động","Chi tiết"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -987,6 +998,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           ) : <span className="text-gray-600">{vnd(0)}</span>}
                         </td>
                         <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
+                        {insuranceCell(r)}
                         <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
                         <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
                         <td className="px-3 py-2.5">
@@ -1057,7 +1069,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#f5f5f5] border-b border-gray-200">
-                      {["Nhân viên","Chức vụ","Lương CB","Ngày công","Tổng lương","Tạm ứng","Còn lại","Trạng thái","Hành động"].map(h => (
+                      {["Nhân viên","Chức vụ","Lương CB","Ngày công","Tổng lương","Trừ BH","Tạm ứng","Còn lại","Trạng thái","Hành động"].map(h => (
                         <th key={h} className={TH}>{h}</th>
                       ))}
                     </tr>
@@ -1086,6 +1098,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           </td>
                           {workDaysCell(r)}
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
+                          {insuranceCell(r)}
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
                           <td className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">{vnd(r.remainingPayment)}</td>
                           <td className="px-3 py-2.5">

@@ -1833,6 +1833,10 @@ model SalaryRecord {
   // chênh lệch nên số FM sửa tay vẫn giữ. Xem lib/leave-days.ts.
   leaveDays           Float        @default(0)
   bhxh                Float        @default(0)
+  // Phần NGƯỜI LAO ĐỘNG đóng bảo hiểm (BHXH 8% + BHYT 1,5% + BHTN 1% = 10,5% ×
+  // mức đóng `bhxh`), trừ vào "Còn lại nhận" từ tháng có Ngày nhận bảo hiểm.
+  // Tổng lương vẫn là lương gộp. Xem insuranceDeductionOf ở lib/salary-total.ts.
+  insuranceDeduction  Float        @default(0)
   totalSalary         Float        @default(0)
   kocCommission       Float        @default(0)
   kolCommission       Float        @default(0)

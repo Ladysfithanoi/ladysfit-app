@@ -27,6 +27,8 @@ type SalaryRecord = {
   kocCommission:        number;
   kolCommission:        number;
   bhxh:                 number;
+  /** Phần người lao động đóng bảo hiểm (10,5%) — đã trừ trong "Còn lại nhận". */
+  insuranceDeduction:   number;
   totalSalary:          number;
   advancePaid:          number;
   remainingPayment:     number;
@@ -222,6 +224,13 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
                   {vnd(record.totalSalary)}
                 </span>
               </div>
+
+              {(record.insuranceDeduction ?? 0) > 0 && (
+                <Row
+                  label="Trừ bảo hiểm (BHXH 8% + BHYT 1,5% + BHTN 1%)"
+                  value={`−${vnd(record.insuranceDeduction)}`}
+                />
+              )}
 
               <Row label="Đã tạm ứng" value={vnd(record.advancePaid)} />
 

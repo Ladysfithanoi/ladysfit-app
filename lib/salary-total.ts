@@ -58,8 +58,40 @@ export function computeTotalSalary(p: SalaryParts): number {
  * phần LƯƠNG CỘNG THÊM nên không nằm trong mức đóng, phụ cấp cũng vậy. Trước
  * đây mức đóng của PT ghi cứng 4.960.000đ, lệch khỏi lương cơ bản thật.
  *
- * STAFF và Admin dạy thêm không đóng BHXH qua bảng lương này.
+ * Admin dạy thêm không có lương cứng nên không đóng BHXH qua bảng lương này.
  */
 export function bhxhBaseOf(role: string, baseSalary: number): number {
-  return role === "PT" || role === "FM" ? baseSalary : 0;
+  return role === "ADMIN" ? 0 : baseSalary;
+}
+
+/**
+ * Tỉ lệ NGƯỜI LAO ĐỘNG đóng bảo hiểm, trừ vào lương: BHXH 8% + BHYT 1,5% +
+ * BHTN 1%. Phần công ty đóng không nằm trong bảng lương.
+ */
+export const EMPLOYEE_INSURANCE_RATE = 0.105;
+
+/**
+ * Tiền bảo hiểm trừ vào lương tháng (1–12/năm): 10,5% × mức đóng, chỉ từ tháng
+ * có NGÀY NHẬN BẢO HIỂM ở Cấu hình lương trở đi (hết thử việc mới đóng). Chưa
+ * nhập ngày nhận bảo hiểm = chưa đóng, không trừ.
+ *
+ * Tổng lương giữ là lương gộp; khoản này chỉ trừ ở "Còn lại nhận":
+ *   còn lại = tổng lương − bảo hiểm − tạm ứng  (xem remainingPaymentOf).
+ */
+export function insuranceDeductionOf(
+  bhxhBase:           number,
+  insuranceStartDate: Date | null | undefined,
+  month:              number,
+  year:               number,
+): number {
+  if (!insuranceStartDate || bhxhBase <= 0) return 0;
+  // Ngày nhận bảo hiểm lưu nửa đêm UTC của ngày đó (parseDayInput).
+  const startKey = insuranceStartDate.getUTCFullYear() * 12 + insuranceStartDate.getUTCMonth();
+  if (startKey > year * 12 + (month - 1)) return 0;
+  return Math.round(bhxhBase * EMPLOYEE_INSURANCE_RATE);
+}
+
+/** "Còn lại nhận" — một công thức cho mọi chỗ ghi bảng lương. */
+export function remainingPaymentOf(totalSalary: number, insuranceDeduction: number, advancePaid: number): number {
+  return totalSalary - insuranceDeduction - advancePaid;
 }

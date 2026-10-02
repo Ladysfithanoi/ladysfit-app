@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { liveSeniorityBonus } from "@/lib/salary-live";
+import { liveInsuranceDeduction, liveSeniorityBonus } from "@/lib/salary-live";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { SalaryStatus } from "@prisma/client";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { bhxhBaseOf, computeTotalSalary } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary, remainingPaymentOf } from "@/lib/salary-total";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -83,7 +83,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     standardWorkDays: standardDays,
     actualWorkDays:   actualDays,
   });
-  const remainingPayment = totalSalary - advancePaid;
+  // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng (và tiền
+  // bảo hiểm trừ vào lương) đổi theo.
+  const bhxh = bhxhBaseOf(record.user.role, baseSalary);
+  const insuranceDeduction = await liveInsuranceDeduction(record.userId, bhxh, record.month, record.year);
+  const remainingPayment = remainingPaymentOf(totalSalary, insuranceDeduction, advancePaid);
 
   const updated = await prisma.salaryRecord.update({
     where: { id: params.id },
@@ -94,8 +98,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       seniorityBonus,
       googleReviews,
       googleBonus,
-      // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng đổi theo.
-      bhxh:             bhxhBaseOf(record.user.role, baseSalary),
+      bhxh,
+      insuranceDeduction,
       standardWorkDays: standardDays as unknown as never,
       actualWorkDays:   actualDays   as unknown as never,
       leaveDays:        leaveCount   as unknown as never,

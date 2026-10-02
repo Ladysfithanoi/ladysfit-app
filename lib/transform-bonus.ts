@@ -16,9 +16,9 @@ import { ptInChargeAt } from "@/lib/transform-credit";
 // thưởng là người đang phụ trách khách vào ngày đạt mốc. Mỗi hợp đồng thưởng
 // đúng một lần. KOC/KOL có hoa hồng riêng nên không tính ở đây.
 //
-// THƯỞNG KHI KẾT THÚC GÓI (từ lương T10/2026): đạt mốc giữa chừng chưa được
+// THƯỞNG KHI KẾT THÚC GÓI (từ lương T9/2026): đạt mốc giữa chừng chưa được
 // thưởng — tiền vào lương THÁNG gói kết thúc (xem packageEndedAt). Hợp đồng đạt
-// mốc trước 01/10/2026 đã trả theo luật cũ (tháng đạt mốc) nên giữ nguyên, không
+// mốc trước 01/09/2026 đã trả theo luật cũ (tháng đạt mốc) nên giữ nguyên, không
 // trả lại lần nữa lúc gói kết thúc.
 
 export const TRANSFORM_BONUS_AMOUNT = 100_000;
@@ -29,7 +29,7 @@ const CUSTOM_GOAL_PACKAGES = ["L3", "L4"];
 
 const DAY_MS = 86_400_000;
 /** Từ mốc này thưởng chờ tới khi gói kết thúc; đạt mốc trước đó trả theo tháng đạt mốc. */
-const PAY_ON_END_FROM = new Date(2026, 9, 1);
+const PAY_ON_END_FROM = new Date(2026, 8, 1);
 /** Sai số làm tròn — 80,0 − 78,0 trong số thực có thể ra 1,9999999. */
 const EPS = 0.01;
 
