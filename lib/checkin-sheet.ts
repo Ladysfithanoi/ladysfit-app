@@ -236,6 +236,23 @@ export function parseOverride(stored: {
   });
 }
 
+/**
+ * MỐC BẮT ĐẦU TÍNH LƯƠNG CHO BUỔI CHỈNH TAY (cả dòng ghi tay trên phiếu lẫn bản
+ * "chỉnh tay số buổi PT" kiểu cũ): tháng 9/2026. Buổi chỉnh tay của tháng nào chỉ
+ * tính vào đúng tháng đó, và chỉ từ mốc này trở đi.
+ *
+ * Vì sao: rà ngày 02/10/2026, 42 bản chỉnh tay nhập ngày 22–29/08 để BÙ SỐ BUỔI
+ * CẢ ĐỜI GÓI từ trước khi có app (+99, +60, +51…) đều mang nhãn tháng 8, nên bị
+ * cộng hết vào tiền buổi dạy tháng 8 — có PT dư 25 triệu. Chúng vẫn được giữ cho
+ * ô "Số buổi PT" ở hồ sơ khách, chỉ không ra tiền.
+ */
+export const MANUAL_PAY_FROM = { year: 2026, month: 9 };
+
+/** (năm, tháng 1–12) có nằm từ mốc tính lương buổi chỉnh tay trở đi không. */
+export function isManualPayMonth(year: number, month: number): boolean {
+  return year * 12 + month >= MANUAL_PAY_FROM.year * 12 + MANUAL_PAY_FROM.month;
+}
+
 /** Tháng/năm theo giờ Việt Nam của một mốc ISO, gộp thành một số để so. */
 function vnMonthKey(iso: string): number {
   const d = new Date(new Date(iso).getTime() + 7 * 3600_000);
@@ -253,7 +270,10 @@ function vnMonthKey(iso: string): number {
 export function isPayableManualRow(row: SheetExtraRow, fallbackAddedAt: Date | string | null): boolean {
   const added = row.addedAt ?? (fallbackAddedAt ? new Date(fallbackAddedAt).toISOString() : null);
   if (!added) return false;
-  return vnMonthKey(added) === vnMonthKey(row.date);
+  const key = vnMonthKey(row.date);
+  // vnMonthKey = năm*12 + tháng(0–11) → đổi về tháng 1–12 để so với mốc.
+  if (!isManualPayMonth(Math.floor(key / 12), (key % 12) + 1)) return false;
+  return vnMonthKey(added) === key;
 }
 
 export function hasAnyEdit(o: SheetOverride): boolean {

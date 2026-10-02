@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { ContractTypeName } from "@/lib/packages";
 import { getManualSheetSessions } from "@/lib/manual-sheet-sessions";
+import { isManualPayMonth } from "@/lib/checkin-sheet";
 import {
   ENROLLMENT_CONTRACT_TYPE,
   ENROLLMENT_ID,
@@ -221,6 +222,9 @@ export async function getSessionAdjustments(
   year:  number,
 ): Promise<AdjustmentRow[]> {
   if (ptIds.length === 0) return [];
+  // Chỉnh tay chỉ ra tiền từ tháng 9/2026 (MANUAL_PAY_FROM ở lib/checkin-sheet).
+  // Ô "Số buổi PT" ở hồ sơ khách vẫn cộng đủ — xem getAdjustmentTotals.
+  if (!isManualPayMonth(year, month)) return [];
 
   return prisma.$queryRawUnsafe<AdjustmentRow[]>(
     `
