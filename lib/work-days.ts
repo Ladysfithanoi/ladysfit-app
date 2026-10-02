@@ -36,10 +36,20 @@ export const PAID_DAYS_BASE = 26;
  */
 export function workDayRatio(actualWorkDays: number, standard: number): number {
   if (standard <= 0) return 1;
+  return paidWorkDays(actualWorkDays, standard) / PAID_DAYS_BASE;
+}
+
+/**
+ * Số công ĐƯỢC TÍNH LƯƠNG trên thang 26 — con số hiển thị kiểu "27/26": tháng
+ * 27 ngày công đi làm đủ là 27/26, nghỉ 1 ngày là 26/26; tháng 24 ngày đi làm
+ * đủ vẫn 26/26. Cùng một phép tính với workDayRatio nên số hiện ra và tiền lương
+ * không thể lệch nhau.
+ */
+export function paidWorkDays(actualWorkDays: number, standard: number): number {
+  if (standard <= 0) return PAID_DAYS_BASE;
   if (actualWorkDays <= 0) return 0;
   const missed = standard - Math.min(actualWorkDays, standard);
-  const paidDays = Math.max(standard, PAID_DAYS_BASE) - missed;
-  return Math.max(0, paidDays) / PAID_DAYS_BASE;
+  return Math.max(0, Math.max(standard, PAID_DAYS_BASE) - missed);
 }
 
 /**

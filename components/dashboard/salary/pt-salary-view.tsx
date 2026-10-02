@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { formatDays } from "@/lib/work-days";
+import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
@@ -162,9 +162,8 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
                   label={(record.leaveDays ?? 0) > 0
                     ? `Ngày công (trừ ${formatDays(record.leaveDays)} ngày)`
                     : "Ngày công"}
-                  value={record.actualWorkDays >= record.standardWorkDays
-                    ? `${formatDays(record.actualWorkDays)}/${record.standardWorkDays} ngày (đủ công)`
-                    : `${formatDays(record.actualWorkDays)}/${record.standardWorkDays} ngày`}
+                  value={`${formatDays(paidWorkDays(record.actualWorkDays, record.standardWorkDays))}/${PAID_DAYS_BASE} công`
+                    + (record.actualWorkDays >= record.standardWorkDays ? " (đủ công)" : "")}
                 />
               )}
 

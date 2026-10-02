@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getBranchRevenue } from "@/lib/salary-revenue";
 import { sessionPayRate } from "@/lib/packages";
 import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
-import { formatDays } from "@/lib/work-days";
+import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { chargeablePackageSql } from "@/lib/checkin-eligibility";
 import ExcelJS from "exceljs";
 
@@ -281,7 +281,7 @@ export async function POST(req: Request) {
       const leaveDays = Number(rec.leaveDays ?? 0);
       const workDaysText = role === "ADMIN" || stdDays <= 0
         ? "—"
-        : `${formatDays(Number(rec.actualWorkDays ?? 0))}/${stdDays}${leaveDays > 0 ? ` (nghỉ ${formatDays(leaveDays)})` : ""}`;
+        : `${formatDays(paidWorkDays(Number(rec.actualWorkDays ?? 0), stdDays))}/${PAID_DAYS_BASE}${leaveDays > 0 ? ` (nghỉ ${formatDays(leaveDays)})` : ""}`;
 
       const rowData = [
         stt,
@@ -349,7 +349,7 @@ export async function POST(req: Request) {
     const noteRow = ws1.addRow([
       "* Doanh số ở dòng TỔNG CỘNG là doanh số cả phòng tập (bằng Tổng doanh thu bên Setup). "
       + "Dòng FM tính hoa hồng trên doanh số phòng, dòng PT/Admin tính trên doanh số cá nhân nên không cộng dồn. "
-      + "Ngày công = thực tế/chuẩn (số ngày trong tháng − số Chủ nhật); lương cứng (lương CB + phụ cấp) chia theo tỉ lệ này. "
+      + "Ngày công = số công được tính trên thang 26 (vd 27/26): lương 1 ngày = (lương CB + phụ cấp)/26, nghỉ ngày nào trừ ngày đó, tháng hơn 26 ngày làm việc (số ngày − Chủ nhật) được cộng thêm ngày dư. "
       + "Số trong ngoặc là ngày nghỉ thường theo lịch nghỉ; nghỉ phép năm vẫn hưởng đủ lương nên không trừ.",
       ...Array(S1_COLS - 1).fill(""),
     ]);

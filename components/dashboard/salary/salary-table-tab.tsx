@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, X, ChevronDown, ChevronUp, Download, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDays } from "@/lib/work-days";
+import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { showPayOf } from "@/lib/session-pay";
 import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
@@ -457,18 +457,22 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   const numInput = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
-  /** Ngày công thực tế / chuẩn — lương cứng được chia theo tỉ lệ này. */
+  /** Công được tính lương trên thang 26 ("27/26") — xem paidWorkDays ở lib/work-days. */
   function workDaysCell(r: SalaryRecord) {
     const std = r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year);
     const act = r.standardWorkDays > 0 ? r.actualWorkDays : std;
     const full = act >= std;
+    const paid = paidWorkDays(act, std);
     const fromCalendar = r.leaveDays ?? 0;
     return (
       <td className="px-3 py-2.5 whitespace-nowrap">
-        <span className={cn("font-bold", full ? "text-gray-700" : "text-orange-500")}>{formatDays(act)}</span>
-        <span className="text-gray-400">/{std} ngày</span>
+        <span className={cn("font-bold", full ? (paid > PAID_DAYS_BASE ? "text-green-600" : "text-gray-700") : "text-orange-500")}>{formatDays(paid)}</span>
+        <span className="text-gray-400">/{PAID_DAYS_BASE} công</span>
         {!full && (
           <span className="block text-[10px] text-orange-400">nghỉ {formatDays(std - act)} ngày</span>
+        )}
+        {std > PAID_DAYS_BASE && (
+          <span className="block text-[10px] text-gray-400">tháng {std} ngày làm việc</span>
         )}
         {fromCalendar > 0 && (
           <span className="block text-[10px] text-gray-400">{formatDays(fromCalendar)} ngày trừ theo lịch nghỉ / ngày vào làm</span>
@@ -1144,8 +1148,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                     <div className="pt-1 border-t border-gray-100">
                       <div className="space-y-1 max-w-[260px]">
                         <label className="text-xs font-semibold text-gray-500">
-                          Ngày công thực tế
-                          <span className="text-gray-400 font-normal"> / {standardWorkDays(month, year)} ngày chuẩn</span>
+                          Ngày đi làm thực tế
+                          <span className="text-gray-400 font-normal"> / {standardWorkDays(month, year)} ngày làm việc của tháng</span>
                         </label>
                         {/* step 0,5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */}
                         <input
@@ -1155,6 +1159,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           onChange={e => updateEntry(entry.userId, "actualWorkDays", parseFloat(e.target.value) || 0)}
                           className={numInput + " w-full text-left"}
                         />
+                        <p className="text-[10px] text-gray-500">
+                          Tính lương: <span className="font-bold">{formatDays(paidWorkDays(entry.actualWorkDays, standardWorkDays(month, year)))}/{PAID_DAYS_BASE} công</span>
+                        </p>
                         {entry.leaveDays > 0 && (
                           <p className="text-[10px] font-semibold text-orange-500">
                             Đã trừ {formatDays(entry.leaveDays)} ngày công theo lịch nghỉ và ngày bắt đầu làm việc
@@ -1345,12 +1352,15 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, edit
           {standardDays > 0 && (
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500">
-                Ngày công thực tế <span className="text-gray-400 font-normal">/ {standardDays} ngày chuẩn</span>
+                Ngày đi làm thực tế <span className="text-gray-400 font-normal">/ {standardDays} ngày làm việc của tháng</span>
               </label>
               {/* step 0,5 vì nghỉ nửa ngày chỉ trừ 0,5 công. */}
               <input type="number" min={0} max={standardDays} step={0.5} value={editWorkDays}
                 onFocus={(e) => e.target.select()} onChange={e => onWorkDays(e.target.value)}
                 className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+              <p className="text-[10px] text-gray-500">
+                Tính lương: <span className="font-bold">{formatDays(paidWorkDays(parseFloat(editWorkDays) || 0, standardDays))}/{PAID_DAYS_BASE} công</span>
+              </p>
               {leaveDays > 0 && (
                 <p className="text-[10px] text-orange-500 font-semibold">
                   Đã trừ {formatDays(leaveDays)} ngày công theo lịch nghỉ / ngày vào làm
