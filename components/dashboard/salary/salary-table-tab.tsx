@@ -1099,7 +1099,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
-                * Lương cơ bản mặc định 0đ — bấm Sửa ở từng dòng để đặt (hoặc tab Cấu hình lương) · chia theo ngày công thực tế / ngày công chuẩn
+                * Lương cơ bản mặc định 0đ — bấm Sửa ở từng dòng để đặt (hoặc tab Cấu hình lương) · lương 1 ngày = lương cứng / 26, nghỉ ngày nào trừ ngày đó, tháng hơn 26 ngày công được cộng thêm ngày dư
               </p>
             </div>
           )}

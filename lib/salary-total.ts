@@ -4,8 +4,9 @@ import { workDayRatio } from "@/lib/work-days";
  * Công thức tổng lương dùng chung cho mọi nơi tạo/tính lại bảng lương
  * (tạo bảng lương, GET tính lại theo doanh số mới, PUT khi FM sửa ngày công).
  *
- * Lương cứng = (lương cơ bản + phụ cấp cố định) × (ngày công thực tế / ngày công
- * chuẩn). Hoa hồng, tiền buổi dạy, thâm niên và các khoản thưởng KHÔNG bị chia
+ * Lương cứng = (lương cơ bản + phụ cấp cố định) / 26 × số ngày được trả lương
+ * (nghỉ trừ ngày, tháng hơn 26 ngày công chuẩn được cộng ngày dư — xem
+ * workDayRatio ở lib/work-days). Hoa hồng, tiền buổi dạy, thâm niên và các khoản thưởng KHÔNG bị chia
  * theo ngày công. Admin dạy thêm không có lương cứng nên không áp dụng.
  *
  * Bản ghi cũ chưa có ngày công (standardWorkDays = 0) → workDayRatio trả 1, tổng
