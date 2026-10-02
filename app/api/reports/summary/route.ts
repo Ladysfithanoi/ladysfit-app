@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { excludeTestBranch, excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -12,7 +13,12 @@ export async function GET() {
   const isFM = session.user.role === "FM";
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
-  const branchFilter = isFM ? { branchId: { in: managedBranchIds } } : {};
+  // Cơ sở / tài khoản test (lib/test-data.ts) không vào thống kê.
+  const seesTest = viewerSeesTestData(session.user);
+  const branchFilter = {
+    ...(isFM ? { branchId: { in: managedBranchIds } } : {}),
+    branch: excludeTestBranch(seesTest),
+  };
 
   const [totalClients, activeClients, pausedClients, totalStaff, totalPackages, activePackages] =
     await Promise.all([
@@ -20,8 +26,8 @@ export async function GET() {
       prisma.client.count({ where: { ...branchFilter, status: "ACTIVE" } }),
       prisma.client.count({ where: { ...branchFilter, status: "PAUSED" } }),
       isFM
-        ? prisma.user.count({ where: { branchId: { in: managedBranchIds } } })
-        : prisma.user.count(),
+        ? prisma.user.count({ where: { branchId: { in: managedBranchIds }, ...excludeTestUser(seesTest) } })
+        : prisma.user.count({ where: excludeTestUser(seesTest) }),
       prisma.packageEnrollment.count({
         where: { client: branchFilter },
       }),

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -21,7 +22,10 @@ export async function GET(req: Request) {
   if (!month || !year) return NextResponse.json({ error: "Missing params" }, { status: 400 });
 
   const branches = await prisma.branch.findMany({
-    where: { name: { not: { contains: "Fitpartner" } } },
+    where: {
+      name: { not: { contains: "Fitpartner" } },
+      ...excludeTestBranch(viewerSeesTestData(session.user)),
+    },
     orderBy: { name: "asc" },
     include: {
       fmAssignments: {

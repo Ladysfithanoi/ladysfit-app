@@ -8,6 +8,7 @@ import { WeekDayData } from "@/components/dashboard/weight-chart";
 import { CEODashboard } from "@/components/dashboard/ceo-dashboard";
 import { getMyRank } from "@/lib/ranking";
 import { currentPeriod } from "@/lib/ranking-config";
+import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -70,7 +71,11 @@ export default async function DashboardPage() {
   }
 
   if (isAdmin || isFM) {
-    const noFitpartner = { name: { not: { contains: "Fitpartner" } } };
+    // Bỏ nhánh Fitpartner và cơ sở test (lib/test-data.ts) khỏi thống kê.
+    const noFitpartner = {
+      name: { not: { contains: "Fitpartner" } },
+      ...excludeTestBranch(viewerSeesTestData(session.user)),
+    };
     const clientBranchFilter = isFM
       ? { branchId: { in: managedBranchIds }, branch: noFitpartner }
       : { branch: noFitpartner };
@@ -310,7 +315,7 @@ export default async function DashboardPage() {
       take: 30,
     }),
     // Huy hiệu ở Tổng quan lấy hạng của cả năm
-    getMyRank(ptId, currentPeriod()),
+    getMyRank(ptId, currentPeriod(), undefined, viewerSeesTestData(session.user)),
   ]);
 
   // Pass all recent logs (newest first) so the dashboard can paginate them client-side.

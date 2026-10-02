@@ -2,6 +2,7 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PACKAGES } from "@/lib/packages";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { TEST_BRANCH_NAME } from "@/lib/test-data";
 
 /**
  * ── Cài đặt → Giả lập ────────────────────────────────────────────────────────
@@ -34,16 +35,10 @@ export async function canSimulate(realUserId: string, targetUserId: string): Pro
 
 // ─── Dữ liệu test ─────────────────────────────────────────────────────────────
 
-export const TEST_BRANCH_NAME = "🧪 Cơ sở Giả lập";
 export const TEST_FM_EMAIL    = "test.fm@ladysfit.test";
 export const TEST_PT_EMAIL    = "test.pt@ladysfit.test";
 /** Mã khách test — không theo dạng LDFxxxx nên không chiếm số của khách thật. */
 const TEST_CLIENT_CODE_PREFIX = "TEST-";
-
-/** Tài khoản test nhận ra bằng đuôi email. */
-export function isTestEmail(email: string | null | undefined): boolean {
-  return !!email && email.endsWith("@ladysfit.test");
-}
 
 const DAY = 24 * 60 * 60 * 1000;
 

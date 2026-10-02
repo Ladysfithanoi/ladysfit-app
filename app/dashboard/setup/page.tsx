@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SetupPage } from "@/components/dashboard/setup/setup-page";
+import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
 
 export default async function Setup() {
   const session = await getServerSession(authOptions);
@@ -12,7 +13,10 @@ export default async function Setup() {
   const isPT = role === "PT";
 
   const branches = await prisma.branch.findMany({
-    where: { name: { not: { contains: "Fitpartner" } } },
+    where: {
+      name: { not: { contains: "Fitpartner" } },
+      ...excludeTestBranch(viewerSeesTestData(session.user)),
+    },
     orderBy: { name: "asc" },
   });
 

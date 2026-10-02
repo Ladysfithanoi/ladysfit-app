@@ -4,6 +4,7 @@ import { Prisma, type Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDaysISO, mondayOf, todayVN, weekKey } from "@/lib/week";
+import { excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 // GET /api/checklist/weekly-overview?weekStart=YYYY-MM-DD
 // Bảng tổng hợp báo cáo tuần của toàn bộ nhân sự cho FM/ADMIN: ai đã gửi, ai còn
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
   }
 
   const staff = await prisma.user.findMany({
-    where: staffWhere,
+    where: { ...staffWhere, ...excludeTestUser(viewerSeesTestData(session.user)) },
     select: { id: true, name: true, email: true, role: true, branch: { select: { name: true } } },
     orderBy: { name: "asc" },
   });

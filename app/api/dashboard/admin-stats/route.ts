@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -18,8 +19,12 @@ export async function GET() {
   const eightWeeksAgo = new Date();
   eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
 
-  const branchFilter = isFM ? { id: { in: managedBranchIds } } : undefined;
-  const clientBranchFilter = isFM ? { branchId: { in: managedBranchIds } } : {};
+  // Cơ sở test (lib/test-data.ts) không vào thống kê.
+  const noTest = excludeTestBranch(viewerSeesTestData(session.user));
+  const branchFilter = isFM ? { id: { in: managedBranchIds }, ...noTest } : noTest;
+  const clientBranchFilter = isFM
+    ? { branchId: { in: managedBranchIds }, branch: noTest }
+    : { branch: noTest };
 
   const [allClients, branches, chartLogs] = await Promise.all([
     prisma.client.findMany({
@@ -41,7 +46,7 @@ export async function GET() {
     prisma.weightLog.findMany({
       where: {
         date: { gte: eightWeeksAgo },
-        ...(isFM ? { client: { branchId: { in: managedBranchIds } } } : {}),
+        client: clientBranchFilter,
       },
       select: { date: true, weight: true, client: { select: { initialWeight: true } } },
     }),

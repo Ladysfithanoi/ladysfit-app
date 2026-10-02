@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { computeBranchRanking, computeRanking, getRankWeights } from "@/lib/ranking";
 import { currentPeriod, type RankPeriod, type RankPeriodType } from "@/lib/ranking-config";
 import { RankingPage } from "@/components/dashboard/ranking/ranking-page";
+import { viewerSeesTestData } from "@/lib/test-data";
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -47,8 +48,8 @@ export default async function Page({
 
   const weights = await getRankWeights();
   const [rows, branchRows] = await Promise.all([
-    computeRanking(period, weights),
-    computeBranchRanking(period, weights),
+    computeRanking(period, weights, viewerSeesTestData(session.user)),
+    computeBranchRanking(period, weights, viewerSeesTestData(session.user)),
   ]);
 
   return (

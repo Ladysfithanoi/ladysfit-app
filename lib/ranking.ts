@@ -10,6 +10,7 @@ import {
   type RankWeights,
 } from "@/lib/ranking-config";
 import { computeTransformCredits, countTransformsByPt } from "@/lib/transform-credit";
+import { excludeTestBranch, excludeTestUser } from "@/lib/test-data";
 
 // ── Xếp hạng nhân sự ─────────────────────────────────────────────────────────
 // Điểm xếp hạng gộp 3 tiêu chí, mỗi tiêu chí quy về thang 100 rồi nhân trọng số:
@@ -109,11 +110,13 @@ export async function getRankWeights(): Promise<RankWeights> {
 /** Bảng xếp hạng toàn bộ PT đang hoạt động trong 1 kỳ. */
 export async function computeRanking(
   period: RankPeriod,
-  weights?: RankWeights
+  weights?: RankWeights,
+  /** Người xem là tài khoản test (đang giả lập) — xem lib/test-data.ts. */
+  includeTest = false
 ): Promise<RankRow[]> {
   const w = weights ?? (await getRankWeights());
   const pts = await prisma.user.findMany({
-    where: { role: "PT", deletedAt: null },
+    where: { role: "PT", deletedAt: null, ...excludeTestUser(includeTest) },
     select: {
       id: true,
       name: true,
@@ -211,7 +214,8 @@ export async function computeRanking(
 /** Bảng xếp hạng phòng tập trong 1 kỳ, sắp theo điểm giảm dần. */
 export async function computeBranchRanking(
   period: RankPeriod,
-  weights?: RankWeights
+  weights?: RankWeights,
+  includeTest = false
 ): Promise<BranchRankRow[]> {
   const w = branchWeights(weights ?? (await getRankWeights()));
   const months = countedMonths(period);
@@ -220,7 +224,7 @@ export async function computeBranchRanking(
   const [branches, leads, credits] = await Promise.all([
     // Fitpartner là nhánh hợp tác, không phải phòng tập — loại như mọi trang khác
     prisma.branch.findMany({
-      where: { name: { not: { contains: "Fitpartner" } } },
+      where: { name: { not: { contains: "Fitpartner" } }, ...excludeTestBranch(includeTest) },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
@@ -291,9 +295,10 @@ export async function computeBranchRanking(
 export async function getMyRank(
   userId: string,
   period: RankPeriod,
-  weights?: RankWeights
+  weights?: RankWeights,
+  includeTest = false
 ): Promise<{ rank: number; total: number; points: number } | null> {
-  const rows = await computeRanking(period, weights);
+  const rows = await computeRanking(period, weights, includeTest);
   const me = rows.find((r) => r.ptId === userId);
   if (!me) return null;
   return { rank: me.rank, total: rows.length, points: me.points };

@@ -4,6 +4,7 @@ import { Prisma, type Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isTaskDone, mergeReflection, toDateOnly } from "@/lib/checklist-review";
+import { excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 // GET /api/checklist/overview?date=YYYY-MM-DD
 // One-glance summary of EVERY staff member's check-list for a single day, so an
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
   }
 
   const staff = await prisma.user.findMany({
-    where: staffWhere,
+    where: { ...staffWhere, ...excludeTestUser(viewerSeesTestData(session.user)) },
     select: { id: true, name: true, email: true, role: true, branch: { select: { name: true } } },
     orderBy: { name: "asc" },
   });

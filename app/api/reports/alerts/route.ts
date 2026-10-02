@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -13,7 +14,12 @@ export async function GET() {
   const managedBranchIds = session.user.managedBranchIds ?? [];
 
   const alerts = await prisma.performanceAlert.findMany({
-    where: isFM ? { client: { branchId: { in: managedBranchIds } } } : {},
+    where: {
+      client: {
+        ...(isFM ? { branchId: { in: managedBranchIds } } : {}),
+        branch: excludeTestBranch(viewerSeesTestData(session.user)),
+      },
+    },
     include: {
       client: { select: { id: true, fullName: true, branchId: true, branch: { select: { id: true, name: true } } } },
       pt: { select: { id: true, name: true } },
