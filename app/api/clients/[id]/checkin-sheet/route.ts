@@ -348,6 +348,20 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     if (row.ptId && !teacherIds.has(row.ptId)) row.ptId = "";
   }
 
+  // NGÀY ĐIỀN của từng dòng ghi tay do máy chủ gắn, không tin trình duyệt: dòng
+  // đã có giữ nguyên ngày điền cũ, dòng mới lấy lúc này. Bảng lương dựa vào nó
+  // để chỉ trả tiền buổi điền ngay trong tháng (isPayableManualRow).
+  const stored = await prisma.checkinSheetOverride.findUnique({
+    where:  { enrollmentId },
+    select: { header: true, rows: true, extraRows: true, createdAt: true },
+  });
+  const before = new Map(parseOverride(stored).extraRows.map((r) => [r.id, r]));
+  const now = new Date().toISOString();
+  for (const row of override.extraRows) {
+    const prev = before.get(row.id);
+    row.addedAt = prev ? (prev.addedAt ?? stored?.createdAt.toISOString() ?? now) : now;
+  }
+
   const data = {
     header:    JSON.stringify(override.header),
     rows:      JSON.stringify(override.rows),

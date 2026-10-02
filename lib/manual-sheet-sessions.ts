@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { parseOverride } from "@/lib/checkin-sheet";
+import { parseOverride, isPayableManualRow } from "@/lib/checkin-sheet";
 import type { ContractTypeName } from "@/lib/packages";
 
 // ── Buổi ghi tay trên phiếu, đọc dưới góc nhìn "buổi dạy" ───────────────────
@@ -36,6 +36,12 @@ type Filter = {
   /** Cửa sổ thời gian [gte, lt). Bỏ trống = cả đời. */
   gte?:      Date;
   lt?:       Date;
+  /**
+   * Chỉ lấy buổi ĐƯỢC TÍNH LƯƠNG — buổi điền ngay trong tháng của nó (xem
+   * isPayableManualRow). Bảng lương bật cờ này; phiếu check-in và "Số buổi PT"
+   * ở hồ sơ khách thì không, vì buổi điền bù vẫn là buổi khách đã tập.
+   */
+  payableOnly?: boolean;
 };
 
 /**
@@ -45,7 +51,7 @@ type Filter = {
  * app ghi rồi đếm — không cần biết buổi đến từ đâu.
  */
 export async function getManualSheetSessions(filter: Filter = {}): Promise<ManualSessionRow[]> {
-  const { ptIds, clientId, gte, lt } = filter;
+  const { ptIds, clientId, gte, lt, payableOnly } = filter;
   if (ptIds && ptIds.length === 0) return [];
 
   const overrides = await prisma.checkinSheetOverride.findMany({
@@ -54,6 +60,7 @@ export async function getManualSheetSessions(filter: Filter = {}): Promise<Manua
       ...(clientId ? { enrollment: { clientId } } : {}),
     },
     select: {
+      createdAt: true,
       header: true,
       rows: true,
       extraRows: true,
@@ -86,6 +93,7 @@ export async function getManualSheetSessions(filter: Filter = {}): Promise<Manua
       if (Number.isNaN(at)) continue;
       if (from !== undefined && at < from) continue;
       if (to !== undefined && at >= to) continue;
+      if (payableOnly && !isPayableManualRow(row, o.createdAt)) continue;
       out.push({
         ptId,
         clientId:     enrollment.clientId,

@@ -65,7 +65,8 @@ export async function getTaughtSessions(
 
   const [logged, manual] = await Promise.all([
     taughtFromLogs(ptIds, gte, lt),
-    getManualSheetSessions({ ptIds, gte, lt }),
+    // Bảng lương: buổi ghi tay điền bù cho tháng cũ không được tính tiền.
+    getManualSheetSessions({ ptIds, gte, lt, payableOnly: true }),
   ]);
 
   return [

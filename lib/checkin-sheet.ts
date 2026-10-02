@@ -112,6 +112,13 @@ export type SheetExtraRow = {
    * trả tiền cho một cái tên đoán ra thì tệ hơn là không trả.
    */
   ptId?: string;
+  /**
+   * Lúc dòng được ĐIỀN (ISO) — máy chủ tự gắn khi lưu, trình sửa không gửi lên
+   * được. Chỉ buổi điền ngay trong tháng của buổi mới được tính lương: điền bù
+   * buổi tháng cũ thì vẫn in lên phiếu nhưng không cộng tiền ngược vào tháng đã
+   * chốt (xem isPayableManualRow).
+   */
+  addedAt?: string;
 };
 
 export type SheetOverride = {
@@ -203,6 +210,7 @@ export function sanitizeOverride(input: unknown): SheetOverride {
       weight: w === undefined ? null : w,
       ptName: cleanName(r.ptName) ?? "",
       ptId,
+      ...(isIso(r.addedAt) ? { addedAt: new Date(r.addedAt as string).toISOString() } : {}),
     });
     if (out.extraRows.length >= MAX_SHEET_ROWS) break;
   }
@@ -226,6 +234,26 @@ export function parseOverride(stored: {
     rows:      read(stored.rows),
     extraRows: read(stored.extraRows),
   });
+}
+
+/** Tháng/năm theo giờ Việt Nam của một mốc ISO, gộp thành một số để so. */
+function vnMonthKey(iso: string): number {
+  const d = new Date(new Date(iso).getTime() + 7 * 3600_000);
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
+}
+
+/**
+ * Buổi ghi tay có được tính LƯƠNG không: chỉ khi được điền NGAY TRONG THÁNG của
+ * buổi đó. Điền bù buổi tháng cũ (tháng đã chốt lương) thì chỉ in lên phiếu —
+ * nếu không, mỗi lần FM điền bù là lương tháng đã trả tự đội lên.
+ *
+ * `fallbackAddedAt`: dòng lưu trước khi có addedAt — lấy lúc tạo phiếu sửa làm
+ * mốc (dòng không thể được điền trước khi có phiếu).
+ */
+export function isPayableManualRow(row: SheetExtraRow, fallbackAddedAt: Date | string | null): boolean {
+  const added = row.addedAt ?? (fallbackAddedAt ? new Date(fallbackAddedAt).toISOString() : null);
+  if (!added) return false;
+  return vnMonthKey(added) === vnMonthKey(row.date);
 }
 
 export function hasAnyEdit(o: SheetOverride): boolean {

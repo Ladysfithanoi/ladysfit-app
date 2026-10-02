@@ -475,8 +475,9 @@ export function CheckinSheetEditor({
 
         <p className="mt-3 text-[11px] leading-relaxed text-gray-400">
           Buổi ghi tay không có chữ ký và ảnh — in ra là ô trống, nhìn phân biệt được với buổi
-          app ghi. Buổi ghi tay CÓ tính vào “Số buổi PT” của bảng lương: tính cho HLV được chọn
-          ở cột HLV, vào tháng của ngày ghi trên dòng. Để trống ô HLV thì dòng vẫn in lên phiếu
+          app ghi. Buổi ghi tay tính vào “Số buổi PT” của bảng lương cho HLV được chọn ở cột HLV,
+          nhưng CHỈ khi được điền ngay trong tháng của buổi đó — điền bù buổi tháng cũ thì
+          vẫn in lên phiếu nhưng không cộng tiền vào tháng đã qua. Để trống ô HLV thì dòng vẫn in lên phiếu
           nhưng không tính công cho ai. Ô cân để trống = dùng số cân gần nhất trước buổi;
           phiếu in giờ VÀO và họ tên đầy đủ của HLV. Bảng luôn tự xếp theo ngày tăng dần —
           buổi điền tay tự về đúng chỗ giữa các buổi app ghi ngay khi rời ô ngày.
