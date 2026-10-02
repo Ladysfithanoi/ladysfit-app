@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeSeniorityBonus } from "@/lib/seniority";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { showPayOf, type ShowBuckets } from "@/lib/session-pay";
@@ -142,6 +143,7 @@ export type SalaryRecordSnapshot = {
 };
 
 export type SalaryPatch = {
+  seniorityBonus:   number;
   totalRevenue:     number;
   commissionRate:   number;
   commissionAmount: number;
@@ -258,11 +260,14 @@ export async function recalcSalary(args: {
     ? baseDays
     : Math.max(0, Math.min(baseDays - (leaveCount - r.leaveDays), standardDays));
 
+  // Bảng lương cũ lưu nguyên tiền thâm niên CẢ NĂM vào một tháng — đưa về 1/12.
+  const seniorityBonus = normalizeSeniorityBonus(role, r.seniorityBonus);
+
   const totalSalary = computeTotalSalary({
     role,
     baseSalary:      r.baseSalary,
     fixedAllowances: r.fixedAllowances,
-    seniorityBonus:  r.seniorityBonus,
+    seniorityBonus,
     commissionAmount,
     showPay,
     goalBonus,
@@ -285,7 +290,8 @@ export async function recalcSalary(args: {
     Math.abs(r.kocCommission    - kocCommission)    > 0.01 ||
     Math.abs(r.kolCommission    - kolCommission)    > 0.01 ||
     Math.abs(r.goalBonus        - goalBonus)        > 0.01 ||
-    Math.abs(r.renewBonus       - renewBonus)       > 0.01;
+    Math.abs(r.renewBonus       - renewBonus)       > 0.01 ||
+    Math.abs(r.seniorityBonus   - seniorityBonus)   > 0.01;
 
   return {
     changed,
@@ -297,6 +303,7 @@ export async function recalcSalary(args: {
       kolCommission,
       ...(role === "PT" ? { goalBonus, clientsAchievedGoal } : { goalBonus: r.goalBonus }),
       ...(role === "FM" ? { renewContracts, renewBonus } : {}),
+      seniorityBonus,
       showPay,
       standardWorkDays: standardDays,
       actualWorkDays:   actualDays,

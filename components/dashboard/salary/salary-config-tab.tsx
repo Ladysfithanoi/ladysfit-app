@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { SENIORITY_PER_YEAR, MAX_SENIORITY_YEARS } from "@/lib/seniority";
 import { Save } from "lucide-react";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { Branch, StaffMember } from "./salary-page";
@@ -39,9 +40,9 @@ const FM_ALLOWANCES   = FM_LUNCH + FM_PHONE + FM_TRANSPORT;
 const PT_DEFAULT_BASE = 5_310_000;
 
 /** Thưởng thâm niên mỗi năm và số năm được tính tối đa. */
-const FM_PER_YEAR   = 9_000_000;
-const PT_PER_YEAR   = 6_000_000;
-const MAX_SENIORITY = 4;
+const FM_PER_YEAR   = SENIORITY_PER_YEAR.FM;
+const PT_PER_YEAR   = SENIORITY_PER_YEAR.PT;
+const MAX_SENIORITY = MAX_SENIORITY_YEARS;
 
 const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
@@ -201,15 +202,16 @@ function SeniorityFields({
           >
             {Array.from({ length: MAX_SENIORITY + 1 }, (_, y) => (
               <option key={y} value={y}>
-                {y} năm{y > 0 ? ` (+${vnd(y * perYear)})` : ""}
+                {y} năm{y > 0 ? ` (+${vnd(y * perYear)}/năm)` : ""}
               </option>
             ))}
           </select>
         </FieldBox>
-        <FieldBox label="Thưởng thâm niên">
+        {/* Mức thâm niên là tiền CẢ NĂM — mỗi tháng cộng 1/12 (lib/seniority). */}
+        <FieldBox label="Thâm niên cộng vào lương mỗi tháng">
           <div className={roFieldCls}>
             {cfg.seniorityYears > 0
-              ? vnd(Math.min(cfg.seniorityYears, MAX_SENIORITY) * perYear)
+              ? `${vnd(Math.round(Math.min(cfg.seniorityYears, MAX_SENIORITY) * perYear / 12))}/tháng · ${vnd(Math.min(cfg.seniorityYears, MAX_SENIORITY) * perYear)}/năm`
               : "—"}
           </div>
         </FieldBox>

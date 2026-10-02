@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeSeniorityBonus } from "@/lib/seniority";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -64,11 +65,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         ? (rec.actualWorkDays ?? 0)
         : Math.max(0, standardDays - leaveCount));
 
+  // Bảng lương cũ lưu nguyên tiền thâm niên CẢ NĂM — đưa về 1/12 (lib/seniority).
+  const seniorityBonus = normalizeSeniorityBonus(record.user.role, record.seniorityBonus);
+
   const totalSalary = computeTotalSalary({
     role:             record.user.role,
     baseSalary,
     fixedAllowances:  record.fixedAllowances,
-    seniorityBonus:   record.seniorityBonus,
+    seniorityBonus,
     commissionAmount: record.commissionAmount,
     showPay:          record.showPay,
     goalBonus:        record.goalBonus,
@@ -87,6 +91,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(body.status && { status: body.status }),
       advancePaid,
       baseSalary,
+      seniorityBonus,
       googleReviews,
       googleBonus,
       // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng đổi theo.

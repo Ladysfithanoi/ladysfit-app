@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, X, ChevronDown, ChevronUp, Download, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { seniorityYearsOf } from "@/lib/seniority";
 import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { showPayOf } from "@/lib/session-pay";
 import type { Branch, StaffMember } from "./salary-page";
@@ -719,7 +720,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             {r.seniorityBonus > 0 ? (
                               <span className="inline-flex flex-col gap-0.5">
-                                <span className="font-semibold text-gray-700">{Math.round(r.seniorityBonus / 6_000_000)} năm</span>
+                                <span className="font-semibold text-gray-700">{seniorityYearsOf("PT", r.seniorityBonus)} năm</span>
                                 <span className="text-[10px] text-gray-400">{vnd(r.seniorityBonus)}</span>
                               </span>
                             ) : <span className="text-gray-400">—</span>}
@@ -932,7 +933,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           {r.seniorityBonus > 0 ? (
                             <span className="inline-flex flex-col gap-0.5">
-                              <span className="font-semibold text-gray-700">{Math.round(r.seniorityBonus / 9_000_000)} năm</span>
+                              <span className="font-semibold text-gray-700">{seniorityYearsOf("FM", r.seniorityBonus)} năm</span>
                               <span className="text-[10px] text-gray-400">{vnd(r.seniorityBonus)}</span>
                             </span>
                           ) : <span className="text-gray-400">—</span>}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { monthlySeniorityBonus } from "@/lib/seniority";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -284,7 +285,7 @@ export async function POST(req: Request) {
       const seniorityYears     = config?.seniorityYears     ?? 0;
 
       const fixedAllowances  = lunchAllowance + phoneAllowance + transportAllowance;
-      const seniorityBonus   = Math.min(seniorityYears, 4) * 9_000_000;
+      const seniorityBonus   = monthlySeniorityBonus("FM", seniorityYears);
       // Hoa hồng FM tính trên doanh số CẢ PHÒNG, nên cơ sở có nhiều FM mà ai cũng
       // hưởng thì phòng trả hoa hồng nhiều lần. Người tạo bảng lương quyết định ai
       // được hưởng; bỏ trống = hưởng (giữ đúng hành vi cũ cho cơ sở một FM).
@@ -350,7 +351,7 @@ export async function POST(req: Request) {
       const baseSalary     = config?.baseSalary     ?? 5_310_000;
       const seniorityYears = config?.seniorityYears ?? 0;
 
-      const seniorityBonus   = Math.min(seniorityYears, 4) * 6_000_000;
+      const seniorityBonus   = monthlySeniorityBonus("PT", seniorityYears);
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = showPayOf(entry);
