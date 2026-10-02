@@ -540,6 +540,12 @@ export function ClientDetailPage({
     if (hash === "detail" || hash === "workout" || hash === "nutrition" || hash === "overview") {
       setView(hash);
     }
+    // Link từ bảng lương (?sheet=<enrollmentId>) mở thẳng phiếu check-in của gói
+    // đó, khỏi phải tìm gói trong hồ sơ.
+    const sheetId = new URLSearchParams(window.location.search).get("sheet");
+    const pkg = sheetId ? initialPackages.find(p => p.id === sheetId) : undefined;
+    if (pkg) setSheetPkg({ id: pkg.id, name: pkg.packageName });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [editOpen, setEditOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);

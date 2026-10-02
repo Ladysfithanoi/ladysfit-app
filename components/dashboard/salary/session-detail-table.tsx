@@ -569,7 +569,7 @@ function NormalRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
+        <ProfileLinkCell clientId={row.clientId} enrollmentId={row.enrollmentId} packageName={row.packageName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -625,7 +625,7 @@ function KOCRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
+        <ProfileLinkCell clientId={row.clientId} enrollmentId={row.enrollmentId} packageName={row.packageName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -664,7 +664,7 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
         {row.totalValue > 0 ? vnd(row.totalValue) : "—"}
       </td>
       <td className={TD}>
-        <ProfileLinkCell clientId={row.clientId} clientName={row.clientName} />
+        <ProfileLinkCell clientId={row.clientId} enrollmentId={row.enrollmentId} packageName={row.packageName} />
       </td>
       <td className={TD}>
         <TransformCell
@@ -683,21 +683,20 @@ function KOLRow({ row, canEdit, onViewImage, onUpload, onToggleTransform }: {
 // ── Sub-cells ──────────────────────────────────────────────────────────────
 
 /**
- * Ô "Link": mở hồ sơ của chính khách hàng ở dòng này (thay cho ảnh check-in
- * trước đây — phiếu buổi tập đã nằm sẵn trong hồ sơ). Khách mua nhiều gói thì
- * mỗi dòng gói đều dẫn về cùng một hồ sơ. Mở tab mới để không mất bảng lương
- * đang xem.
+ * Ô "Link": mở thẳng phiếu check-in của gói ở dòng này (hồ sơ khách tự bật phiếu
+ * qua ?sheet=), khỏi phải tìm gói trong hồ sơ. Khách mua nhiều gói thì mỗi dòng
+ * mở đúng phiếu của gói đó. Mở tab mới để không mất bảng lương đang xem.
  */
-function ProfileLinkCell({ clientId, clientName }: { clientId: string; clientName: string }) {
+function ProfileLinkCell({ clientId, enrollmentId, packageName }: { clientId: string; enrollmentId: string; packageName: string }) {
   return (
     <Link
-      href={`/dashboard/clients/${clientId}`}
+      href={`/dashboard/clients/${clientId}?sheet=${enrollmentId}`}
       target="_blank"
       rel="noopener"
-      title={`Mở hồ sơ ${clientName}`}
+      title={`Mở phiếu check-in ${packageName}`}
       className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#f15b5c] hover:underline whitespace-nowrap"
     >
-      <ExternalLink className="w-3.5 h-3.5" /> Hồ sơ KH
+      <ExternalLink className="w-3.5 h-3.5" /> Phiếu check-in
     </Link>
   );
 }
