@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Images, ShieldCheck, BookOpen, Utensils, ClipboardList, Tag } from "lucide-react";
+import { Building2, Images, ShieldCheck, BookOpen, Utensils, ClipboardList, Tag, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsPageClient } from "./settings-page-client";
 import { TransformPhotosTab } from "./transform-photos-tab";
@@ -10,6 +10,7 @@ import { UserGuidesTab } from "./user-guides-tab";
 import { FoodManagementTab } from "./food-management-tab";
 import { WorkoutScheduleTemplateTab } from "./workout-schedule-template-tab";
 import { PackagePromosTab } from "./package-promos-tab";
+import { SimulateTab } from "./simulate-tab";
 
 type BranchRow = {
   id: string;
@@ -26,12 +27,21 @@ const TABS = [
   { key: "ptlevels",  label: "Cấp độ PT",           icon: ShieldCheck },
   { key: "promos",    label: "Trợ giá",             icon: Tag         },
   { key: "guides",    label: "Hướng dẫn",           icon: BookOpen    },
+  { key: "simulate",  label: "Giả lập",             icon: FlaskConical },
 ] as const;
 
 type TabKey = typeof TABS[number]["key"];
 
-export function SettingsWithTabs({ initialBranches }: { initialBranches: BranchRow[] }) {
-  const [tab, setTab] = useState<TabKey>("branches");
+export function SettingsWithTabs({
+  initialBranches,
+  initialTab,
+}: {
+  initialBranches: BranchRow[];
+  initialTab?: string;
+}) {
+  const [tab, setTab] = useState<TabKey>(
+    TABS.some((t) => t.key === initialTab) ? (initialTab as TabKey) : "branches",
+  );
 
   return (
     <div>
@@ -59,6 +69,7 @@ export function SettingsWithTabs({ initialBranches }: { initialBranches: BranchR
       {tab === "ptlevels"  && <PTLevelsTab />}
       {tab === "promos"    && <PackagePromosTab branches={initialBranches} />}
       {tab === "guides"    && <UserGuidesTab />}
+      {tab === "simulate"  && <SimulateTab />}
     </div>
   );
 }

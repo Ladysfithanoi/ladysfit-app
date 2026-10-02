@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { assertSessionDevice, authorizeLogin } from "@/lib/login-device";
+import { canSimulate } from "@/lib/simulate";
 
 // ─── Auth options ─────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         // Initial sign-in: populate token from the authorized user object
         token.role     = user.role;
@@ -74,6 +75,14 @@ export const authOptions: NextAuthOptions = {
       // On explicit session.update() calls (e.g. after role change), refresh iat
       if (trigger === "update") {
         token.iat = Math.floor(Date.now() / 1000);
+        // Cài đặt → Giả lập: Admin đóng vai FM/PT. null = thoát giả lập.
+        // Kiểm quyền ở server, không tin dữ liệu client gửi lên — xem lib/simulate.ts.
+        const target = (session as { simulateUserId?: unknown } | undefined)?.simulateUserId;
+        if (target === null) {
+          delete token.actAs;
+        } else if (typeof target === "string" && token.sub && await canSimulate(token.sub, target)) {
+          token.actAs = target;
+        }
       }
       return token;
     },
@@ -91,28 +100,46 @@ export const authOptions: NextAuthOptions = {
         };
       }
 
+      // Đang giả lập → mọi màn và API thấy tài khoản được đóng vai. Kiểm lại mỗi
+      // lần: Admin bị hạ quyền hoặc tài khoản đích bị xoá thì tự thoát giả lập.
+      let impersonator: { id: string; name: string | null } | undefined;
+      let effectiveId = token.sub;
+      if (token.actAs) {
+        const real = await prisma.user.findUnique({
+          where:  { id: token.sub },
+          select: { id: true, name: true, role: true },
+        });
+        if (real?.role === Role.ADMIN && await canSimulate(token.sub, token.actAs)) {
+          impersonator = { id: real.id, name: real.name };
+          effectiveId  = token.actAs;
+        }
+      }
+
       const dbUser = await prisma.user.findUnique({
-        where:  { id: token.sub },
+        where:  { id: effectiveId },
         select: {
           name:             true,
+          email:            true,
           role:             true,
           branchId:         true,
           managedBranches:  { select: { branchId: true } },
         },
       });
 
-      const resolvedRole = dbUser?.role ?? token.role ?? Role.PT;
+      const resolvedRole = dbUser?.role ?? (impersonator ? Role.PT : token.role ?? Role.PT);
 
       return {
         ...session,
         user: {
           ...session.user,
-          id:               token.sub,
+          id:               effectiveId,
           name:             dbUser?.name ?? session.user.name,
+          email:            impersonator ? dbUser?.email ?? session.user.email : session.user.email,
           role:             resolvedRole,
           branchId:         dbUser?.branchId ?? token.branchId ?? null,
           managedBranchIds: dbUser?.managedBranches?.map((m) => m.branchId) ?? [],
           deviceId:         token.did,
+          impersonator,
         },
       };
     },

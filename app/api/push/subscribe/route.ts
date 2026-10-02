@@ -10,6 +10,8 @@ type SubBody = { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Admin đang giả lập: máy này vẫn là máy của Admin, không chuyển chủ sang FM/PT.
+  if (session.user.impersonator) return NextResponse.json({ ok: true });
 
   const body = (await req.json().catch(() => ({}))) as SubBody;
   const endpoint = body.endpoint;
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.impersonator) return NextResponse.json({ ok: true });
   const body = (await req.json().catch(() => ({}))) as SubBody;
   if (body.endpoint) {
     await prisma.pushSubscription.deleteMany({ where: { endpoint: body.endpoint, userId: session.user.id } });

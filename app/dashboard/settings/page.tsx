@@ -4,7 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsWithTabs } from "@/components/dashboard/settings-with-tabs";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
@@ -32,6 +36,7 @@ export default async function SettingsPage() {
   return (
     <SettingsWithTabs
       initialBranches={branches}
+      initialTab={searchParams?.tab}
     />
   );
 }

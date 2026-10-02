@@ -6,6 +6,7 @@ import { Navbar } from "@/components/dashboard/navbar";
 import { PendingCheckoutBanner } from "@/components/dashboard/pending-checkout-banner";
 import { FollowUpReminderBanner } from "@/components/dashboard/follow-up-reminder-banner";
 import { PushOptIn } from "@/components/dashboard/push-opt-in";
+import { SimulateBanner } from "@/components/dashboard/simulate-banner";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -25,6 +26,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
       <main className="lg:ml-60 pt-16 min-h-screen">
         <div className="p-4 md:p-6 max-w-7xl">
+          <SimulateBanner />
           <PushOptIn />
           <PendingCheckoutBanner />
           <FollowUpReminderBanner />

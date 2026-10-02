@@ -14,6 +14,8 @@ declare module "next-auth" {
       managedBranchIds: string[];
       // id dòng trusted_devices của máy đang dùng (lib/login-device.ts)
       deviceId?: string;
+      // Có khi Admin đang giả lập tài khoản này (Cài đặt → Giả lập)
+      impersonator?: { id: string; name: string | null };
     };
   }
 
@@ -30,5 +32,7 @@ declare module "next-auth/jwt" {
     role?: Role;
     branchId?: string | null;
     did?: string;
+    // id tài khoản Admin đang đóng vai (lib/simulate.ts)
+    actAs?: string;
   }
 }
