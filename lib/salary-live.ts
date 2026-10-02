@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { normalizeSeniorityBonus } from "@/lib/seniority";
+import { monthlySeniorityBonus, seniorityYearsFor } from "@/lib/seniority";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { showPayOf, capFmShows, type ShowBuckets } from "@/lib/session-pay";
@@ -261,8 +261,8 @@ export async function recalcSalary(args: {
     ? baseDays
     : Math.max(0, Math.min(baseDays - (leaveCount - r.leaveDays), standardDays));
 
-  // Bảng lương cũ lưu nguyên tiền thâm niên CẢ NĂM vào một tháng — đưa về 1/12.
-  const seniorityBonus = normalizeSeniorityBonus(role, r.seniorityBonus);
+  // THÂM NIÊN tính lại theo đúng tháng lương từ Cấu hình lương (lib/seniority).
+  const seniorityBonus = await liveSeniorityBonus(r.userId, role, month, year);
 
   const totalSalary = computeTotalSalary({
     role,
@@ -317,6 +317,21 @@ export async function recalcSalary(args: {
 }
 
 /** Dựng payload `data` cho prisma.salaryRecord.update từ kết quả tính lại. */
+/**
+ * Tiền thâm niên của MỘT THÁNG lương, đọc từ Cấu hình lương mới nhất: số năm
+ * tính tới tháng đó (theo Ngày làm chính thức), × mức cả năm / 12. Chỉ FM và PT
+ * có thâm niên.
+ */
+export async function liveSeniorityBonus(userId: string, role: string, month: number, year: number): Promise<number> {
+  if (role !== "FM" && role !== "PT") return 0;
+  const config = await prisma.salaryConfig.findFirst({
+    where:   { userId },
+    orderBy: { effectiveFrom: "desc" },
+    select:  { officialStartDate: true, seniorityYears: true },
+  });
+  return monthlySeniorityBonus(role, seniorityYearsFor(config, month, year));
+}
+
 export function salaryUpdateData(patch: SalaryPatch) {
   const { shows, ...rest } = patch;
   return { ...rest, ...(shows ?? {}) };

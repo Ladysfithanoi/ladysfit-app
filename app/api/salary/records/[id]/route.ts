@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { normalizeSeniorityBonus } from "@/lib/seniority";
+import { liveSeniorityBonus } from "@/lib/salary-live";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -65,8 +65,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         ? (rec.actualWorkDays ?? 0)
         : Math.max(0, standardDays - leaveCount));
 
-  // Bảng lương cũ lưu nguyên tiền thâm niên CẢ NĂM — đưa về 1/12 (lib/seniority).
-  const seniorityBonus = normalizeSeniorityBonus(record.user.role, record.seniorityBonus);
+  // Thâm niên theo đúng tháng lương — cùng một hàm với lúc tính lại (salary-live).
+  const seniorityBonus = await liveSeniorityBonus(record.userId, record.user.role, record.month, record.year);
 
   const totalSalary = computeTotalSalary({
     role:             record.user.role,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SENIORITY_PER_YEAR, MAX_SENIORITY_YEARS } from "@/lib/seniority";
+import { SENIORITY_PER_YEAR, MAX_SENIORITY_YEARS, seniorityYearsAt } from "@/lib/seniority";
 import { Save } from "lucide-react";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import type { Branch, StaffMember } from "./salary-page";
@@ -86,20 +86,17 @@ function makeDefault(role: string): Config {
 }
 
 /**
- * Số năm TRÒN từ một mốc ngày tới hôm nay. Chưa tới ngày kỷ niệm trong năm thì
- * chưa được tính thêm năm — đó là cách "tính thâm niên từ ngày làm chính thức".
+ * Số năm thâm niên TỚI THÁNG NÀY, cùng luật với bảng lương (seniorityYearsAt ở
+ * lib/seniority): tháng kỷ niệm là tháng bắt đầu được cộng. Bảng lương mỗi
+ * tháng tự tính lại số năm theo đúng tháng đó — ô này chỉ để xem nhanh.
  * Ô trống hoặc ngày chưa gõ xong trả `null`.
  */
 function yearsSince(ymd: string): number | null {
   if (!ymd) return null;
   const from = new Date(`${ymd}T00:00:00.000Z`);
   if (isNaN(from.getTime())) return null;
-
   const now = new Date();
-  const beforeAnniversary =
-    now.getUTCMonth() < from.getUTCMonth() ||
-    (now.getUTCMonth() === from.getUTCMonth() && now.getUTCDate() < from.getUTCDate());
-  return Math.max(0, now.getUTCFullYear() - from.getUTCFullYear() - (beforeAnniversary ? 1 : 0));
+  return seniorityYearsAt(from, now.getMonth() + 1, now.getFullYear());
 }
 
 const inputCls   = "h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30 w-full";
@@ -159,7 +156,7 @@ function MilestoneFields({
           hint={
             years === null
               ? "Lương thâm niên bắt đầu tính từ mốc này."
-              : `Lương thâm niên tính từ mốc này — tới nay là ${years} năm.`
+              : `Tới tháng này là ${years} năm. Bảng lương mỗi tháng tự tính theo tháng đó (tháng kỷ niệm bắt đầu được cộng).`
           }
         >
           <DateMaskInput

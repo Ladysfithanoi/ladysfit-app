@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { monthlySeniorityBonus } from "@/lib/seniority";
+import { monthlySeniorityBonus, seniorityYearsFor } from "@/lib/seniority";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -282,7 +282,7 @@ export async function POST(req: Request) {
       const lunchAllowance     = config?.lunchAllowance     ?? 2_600_000;
       const phoneAllowance     = config?.phoneAllowance     ?? 900_000;
       const transportAllowance = config?.transportAllowance ?? 500_000;
-      const seniorityYears     = config?.seniorityYears     ?? 0;
+      const seniorityYears     = seniorityYearsFor(config, body.month, body.year);
 
       const fixedAllowances  = lunchAllowance + phoneAllowance + transportAllowance;
       const seniorityBonus   = monthlySeniorityBonus("FM", seniorityYears);
@@ -341,7 +341,7 @@ export async function POST(req: Request) {
       // PT
       const totalRevenue   = await getUserRevenue(entry.userId, body.branchId, body.month, body.year);
       const baseSalary     = config?.baseSalary     ?? 5_310_000;
-      const seniorityYears = config?.seniorityYears ?? 0;
+      const seniorityYears = seniorityYearsFor(config, body.month, body.year);
 
       const seniorityBonus   = monthlySeniorityBonus("PT", seniorityYears);
       const rate             = ptRate(totalRevenue);
