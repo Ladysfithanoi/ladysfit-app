@@ -144,6 +144,63 @@ export async function reversePackageSession(
   };
 }
 
+/**
+ * CHUYỂN MỘT BUỔI ĐÃ GHI sang lộ trình khác của cùng khách — chỉ Admin (xem route
+ * .../workout-logs/[logId]/move). Buổi tập, chữ ký, ảnh, người dạy giữ nguyên; chỉ
+ * đổi lộ trình mà buổi thuộc về (wl."packageEnrollmentId" — quyết định buổi in lên
+ * phiếu check-in nào và bảng lương tra đơn giá theo gói nào).
+ *
+ * Buổi đã trừ vào lộ trình (packageCounted) thì lộ trình đích +1 buổi đã dùng
+ * (đủ buổi thì hoàn thành). Lộ trình cũ chỉ được hoàn lại 1 buổi khi
+ * `refundSource` — có trường hợp gói cũ vẫn phải tính là đã dùng xong (vd L0 trải
+ * nghiệm đã hoàn thành, buổi chỉ là ghi nhầm gói).
+ */
+export async function moveLogToPackage(
+  clientId: string,
+  logId: string,
+  toEnrollmentId: string,
+  refundSource: boolean,
+): Promise<{ from: PackageUpdate | null; to: PackageUpdate | null; packageEnrollmentId: string }> {
+  const log = await prisma.workoutLog.findFirst({
+    where:  { id: logId, clientId },
+    select: { id: true, packageCounted: true, packageEnrollmentId: true },
+  });
+  if (!log) throw new Error("Không tìm thấy buổi tập");
+  if (log.packageEnrollmentId === toEnrollmentId) throw new Error("Buổi này đã thuộc lộ trình đó");
+  const target = await prisma.packageEnrollment.findFirst({ where: { id: toEnrollmentId, clientId } });
+  if (!target) throw new Error("Không tìm thấy lộ trình đích của khách này");
+
+  const toUpdate = (p: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string }): PackageUpdate =>
+    ({ id: p.id, sessionsUsed: p.sessionsUsed, sessions: p.sessions, packageName: p.packageName, status: p.status });
+
+  const result = await prisma.$transaction(async (tx) => {
+    let from: PackageUpdate | null = null;
+    let to: PackageUpdate | null = null;
+    if (log.packageCounted) {
+      if (refundSource && log.packageEnrollmentId) {
+        const src = await tx.packageEnrollment.findFirst({ where: { id: log.packageEnrollmentId, clientId } });
+        if (src && src.sessionsUsed > 0) {
+          const used = src.sessionsUsed - 1;
+          from = toUpdate(await tx.packageEnrollment.update({
+            where: { id: src.id },
+            data:  { sessionsUsed: used, ...(src.status === "COMPLETED" && used < src.sessions ? { status: "ACTIVE" } : {}) },
+          }));
+        }
+      }
+      const used = target.sessionsUsed + 1;
+      to = toUpdate(await tx.packageEnrollment.update({
+        where: { id: target.id },
+        data:  { sessionsUsed: used, ...(used >= target.sessions ? { status: "COMPLETED" } : {}) },
+      }));
+    }
+    await tx.workoutLog.update({ where: { id: log.id }, data: { packageEnrollmentId: target.id } });
+    return { from, to };
+  });
+
+  await refreshClientChurnStatus(clientId);
+  return { ...result, packageEnrollmentId: target.id };
+}
+
 // Create the client-facing "session complete → next session" notification.
 // Called at CHECK-OUT (when the session is actually finished). Best-effort.
 export async function notifyNextSession(

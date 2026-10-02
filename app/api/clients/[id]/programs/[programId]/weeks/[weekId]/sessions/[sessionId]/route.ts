@@ -21,6 +21,10 @@ const sessionInclude = {
 // sinh ra để chứng minh buổi tập có thật (xem lib/checkin-sheet) — một nút sửa
 // cấu trúc giáo án không được là đường xoá sạch bằng chứng ấy chỉ bằng một cú bấm.
 //
+// RIÊNG ADMIN được xoá cả ô buổi đã có chữ ký: buổi đã trừ được hoàn về đúng lộ
+// trình (vòng reversePackageSession bên dưới) và toàn bộ ô buổi kèm nhật ký vào
+// Thùng rác (captureTrash) — khôi phục được, kể cả số buổi đã trừ.
+//
 // Muốn bỏ thật thì đi đúng đường đã có: xoá NHẬT KÝ của buổi đó ngay trong nhật ký
 // tập ("Xóa buổi tập này (trừ khỏi số buổi đã tính)") — đường đó hoàn đúng buổi về
 // đúng lộ trình và để lại vết. Nhật ký hết rồi thì ô buổi xoá bình thường.
@@ -46,7 +50,7 @@ export async function DELETE(
       where: { sessionId: params.sessionId },
       select: { status: true },
     });
-    if (logs.length > 0) {
+    if (logs.length > 0 && session.user.role !== "ADMIN") {
       const done = logs.filter((l) => l.status === "COMPLETED").length;
       const what =
         done === logs.length ? `${done} buổi đã tập`
@@ -77,10 +81,8 @@ export async function DELETE(
       id: string; sessionsUsed: number; sessions: number; packageName: string; status: string;
     } | null = null;
 
-    // Lưới an toàn cho khe hở giữa lúc kiểm tra ở trên và lúc xoá: khách vừa kịp
-    // ký check-in đúng lúc này thì buổi vẫn phải được hoàn về đúng lộ trình đã trừ,
-    // thay vì bị cascade cuốn đi mà lộ trình giữ nguyên số buổi đã dùng. Bình
-    // thường vòng lặp này không chạy lần nào.
+    // Hoàn buổi về đúng lộ trình đã trừ cho mọi nhật ký sắp bị cascade cuốn đi:
+    // Admin xoá ô buổi đã ký, hoặc khách vừa kịp ký check-in đúng lúc này.
     const countedLogs = await prisma.workoutLog.findMany({
       where: { clientId: params.id, sessionId: params.sessionId, packageCounted: true },
       select: { packageEnrollmentId: true },

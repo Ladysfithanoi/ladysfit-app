@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle, Camera, Scale } from "lucide-react";
+import { X, ChevronDown, ChevronUp, ChevronLeft, Loader2, ClipboardList, ClipboardCheck, Pencil, Check, Copy, Clock, PenLine, Trash2, RefreshCw, AlertTriangle, Camera, Scale, ArrowRightLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { WorkoutLogRow, SetLogRow } from "./workout-tab";
+import type { WorkoutLogRow, SetLogRow, PackageForWorkoutTab } from "./workout-tab";
 import { CheckOutPhotoCapture, CheckOutPhotoThumb } from "./checkout-photo";
 import { MAX_SESSION_MINUTES as CAP_MINUTES } from "@/lib/checkin-eligibility";
 import {
@@ -2066,6 +2067,8 @@ export function SessionLogHistory({
   phase,
   clientId,
   assignedPTId = null,
+  userRole,
+  packages = [],
   onLogUpdated,
   onLogDeleted,
   onClose,
@@ -2076,6 +2079,10 @@ export function SessionLogHistory({
   clientId: string;
   /** PT đang phụ trách khách — buổi do người khác dạy được gắn nhãn "Dạy hộ". */
   assignedPTId?: string | null;
+  /** Admin được chuyển buổi (kể cả buổi có chữ ký) sang lộ trình khác. */
+  userRole?: string;
+  /** Lộ trình của khách — danh sách đích khi chuyển buổi. */
+  packages?: PackageForWorkoutTab[];
   onLogUpdated: (updated: WorkoutLogRow) => void;
   onLogDeleted: (logId: string, pkg?: { id: string; sessionsUsed: number; sessions: number; packageName: string; status: string } | null) => void;
   onClose: () => void;
@@ -2086,6 +2093,40 @@ export function SessionLogHistory({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  // Chuyển buổi sang lộ trình khác — chỉ Admin.
+  const router = useRouter();
+  const isAdmin = userRole === "ADMIN";
+  const [moveLog, setMoveLog] = useState<WorkoutLogRow | null>(null);
+  const [moveTo, setMoveTo] = useState("");
+  const [moveRefund, setMoveRefund] = useState(true);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState("");
+  const pkgName = (id?: string | null) => packages.find((p) => p.id === id)?.packageName ?? "—";
+
+  async function handleMove() {
+    if (!moveLog || !moveTo) return;
+    setMoving(true);
+    setMoveError("");
+    try {
+      const res = await fetch(`/api/clients/${clientId}/workout-logs/${moveLog.id}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toEnrollmentId: moveTo, refundSource: moveRefund }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      const updated = { ...moveLog, packageEnrollmentId: data.packageEnrollmentId as string };
+      setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      onLogUpdated(updated);
+      setMoveLog(null);
+      // Số buổi đã dùng của các lộ trình nằm ở dữ liệu trang — tải lại cho khớp.
+      router.refresh();
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setMoving(false);
+    }
+  }
 
   const isCardio = isCardioSession(sessionName);
   const showSuggestions = !isCardio && getRepRange(phase) != null;
@@ -2187,6 +2228,22 @@ export function SessionLogHistory({
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
+                      {/* Chuyển buổi sang lộ trình khác — chỉ Admin, kể cả buổi có chữ ký */}
+                      {isAdmin && packages.length > 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMoveLog(log);
+                            setMoveTo(packages.find((p) => p.id !== log.packageEnrollmentId)?.id ?? "");
+                            setMoveRefund(true);
+                            setMoveError("");
+                          }}
+                          title={`Chuyển buổi sang gói khác (đang thuộc ${pkgName(log.packageEnrollmentId)})`}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                        </button>
+                      )}
                       {/* Delete button — removes the session and un-counts it */}
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(log.id); setDeleteError(""); }}
@@ -2330,6 +2387,64 @@ export function SessionLogHistory({
           )}
         </div>
       </div>
+
+      {/* Chuyển buổi sang lộ trình khác (Admin) */}
+      {moveLog && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                <ArrowRightLeft className="w-5 h-5 text-indigo-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">Chuyển buổi {fmtDate(moveLog.sessionDate)} sang gói khác</p>
+                <p className="text-xs text-gray-500 mt-0.5">Đang thuộc gói {pkgName(moveLog.packageEnrollmentId)}</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500">Chuyển sang gói</label>
+              <select
+                value={moveTo}
+                onChange={(e) => setMoveTo(e.target.value)}
+                className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                {packages.filter((p) => p.id !== moveLog.packageEnrollmentId).map((p) => (
+                  <option key={p.id} value={p.id}>{p.packageName}</option>
+                ))}
+              </select>
+            </div>
+            {moveLog.packageCounted && (
+              <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={moveRefund} onChange={(e) => setMoveRefund(e.target.checked)} className="mt-0.5 w-4 h-4" />
+                <span>
+                  Hoàn 1 buổi cho gói {pkgName(moveLog.packageEnrollmentId)}. Bỏ tích nếu gói cũ vẫn phải tính là đã dùng
+                  (vd gói trải nghiệm đã hoàn thành, buổi chỉ bị ghi nhầm gói).
+                </span>
+              </label>
+            )}
+            <p className="text-[11px] text-gray-400">
+              Chữ ký, ảnh và người dạy giữ nguyên. Buổi chuyển sang phiếu check-in của gói mới và bảng lương tính theo đơn giá gói mới.
+            </p>
+            {moveError && <p className="text-xs text-red-500 font-medium">{moveError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleMove}
+                disabled={moving || !moveTo}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 transition-colors"
+              >
+                {moving ? <><Loader2 className="w-4 h-4 animate-spin" />Đang chuyển...</> : "Chuyển buổi"}
+              </button>
+              <button
+                onClick={() => setMoveLog(null)}
+                disabled={moving}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm delete a recorded session */}
       {confirmDeleteId && (

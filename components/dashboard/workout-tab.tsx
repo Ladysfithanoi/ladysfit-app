@@ -1635,10 +1635,12 @@ function ProgramView({
                 {!editMode && !isReadOnly && currentWeekData.sessions.length > 1 && (
                   <button
                     onClick={() => { setConfirmDeleteSession(true); setDeleteSessionError(""); }}
-                    disabled={activeSessionLogCount > 0}
+                    disabled={activeSessionLogCount > 0 && !isAdmin}
                     title={
                       activeSessionLogCount > 0
-                        ? "Khách đã ký check-in buổi này — xoá nhật ký của buổi trước thì mới xoá được ô buổi"
+                        ? isAdmin
+                          ? "Admin: xoá cả ô buổi lẫn nhật ký có chữ ký khách (hoàn buổi cho lộ trình, khôi phục được trong Thùng rác)"
+                          : "Khách đã ký check-in buổi này — xoá nhật ký của buổi trước thì mới xoá được ô buổi"
                         : "Xóa buổi đang chọn khỏi tuần này"
                     }
                     className="flex-shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-xs font-bold border border-red-200 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300 disabled:hover:bg-transparent"
@@ -1922,6 +1924,8 @@ function ProgramView({
                           phase={program.phase}
                           clientId={clientId}
                           assignedPTId={assignedPTId}
+                          userRole={userRole}
+                          packages={packages}
                           onLogUpdated={onLogUpdated}
                           onLogDeleted={onLogDeleted}
                           onClose={() => setHistorySessionId(null)}
@@ -2168,11 +2172,19 @@ function ProgramView({
                 <p className="text-xs text-gray-500 mt-0.5">Khôi phục được trong Thùng rác</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-              Ô buổi này và các bài tập trong nó sẽ bị xoá khỏi Tuần {currentWeekData.weekNumber}.
-              Khách <span className="font-bold">chưa ký check-in</span> buổi này, nên không có nhật ký, chữ ký
-              hay ảnh nào mất đi.
-            </p>
+            {activeSessionLogCount > 0 ? (
+              <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                Ô buổi này đã có <span className="font-bold text-red-600">{activeSessionLogCount} nhật ký có chữ ký khách</span>.
+                Xoá sẽ xoá cả nhật ký, chữ ký và ảnh check-out của các buổi đó, đồng thời
+                <span className="font-bold"> hoàn lại buổi cho lộ trình</span> đã trừ. Khôi phục được trong Thùng rác.
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                Ô buổi này và các bài tập trong nó sẽ bị xoá khỏi Tuần {currentWeekData.weekNumber}.
+                Khách <span className="font-bold">chưa ký check-in</span> buổi này, nên không có nhật ký, chữ ký
+                hay ảnh nào mất đi.
+              </p>
+            )}
             {deleteSessionError && <p className="text-xs text-red-500 font-medium">{deleteSessionError}</p>}
             <div className="flex gap-3">
               <button
