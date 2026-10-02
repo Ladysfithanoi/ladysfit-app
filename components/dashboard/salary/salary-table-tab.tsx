@@ -455,6 +455,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     return parts.join(" + ");
   }
 
+  // Nút thao tác ở thanh lọc: chữ không bao giờ xuống dòng, kể cả trên điện thoại.
+  const actionBtn = "flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap disabled:opacity-60 transition-colors";
+
   const numInput = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30";
 
   /** Công được tính lương trên thang 26 ("27/26") — xem paidWorkDays ở lib/work-days. */
@@ -619,11 +622,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </select>
             </div>
           ))}
-          <div className="flex items-center gap-2 ml-auto">
+          {/* Điện thoại: hai nút phụ chia đôi một hàng, nút chính chiếm trọn hàng
+              dưới — chữ luôn nằm trên MỘT dòng (whitespace-nowrap), không bị bẻ
+              xuống dòng khi màn hẹp. Máy rộng: cả ba nút đứng một hàng bên phải. */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
             {records.length > 0 && (
               <button onClick={handleExport} disabled={exporting}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-60 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
-                <Download className="w-4 h-4" />
+                className={cn(actionBtn, "flex-1 sm:flex-none border border-gray-200 bg-white text-gray-700 hover:bg-gray-50")}>
+                <Download className="w-4 h-4 shrink-0" />
                 {exporting ? "Đang xuất..." : "Xuất Excel"}
               </button>
             )}
@@ -634,16 +640,16 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                   branchName: branches.find(b => b.id === selectedBranchId)?.name ?? "",
                 })}
                 disabled={!selectedBranchId}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-60 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors">
-                <Star className="w-4 h-4" />
-                Ảnh đánh giá Google
+                className={cn(actionBtn, "flex-1 sm:flex-none border border-gray-200 bg-white text-gray-700 hover:bg-gray-50")}>
+                <Star className="w-4 h-4 shrink-0" />
+                Đánh giá Google
               </button>
             )}
             {!isCOO && (
               <button onClick={openGenModal} disabled={!selectedBranchId}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-60"
+                className={cn(actionBtn, "basis-full sm:basis-auto text-white")}
                 style={{ backgroundColor: "#f15b5c" }}>
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4 shrink-0" />
                 Tạo bảng lương tháng
               </button>
             )}
