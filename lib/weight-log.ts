@@ -50,29 +50,46 @@ function vnDayRange(day: string): { gte: Date; lte: Date } {
 /**
  * `currentWeight` của khách LUÔN là lần cân mới nhất — tính lại từ nhật ký cân
  * chứ không nhận số do người gọi truyền vào, nên sửa hay xoá một bản ghi cũ cũng
- * ra đúng kết quả.
- *
- * `hasTransformed` chỉ bật, không bao giờ tắt: đó là cột mốc khách đã đạt được,
- * xoá một lần cân không lấy lại được thành tích đó.
+ * ra đúng kết quả. `hasTransformed` cũng tính lại theo cùng nhật ký đó — xem
+ * syncTransformFlag.
  */
 export async function syncClientWeight(clientId: string): Promise<void> {
-  const [latest, client] = await Promise.all([
-    prisma.weightLog.findFirst({ where: { clientId }, orderBy: { date: "desc" } }),
-    prisma.client.findUnique({
-      where: { id: clientId },
-      select: { initialWeight: true, hasTransformed: true },
+  const latest = await prisma.weightLog.findFirst({ where: { clientId }, orderBy: { date: "desc" } });
+  if (!latest) return;
+  await prisma.client.update({ where: { id: clientId }, data: { currentWeight: latest.weight } });
+  await syncTransformFlag(clientId);
+}
+
+/**
+ * `hasTransformed` = còn ÍT NHẤT MỘT lần cân giảm đủ 7kg so với cân ban đầu —
+ * cùng định nghĩa mốc transform ở lib/transform-credit.
+ *
+ * Tính lại cả hai chiều, mỗi khi nhật ký cân hoặc cân ban đầu đổi. Khách tăng
+ * cân lại vẫn giữ thành tích (lần cân đạt mốc vẫn còn trong nhật ký); còn số cân
+ * gõ nhầm — 55,5 thay vì 89 — bị xoá hay sửa thì cờ tắt theo. Trước đây cờ "chỉ
+ * bật, không tắt" nên một lần gõ nhầm đã xoá vẫn đếm transform mãi mãi.
+ *
+ * Khách chưa có lần cân nào thì giữ nguyên cờ: không có dữ liệu để kết luận.
+ */
+export async function syncTransformFlag(clientId: string): Promise<void> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { initialWeight: true, hasTransformed: true },
+  });
+  if (!client) return;
+  const [anyLog, hit] = await Promise.all([
+    prisma.weightLog.findFirst({ where: { clientId }, select: { id: true } }),
+    prisma.weightLog.findFirst({
+      // Bỏ qua số cân ngoài ngưỡng người thật (vd 0 kg gõ nhầm) — không phải mốc.
+      where: { clientId, weight: { gte: WEIGHT_MIN, lte: client.initialWeight - TRANSFORM_LOSS_KG } },
+      select: { id: true },
     }),
   ]);
-  if (!latest || !client) return;
-
-  const nowTransformed = client.initialWeight - latest.weight >= TRANSFORM_LOSS_KG;
-  await prisma.client.update({
-    where: { id: clientId },
-    data: {
-      currentWeight: latest.weight,
-      ...(nowTransformed && !client.hasTransformed ? { hasTransformed: true } : {}),
-    },
-  });
+  if (!anyLog) return;
+  const transformed = hit != null;
+  if (transformed !== client.hasTransformed) {
+    await prisma.client.update({ where: { id: clientId }, data: { hasTransformed: transformed } });
+  }
 }
 
 /**

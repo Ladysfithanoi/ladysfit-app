@@ -6,6 +6,7 @@ import { Role } from "@prisma/client";
 import { logPTAssignment } from "@/lib/transform-credit";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { captureTrash } from "@/lib/trash";
+import { syncTransformFlag } from "@/lib/weight-log";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -118,6 +119,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       avatarUrl: "avatarUrl" in body ? (body.avatarUrl ?? null) : undefined,
     },
   });
+
+  // Cân ban đầu đổi thì mốc giảm 7kg đổi theo — tính lại cờ transform.
+  if (body.initialWeight) await syncTransformFlag(params.id);
 
   // Đổi người phụ trách ở form sửa hồ sơ cũng phải vào nhật ký, nếu không
   // transform của khách sẽ được quy nhầm cho người mới nhận (lib/transform-credit).

@@ -160,6 +160,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     id: client.id,
     clientCode: client.clientCode ?? null,
     fullName: client.fullName,
+    hasTransformed: client.hasTransformed,
     phone: client.phone,
     email: client.email ?? null,
     passwordSetAt: client.passwordSetAt?.toISOString() ?? null,

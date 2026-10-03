@@ -560,7 +560,8 @@ export function ClientsPageClient({
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      {c.initialWeight - c.currentWeight >= 7 ? (
+                      {/* Cùng nguồn với bảng xếp hạng: từng có lần cân giảm đủ 7kg (lib/transform-credit). */}
+                      {c.transform ? (
                         <div className="flex flex-col items-start gap-0.5">
                           <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-[#f15b5c]/10 text-[#f15b5c]">
                             Đã Transform

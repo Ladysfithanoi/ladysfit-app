@@ -152,7 +152,8 @@ export async function computeTransformCredits(): Promise<TransformCredit[]> {
   for (const log of logs) {
     if (milestoneByClient.has(log.clientId)) continue;
     const initial = initialWeightById.get(log.clientId);
-    if (initial != null && initial - log.weight >= TRANSFORM_LOSS_KG) {
+    // Số cân dưới 20 kg là gõ nhầm (WEIGHT_MIN ở lib/weight-log), không phải mốc.
+    if (initial != null && log.weight >= 20 && initial - log.weight >= TRANSFORM_LOSS_KG) {
       milestoneByClient.set(log.clientId, log.date);
     }
   }

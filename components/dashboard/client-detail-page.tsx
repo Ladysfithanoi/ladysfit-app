@@ -64,6 +64,8 @@ type ClientDetail = {
   id: string;
   clientCode: string | null;
   fullName: string;
+  /** Từng có lần cân giảm đủ 7kg — cùng nguồn với bảng xếp hạng (lib/weight-log). */
+  hasTransformed: boolean;
   phone: string;
   email: string | null;
   passwordSetAt: string | null;
@@ -883,7 +885,7 @@ export function ClientDetailPage({
   const progressPct = totalToLose > 0
     ? Math.min(100, Math.max(0, Math.round((lostKg / totalToLose) * 100)))
     : 0;
-  const isTransformed = client.initialWeight - client.currentWeight >= 7;
+  const isTransformed = client.hasTransformed;
 
   // BMI / WHR
   const bmi = client.height > 0

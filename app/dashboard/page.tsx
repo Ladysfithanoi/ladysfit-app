@@ -92,6 +92,7 @@ export default async function DashboardPage() {
           status: true,
           initialWeight: true,
           currentWeight: true,
+          hasTransformed: true,
           height: true,
           createdAt: true,
           updatedAt: true,
@@ -119,7 +120,10 @@ export default async function DashboardPage() {
       }),
     ]);
 
-    const transformed = allClients.filter((c) => c.initialWeight - c.currentWeight >= 7);
+    // "Đã transform" = từng có lần cân giảm đủ 7kg (cờ hasTransformed, tính lại từ
+    // nhật ký cân — lib/weight-log). CÙNG nguồn với bảng xếp hạng và bảng khách
+    // hàng; không lấy cân hiện tại, vì khách tăng lại vài lạng vẫn là đã đạt mốc.
+    const transformed = allClients.filter((c) => c.hasTransformed);
 
     // Determine WHEN each transformed client first reached ≥ 7 kg loss, so transforms
     // can be grouped by month / quarter. Fall back to updatedAt if no weight log crossed.
@@ -174,8 +178,7 @@ export default async function DashboardPage() {
       c.initialWeight > 0 && c.height > 0 && c.initialWeight - c.height + 100 >= 7;
     const isClassifiable = (c: { initialWeight: number; height: number }) =>
       c.initialWeight > 0 && c.height > 0;
-    const isTransformed = (c: { initialWeight: number; currentWeight: number }) =>
-      c.initialWeight - c.currentWeight >= 7;
+    const isTransformed = (c: { hasTransformed: boolean }) => c.hasTransformed;
 
     // Transform-quality counters grouped by (branch, year, month of createdAt). The client
     // component sums the buckets it needs for the selected branch + period.
@@ -220,7 +223,7 @@ export default async function DashboardPage() {
       branchCount: branches.length,
       branchStats: branches.map((b) => {
         const bc = allClients.filter((c) => c.branchId === b.id);
-        const bt = bc.filter((c) => c.initialWeight - c.currentWeight >= 7);
+        const bt = bc.filter(isTransformed);
         return {
           id: b.id,
           name: b.name,
@@ -301,6 +304,7 @@ export default async function DashboardPage() {
         initialWeight: true,
         currentWeight: true,
         targetWeight: true,
+        hasTransformed: true,
       },
       orderBy: { createdAt: "desc" }, // newest clients first
     }),
@@ -337,7 +341,7 @@ export default async function DashboardPage() {
   const stats: PTStats = {
     totalClients: myClients.length,
     activeClients: myClients.filter((c) => c.status === "ACTIVE").length,
-    transformedCount: myClients.filter((c) => c.initialWeight - c.currentWeight >= 7).length,
+    transformedCount: myClients.filter((c) => c.hasTransformed).length,
     clientProgress: myClients.map((c) => {
       const lostKg = Math.max(0, c.initialWeight - c.currentWeight);
       const totalToLose = c.initialWeight - c.targetWeight;
