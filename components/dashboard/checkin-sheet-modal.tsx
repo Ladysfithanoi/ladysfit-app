@@ -767,16 +767,16 @@ export function CheckinSheetModal({
             Lúc đang sửa thì ẩn đi: trình sửa có cặp nút Lưu/Huỷ của nó, và tải
             ảnh khi chưa lưu sẽ ra tờ phiếu cũ chứ không phải cái đang sửa. */}
         {!editing && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-gray-100 px-4 py-4 sm:gap-x-3 sm:px-5">
             <button
               onClick={() => download()}
               disabled={loading || !data || downloading}
-              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start"
+              className="flex h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-bold text-white disabled:opacity-40 sm:flex-none sm:justify-start sm:gap-2 sm:px-5"
               style={{ backgroundColor: BRAND }}
             >
               {downloading
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Download className="h-4 w-4" />}
+                ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                : <Download className="h-4 w-4 shrink-0" />}
               {pageCount > 1 ? `Tải cả ${pageCount} tờ` : "Tải ảnh phiếu"}
             </button>
             {/* Lối dự phòng: điện thoại (nhất là iPhone) thường chỉ nhận một file
@@ -785,10 +785,10 @@ export function CheckinSheetModal({
               <button
                 onClick={() => download(page)}
                 disabled={loading || !data || downloading}
-                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold disabled:opacity-40 sm:flex-none"
+                className="flex h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-sm font-bold disabled:opacity-40 sm:flex-none sm:gap-2 sm:px-4"
                 style={{ borderColor: BRAND, color: BRAND }}
               >
-                <Download className="h-4 w-4" />
+                <Download className="h-4 w-4 shrink-0" />
                 Tải tờ {page + 1}
               </button>
             )}
@@ -800,7 +800,7 @@ export function CheckinSheetModal({
             <button
               onClick={onClose}
               disabled={downloading}
-              className="h-11 shrink-0 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+              className="h-11 shrink-0 whitespace-nowrap rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 sm:px-5"
             >
               Đóng
             </button>
