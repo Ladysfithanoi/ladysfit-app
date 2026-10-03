@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncLeadToTransaction } from "@/lib/sync-finance";
+import { vnMonthStart } from "@/lib/format-date";
 
 function canAccess(role: string, branchId: string, managedBranchIds: string[]) {
   if (role === "ADMIN" || role === "CEO_FITPARTNER" || role === "COO") return true;
@@ -52,8 +53,8 @@ export async function GET(req: Request) {
     }
   }
 
-  const start = new Date(year, month - 1, 1);
-  const end   = new Date(year, month, 1);
+  const start = vnMonthStart(year, month);
+  const end   = vnMonthStart(year, month + 1);
 
   const transactions = await prisma.transaction.findMany({
     where: {

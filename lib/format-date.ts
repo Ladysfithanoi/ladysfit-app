@@ -42,3 +42,19 @@ export function fmtDateTime(date: string | Date | null | undefined): string {
 export function vnMonthStart(year: number, month: number): Date {
   return new Date(Date.UTC(year, month - 1, 1) - 7 * 3600_000);
 }
+
+/** 00:00 giờ VN ngày 1/1 của năm. */
+export function vnYearStart(year: number): Date {
+  return vnMonthStart(year, 1);
+}
+
+/**
+ * Đồng hồ giờ VN của một thời điểm, ĐỌC BẰNG getUTC*() (getUTCDate, getUTCMonth…).
+ *
+ * Dùng để xếp một thời điểm vào ngày / tuần / tháng theo lịch VN mà không phụ thuộc
+ * múi giờ máy đang chạy (Vercel UTC, máy dev giờ VN). Mốc đem so cũng phải dựng
+ * bằng Date.UTC theo ngày lịch VN. Ngày lưu dạng "chỉ ngày" (00:00Z) vẫn ra đúng ngày.
+ */
+export function vnWallClock(d: Date | string): Date {
+  return new Date(new Date(d).getTime() + 7 * 3600_000);
+}

@@ -3,33 +3,27 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
-import { ymd, addDaysISO, weekKey } from "@/lib/week";
+import { addDaysISO, weekKey } from "@/lib/week";
+import { vnWallClock } from "@/lib/format-date";
 
+// Mốc tuần là NGÀY LỊCH VN dựng bằng Date.UTC; thời điểm đem so phải qua
+// vnWallClock trước (xem lib/format-date).
 function computeWeekBounds(year: number, month: number) {
-  const d = new Date(year, month - 1, 1);
-  const dow = d.getDay() || 7;
-  const firstMon = new Date(d);
-  firstMon.setDate(d.getDate() - dow + 1);
-  const lastDay = new Date(year, month, 0);
+  const dow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay() || 7;
+  const nextMonth = Date.UTC(year, month, 1);
   return [1, 2, 3, 4, 5].map((w) => {
-    const start = new Date(firstMon);
-    start.setDate(firstMon.getDate() + (w - 1) * 7);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    const start = new Date(Date.UTC(year, month - 1, 2 - dow + (w - 1) * 7));
     // The final reporting week (5) always ends on the last calendar day of the month;
     // clamp any earlier week that spills past month-end too.
-    if (w === 5 || end > lastDay) {
-      end.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
-    }
-    end.setHours(23, 59, 59, 999);
-    // `mondayISO` là đúng ngày Thứ 2 dạng YYYY-MM-DD (không đi vòng qua UTC như
-    // toISOString), để tra đúng tuần của báo cáo check-list bên dưới.
+    const endExcl = w === 5 ? nextMonth : Math.min(start.getTime() + 7 * 86_400_000, nextMonth);
+    const end = new Date(endExcl - 1);
     return {
       weekNumber: w,
       weekStart: start.toISOString(),
       weekEnd: end.toISOString(),
-      mondayISO: ymd(start),
+      // Ngày Thứ 2 dạng YYYY-MM-DD — start dựng bằng Date.UTC nên toISOString ra đúng
+      // ngày lịch, để tra đúng tuần của báo cáo check-list bên dưới.
+      mondayISO: start.toISOString().slice(0, 10),
     };
   });
 }
@@ -338,8 +332,9 @@ export async function GET(req: Request) {
   const selectedBound = weekBounds.find((b) => b.weekNumber === weekNumber);
   if (selectedBound) {
     const assignWeek = (date: Date): number => {
+      const vn = vnWallClock(date);
       for (const b of weekBounds) {
-        if (date >= new Date(b.weekStart) && date <= new Date(b.weekEnd)) return b.weekNumber;
+        if (vn >= new Date(b.weekStart) && vn <= new Date(b.weekEnd)) return b.weekNumber;
       }
       return 5;
     };

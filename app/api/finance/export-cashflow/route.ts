@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
 import ExcelJS              from "exceljs";
+import { vnWallClock, vnYearStart } from "@/lib/format-date";
 
 const C_RED   = "FFF15B5C";
 const C_WHITE = "FFFFFFFF";
@@ -248,8 +249,8 @@ export async function POST(req: Request) {
     wb.modified = new Date();
 
     if (period === "monthly") {
-      const start = new Date(year, 0, 1);
-      const end   = new Date(year + 1, 0, 1);
+      const start = vnYearStart(year);
+      const end   = vnYearStart(year + 1);
 
       const rows = await prisma.transaction.findMany({
         where:  { branchId, transactionDate: { gte: start, lt: end } },
@@ -259,7 +260,7 @@ export async function POST(req: Request) {
       const byMonth: Record<number, { income: number; expense: number }> = {};
       for (let m = 1; m <= 12; m++) byMonth[m] = { income: 0, expense: 0 };
       for (const r of rows) {
-        const m = new Date(r.transactionDate).getMonth() + 1;
+        const m = vnWallClock(r.transactionDate).getUTCMonth() + 1;
         if (r.type === "INCOME") byMonth[m].income += r.amount;
         else byMonth[m].expense += r.amount;
       }
@@ -276,8 +277,8 @@ export async function POST(req: Request) {
     }
 
     if (period === "quarterly") {
-      const start = new Date(year, 0, 1);
-      const end   = new Date(year + 1, 0, 1);
+      const start = vnYearStart(year);
+      const end   = vnYearStart(year + 1);
 
       const rows = await prisma.transaction.findMany({
         where:  { branchId, transactionDate: { gte: start, lt: end } },
@@ -289,7 +290,7 @@ export async function POST(req: Request) {
         3: { income: 0, expense: 0 }, 4: { income: 0, expense: 0 },
       };
       for (const r of rows) {
-        const m = new Date(r.transactionDate).getMonth() + 1;
+        const m = vnWallClock(r.transactionDate).getUTCMonth() + 1;
         const q = Math.ceil(m / 3);
         if (r.type === "INCOME") byQ[q].income += r.amount;
         else byQ[q].expense += r.amount;
@@ -308,8 +309,8 @@ export async function POST(req: Request) {
 
     if (period === "yearly") {
       const fetchFrom = fromYear - 1;
-      const start     = new Date(fetchFrom, 0, 1);
-      const end       = new Date(toYear + 1, 0, 1);
+      const start     = vnYearStart(fetchFrom);
+      const end       = vnYearStart(toYear + 1);
 
       const rows = await prisma.transaction.findMany({
         where:  { branchId, transactionDate: { gte: start, lt: end } },
@@ -318,7 +319,7 @@ export async function POST(req: Request) {
 
       const byYear: Record<number, { income: number; expense: number }> = {};
       for (const r of rows) {
-        const y = new Date(r.transactionDate).getFullYear();
+        const y = vnWallClock(r.transactionDate).getUTCFullYear();
         if (!byYear[y]) byYear[y] = { income: 0, expense: 0 };
         if (r.type === "INCOME") byYear[y].income += r.amount;
         else byYear[y].expense += r.amount;

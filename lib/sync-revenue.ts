@@ -1,28 +1,24 @@
 import { prisma } from "@/lib/prisma";
+import { vnWallClock } from "@/lib/format-date";
 
+// Mốc tuần là NGÀY LỊCH VN dựng bằng Date.UTC; thời điểm đem so phải qua
+// vnWallClock trước (xem lib/format-date).
 function computeWeekDates(year: number, month: number, weekNumber: number) {
-  const d = new Date(year, month - 1, 1);
-  const dow = d.getDay() || 7;
-  const firstMon = new Date(d);
-  firstMon.setDate(d.getDate() - dow + 1);
-  const weekStart = new Date(firstMon);
-  weekStart.setDate(firstMon.getDate() + (weekNumber - 1) * 7);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
+  const dow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay() || 7;
+  const weekStart = new Date(Date.UTC(year, month - 1, 2 - dow + (weekNumber - 1) * 7));
   // The final reporting week (5) always ends on the last calendar day of the month,
   // so revenue signed at month-end is captured. Clamp earlier overflow weeks too.
-  const lastDay = new Date(year, month, 0);
-  if (weekNumber === 5 || weekEnd > lastDay) {
-    weekEnd.setFullYear(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate());
-  }
-  weekEnd.setHours(23, 59, 59, 999);
+  const nextMonth = Date.UTC(year, month, 1);
+  const weekEndExcl = weekNumber === 5 ? nextMonth : Math.min(weekStart.getTime() + 7 * 86_400_000, nextMonth);
+  const weekEnd = new Date(weekEndExcl - 1);
   return { weekStart, weekEnd };
 }
 
 function getWeekNumber(signDate: Date, year: number, month: number): number | null {
+  const vn = vnWallClock(signDate);
   for (let w = 1; w <= 5; w++) {
     const { weekStart, weekEnd } = computeWeekDates(year, month, w);
-    if (signDate >= weekStart && signDate <= weekEnd) return w;
+    if (vn >= weekStart && vn <= weekEnd) return w;
   }
   return null;
 }

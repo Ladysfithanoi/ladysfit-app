@@ -1,17 +1,13 @@
 import { prisma } from "@/lib/prisma";
+import { vnMonthStart, vnWallClock } from "@/lib/format-date";
 
+// Mốc tuần là NGÀY LỊCH VN dựng bằng Date.UTC; thời điểm đem so phải qua
+// vnWallClock trước (xem lib/format-date).
 function computeWeekBounds(year: number, month: number) {
-  const d = new Date(year, month - 1, 1);
-  const dow = d.getDay() || 7;
-  const firstMon = new Date(d);
-  firstMon.setDate(d.getDate() - dow + 1);
+  const dow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay() || 7;
   return [1, 2, 3, 4, 5].map((w) => {
-    const start = new Date(firstMon);
-    start.setDate(firstMon.getDate() + (w - 1) * 7);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
+    const start = new Date(Date.UTC(year, month - 1, 2 - dow + (w - 1) * 7));
+    const end = new Date(start.getTime() + 7 * 86_400_000 - 1);
     return { w, start, end };
   });
 }
@@ -49,8 +45,8 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
 
   const ptIds = Array.from(new Set(targets.map((t) => t.userId)));
   const branchIds = Array.from(new Set(targets.map((t) => t.branchId)));
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+  const monthStart = vnMonthStart(year, month);
+  const monthEnd = new Date(vnMonthStart(year, month + 1).getTime() - 1);
   const weekBounds = computeWeekBounds(year, month);
 
   const [leads, consultations, transformedClients] = await Promise.all([
@@ -86,8 +82,9 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
   // Assign a lead to a reporting week by sign date (else creation date); anything that
   // doesn't fall in a week window lands in the final week so the month total is complete.
   const assignWeek = (date: Date): number => {
+    const vn = vnWallClock(date);
     for (const { w, start, end } of weekBounds) {
-      if (date >= start && date <= end) return w;
+      if (vn >= start && vn <= end) return w;
     }
     return 5;
   };
@@ -103,8 +100,9 @@ export async function enrichTargetsWithDynamicActuals<T extends TargetRow>(
       const wLeads = myLeads.filter((l) => assignWeek(new Date(l.signDate ?? l.createdAt)) === w);
       const revenueActual = wLeads.reduce((s, l) => s + (l.actualRevenue ?? 0), 0);
       const fitpartnerRevenueActual = wLeads.reduce((s, l) => s + (l.fitpartnerRevenue ?? 0), 0);
-      const fitActual = myConsults.filter((c) => c.updatedAt >= start && c.updatedAt <= end).length;
-      const transformActual = myTransforms.filter((c) => c.updatedAt >= start && c.updatedAt <= end).length;
+      const inWeek = (d: Date) => { const vn = vnWallClock(d); return vn >= start && vn <= end; };
+      const fitActual = myConsults.filter((c) => inWeek(c.updatedAt)).length;
+      const transformActual = myTransforms.filter((c) => inWeek(c.updatedAt)).length;
 
       if (existing) {
         // Revenue is always derived from leads (never entered by hand), so refresh it from

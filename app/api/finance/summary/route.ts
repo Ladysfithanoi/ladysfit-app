@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { vnMonthStart } from "@/lib/format-date";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -19,8 +20,8 @@ export async function GET(req: Request) {
   if (role === "PT") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (role === "FM" && !managed.includes(branchId)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const start = new Date(year, month - 1, 1);
-  const end   = new Date(year, month, 1);
+  const start = vnMonthStart(year, month);
+  const end   = vnMonthStart(year, month + 1);
 
   const [incomeAgg, expenseAgg, byCategory] = await Promise.all([
     prisma.transaction.aggregate({

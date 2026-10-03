@@ -4,6 +4,7 @@ import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
 import ExcelJS              from "exceljs";
 import sharp                from "sharp";
+import { vnMonthStart, vnWallClock } from "@/lib/format-date";
 
 const C_RED   = "FFF15B5C";
 const C_WHITE = "FFFFFFFF";
@@ -38,8 +39,9 @@ function parseDesc(desc: string | null) {
   };
 }
 
-function fmtDate(d: Date) {
-  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+function fmtDate(date: Date) {
+  const d = vnWallClock(date);
+  return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()}`;
 }
 
 function styleHeader(cell: ExcelJS.Cell) {
@@ -272,7 +274,7 @@ export async function POST(req: Request) {
         where: {
           branchId,
           type:            type === "income" ? "INCOME" : "EXPENSE",
-          transactionDate: { gte: new Date(year, month - 1, 1), lt: new Date(year, month, 1) },
+          transactionDate: { gte: vnMonthStart(year, month), lt: vnMonthStart(year, month + 1) },
         },
         include: { createdBy: { select: { name: true } } },
         orderBy: { transactionDate: "asc" },
@@ -338,7 +340,7 @@ export async function POST(req: Request) {
 
         const vals: ExcelJS.CellValue[] = [
           idx + 1,
-          new Date(tx.transactionDate),
+          vnWallClock(tx.transactionDate),
           tx.category,
           p ? p.customer : (tx.description ?? ""),
           p ? p.pkg      : "",
@@ -405,7 +407,7 @@ export async function POST(req: Request) {
 
         const vals: ExcelJS.CellValue[] = [
           idx + 1,
-          new Date(tx.transactionDate),
+          vnWallClock(tx.transactionDate),
           tx.description ?? "",
           tx.amount,
           "", // invoice — set below

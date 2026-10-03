@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { vnMonthStart, vnWallClock, vnYearStart } from "@/lib/format-date";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,8 +27,8 @@ export async function GET(req: Request) {
 
   // ── Daily view ────────────────────────────────────────────────────────────
   if (month && year) {
-    const start       = new Date(year, month - 1, 1);
-    const end         = new Date(year, month, 1);
+    const start       = vnMonthStart(year, month);
+    const end         = vnMonthStart(year, month + 1);
     const daysInMonth = new Date(year, month, 0).getDate();
 
     const rows = await prisma.transaction.findMany({
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
 
     const byDay: Record<number, { income: number; expense: number }> = {};
     for (const r of rows) {
-      const d = new Date(r.transactionDate).getDate();
+      const d = vnWallClock(r.transactionDate).getUTCDate();
       if (!byDay[d]) byDay[d] = { income: 0, expense: 0 };
       if (r.type === "INCOME") byDay[d].income += r.amount;
       else byDay[d].expense += r.amount;
@@ -59,8 +60,8 @@ export async function GET(req: Request) {
   if (period === "quarterly") {
     if (!year) return NextResponse.json({ error: "Missing year" }, { status: 400 });
 
-    const start = new Date(year, 0, 1);
-    const end   = new Date(year + 1, 0, 1);
+    const start = vnYearStart(year);
+    const end   = vnYearStart(year + 1);
 
     const rows = await prisma.transaction.findMany({
       where: { branchId, transactionDate: { gte: start, lt: end } },
@@ -75,7 +76,7 @@ export async function GET(req: Request) {
     };
 
     for (const r of rows) {
-      const m = new Date(r.transactionDate).getMonth() + 1;
+      const m = vnWallClock(r.transactionDate).getUTCMonth() + 1;
       const q = Math.ceil(m / 3);
       if (r.type === "INCOME") byQ[q].income += r.amount;
       else byQ[q].expense += r.amount;
@@ -104,8 +105,8 @@ export async function GET(req: Request) {
     if (!fromYear || !toYear) return NextResponse.json({ error: "Missing fromYear/toYear" }, { status: 400 });
 
     const fetchFrom = fromYear - 1; // one extra year for growth calculation
-    const start = new Date(fetchFrom, 0, 1);
-    const end   = new Date(toYear + 1, 0, 1);
+    const start = vnYearStart(fetchFrom);
+    const end   = vnYearStart(toYear + 1);
 
     const rows = await prisma.transaction.findMany({
       where: { branchId, transactionDate: { gte: start, lt: end } },
@@ -114,7 +115,7 @@ export async function GET(req: Request) {
 
     const byYear: Record<number, { income: number; expense: number }> = {};
     for (const r of rows) {
-      const y = new Date(r.transactionDate).getFullYear();
+      const y = vnWallClock(r.transactionDate).getUTCFullYear();
       if (!byYear[y]) byYear[y] = { income: 0, expense: 0 };
       if (r.type === "INCOME") byYear[y].income += r.amount;
       else byYear[y].expense += r.amount;
@@ -136,8 +137,8 @@ export async function GET(req: Request) {
   // ── Monthly view (default) ────────────────────────────────────────────────
   if (!year) return NextResponse.json({ error: "Missing year" }, { status: 400 });
 
-  const start = new Date(year, 0, 1);
-  const end   = new Date(year + 1, 0, 1);
+  const start = vnYearStart(year);
+  const end   = vnYearStart(year + 1);
 
   const rows = await prisma.transaction.findMany({
     where: { branchId, transactionDate: { gte: start, lt: end } },
@@ -148,7 +149,7 @@ export async function GET(req: Request) {
   for (let m = 1; m <= 12; m++) byMonth[m] = { income: 0, expense: 0 };
 
   for (const r of rows) {
-    const m = new Date(r.transactionDate).getMonth() + 1;
+    const m = vnWallClock(r.transactionDate).getUTCMonth() + 1;
     if (r.type === "INCOME") byMonth[m].income += r.amount;
     else byMonth[m].expense += r.amount;
   }
