@@ -158,8 +158,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }),
     ]);
     // Mở chặng phụ trách mới: transform khách đạt được TRƯỚC hôm nay vẫn thuộc
-    // về người cũ, người nhận phải kèm đủ 6 tuần mới được ghi công
-    // (lib/transform-credit).
+    // về người cũ, từ hôm nay mới ghi công cho người nhận (lib/transform-credit).
     await logPTAssignment(params.id, substituteId, "TRANSFERRED");
   } else {
     const endDate = new Date();

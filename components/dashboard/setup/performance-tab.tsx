@@ -13,7 +13,7 @@ type Personnel = {
   customers: number[];
   leads: number[];
   clientCount: number;        // số khách hàng thực tế PT phụ trách (đếm Client)
-  transformedCount: number;   // số khách transform được ghi công (kèm đủ 6 tuần trước mốc)
+  transformedCount: number;   // số khách transform được ghi công (đang kèm khách vào ngày đạt mốc)
 };
 
 function nameWithRole(name: string, role?: string, levelName?: string | null) {
@@ -300,7 +300,7 @@ export function PerformanceTab({ branchId, year }: Props) {
                   <td className={cn(td, "text-center")}>
                     <span
                       className="font-semibold text-blue-600"
-                      title={`${row.transformedCount}/${row.clientCount} khách transform được ghi công (kèm khách đủ 6 tuần trước ngày đạt mốc)`}
+                      title={`${row.transformedCount}/${row.clientCount} khách transform được ghi công (đang kèm khách vào ngày đạt mốc)`}
                     >
                       {fmtPct(row.transformPct)}
                     </span>

@@ -7,7 +7,7 @@ import { countTransformsByPt } from "@/lib/transform-credit";
 //   2. Đạt bài kiểm tra thực hành (lần chấm gần nhất passed, còn hạn theo retestIntervalDays)
 //   3. TB doanh số/tháng ≥ promoteMinAvgRevenue của cấp hiện tại
 //   4. Số khách transform ≥ promoteMinTransform của cấp hiện tại — chỉ đếm
-//      transform được ghi công cho chính họ (kèm khách đủ 6 tuần trước mốc),
+//      transform được ghi công cho chính họ (đang kèm khách vào ngày đạt mốc),
 //      nhận khách có sẵn transform của người khác thì không tính (transform-credit)
 // Cấp cao nhất (không còn cấp trên) thì giữ nguyên.
 

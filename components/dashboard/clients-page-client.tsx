@@ -41,7 +41,7 @@ type ClientRow = {
   selfMeasuredThisWeek: boolean;
   /**
    * Mốc transform dùng để tính (lib/transform-credit): ngày cân đầu tiên giảm đủ
-   * 7 kg, và người được ghi công (null = không ai — chưa kèm đủ 6 tuần).
+   * 7 kg, và người được ghi công (null = không ai — khách đổi tay, không rõ ai làm ra).
    */
   transform?: { date: string; creditedPtId: string | null; creditedPtName: string | null } | null;
   substituteInfo?: { type: string; daysLeft: number | null } | null;
@@ -576,7 +576,7 @@ export function ClientsPageClient({
                           {c.transform && !c.transform.creditedPtId && (
                             <span
                               className="text-[10px] text-orange-400 whitespace-nowrap"
-                              title="Người phụ trách tại ngày đạt mốc chưa kèm khách đủ 6 tuần, nên transform này không ghi công cho PT nào"
+                              title="Mốc đạt trước khi có nhật ký phụ trách mà khách đã từng đổi người, không rõ ai làm ra, nên transform này không ghi công cho PT nào"
                             >
                               Không ghi công PT
                             </span>

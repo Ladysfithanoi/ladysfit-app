@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 // ── Transform thuộc về ai ────────────────────────────────────────────────────
 // Một khách chỉ đạt transform ĐÚNG MỘT LẦN (mốc giảm đủ 7 kg đầu tiên), nên
 // transform đó chỉ được ghi công cho MỘT người: người đang kèm khách tại thời
-// điểm đạt mốc, và phải đã kèm ít nhất 6 tuần trước đó.
+// điểm đạt mốc.
 //
 // Trước đây transform đếm theo clients."assignedPTId" — người ĐANG giữ khách.
 // Khách của một nhân sự nghỉ việc được chuyển sang người khác thì transform cũ
@@ -12,29 +12,17 @@ import { prisma } from "@/lib/prisma";
 //
 //   • Mốc rơi vào chặng của ai → người đó được ghi công, kể cả khi khách nay đã
 //     chuyển sang người khác (công của người làm ra kết quả).
-//   • Chặng đó phải dài ít nhất 6 tuần tính đến ngày đạt mốc, không thì không
-//     ai được tính — chặn đúng trường hợp nhận khách xong ăn theo kết quả sẵn có.
+//   • Không đòi kèm khách tối thiểu bao lâu: có khách chỉ sau 1 tuần đã đủ mốc.
+//     (Luật "kèm đủ 6 tuần" đã gỡ ngày 03/10/2026.) Mốc đạt TRƯỚC ngày nhận
+//     khách vẫn thuộc người cũ, nên nhận khách có sẵn transform không ăn theo.
 //   • Mốc đạt TRƯỚC 01/04/2026 (chưa có app, khách nhập từ nơi khác vào): luôn
-//     được tính, bỏ qua luật 6 tuần và luật đổi tay — xem PRE_APP_BEFORE.
+//     được tính, bỏ qua luật đổi tay — xem PRE_APP_BEFORE.
 //   • Mốc có TRƯỚC chặng đầu tiên (dữ liệu cũ nhập lúc chuyển sang phần mềm):
 //     khách chưa từng đổi tay thì người đang phụ trách vẫn được tính; khách đã
 //     từng đổi tay thì không rõ ai làm nên không tính cho ai.
 
 /** Giảm đủ ngần này kg thì khách được coi là đạt transform. */
 export const TRANSFORM_LOSS_KG = 7;
-
-/** Số ngày tối thiểu phải kèm khách trước ngày khách đạt mốc — 6 tuần. */
-export const TRANSFORM_MIN_TENURE_DAYS = 42;
-
-/**
- * Khách mở hồ sơ trước mốc này là khách nhập vào lúc chuyển sang phần mềm
- * (tháng 5/2026) — họ đã tập với người phụ trách từ lâu trước đó, "ngày mở hồ
- * sơ" chỉ là ngày nhập liệu nên không đo được thâm niên kèm khách. Với những
- * khách này, luật 6 tuần chỉ áp cho chặng mở bằng một lần CHUYỂN GIAO, còn
- * người phụ trách ban đầu vẫn được ghi công. Khách mở hồ sơ từ 6/2026 trở đi
- * áp đủ luật, nên ngoại lệ này tự hết theo thời gian.
- */
-const LEGACY_IMPORT_BEFORE = new Date("2026-06-01T00:00:00+07:00");
 
 /**
  * App bắt đầu dùng từ 01/04/2026. Transform đạt trước ngày này là kết quả PT
@@ -44,8 +32,6 @@ const LEGACY_IMPORT_BEFORE = new Date("2026-06-01T00:00:00+07:00");
  * (mốc có trước cả chặng đầu tiên thì tính cho người của chặng đầu tiên).
  */
 export const PRE_APP_BEFORE = new Date("2026-04-01T00:00:00+07:00");
-
-const DAY_MS = 86_400_000;
 
 export type TransformCredit = {
   clientId: string;
@@ -75,8 +61,8 @@ type ClientRow = {
  * hiện tại từ ngày mở hồ sơ.
  *
  * Nếu chặng cuối không phải người đang giữ khách — đổi người bằng đường chưa
- * được ghi nhật ký — mở thêm một chặng cho họ tính từ BÂY GIỜ: họ chưa đủ 6
- * tuần nên không ăn theo kết quả cũ, còn mốc cũ vẫn thuộc về người chặng trước.
+ * được ghi nhật ký — mở thêm một chặng cho họ tính từ BÂY GIỜ: mốc cũ vẫn thuộc
+ * về người chặng trước, người mới không ăn theo kết quả cũ.
  */
 function buildHistory(client: ClientRow, logged: Segment[]): Segment[] {
   const history =
@@ -89,8 +75,7 @@ function buildHistory(client: ClientRow, logged: Segment[]): Segment[] {
 
 /**
  * Người đang phụ trách khách vào một ngày — chặng cuối cùng mở trước ngày đó.
- * Không áp luật 6 tuần: dùng cho thưởng theo hợp đồng (lib/transform-bonus),
- * nơi lộ trình L1 chỉ dài 30 ngày.
+ * Dùng cho thưởng theo hợp đồng (lib/transform-bonus).
  */
 export function ptInChargeAt(
   client: ClientRow,
@@ -118,18 +103,13 @@ function creditedPt(client: ClientRow, history: Segment[], date: Date): string |
     else break; // history đã sắp xếp tăng dần theo startedAt
   }
 
-  // Đạt mốc trước khi có app → mặc định tính, không xét 6 tuần hay đổi tay.
+  // Đạt mốc trước khi có app → mặc định tính, không xét đổi tay.
   if (date < PRE_APP_BEFORE) return (current ?? history[0]).ptId;
 
   // Đạt mốc trước cả chặng đầu tiên — chỉ tính khi khách chưa từng đổi tay.
   if (!current) return neverChangedHands ? client.assignedPTId : null;
 
-  // Khách cũ nhập lúc chuyển sang phần mềm: chặng đầu không đo được thâm niên.
-  const isFirstSegment = current === history[0] && current.startedAt <= client.createdAt;
-  if (isFirstSegment && client.createdAt < LEGACY_IMPORT_BEFORE) return current.ptId;
-
-  const tenureDays = (date.getTime() - current.startedAt.getTime()) / DAY_MS;
-  return tenureDays >= TRANSFORM_MIN_TENURE_DAYS ? current.ptId : null;
+  return current.ptId;
 }
 
 /**

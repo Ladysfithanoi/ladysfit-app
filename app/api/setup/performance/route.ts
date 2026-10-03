@@ -88,10 +88,10 @@ export async function GET(req: Request) {
     computeTransformCredits(),
   ]);
 
-  // Transform của cơ sở, ghi công theo luật 6 tuần (lib/transform-credit): mỗi
-  // transform chỉ về tay một người, người nhận khách có sẵn transform không
-  // được tính. Phần không thuộc về ai — người làm ra đã nghỉ, khách đổi tay quá
-  // sát mốc — dồn vào "phòng tập" để TỔNG của cơ sở không hụt đi.
+  // Transform của cơ sở, ghi công theo lib/transform-credit: mỗi transform chỉ
+  // về tay một người, người nhận khách có sẵn transform không được tính. Phần
+  // không thuộc về ai — người làm ra đã nghỉ, mốc không rõ của chặng nào — dồn
+  // vào "phòng tập" để TỔNG của cơ sở không hụt đi.
   // PT chỉ xem được số của chính mình nên không thấy phần của cả cơ sở.
   const visibleCredits = allCredits.filter(
     (c) => c.branchId === branchId && (!isPT || c.ptId === session.user.id)

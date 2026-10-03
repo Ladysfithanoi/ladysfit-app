@@ -275,8 +275,8 @@ export function RankingPage({
         {board === "staff" ? (
           <span className="text-xs text-gray-400 font-medium">
             · Chỉ tính doanh số và transform phát sinh trong {periodLabel(period).toLowerCase()},
-            chấm theo tương quan với người cao nhất · Chưa thi tính 0đ · Transform chỉ tính cho
-            người đã kèm khách ít nhất 6 tuần trước ngày khách đạt mốc
+            chấm theo tương quan với người cao nhất · Chưa thi tính 0đ · Transform tính cho
+            người đang kèm khách vào ngày khách đạt mốc
           </span>
         ) : (
           <span className="text-xs text-gray-400 font-medium">

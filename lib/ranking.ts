@@ -53,8 +53,8 @@ type PtPeriodStat = { avgMonthlyRevenue: number; transformedCount: number };
 
 /**
  * TB doanh số/tháng (triệu) + số khách transform của từng PT trong kỳ.
- * Transform lấy mốc là lần cân đầu tiên giảm đủ 7 kg và chỉ ghi công cho người
- * đã kèm khách ≥ 6 tuần tính đến mốc đó — xem lib/transform-credit.ts.
+ * Transform lấy mốc là lần cân đầu tiên giảm đủ 7 kg và ghi công cho người
+ * đang kèm khách vào ngày đó — xem lib/transform-credit.ts.
  */
 export async function computePtPeriodStats(
   ptIds: string[],
