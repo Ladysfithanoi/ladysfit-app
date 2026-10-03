@@ -6,6 +6,7 @@ import { sessionPayRate } from "@/lib/packages";
 import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
 import { canAccessSessionDetail } from "@/lib/salary-access";
 import { chargeablePackageSql } from "@/lib/checkin-eligibility";
+import { vnMonthStart } from "@/lib/format-date";
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
   if (endWeight == null) return 0;
@@ -58,8 +59,8 @@ export async function GET(req: Request) {
       fullName: string;
     };
 
-    const startDate = new Date(year, month - 1, 1);
-    const endDate   = new Date(year, month, 1);
+    const startDate = vnMonthStart(year, month);
+    const endDate   = vnMonthStart(year, month + 1);
 
     // Đếm buổi theo NGƯỜI THỰC SỰ DẠY (wl."createdById"), không theo assignedPTId.
     // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi

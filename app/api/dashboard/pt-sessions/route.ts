@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { vnMonthStart } from "@/lib/format-date";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -22,8 +23,8 @@ export async function GET(req: Request) {
       ? [branchIdParam]
       : managedBranchIds;
 
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
+  const monthStart = vnMonthStart(year, month);
+  const monthEnd = vnMonthStart(year, month + 1);
 
   const logs = await prisma.workoutLog.findMany({
     where: {

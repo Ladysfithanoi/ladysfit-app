@@ -14,6 +14,7 @@ import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData }
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
+import { vnMonthStart } from "@/lib/format-date";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -81,8 +82,8 @@ export async function GET(req: Request) {
 
   // Thưởng transform của cả tháng — tính một lần, mỗi dòng lọc phần của mình.
   const transformBonuses = await computeTransformBonuses({
-    start: new Date(year, month - 1, 1),
-    end:   new Date(year, month, 1),
+    start: vnMonthStart(year, month),
+    end:   vnMonthStart(year, month + 1),
   });
 
   // Recalculate and patch each record where revenue-derived values changed

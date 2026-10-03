@@ -2,6 +2,7 @@ import { NextResponse }    from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
+import { vnMonthStart } from "@/lib/format-date";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -17,8 +18,8 @@ export async function GET(req: Request) {
   const managedBranchIds = session.user.managedBranchIds ?? [];
   if (!ptId) return NextResponse.json({ error: "ptId required" }, { status: 400 });
 
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd   = new Date(year, month, 1);
+  const monthStart = vnMonthStart(year, month);
+  const monthEnd   = vnMonthStart(year, month + 1);
 
   const [pt, logs] = await Promise.all([
     prisma.user.findUnique({ where: { id: ptId }, select: { name: true, email: true } }),

@@ -4,6 +4,7 @@ import { authOptions }       from "@/lib/auth";
 import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { emptyBuckets, tallyShows, type ShowBuckets } from "@/lib/session-pay";
 import { canReadSalary } from "@/lib/salary-access";
+import { vnMonthStart } from "@/lib/format-date";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -21,8 +22,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const gte = new Date(year, month - 1, 1);
-  const lt  = new Date(year, month, 1);
+  const gte = vnMonthStart(year, month);
+  const lt  = vnMonthStart(year, month + 1);
 
   // "Số buổi PT" — chỉ buổi đã check-out có chữ ký kèm nhật ký buổi tập, cộng
   // phần Admin/FM chỉnh tay "Số buổi PT" ở hồ sơ khách cho tháng này.

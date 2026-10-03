@@ -9,6 +9,7 @@ import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
+import { vnMonthStart } from "@/lib/format-date";
 
 /**
  * MỘT ĐƯỜNG TÍNH LẠI BẢNG LƯƠNG THEO THỜI GIAN THỰC.
@@ -82,7 +83,7 @@ export async function fetchKOCKOLCommission(
     WHERE k."ptId" = $1 AND k.status = 'COMPLETED'
       AND k."endDate" >= $2 AND k."endDate" < $3
     `,
-    ptId, new Date(year, month - 1, 1), new Date(year, month, 1)
+    ptId, vnMonthStart(year, month), vnMonthStart(year, month + 1)
   );
 
   let kocCommission = 0;
@@ -105,7 +106,7 @@ export async function fetchKOCKOLCommission(
   // trả 3,6tr/tháng vô thời hạn, kể cả tháng PT không dạy buổi KOL nào. Nay đếm
   // đúng buổi đã check-out có chữ ký trong tháng, cùng nguồn với tiền buổi dạy,
   // nên buổi KOL dạy hộ cũng ghi công đúng người dạy.
-  const taught = await getTaughtSessions([ptId], new Date(year, month - 1, 1), new Date(year, month, 1));
+  const taught = await getTaughtSessions([ptId], vnMonthStart(year, month), vnMonthStart(year, month + 1));
   const kolAdjust = (await getSessionAdjustments([ptId], month, year))
     .filter(a => a.contractType === "KOL")
     .reduce((sum, a) => sum + a.delta, 0);

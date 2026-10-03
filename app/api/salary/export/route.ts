@@ -9,6 +9,7 @@ import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/l
 import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { chargeablePackageSql } from "@/lib/checkin-eligibility";
 import ExcelJS from "exceljs";
+import { vnMonthStart } from "@/lib/format-date";
 
 // ── KOC helpers (same logic as session-detail) ────────────────────────────
 
@@ -84,8 +85,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Không có dữ liệu bảng lương" }, { status: 404 });
     }
 
-    const startDate = new Date(year, month - 1, 1);
-    const endDate   = new Date(year, month, 1);
+    const startDate = vnMonthStart(year, month);
+    const endDate   = vnMonthStart(year, month + 1);
     const ptAdminRecords = records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF");
     const ptUserIds = ptAdminRecords.map(r => r.userId);
 

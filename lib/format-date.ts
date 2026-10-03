@@ -30,3 +30,15 @@ export function fmtDateTime(date: string | Date | null | undefined): string {
     String(d.getMinutes()).padStart(2, "0")
   );
 }
+
+/**
+ * 00:00 giờ VN ngày 1 của tháng (month 1-based; month = 13 → tháng 1 năm sau).
+ *
+ * Mốc tháng của lương và buổi dạy phải theo giờ VN, không theo giờ máy chủ:
+ * Vercel chạy UTC, nên `new Date(year, month - 1, 1)` ở đó là 07:00 sáng giờ VN —
+ * buổi dạy trước 7h sáng ngày 1 bị đếm sang tháng trước, lệch với phiếu check-in
+ * (phiếu xếp buổi theo ngày giờ VN).
+ */
+export function vnMonthStart(year: number, month: number): Date {
+  return new Date(Date.UTC(year, month - 1, 1) - 7 * 3600_000);
+}

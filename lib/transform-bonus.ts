@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ptInChargeAt } from "@/lib/transform-credit";
+import { vnMonthStart } from "@/lib/format-date";
 
 // ── Thưởng transform theo hợp đồng ───────────────────────────────────────────
 // HAI KHÁI NIỆM TÁCH BẠCH, đừng gộp:
@@ -169,8 +170,8 @@ export async function transformBonusForUser(
   year: number,
 ): Promise<{ goalBonus: number; clientsAchievedGoal: number; items: TransformBonus[] }> {
   const all = await computeTransformBonuses({
-    start: new Date(year, month - 1, 1),
-    end: new Date(year, month, 1),
+    start: vnMonthStart(year, month),
+    end: vnMonthStart(year, month + 1),
   });
   const items = all.filter((b) => b.ptId === userId);
   return {
