@@ -18,9 +18,10 @@ import { vnMonthStart } from "@/lib/format-date";
 // đúng một lần. KOC/KOL có hoa hồng riêng nên không tính ở đây.
 //
 // THƯỞNG KHI KẾT THÚC GÓI (từ lương T9/2026): đạt mốc giữa chừng chưa được
-// thưởng — tiền vào lương THÁNG gói kết thúc (xem packageEndedAt). Hợp đồng đạt
-// mốc trước 01/09/2026 đã trả theo luật cũ (tháng đạt mốc) nên giữ nguyên, không
-// trả lại lần nữa lúc gói kết thúc.
+// thưởng — tiền vào lương THÁNG gói kết thúc (xem packageEndedAt), kể cả khi
+// khách đạt mốc từ trước 01/09/2026: tháng đạt mốc đã qua thì không quay lại trả
+// được, nên gói kết thúc tháng nào trả tháng đó. Chỉ gói đã KẾT THÚC trước
+// 01/09/2026 giữ luật cũ (tháng đạt mốc), để lương các tháng đã qua không đổi.
 
 export const TRANSFORM_BONUS_AMOUNT = 100_000;
 
@@ -29,8 +30,8 @@ const FIXED_GOAL_KG: Record<string, number> = { L1: 2, L2: 5 };
 const CUSTOM_GOAL_PACKAGES = ["L3", "L4"];
 
 const DAY_MS = 86_400_000;
-/** Từ mốc này thưởng chờ tới khi gói kết thúc; đạt mốc trước đó trả theo tháng đạt mốc. */
-const PAY_ON_END_FROM = new Date(2026, 8, 1);
+/** Gói kết thúc từ mốc này trả thưởng vào tháng kết thúc; kết thúc trước đó trả theo tháng đạt mốc. */
+const PAY_ON_END_FROM = new Date("2026-09-01T00:00:00+07:00");
 /** Sai số làm tròn — 80,0 − 78,0 trong số thực có thể ra 1,9999999. */
 const EPS = 0.01;
 
@@ -120,7 +121,7 @@ export async function computeTransformBonuses(range: { start: Date; end: Date })
       if (baseline - log.weight >= goalKg - EPS) { hit = log; break; }
     }
     if (!hit) continue;
-    const payDate = hit.date < PAY_ON_END_FROM ? hit.date : endedAt;
+    const payDate = endedAt && endedAt < PAY_ON_END_FROM ? hit.date : endedAt;
     if (!payDate || payDate < range.start || payDate >= range.end) continue;
 
     const ptId = ptInChargeAt(
