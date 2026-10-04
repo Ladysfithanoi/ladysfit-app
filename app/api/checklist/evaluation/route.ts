@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { todayVN } from "@/lib/week";
 import {
+  isChecklistFilled,
   isPeriod,
   isTaskDone,
   mergeReflection,
@@ -82,7 +83,7 @@ export async function GET(req: Request) {
       reportDate: { gte: toDateOnly(range.from), lt: to },
     },
     select: {
-      id: true, userId: true, reportDate: true, checkedOutAt: true,
+      id: true, userId: true, reportDate: true, checkedOutAt: true, targetNote: true,
       fmRating: true, fmComment: true, fmReviewedAt: true,
       fmReviewer: { select: { name: true, email: true } },
       dailyResults: true, dailyCompleted: true, dailyIncomplete: true, dailyNextPlan: true,
@@ -117,7 +118,9 @@ export async function GET(req: Request) {
       name:         s.name ?? s.email,
       role:         s.role,
       branchName:   s.branch?.name ?? "",
-      daysFilled:   list.length,
+      // Ngày FM chấm cho check-list bỏ trống vẫn vào điểm trung bình, nhưng
+      // không tính là ngày đã điền.
+      daysFilled:   list.filter(isChecklistFilled).length,
       daysCheckedOut: list.filter(c => c.checkedOutAt != null).length,
       daysReviewed: list.filter(c => c.fmReviewedAt != null).length,
       avgRating:    average(ratings),

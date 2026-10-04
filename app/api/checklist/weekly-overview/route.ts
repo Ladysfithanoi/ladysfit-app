@@ -4,6 +4,7 @@ import { Prisma, type Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDaysISO, mondayOf, todayVN, weekKey } from "@/lib/week";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 import { excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 // GET /api/checklist/weekly-overview?weekStart=YYYY-MM-DD
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
       where: {
         userId: { in: staffIds },
         reportDate: { gte: toUTC(weekStart), lt: toUTC(weekEnd) },
+        ...FILLED_CHECKLIST_WHERE,
       },
       select: {
         userId: true,

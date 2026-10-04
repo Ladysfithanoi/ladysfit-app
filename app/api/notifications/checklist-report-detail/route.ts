@@ -2,6 +2,7 @@ import { NextResponse }    from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
   });
 
   const filled = await prisma.dailyChecklist.findMany({
-    where: { userId: { in: pts.map((p) => p.id) }, reportDate: { gte: dayStart, lt: dayEnd } },
+    where: { userId: { in: pts.map((p) => p.id) }, reportDate: { gte: dayStart, lt: dayEnd }, ...FILLED_CHECKLIST_WHERE },
     select: { userId: true },
   });
   const filledIds = new Set(filled.map((c) => c.userId));

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { addDaysISO, mondayOf, todayVN, weekLabel, VN_DAY_NAMES } from "@/lib/week";
 import { callGemini, getGeminiKeys } from "@/lib/gemini";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 
 // POST /api/checklist/weekly-summary  { weekStart }
 // Đọc toàn bộ check-list 7 ngày của chính người đang đăng nhập rồi nhờ Gemini
@@ -55,6 +56,7 @@ export async function GET(req: Request) {
     where: {
       userId: session.user.id,
       reportDate: { gte: toUTC(weekStart), lt: toUTC(addDaysISO(weekStart, 7)) },
+      ...FILLED_CHECKLIST_WHERE,
     },
     include: { items: { orderBy: { order: "asc" } } },
   });
@@ -139,6 +141,7 @@ export async function POST(req: Request) {
     where: {
       userId: session.user.id,
       reportDate: { gte: toUTC(weekStart), lt: toUTC(weekEnd) },
+      ...FILLED_CHECKLIST_WHERE,
     },
     include: { items: { orderBy: { order: "asc" } } },
     orderBy: { reportDate: "asc" },

@@ -2,6 +2,7 @@ import { NextResponse }    from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions }      from "@/lib/auth";
 import { prisma }           from "@/lib/prisma";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 
 // Vercel Cron gọi bằng GET kèm "Authorization: Bearer <CRON_SECRET>"; nút
 // "Test thông báo" của Admin gọi POST bằng phiên đăng nhập. Trước đây route chỉ
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
 
   const [filledToday, existingReminders] = await Promise.all([
     prisma.dailyChecklist.findMany({
-      where: { userId: { in: ptIds }, reportDate: { gte: today, lt: tomorrow } },
+      where: { userId: { in: ptIds }, reportDate: { gte: today, lt: tomorrow }, ...FILLED_CHECKLIST_WHERE },
       select: { userId: true },
     }),
     prisma.checklistNotification.findMany({

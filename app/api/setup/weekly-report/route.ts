@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import type { Role } from "@prisma/client";
 import { addDaysISO, weekKey } from "@/lib/week";
 import { vnWallClock } from "@/lib/format-date";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 
 // Mốc tuần là NGÀY LỊCH VN dựng bằng Date.UTC; thời điểm đem so phải qua
 // vnWallClock trước (xem lib/format-date).
@@ -209,6 +210,7 @@ export async function GET(req: Request) {
               gte: new Date(selectedMonday + "T00:00:00.000Z"),
               lt: new Date(addDaysISO(selectedMonday, 7) + "T00:00:00.000Z"),
             },
+            ...FILLED_CHECKLIST_WHERE,
           },
           select: {
             userId: true,

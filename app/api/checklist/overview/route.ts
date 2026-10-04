@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { Prisma, type Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isTaskDone, mergeReflection, toDateOnly } from "@/lib/checklist-review";
+import { isChecklistFilled, isTaskDone, mergeReflection, toDateOnly } from "@/lib/checklist-review";
 import { excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 // GET /api/checklist/overview?date=YYYY-MM-DD
@@ -65,7 +65,9 @@ export async function GET(req: Request) {
 
   const result = staff.map((s) => {
     const cl = byUser.get(s.id);
-    if (!cl) {
+    // Check-list rỗng FM tạo ra chỉ để chấm điểm ngày bỏ trống: vẫn là "chưa
+    // điền", nhưng giữ điểm FM đã chấm.
+    if (!cl || !isChecklistFilled(cl)) {
       return {
         userId: s.id,
         name: s.name ?? s.email,
@@ -74,8 +76,8 @@ export async function GET(req: Request) {
         filled: false,
         checkedOut: false,
         checkedOutAt: null as string | null,
-        fmRating: null as number | null,
-        reviewed: false,
+        fmRating: (cl?.fmRating ?? null) as number | null,
+        reviewed: cl?.fmReviewedAt != null,
         tasksTotal: 0,
         tasksCompleted: 0,
         taskRate: 0,

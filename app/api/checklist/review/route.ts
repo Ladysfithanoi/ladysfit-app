@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { dayRange, isValidRating } from "@/lib/checklist-review";
+import { dayRange, isValidRating, toDateOnly } from "@/lib/checklist-review";
+import { todayVN } from "@/lib/week";
 
 /**
  * PUT /api/checklist/review — FM chấm đánh giá cho check-list một ngày của một
@@ -11,6 +12,11 @@ import { dayRange, isValidRating } from "@/lib/checklist-review";
  * Chỉ FM phụ trách cơ sở của người đó (và Admin) mới chấm được, và chỉ chấm cho
  * NGƯỜI KHÁC: tự chấm cho mình thì con số trên màn Tổng kết đánh giá không còn
  * nghĩa lý gì.
+ *
+ * Ngày nhân sự bỏ trống cũng chấm được (thường là 1 sao vì không làm gì): khi đó
+ * tạo một check-list rỗng chỉ để giữ điểm. Trước đây chỗ này trả 404, điểm không
+ * lưu, nên người bỏ trống check-list lại được điểm trung bình cao hơn người làm.
+ * Dòng rỗng đó không tính là "đã điền" (xem isChecklistFilled).
  */
 
 /** Cơ sở của nhân sự có nằm trong số cơ sở FM này phụ trách không. */
@@ -59,20 +65,29 @@ export async function PUT(req: Request) {
 
   const comment = body.comment?.trim() ? body.comment.trim() : null;
 
-  const checklist = await prisma.dailyChecklist.findFirst({
+  // Xoá trắng cả điểm lẫn nhận xét thì coi như gỡ đánh giá, để ngày đó không bị
+  // đếm vào số lần đã chấm của kỳ.
+  const cleared = rating === null && comment === null;
+
+  let checklist = await prisma.dailyChecklist.findFirst({
     where:  { userId: body.userId, reportDate: dayRange(body.date) },
     select: { id: true },
   });
   if (!checklist) {
-    return NextResponse.json(
-      { error: "Nhân sự chưa có check-list cho ngày này" },
-      { status: 404 },
-    );
+    if (cleared) {
+      return NextResponse.json({
+        fmRating: null, fmComment: null, fmReviewedAt: null, fmReviewerName: null,
+      });
+    }
+    // Ngày chưa tới thì chưa có gì để chấm.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date) || body.date > todayVN()) {
+      return NextResponse.json({ error: "Chưa thể đánh giá ngày chưa tới" }, { status: 400 });
+    }
+    checklist = await prisma.dailyChecklist.create({
+      data:   { userId: body.userId, reportDate: toDateOnly(body.date) },
+      select: { id: true },
+    });
   }
-
-  // Xoá trắng cả điểm lẫn nhận xét thì coi như gỡ đánh giá, để ngày đó không bị
-  // đếm vào số lần đã chấm của kỳ.
-  const cleared = rating === null && comment === null;
 
   const updated = await prisma.dailyChecklist.update({
     where: { id: checklist.id },

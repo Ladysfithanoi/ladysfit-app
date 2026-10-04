@@ -16,6 +16,7 @@
  * lệch một ngày khi máy chủ chạy ở múi giờ khác.
  */
 
+import type { Prisma } from "@prisma/client";
 import { mondayOf, addDaysISO, parseYMD, ymd, isoWeekNumber } from "@/lib/week";
 
 /** Thang điểm đánh giá của FM. */
@@ -78,6 +79,48 @@ export function mergeReflection(c: {
   if (c.dailyNextPlan?.trim())   parts.push(`➡️ Giải pháp / kế hoạch:\n${c.dailyNextPlan.trim()}`);
   return parts.join("\n\n");
 }
+
+/**
+ * Một check-list có thật sự được ĐIỀN hay không.
+ *
+ * FM chấm được cả ngày nhân sự bỏ trống (vd. 1 sao vì không làm gì) — khi đó
+ * PUT /api/checklist/review tạo một dòng check-list rỗng chỉ để giữ điểm. Dòng
+ * đó không phải "đã điền": mọi chỗ đếm số ngày đã điền / nhắc chưa điền phải đi
+ * qua quy tắc này (hoặc bản `where` bên dưới), đừng đếm thẳng số dòng.
+ */
+export function isChecklistFilled(c: {
+  checkedOutAt:    Date | string | null;
+  targetNote:      string | null;
+  dailyResults:    string | null;
+  dailyCompleted:  string | null;
+  dailyIncomplete: string | null;
+  dailyNextPlan:   string | null;
+  items:           unknown[];
+}): boolean {
+  return c.items.length > 0
+    || c.checkedOutAt != null
+    || !!c.targetNote?.trim()
+    || !!mergeReflection(c);
+}
+
+/** Cùng quy tắc với `isChecklistFilled`, viết thành điều kiện lọc của Prisma. */
+export const FILLED_CHECKLIST_WHERE: Prisma.DailyChecklistWhereInput = {
+  OR: [
+    { items: { some: {} } },
+    { checkedOutAt: { not: null } },
+    { targetNote: { not: "" } },
+    { dailyResults: { not: "" } },
+    { dailyCompleted: { not: "" } },
+    { dailyIncomplete: { not: "" } },
+    { dailyNextPlan: { not: "" } },
+  ],
+};
+
+/** Các cột `isChecklistFilled` cần — gộp vào `select` của truy vấn. */
+export const FILLED_CHECKLIST_SELECT = {
+  checkedOutAt: true, targetNote: true,
+  dailyResults: true, dailyCompleted: true, dailyIncomplete: true, dailyNextPlan: true,
+} as const;
 
 // ── Kỳ tổng kết ─────────────────────────────────────────────────────────────
 

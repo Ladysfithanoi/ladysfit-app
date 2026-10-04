@@ -610,6 +610,7 @@ function SaveStatus({
 function FMReviewCard({
   canReview,
   checkedOutAt,
+  dayEmpty,
   rating,
   comment,
   reviewedAt,
@@ -621,6 +622,7 @@ function FMReviewCard({
 }: {
   canReview:    boolean;
   checkedOutAt: string | null;
+  dayEmpty:     boolean;
   rating:       number | null;
   comment:      string;
   reviewedAt:   string | null;
@@ -644,7 +646,11 @@ function FMReviewCard({
       </div>
 
       <div className="p-4 sm:p-5 space-y-4">
-        {!checkedOutAt && (
+        {dayEmpty ? (
+          <p className="text-[11px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2 leading-snug">
+            Nhân sự không điền check-list ngày này. Điểm chấm vẫn được tính vào điểm trung bình.
+          </p>
+        ) : !checkedOutAt && (
           <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-snug">
             Nhân sự chưa check-out ngày này — tự luận có thể còn viết dở.
           </p>
@@ -1652,6 +1658,7 @@ export function DailyTab({
       {(isTeamView || !!fmReviewedAt) && <FMReviewCard
         canReview={canReview}
         checkedOutAt={checkedOutAt}
+        dayEmpty={rows.length === 0 && !dailyResults.trim() && !targetNote.trim() && !checkedOutAt}
         rating={fmRating}
         comment={fmComment}
         reviewedAt={fmReviewedAt}

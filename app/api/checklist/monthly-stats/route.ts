@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { Prisma, type Role } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { FILLED_CHECKLIST_WHERE } from "@/lib/checklist-review";
 import { excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 // GET /api/checklist/monthly-stats?month=&year=&branchId=
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
   const endDate = new Date(Date.UTC(year, month, 1));
 
   const checklists = await prisma.dailyChecklist.findMany({
-    where: { userId: { in: staffIds }, reportDate: { gte: startDate, lt: endDate } },
+    where: { userId: { in: staffIds }, reportDate: { gte: startDate, lt: endDate }, ...FILLED_CHECKLIST_WHERE },
     select: {
       userId: true,
       items: { select: { kpi: true, actualResult: true, isTeachingSession: true } },
