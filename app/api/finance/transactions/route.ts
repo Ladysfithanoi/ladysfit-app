@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncLeadToTransaction } from "@/lib/sync-finance";
+import { syncMissingLeadIncome } from "@/lib/sync-finance";
 import { vnMonthStart } from "@/lib/format-date";
 
 function canAccess(role: string, branchId: string, managedBranchIds: string[]) {
@@ -27,31 +27,8 @@ export async function GET(req: Request) {
   const managed: string[] = session.user.managedBranchIds ?? [];
   if (!canAccess(role, branchId, managed)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Auto-sync: create any missing INCOME transactions for qualifying leads in this month/year.
-  // Runs in O(2 queries) when everything is already synced (the common path).
-  {
-    const qualifyingIds = (await prisma.salesLead.findMany({
-      where: { branchId, month, year, status: { in: ["PIF", "DE", "PB"] }, actualRevenue: { gt: 0 } },
-      select: { id: true },
-    })).map(l => l.id);
-
-    if (qualifyingIds.length > 0) {
-      const syncedIds = new Set(
-        (await prisma.transaction.findMany({
-          where: { referenceId: { in: qualifyingIds } },
-          select: { referenceId: true },
-        })).map(t => t.referenceId!)
-      );
-      const missing = qualifyingIds.filter(id => !syncedIds.has(id));
-      if (missing.length > 0) {
-        const toSync = await prisma.salesLead.findMany({
-          where: { id: { in: missing } },
-          include: { assignedPT: { select: { name: true } } },
-        });
-        for (const lead of toSync) await syncLeadToTransaction(lead);
-      }
-    }
-  }
+  // Tạo dòng thu còn thiếu cho lead có doanh thu — file Excel gọi đúng hàm này.
+  await syncMissingLeadIncome(branchId, month, year);
 
   const start = vnMonthStart(year, month);
   const end   = vnMonthStart(year, month + 1);

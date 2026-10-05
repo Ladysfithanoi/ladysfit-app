@@ -10,7 +10,7 @@ import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
-import { ptRate, fmRate, fetchKOCKOLCommission, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
+import { ptRate, fmRate, fetchKOCKOLCommission, loadLiveSalaryRecords } from "@/lib/salary-live";
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
@@ -50,66 +50,8 @@ export async function GET(req: Request) {
   }
   console.log("[salary/GET] branchFilter:", branchFilter, "month:", month, "year:", year);
 
-  const records = await prisma.salaryRecord.findMany({
-    where: { branchId: { in: branchFilter }, month, year, user: { deletedAt: null } },
-    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
-    orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
-  });
-
-  console.log("[salary/GET] records found:", records.length);
-  if (records.length === 0) return NextResponse.json(records);
-
-  // Fresh branch revenue (VND) per branchId — used for FM commission
-  const uniqueBranchIds = Array.from(new Set(records.map(r => r.branchId)));
-  const branchRevenueMap: Record<string, number> = {};
-  await Promise.all(uniqueBranchIds.map(async (bid) => {
-    branchRevenueMap[bid] = await getBranchRevenue(bid, month, year);
-  }));
-
-  // Fresh individual revenue (VND) per user — used for PT/ADMIN commission.
-  // Khoá theo cả cơ sở: một người có thể có bảng lương ở nhiều cơ sở.
-  const ptAdminRecords = records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF");
-  const ptRevenueMap: Record<string, number> = {};
-  await Promise.all(ptAdminRecords.map(async (r) => {
-    ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
-  }));
-
-  // Ngày công bị trừ theo lịch nghỉ của tháng (nghỉ thường 1, nửa ngày 0,5).
-  // Nghỉ phép năm không nằm ở đây vì vẫn hưởng đủ lương.
-  const leaveMap = await sumWorkDayDeductionByUser(
-    Array.from(new Set(records.map(r => r.userId))), month, year,
-  );
-
-  // Thưởng transform của cả tháng — tính một lần, mỗi dòng lọc phần của mình.
-  const transformBonuses = await computeTransformBonuses({
-    start: vnMonthStart(year, month),
-    end:   vnMonthStart(year, month + 1),
-  });
-
-  // Recalculate and patch each record where revenue-derived values changed
-  const updated = await Promise.all(records.map(async (r) => {
-    const role = r.user.role;
-
-    const { patch, changed } = await recalcSalary({
-      record:     r,
-      role,
-      month,
-      year,
-      revenue:    role === "FM"
-        ? (branchRevenueMap[r.branchId] ?? 0)
-        : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0),
-      leaveCount: leaveMap[r.userId] ?? 0,
-      transformBonuses,
-    });
-
-    if (!changed) return r;
-
-    return prisma.salaryRecord.update({
-      where: { id: r.id },
-      data: salaryUpdateData(patch),
-      include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
-    });
-  }));
+  // Cùng một đường với file Excel (POST /api/salary/export) — xem loadLiveSalaryRecords.
+  const updated = await loadLiveSalaryRecords(branchFilter, month, year);
 
   console.log("[salary/GET] returning", updated.length, "records");
   return NextResponse.json(updated);
@@ -203,8 +145,8 @@ export async function POST(req: Request) {
   // Ngày công chuẩn của tháng = số ngày trong tháng − số Chủ nhật (26–27 ngày).
   const stdDays = standardWorkDays(body.month, body.year);
   const transformBonuses = await computeTransformBonuses({
-    start: new Date(body.year, body.month - 1, 1),
-    end:   new Date(body.year, body.month, 1),
+    start: vnMonthStart(body.year, body.month),
+    end:   vnMonthStart(body.year, body.month + 1),
   });
   // Ngày công bị trừ theo lịch nghỉ (nghỉ thường 1, nửa ngày 0,5) — mặc định trừ
   // luôn vào ngày công thực tế; nghỉ phép năm không trừ.

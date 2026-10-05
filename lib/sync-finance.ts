@@ -143,3 +143,33 @@ export async function syncLeadToTransaction(lead: LeadForSync): Promise<void> {
     });
   }
 }
+
+/**
+ * Tạo dòng thu còn thiếu cho các lead có doanh thu của một cơ sở trong tháng.
+ *
+ * Bảng thu trên màn hình (GET /api/finance/transactions) và file Excel
+ * (POST /api/finance/export) cùng gọi trước khi đọc, để hai bên luôn cùng một
+ * danh sách. Khi mọi lead đã có dòng thu thì chỉ tốn hai truy vấn.
+ */
+export async function syncMissingLeadIncome(branchId: string, month: number, year: number): Promise<void> {
+  const qualifyingIds = (await prisma.salesLead.findMany({
+    where: { branchId, month, year, status: { in: ["PIF", "DE", "PB"] }, actualRevenue: { gt: 0 } },
+    select: { id: true },
+  })).map(l => l.id);
+  if (qualifyingIds.length === 0) return;
+
+  const syncedIds = new Set(
+    (await prisma.transaction.findMany({
+      where: { referenceId: { in: qualifyingIds } },
+      select: { referenceId: true },
+    })).map(t => t.referenceId!)
+  );
+  const missing = qualifyingIds.filter(id => !syncedIds.has(id));
+  if (missing.length === 0) return;
+
+  const toSync = await prisma.salesLead.findMany({
+    where: { id: { in: missing } },
+    include: { assignedPT: { select: { name: true } } },
+  });
+  for (const lead of toSync) await syncLeadToTransaction(lead);
+}

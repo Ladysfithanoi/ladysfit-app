@@ -1,0 +1,258 @@
+import { prisma } from "@/lib/prisma";
+import { sessionPayRate } from "@/lib/packages";
+import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
+import { chargeablePackageSql } from "@/lib/checkin-eligibility";
+import { vnMonthStart } from "@/lib/format-date";
+
+/**
+ * MỘT ĐƯỜNG DỰNG "CHI TIẾT BUỔI DẠY" CỦA MỘT NGƯỜI DẠY TRONG THÁNG.
+ *
+ * Bảng chi tiết dưới mỗi dòng lương (GET /api/salary/session-detail) và sheet
+ * "Chi tiết buổi dạy" của file Excel (POST /api/salary/export) cùng đọc qua đây.
+ * Trước đây file Excel tự viết lại một bản riêng nên lệch màn hình: thiếu khách
+ * dạy hộ, tính KOC theo buổi tháng thay vì theo cả hợp đồng, bỏ qua dòng FM.
+ */
+
+function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
+  if (endWeight == null) return 0;
+  const weightLost = startWeight - endWeight;
+  const maxSessions = Math.min(sessions, 60);
+
+  if (startWeight < 70) return 0;
+  if (weightLost >= 8 && weightLost <= 9.9) return maxSessions * 35_000;
+  if (weightLost >= 5 && weightLost <= 7.9) return maxSessions * 25_000;
+  if (weightLost >= 3 && weightLost <= 4.9) return maxSessions * 20_000;
+  return 0;
+}
+
+function kocRatePerSession(startWeight: number, endWeight: number | null): number | null {
+  if (endWeight == null) return null;
+  const weightLost = startWeight - endWeight;
+  if (startWeight < 70) return 0;
+  if (weightLost >= 8 && weightLost <= 9.9) return 35_000;
+  if (weightLost >= 5 && weightLost <= 7.9) return 25_000;
+  if (weightLost >= 3 && weightLost <= 4.9) return 20_000;
+  return 0;
+}
+
+export async function buildSessionDetailRows(ptId: string, month: number, year: number) {
+  type EnrollmentRow = {
+    id: string;
+    clientId: string;
+    contractCode: string | null;
+    packageName: string;
+    packageStage: string;
+    sessions: number;
+    sessionsUsed: number;
+    contractType: string;
+    refunded: boolean;
+    fullName: string;
+  };
+
+  const startDate = vnMonthStart(year, month);
+  const endDate   = vnMonthStart(year, month + 1);
+
+  // Đếm buổi theo NGƯỜI THỰC SỰ DẠY (wl."createdById"), không theo assignedPTId.
+  // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi
+  // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ. Chỉ buổi đã
+  // check-out có chữ ký kèm nhật ký buổi tập mới được tính (xem pt-session-count).
+  const taughtRows       = await getTaughtSessions([ptId], startDate, endDate);
+  const logCountByClient = countByClient(taughtRows);
+  // Gộp theo lộ trình: một khách có thể có gói cũ vừa hết + gói mới, gộp theo
+  // khách sẽ gán cùng số buổi cho cả hai dòng và cộng trùng "Tổng giá trị".
+  const logCountByEnrollment = countByEnrollment(taughtRows);
+
+  // Phần Admin/FM CHỈNH TAY "Số buổi PT" cho tháng này, giữ RIÊNG chứ không trộn
+  // thẳng vào số buổi app ghi.
+  //
+  // Trộn vào rồi trả về đúng một con số là cách bảng lương thành ra không đọc
+  // được: phiếu check-in của khách in 3 buổi mà bảng lương ghi 4, không chỗ nào
+  // nói con số thứ tư từ đâu ra. Hai con số này ĐO HAI THỨ KHÁC NHAU và lệch nhau
+  // là chuyện bình thường — phiếu là phụ lục hợp đồng của khách, bảng lương là
+  // công dạy của PT, và buổi chỉnh tay cố ý không lên phiếu (xem lib/checkin-sheet)
+  // y như dòng ghi tay trên phiếu cố ý không lên bảng lương. Cái thiếu không phải
+  // là một luật chung, mà là câu giải thích. Hệ thống đang có 783 buổi chỉnh tay,
+  // nên thiếu câu đó là 783 lần có người phải đi hỏi.
+  const adjustByEnrollment = new Map<string, number>();
+  for (const adj of await getSessionAdjustments([ptId], month, year)) {
+    adjustByEnrollment.set(
+      adj.enrollmentId,
+      (adjustByEnrollment.get(adj.enrollmentId) ?? 0) + adj.delta
+    );
+  }
+
+  // Số cuối cùng để trả tiền = buổi app ghi + phần chỉnh tay, không âm.
+  const totalByEnrollment = new Map<string, number>();
+  logCountByEnrollment.forEach((n, id) => totalByEnrollment.set(id, n));
+  adjustByEnrollment.forEach((delta, id) => {
+    totalByEnrollment.set(id, Math.max(0, (logCountByEnrollment.get(id) ?? 0) + delta));
+  });
+  // Lộ trình đã có buổi dạy tháng này phải hiện ra kể cả khi gói vừa đóng
+  // (hết buổi / hết hạn) giữa tháng — nếu không, bảng chi tiết sẽ lệch với
+  // tiền buổi dạy thực trả.
+  const taughtEnrollmentIds = Array.from(totalByEnrollment.keys());
+
+  // Lộ trình CÒN CHẠY của khách được GÁN cho PT này (hiện luôn cả khi tháng
+  // này chưa dạy buổi nào — để thấy số buổi còn lại, ảnh, transform).
+  //
+  // "Còn chạy" tính sống bằng chargeablePackageSql, KHÔNG đọc cờ status: gói
+  // đã hết hạn hoặc hết buổi mà lưới quét đêm chưa kịp đóng thì vẫn đang mang
+  // cờ ACTIVE, và phiếu lương sẽ liệt kê khách đã nghỉ như khách đang tập.
+  //
+  // Thêm vế c.status = 'ACTIVE': "Bảo lưu" / "Nghỉ tập" là trạng thái của KHÁCH,
+  // gói vẫn để nguyên ACTIVE — không lọc thì khách bảo lưu vẫn hiện như đang tập.
+  // Gói đã có buổi dạy tháng này thì vẫn hiện bất kể trạng thái (khớp tiền trả).
+  const assignedEnrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
+    `
+    SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
+           pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
+           pe.refunded, c."fullName"
+    FROM package_enrollments pe
+    JOIN clients c ON c.id = pe."clientId"
+    WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
+    ORDER BY c."fullName" ASC, pe."createdAt" ASC
+    `,
+    ptId, taughtEnrollmentIds
+  );
+
+  // Thêm khách mà PT này DẠY HỘ tháng này (có buổi dạy nhưng không phải khách
+  // được gán cho mình) → để buổi dạy hộ hiện ra và được tính giá trị.
+  const assignedClientIds = new Set(assignedEnrollments.map(e => e.clientId));
+  const substituteClientIds = Array.from(logCountByClient.keys()).filter(
+    cid => !assignedClientIds.has(cid)
+  );
+  const substituteEnrollments = substituteClientIds.length > 0
+    ? await prisma.$queryRawUnsafe<EnrollmentRow[]>(
+        `
+        SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
+               pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
+               pe.refunded, c."fullName"
+        FROM package_enrollments pe
+        JOIN clients c ON c.id = pe."clientId"
+        WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
+        ORDER BY c."fullName" ASC, pe."createdAt" ASC
+        `,
+        substituteClientIds, taughtEnrollmentIds
+      )
+    : [];
+
+  const allEnrollments = [
+    ...assignedEnrollments.map(e => ({ ...e, isSubstitute: false })),
+    ...substituteEnrollments.map(e => ({ ...e, isSubstitute: true })),
+  ];
+
+  if (allEnrollments.length === 0) return [];
+
+  const enrollmentIds = allEnrollments.map(e => e.id);
+
+  const photos = await prisma.sessionPhoto.findMany({
+    where: {
+      ptId,
+      packageEnrollmentId: { in: enrollmentIds },
+      month,
+      year,
+    },
+  });
+  const photoByEnrollment = new Map(photos.map(p => [p.packageEnrollmentId, p]));
+
+  // Fetch KOC contracts for these enrollments (camelCase columns)
+  const kocEnrollmentIds = allEnrollments.filter(e => e.contractType === "KOC").map(e => e.id);
+  const kocContracts = kocEnrollmentIds.length > 0
+    ? await prisma.$queryRawUnsafe<{
+        enrollmentId: string;
+        startWeight: number;
+        endWeight: number | null;
+        startWeightConfirmed: boolean;
+        endWeightConfirmed: boolean;
+        status: string;
+        totalSessions: number;
+      }[]>(
+        `SELECT "enrollmentId", "startWeight", "endWeight", "startWeightConfirmed", "endWeightConfirmed", status, "totalSessions"
+         FROM koc_contracts
+         WHERE "enrollmentId" = ANY($1::text[])`,
+        kocEnrollmentIds
+      )
+    : [];
+  const kocByEnrollment = new Map(kocContracts.map(k => [k.enrollmentId, k]));
+
+  const rows = allEnrollments.map((e, idx) => {
+    const photo = photoByEnrollment.get(e.id);
+    const sessionsThisMonth = totalByEnrollment.get(e.id) ?? 0;
+    // Tách đôi để bảng nói được "4 = 3 app ghi + 1 chỉnh tay".
+    const sessionsFromLogs = logCountByEnrollment.get(e.id) ?? 0;
+    const sessionsAdjusted = adjustByEnrollment.get(e.id) ?? 0;
+    const contractType = e.contractType as "NORMAL" | "KOC" | "KOL" | "TRANSFER";
+
+    const base = {
+      stt: idx + 1,
+      enrollmentId: e.id,
+      contractCode: e.contractCode,
+      clientId: e.clientId,
+      clientName: e.fullName,
+      isSubstitute: e.isSubstitute,
+      packageName: e.packageName,
+      totalSessions: Number(e.sessions),
+      sessionsUsed: Number(e.sessionsUsed),
+      sessionsRemaining: Number(e.sessions) - Number(e.sessionsUsed),
+      sessionsThisMonth,
+      /** Trong đó: buổi do app ghi (có check-out, ảnh/chữ ký, nhật ký set). */
+      sessionsFromLogs,
+      /** Và: phần Admin/FM cộng/trừ tay cho tháng này. 0 = không ai chỉnh. */
+      sessionsAdjusted,
+      contractType,
+      /** Gói L0 đã hoàn tiền cho khách — buổi dạy 0đ. */
+      refunded: e.refunded === true,
+      photo: photo ? {
+        id: photo.id,
+        checkinImages:   photo.checkinImages   ? JSON.parse(photo.checkinImages)   : [],
+        transformImages: photo.transformImages  ? JSON.parse(photo.transformImages) : [],
+        hasTransformed:  photo.hasTransformed,
+      } : null,
+    };
+
+    if (contractType === "KOC") {
+      const koc = kocByEnrollment.get(e.id);
+      const startWeight = koc ? Number(koc.startWeight) : 0;
+      const endWeight   = koc?.endWeight != null ? Number(koc.endWeight) : null;
+      const ratePerSession = koc?.endWeightConfirmed ? kocRatePerSession(startWeight, endWeight) : null;
+      const commission = koc?.endWeightConfirmed
+        ? calculateKOCCommission(startWeight, endWeight, Number(koc.totalSessions))
+        : 0;
+      return {
+        ...base,
+        valuePerSession: ratePerSession ?? 0,
+        totalValue: commission,
+        koc: {
+          startWeight,
+          endWeight,
+          startWeightConfirmed: koc?.startWeightConfirmed ?? false,
+          endWeightConfirmed: koc?.endWeightConfirmed ?? false,
+          status: koc?.status ?? "ACTIVE",
+          totalSessions: koc ? Number(koc.totalSessions) : 0,
+          ratePerSession,
+        },
+      };
+    }
+
+    if (contractType === "KOL") {
+      return {
+        ...base,
+        valuePerSession: 60_000,
+        totalValue: sessionsThisMonth * 60_000,
+        koc: null,
+      };
+    }
+
+    const vpSession = sessionPayRate(e.packageName, contractType, e.refunded);
+    return {
+      ...base,
+      valuePerSession: vpSession,
+      totalValue: sessionsThisMonth * vpSession,
+      koc: null,
+    };
+  });
+
+  return rows;
+}
+
+export type SessionDetailRow = Awaited<ReturnType<typeof buildSessionDetailRows>>[number];

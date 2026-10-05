@@ -183,7 +183,7 @@ export function IncomeTab({ branchId, month, year, isReadOnly, onMutate }: Props
       const res = await fetch("/api/finance/export", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ type: "income", branchId, month, year }),
+        body:    JSON.stringify({ type: "income", branchId, month, year, category: filterCat || undefined }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

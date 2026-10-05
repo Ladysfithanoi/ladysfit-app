@@ -7,7 +7,7 @@ import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
-import { transformBonusForUser, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
+import { transformBonusForUser, computeTransformBonuses, TRANSFORM_BONUS_AMOUNT, type TransformBonus } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { vnMonthStart } from "@/lib/format-date";
 
@@ -382,4 +382,65 @@ export function applyLeaveChange(
 export function salaryUpdateData(patch: SalaryPatch) {
   const { shows, ...rest } = patch;
   return { ...rest, ...(shows ?? {}) };
+}
+
+// ── Đọc bảng lương của cả cơ sở, đã tính lại ──────────────────────────────
+
+const LIVE_RECORD_INCLUDE = {
+  user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } },
+} as const;
+
+/**
+ * Bảng lương các cơ sở trong tháng, ĐÃ TÍNH LẠI và lưu lại những dòng đổi số.
+ *
+ * Màn Quỹ lương và file Excel cùng đọc qua đây. Trước đây file Excel đọc thẳng
+ * số đã lưu, nên buổi dạy / lead / ngày nghỉ phát sinh sau lần mở màn hình gần
+ * nhất làm hai bên lệch nhau.
+ */
+export async function loadLiveSalaryRecords(branchIds: string[], month: number, year: number) {
+  const records = await prisma.salaryRecord.findMany({
+    where: { branchId: { in: branchIds }, month, year, user: { deletedAt: null } },
+    include: LIVE_RECORD_INCLUDE,
+    orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
+  });
+  if (records.length === 0) return records;
+
+  // Doanh số phòng (FM) theo cơ sở, doanh số cá nhân (PT/Admin) theo người + cơ sở.
+  const branchRevenueMap: Record<string, number> = {};
+  await Promise.all(Array.from(new Set(records.map(r => r.branchId))).map(async bid => {
+    branchRevenueMap[bid] = await getBranchRevenue(bid, month, year);
+  }));
+  const ptRevenueMap: Record<string, number> = {};
+  await Promise.all(records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF").map(async r => {
+    ptRevenueMap[`${r.userId}:${r.branchId}`] = await getUserRevenue(r.userId, r.branchId, month, year);
+  }));
+
+  const leaveMap = await sumWorkDayDeductionByUser(
+    Array.from(new Set(records.map(r => r.userId))), month, year,
+  );
+  const transformBonuses = await computeTransformBonuses({
+    start: vnMonthStart(year, month),
+    end:   vnMonthStart(year, month + 1),
+  });
+
+  return Promise.all(records.map(async r => {
+    const role = r.user.role;
+    const { patch, changed } = await recalcSalary({
+      record: r,
+      role,
+      month,
+      year,
+      revenue: role === "FM"
+        ? (branchRevenueMap[r.branchId] ?? 0)
+        : (ptRevenueMap[`${r.userId}:${r.branchId}`] ?? 0),
+      leaveCount: leaveMap[r.userId] ?? 0,
+      transformBonuses,
+    });
+    if (!changed) return r;
+    return prisma.salaryRecord.update({
+      where: { id: r.id },
+      data: salaryUpdateData(patch),
+      include: LIVE_RECORD_INCLUDE,
+    });
+  }));
 }

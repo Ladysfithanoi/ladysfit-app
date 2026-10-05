@@ -5,6 +5,7 @@ import { prisma }           from "@/lib/prisma";
 import ExcelJS              from "exceljs";
 import sharp                from "sharp";
 import { vnMonthStart, vnWallClock } from "@/lib/format-date";
+import { syncMissingLeadIncome } from "@/lib/sync-finance";
 
 const C_RED   = "FFF15B5C";
 const C_WHITE = "FFFFFFFF";
@@ -253,14 +254,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let parsed: { type: "income" | "expense"; branchId: string; month: number; year: number };
+  // category: bộ lọc "Danh mục" đang chọn trên màn hình — bỏ trống là tất cả.
+  let parsed: { type: "income" | "expense"; branchId: string; month: number; year: number; category?: string };
   try {
     parsed = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { type, branchId, month, year } = parsed;
+  const { type, branchId, month, year, category } = parsed;
 
   const managed: string[] = session.user.managedBranchIds ?? [];
   if (role === "FM" && !managed.includes(branchId)) {
@@ -268,6 +270,10 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Màn Bảng thu tạo dòng thu còn thiếu của lead trước khi đọc — file cũng vậy,
+    // nếu không file có thể thiếu hợp đồng mà màn hình đang hiện.
+    if (type === "income") await syncMissingLeadIncome(branchId, month, year);
+
     const [branch, transactions] = await Promise.all([
       prisma.branch.findUnique({ where: { id: branchId }, select: { name: true } }),
       prisma.transaction.findMany({
@@ -275,9 +281,11 @@ export async function POST(req: Request) {
           branchId,
           type:            type === "income" ? "INCOME" : "EXPENSE",
           transactionDate: { gte: vnMonthStart(year, month), lt: vnMonthStart(year, month + 1) },
+          ...(category ? { category } : {}),
         },
         include: { createdBy: { select: { name: true } } },
-        orderBy: { transactionDate: "asc" },
+        // Cùng thứ tự với bảng trên màn hình (mới nhất lên đầu).
+        orderBy: { transactionDate: "desc" },
       }),
     ]);
 
@@ -309,7 +317,7 @@ export async function POST(req: Request) {
 
     ws.mergeCells(1, 1, 1, NCOLS);
     const info     = ws.getCell(1, 1);
-    info.value     = `Cơ sở: ${branchName}   |   Tháng: ${mm}/${year}`;
+    info.value     = `Cơ sở: ${branchName}   |   Tháng: ${mm}/${year}${category ? `   |   Danh mục: ${category}` : ""}`;
     info.font      = { bold: true, size: 12 };
     info.alignment = { horizontal: "center", vertical: "middle" };
     info.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: C_TOTAL } };
@@ -317,8 +325,9 @@ export async function POST(req: Request) {
     ws.getRow(2).height = 6;
 
     if (type === "income") {
-      const HEADERS = ["STT","Ngày GD","Danh mục","Khách hàng","Gói tập","PT phụ trách","Mã HĐ","Số tiền (VND)","Mô tả","Hóa đơn"];
-      const WIDTHS  = [5, 13, 18, 24, 18, 18, 13, 18, 30, 18];
+      // Cùng các cột với bảng trên màn hình.
+      const HEADERS = ["STT","Ngày GD","Danh mục","Khách hàng","Gói tập","PT phụ trách","Mã HĐ","Số tiền (VND)","Nguồn","Hóa đơn"];
+      const WIDTHS  = [5, 13, 18, 24, 18, 18, 13, 18, 20, 18];
 
       HEADERS.forEach((h, i) => {
         const c = ws.getCell(HDR, i + 1);
@@ -347,7 +356,7 @@ export async function POST(req: Request) {
           p ? p.pt       : "",
           p ? p.contract : "",
           tx.amount,
-          p ? "" : "",
+          tx.referenceId ? "Hợp đồng" : (tx.createdBy.name ?? ""),
           "", // invoice — set below
         ];
         vals.forEach((v, i) => { const c = row.getCell(i+1); c.value = v; styleData(c, even); });

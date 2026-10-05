@@ -3,25 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { canReadSalary } from "@/lib/salary-access";
 import { prisma } from "@/lib/prisma";
-import { getBranchRevenue } from "@/lib/salary-revenue";
-import { sessionPayRate } from "@/lib/packages";
-import { countByEnrollment, getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
 import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
-import { chargeablePackageSql } from "@/lib/checkin-eligibility";
+import { loadLiveSalaryRecords } from "@/lib/salary-live";
+import { buildSessionDetailRows, type SessionDetailRow } from "@/lib/salary-session-detail";
 import ExcelJS from "exceljs";
-import { vnMonthStart } from "@/lib/format-date";
-
-// ── KOC helpers (same logic as session-detail) ────────────────────────────
-
-function calcKOCRate(startW: number, endW: number | null): number {
-  if (endW == null) return 0;
-  const lost = startW - endW;
-  if (startW < 70) return 0;
-  if (lost >= 8 && lost <= 9.9) return 35_000;
-  if (lost >= 5 && lost <= 7.9) return 25_000;
-  if (lost >= 3 && lost <= 4.9) return 20_000;
-  return 0;
-}
+import { vnWallClock } from "@/lib/format-date";
 
 // ── Style helpers ─────────────────────────────────────────────────────────
 
@@ -75,129 +61,26 @@ export async function POST(req: Request) {
     const branch = allBranches ? null : await prisma.branch.findUnique({ where: { id: branchId } });
     const branchName = allBranches ? "Tất cả cơ sở" : branch?.name ?? branchId;
 
-    const records = await prisma.salaryRecord.findMany({
-      where: { ...(allBranches ? {} : { branchId }), month, year, user: { deletedAt: null } },
-      include: { user: { select: { id: true, name: true, email: true, role: true } } },
-      orderBy: [{ user: { role: "asc" } }, { user: { name: "asc" } }],
-    });
+    // Cùng bộ lọc cơ sở và cùng đường tính lại với màn Quỹ lương (GET
+    // /api/salary/records) — file phải ra đúng những con số đang hiện trên app.
+    const branchIds = allBranches
+      ? (await prisma.branch.findMany({
+          where: { name: { not: { contains: "Fitpartner" } } },
+          select: { id: true },
+        })).map(b => b.id)
+      : [branchId];
+    const records = await loadLiveSalaryRecords(branchIds, month, year);
 
     if (records.length === 0) {
       return NextResponse.json({ error: "Không có dữ liệu bảng lương" }, { status: 404 });
     }
 
-    const startDate = vnMonthStart(year, month);
-    const endDate   = vnMonthStart(year, month + 1);
-    const ptAdminRecords = records.filter(r => r.user.role !== "FM" && r.user.role !== "STAFF");
-    const ptUserIds = ptAdminRecords.map(r => r.userId);
-
-    // KOC contracts for branch PTs (fetched first so rates populate session rows)
-    type KOCRow = {
-      enrollmentId: string; startWeight: number; endWeight: number | null;
-      startWeightConfirmed: boolean; endWeightConfirmed: boolean;
-      status: string; totalSessions: number;
-      clientName: string; ptName: string;
-    };
-    const kocContracts: KOCRow[] = ptUserIds.length > 0
-      ? await prisma.$queryRawUnsafe<KOCRow[]>(
-          `SELECT k."enrollmentId", k."startWeight", k."endWeight",
-                  k."startWeightConfirmed", k."endWeightConfirmed", k.status, k."totalSessions",
-                  c."fullName" AS "clientName",
-                  u.name       AS "ptName"
-           FROM koc_contracts k
-           JOIN clients c ON c.id = k."clientId"
-           JOIN users u   ON u.id = k."ptId"
-           WHERE k."ptId" = ANY($1::text[])
-           ORDER BY u.name ASC, c."fullName" ASC`,
-          ptUserIds
-        )
-      : [];
-
-    const kocByEnrollmentId = new Map<string, KOCRow>();
-    for (const k of kocContracts) kocByEnrollmentId.set(k.enrollmentId, k);
-
-    // Session details per PT
-    type EnrollmentRow = {
-      id: string; clientId: string; contractCode: string | null;
-      packageName: string; sessions: number; sessionsUsed: number;
-      contractType: string; refunded: boolean; fullName: string;
-    };
-    type SessionRow = {
-      stt: number; ptName: string; clientName: string;
-      packageName: string; contractType: string;
-      totalSessions: number; sessionsRemaining: number;
-      sessionsThisMonth: number; valuePerSession: number | string; totalValue: number;
-    };
-
-    const sessionDetailsByUser = new Map<string, SessionRow[]>();
-
-    await Promise.all(ptAdminRecords.map(async r => {
-      // Cùng định nghĩa "Số buổi PT" với bảng lương: buổi đã check-out có chữ ký
-      // kèm nhật ký buổi tập, ghi công cho người thực sự dạy. Gộp theo lộ trình
-      // để khách có nhiều gói không bị cộng trùng giá trị.
-      const logCount = countByEnrollment(await getTaughtSessions([r.userId], startDate, endDate));
-      // Cộng phần Admin/FM chỉnh tay "Số buổi PT" đã ghi nhận vào tháng này.
-      for (const adj of await getSessionAdjustments([r.userId], month, year)) {
-        logCount.set(adj.enrollmentId, Math.max(0, (logCount.get(adj.enrollmentId) ?? 0) + adj.delta));
-      }
-
-      // Lộ trình đã có buổi dạy tháng này vẫn hiện kể cả khi gói vừa đóng giữa
-      // tháng (hết buổi / hết hạn), để file Excel khớp với tiền buổi dạy thực trả.
-      // Ngoài nhóm đó chỉ lấy gói CÒN CHẠY tính sống — cùng một luật với bảng
-      // trên màn hình, xem chargeablePackageSql. Khách Bảo lưu / Nghỉ tập bị loại
-      // (c.status = 'ACTIVE') trừ khi tháng này có buổi dạy.
-      const enrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
-        `SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName",
-                pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
-                pe.refunded, c."fullName"
-         FROM package_enrollments pe
-         JOIN clients c ON c.id = pe."clientId"
-         WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
-         ORDER BY c."fullName" ASC, pe."createdAt" ASC`,
-        r.userId, Array.from(logCount.keys())
-      );
-
-      const ptName = r.user.name ?? r.user.email;
-
-      const rows: SessionRow[] = enrollments.map((e, idx) => {
-        const contractType = e.contractType as "NORMAL" | "KOC" | "KOL" | "TRANSFER";
-        const sessionsThisMonth = logCount.get(e.id) ?? 0;
-
-        let valuePerSession: number | string;
-        let totalValue: number;
-
-        if (contractType === "KOC") {
-          const koc = kocByEnrollmentId.get(e.id);
-          if (koc?.endWeightConfirmed) {
-            const rate = calcKOCRate(Number(koc.startWeight), koc.endWeight != null ? Number(koc.endWeight) : null);
-            valuePerSession = rate > 0 ? rate : 0;
-            totalValue = sessionsThisMonth * (rate > 0 ? rate : 0);
-          } else {
-            valuePerSession = "Chờ kết quả";
-            totalValue = 0;
-          }
-        } else if (contractType === "KOL") {
-          valuePerSession = 60_000;
-          totalValue = sessionsThisMonth * 60_000;
-        } else {
-          valuePerSession = sessionPayRate(e.packageName, contractType, e.refunded);
-          totalValue = sessionsThisMonth * (valuePerSession as number);
-        }
-
-        return {
-          stt: idx + 1,
-          ptName,
-          clientName: e.fullName,
-          packageName: e.packageName,
-          contractType,
-          totalSessions: Number(e.sessions),
-          sessionsRemaining: Number(e.sessions) - Number(e.sessionsUsed),
-          sessionsThisMonth,
-          valuePerSession,
-          totalValue,
-        };
-      });
-
-      sessionDetailsByUser.set(r.userId, rows);
+    // Người có dòng "Chi tiết" trên màn hình: PT, Admin dạy thêm và FM (FM cũng
+    // dạy khách). STAFF không dạy nên không có.
+    const teacherRecords = records.filter(r => r.user.role !== "STAFF");
+    const sessionDetailsByRecord = new Map<string, SessionDetailRow[]>();
+    await Promise.all(teacherRecords.map(async r => {
+      sessionDetailsByRecord.set(r.id, await buildSessionDetailRows(r.userId, month, year));
     }));
 
     // ── Build workbook ─────────────────────────────────────────────────────
@@ -207,8 +90,9 @@ export async function POST(req: Request) {
     wb.created = new Date();
 
     const monthStr = String(month).padStart(2, "0");
-    const now = new Date();
-    const todayStr = `${String(now.getDate()).padStart(2,"0")}/${String(now.getMonth()+1).padStart(2,"0")}/${now.getFullYear()}`;
+    // Giờ VN — máy chủ chạy UTC, đọc giờ máy là sai ngày từ 0h tới 7h sáng.
+    const now = vnWallClock(new Date());
+    const todayStr = `${String(now.getUTCDate()).padStart(2,"0")}/${String(now.getUTCMonth()+1).padStart(2,"0")}/${now.getUTCFullYear()}`;
 
     const STATUS_VN: Record<string, string> = {
       PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán",
@@ -279,10 +163,13 @@ export async function POST(req: Request) {
 
       // Admin dạy thêm không có lương cứng nên không áp ngày công.
       const stdDays   = Number(rec.standardWorkDays ?? 0);
-      const leaveDays = Number(rec.leaveDays ?? 0);
+      // Số ngày nghỉ = chuẩn − thực tế, như ô Ngày công trên màn hình (gồm cả phần
+      // FM sửa tay, không riêng lịch nghỉ).
+      const actDays   = Number(rec.actualWorkDays ?? 0);
+      const offDays   = Math.max(0, stdDays - actDays);
       const workDaysText = role === "ADMIN" || stdDays <= 0
         ? "—"
-        : `${formatDays(paidWorkDays(Number(rec.actualWorkDays ?? 0), stdDays))}/${PAID_DAYS_BASE}${leaveDays > 0 ? ` (nghỉ ${formatDays(leaveDays)})` : ""}`;
+        : `${formatDays(paidWorkDays(actDays, stdDays))}/${PAID_DAYS_BASE}${offDays > 0 ? ` (nghỉ ${formatDays(offDays)})` : ""}`;
 
       const rowData = [
         stt,
@@ -330,7 +217,12 @@ export async function POST(req: Request) {
     }
 
     // Total row
-    const branchRevenue = await getBranchRevenue(branchId, month, year);
+    // Doanh số phòng giống ô "Doanh số phòng" trên màn hình: lấy từ dòng FM, gộp
+    // theo cơ sở trước (cơ sở nhiều FM thì mỗi dòng cùng mang doanh số phòng).
+    const branchRevenue = Array.from(
+      records.filter(r => r.user.role === "FM")
+        .reduce((m, r) => m.set(r.branchId, r.totalRevenue), new Map<string, number>()).values()
+    ).reduce((s, v) => s + v, 0);
     const totRowData = Array(S1_COLS).fill("") as (string | number)[];
     totRowData[1] = "TỔNG CỘNG";
     [4,5,7,10,11,12,13,14,15,16,17].forEach(c => { totRowData[c - 1] = totals[c - 1]; });
@@ -380,11 +272,12 @@ export async function POST(req: Request) {
     s2TitleCell.fill = solidFill(RED.argb);
     s2TitleCell.alignment = { horizontal: "center", vertical: "middle" };
 
-    const S2_HEADERS = ["STT","Tên PT","Tên KH","Gói tập","Loại HĐ","Tổng buổi","Còn lại","Buổi dạy tháng","Giá/buổi","Tổng giá trị"];
+    const S2_HEADERS = ["STT","Người dạy","Tên KH","Gói tập","Loại HĐ","Tổng buổi","Còn lại","Buổi dạy tháng","Giá/buổi","Tổng giá trị"];
 
-    for (const r of ptAdminRecords) {
+    for (const r of teacherRecords) {
+      const teacherName = r.user.name ?? r.user.email;
       // Section header per PT
-      const secRow = ws2.addRow([`${r.user.name ?? r.user.email}`, ...Array(S2_COLS - 1).fill("")]);
+      const secRow = ws2.addRow([`${teacherName} (${ROLE_VN[r.user.role] ?? r.user.role})`, ...Array(S2_COLS - 1).fill("")]);
       ws2.mergeCells(secRow.number, 1, secRow.number, S2_COLS);
       secRow.height = 22;
       const secCell = ws2.getCell(secRow.number, 1);
@@ -396,22 +289,29 @@ export async function POST(req: Request) {
       const s2Hdr = ws2.addRow(S2_HEADERS);
       applyHeaderStyle(s2Hdr);
 
-      const sessionRows = sessionDetailsByUser.get(r.userId) ?? [];
+      const sessionRows = sessionDetailsByRecord.get(r.id) ?? [];
       if (sessionRows.length === 0) {
-        const emptyRow = ws2.addRow(["Không có gói tập đang hoạt động", ...Array(S2_COLS - 1).fill("")]);
+        const emptyRow = ws2.addRow(["Không có gói tập đang hoạt động / buổi dạy trong tháng", ...Array(S2_COLS - 1).fill("")]);
         ws2.mergeCells(emptyRow.number, 1, emptyRow.number, S2_COLS);
         ws2.getCell(emptyRow.number, 1).font = { italic: true, color: { argb: "FF999999" } };
         ws2.getCell(emptyRow.number, 1).alignment = { horizontal: "center" };
       } else {
         let ptTotal = 0;
         sessionRows.forEach((s, idx) => {
+          // KOC chưa chốt cân cuối thì chưa có giá — màn hình cũng để "Chờ kết quả".
+          const kocPending = s.contractType === "KOC" && !s.koc?.endWeightConfirmed;
           const dr = ws2.addRow([
-            idx + 1, s.ptName, s.clientName, s.packageName,
+            idx + 1, teacherName,
+            s.isSubstitute ? `${s.clientName} (dạy hộ)` : s.clientName,
+            s.refunded ? `${s.packageName} (hoàn tiền)` : s.packageName,
             s.contractType, s.totalSessions, s.sessionsRemaining,
-            s.sessionsThisMonth, s.valuePerSession, s.totalValue,
+            s.sessionsAdjusted !== 0
+              ? `${s.sessionsThisMonth} (app ${s.sessionsFromLogs}, chỉnh tay ${s.sessionsAdjusted > 0 ? "+" : ""}${s.sessionsAdjusted})`
+              : s.sessionsThisMonth,
+            kocPending ? "Chờ kết quả" : s.valuePerSession, s.totalValue,
           ]);
           dr.height = 17;
-          if (typeof s.valuePerSession === "number") dr.getCell(9).numFmt = VND_FMT;
+          if (!kocPending) dr.getCell(9).numFmt = VND_FMT;
           dr.getCell(10).numFmt = VND_FMT;
           dr.eachCell(cell => {
             cell.border = { bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
