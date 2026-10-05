@@ -11,6 +11,7 @@ import {
 } from "@/lib/checkin-eligibility";
 import { generatePackageProgressNotifications } from "@/lib/package-progress";
 import { parseWeightInput, recordWeightLog } from "@/lib/weight-log";
+import { vnWallClock } from "@/lib/format-date";
 
 // POST /api/clients/[id]/workout-logs/check-in
 // Starts a session: the client signs to confirm they showed up, then we create
@@ -23,13 +24,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { programId, weekId, sessionId, checkInSignatureUrl, weightKg } = (await req.json()) as {
+    const { programId, weekId, sessionId, checkInSignatureUrl, weightKg, confirmSameDay } = (await req.json()) as {
       programId?: string;
       weekId?: string;
       sessionId?: string;
       checkInSignatureUrl?: string | null;
       /** Cân nặng PT cân cho khách ngay lúc check-in. KHÔNG bắt buộc. */
       weightKg?: number | string | null;
+      /** PT đã xác nhận khách tập buổi thứ hai trong ngày (xem cảnh báo SAME_DAY_SESSION). */
+      confirmSameDay?: boolean;
     };
     if (!programId || !weekId || !sessionId) {
       return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -151,6 +154,43 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const block = findCheckInBlock(packages);
     if (block) {
       return NextResponse.json({ error: block.message, reason: block.reason }, { status: 409 });
+    }
+
+    // KHÁCH ĐÃ TẬP HÔM NAY → HỎI LẠI. Ca hay gặp: PT mở nhầm hồ sơ một khách khác
+    // (cùng mình phụ trách) rồi cho khách đang đứng trước mặt ký vào đó — khách kia
+    // bị trừ oan một buổi, khách thật thì không, mà phiếu check-in của cả hai đều
+    // sai. Khách tập hai buổi thật trong một ngày vẫn có, nên chỉ cảnh báo: PT xem
+    // lại đúng khách rồi bấm tiếp (confirmSameDay) là mở được.
+    if (!confirmSameDay) {
+      const vnNow = vnWallClock(new Date());
+      const dayStart = new Date(
+        Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate()) - 7 * 3600_000,
+      );
+      const earlier = await prisma.workoutLog.findFirst({
+        where: { clientId: params.id, status: "COMPLETED", sessionDate: { gte: dayStart } },
+        select: {
+          sessionDate: true,
+          client: { select: { fullName: true } },
+          session: { select: { sessionName: true } },
+          createdBy: { select: { name: true } },
+        },
+        orderBy: { sessionDate: "desc" },
+      });
+      if (earlier) {
+        const t = vnWallClock(earlier.sessionDate);
+        const hhmm = `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`;
+        return NextResponse.json(
+          {
+            error:
+              `Khách ${earlier.client.fullName} đã tập hôm nay lúc ${hhmm}` +
+              (earlier.session?.sessionName ? ` (${earlier.session.sessionName}` : " (") +
+              (earlier.createdBy?.name ? `, ${earlier.createdBy.name} dạy)` : ")") +
+              `.\nKiểm tra lại có đúng hồ sơ của khách đang tập không — check-in nhầm hồ sơ là khách này bị trừ oan một buổi.`,
+            reason: "SAME_DAY_SESSION",
+          },
+          { status: 409 },
+        );
+      }
     }
 
     // Build the set-log scaffold from the session's current movements.

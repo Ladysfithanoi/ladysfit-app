@@ -701,6 +701,14 @@ function ProgramView({
   // Session waiting for the client's check-in signature before it can start.
   const [signCheckIn, setSignCheckIn] = useState<{ sessionId: string; weekId: string } | null>(null);
   const [checkInSigning, setCheckInSigning] = useState(false);
+  // Khách đã tập hôm nay — chờ PT xác nhận đúng hồ sơ rồi mới check-in tiếp.
+  const [sameDayConfirm, setSameDayConfirm] = useState<{
+    sessionId: string;
+    weekId: string;
+    checkInSignatureUrl: string;
+    weightKg?: number | null;
+    message: string;
+  } | null>(null);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
   const [deleteSessionError, setDeleteSessionError] = useState("");
@@ -711,7 +719,8 @@ function ProgramView({
     sessionId: string,
     weekId: string,
     checkInSignatureUrl: string,
-    weightKg?: number | null
+    weightKg?: number | null,
+    confirmSameDay = false,
   ) {
     // Chốt chặn cuối ở giao diện; server vẫn tự kiểm tra lại (API trả 409).
     if (checkInBlock) {
@@ -726,10 +735,17 @@ function ProgramView({
       const res = await fetch(`/api/clients/${clientId}/workout-logs/check-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ programId: program.id, weekId, sessionId, checkInSignatureUrl, weightKg }),
+        body: JSON.stringify({ programId: program.id, weekId, sessionId, checkInSignatureUrl, weightKg, confirmSameDay }),
       });
       const data = await res.json();
+      // Khách đã có buổi hôm nay → hỏi PT có đúng hồ sơ không, giữ nguyên chữ ký
+      // vừa ký để bấm tiếp là gửi lại luôn, khỏi bắt khách ký lần nữa.
+      if (res.status === 409 && data.reason === "SAME_DAY_SESSION") {
+        setSameDayConfirm({ sessionId, weekId, checkInSignatureUrl, weightKg, message: data.error });
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Có lỗi xảy ra");
+      setSameDayConfirm(null);
       const { packageUpdate, weightLogged, ...log } = data as WorkoutLogRow & {
         packageUpdate: PackageUpdate | null;
         weightLogged: number | null;
@@ -2197,6 +2213,47 @@ function ProgramView({
               <button
                 onClick={() => { setConfirmDeleteSession(false); setDeleteSessionError(""); }}
                 disabled={deletingSession}
+                className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Khách đã tập hôm nay: hỏi lại có đúng hồ sơ không ── */}
+      {sameDayConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-gray-900">Khách đã tập hôm nay</p>
+                <p className="text-xs text-gray-500 mt-0.5">Đây sẽ là buổi thứ hai trong ngày</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 whitespace-pre-line">
+              {sameDayConfirm.message}
+            </p>
+            {checkInError && <p className="text-xs text-red-500 font-medium">{checkInError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const c = sameDayConfirm;
+                  void handleCheckIn(c.sessionId, c.weekId, c.checkInSignatureUrl, c.weightKg, true);
+                }}
+                disabled={checkInSigning}
+                className="flex-1 h-10 rounded-xl text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                style={{ backgroundColor: "#f15b5c" }}
+              >
+                {checkInSigning ? <><Loader2 className="w-4 h-4 animate-spin" />Đang check-in...</> : "Đúng khách, check-in"}
+              </button>
+              <button
+                onClick={() => { setSameDayConfirm(null); setSignCheckIn(null); setCheckInError(""); }}
+                disabled={checkInSigning}
                 className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
               >
                 Hủy
