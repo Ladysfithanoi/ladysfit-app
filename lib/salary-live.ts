@@ -263,9 +263,7 @@ export async function recalcSalary(args: {
   const leaveCount = args.leaveCount ??
     ((await sumWorkDayDeductionByUser([r.userId], month, year))[r.userId] ?? 0);
   const baseDays   = hasWorkDays ? r.actualWorkDays : standardDays;
-  const actualDays = leaveCount === r.leaveDays
-    ? baseDays
-    : Math.max(0, Math.min(baseDays - (leaveCount - r.leaveDays), standardDays));
+  const actualDays = applyLeaveChange(baseDays, r.leaveDays, leaveCount, standardDays);
 
   // THÂM NIÊN tính lại theo đúng tháng lương từ Cấu hình lương (lib/seniority).
   const seniorityBonus = await liveSeniorityBonus(r.userId, role, month, year);
@@ -355,6 +353,30 @@ export async function liveInsuranceDeduction(userId: string, bhxhBase: number, m
     select:  { insuranceStartDate: true },
   });
   return insuranceDeductionOf(bhxhBase, config?.insuranceStartDate, month, year);
+}
+
+/**
+ * Ngày công thực tế sau khi lịch nghỉ đổi — MỘT công thức cho mọi chỗ ghi ngày công.
+ *
+ * Bảng lương lưu `actualWorkDays` ĐÃ TRỪ sẵn ngày nghỉ, kèm `leaveDays` = số ngày
+ * nghỉ đã trừ vào con số đó. Lịch nghỉ đổi thì chỉ trừ (hoặc trả lại) phần chênh,
+ * nên phần FM sửa tay vẫn được giữ.
+ *
+ * Bất biến: actualWorkDays + leaveDays chỉ đổi khi FM sửa tay. Ghi `actualWorkDays`
+ * mà không đi qua đây (vd lấy số đang hiện trên màn hình, ghép với số ngày nghỉ MỚI
+ * của lịch) là phá bất biến đó — lịch nghỉ đổi trong lúc màn lương chưa tải lại
+ * thì ngày nghỉ bị trừ hai lần, hoặc mất.
+ *
+ * `days` là ngày công đã trừ đúng `appliedLeave` ngày nghỉ.
+ */
+export function applyLeaveChange(
+  days:          number,
+  appliedLeave:  number,
+  currentLeave:  number,
+  standardDays:  number,
+): number {
+  if (currentLeave === appliedLeave) return days;
+  return Math.max(0, Math.min(days - (currentLeave - appliedLeave), standardDays));
 }
 
 export function salaryUpdateData(patch: SalaryPatch) {

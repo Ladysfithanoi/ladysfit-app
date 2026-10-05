@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { liveInsuranceDeduction, liveSeniorityBonus } from "@/lib/salary-live";
+import { applyLeaveChange, liveInsuranceDeduction, liveSeniorityBonus } from "@/lib/salary-live";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +27,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const body = await req.json() as {
     status?: SalaryStatus; advancePaid?: number; notes?: string; actualWorkDays?: number;
+    /**
+     * Số ngày nghỉ (leaveDays) của bản ghi lúc màn hình hiện `actualWorkDays` —
+     * để lịch nghỉ đổi sau lúc tải trang thì chỉ áp phần chênh (applyLeaveChange).
+     */
+    leaveDaysSeen?: number;
     /** Lương cơ bản FM đặt tay cho người này ngay trong bảng lương. */
     baseSalary?: number;
     /** FM: số lượt đánh giá Google Business — thưởng theo số này. */
@@ -56,14 +61,28 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     ? rec.standardWorkDays!
     : standardWorkDays(record.month, record.year);
 
-  // Ngày nghỉ trên lịch nghỉ tại thời điểm sửa. FM nhập tay thì lấy đúng số FM
-  // nhập; ghi lại số ngày nghỉ đã áp để lần tính sau chỉ trừ phần chênh lệch.
+  // Ngày nghỉ trên lịch nghỉ tại thời điểm sửa; ghi lại cùng ngày công để lần
+  // tính sau chỉ trừ phần chênh lệch.
+  //
+  // Số FM nhập đã trừ đúng số ngày nghỉ màn hình lúc đó đang thấy (leaveDaysSeen),
+  // không phải số của lịch NGAY BÂY GIỜ. Trước đây ghép thẳng hai số đó: tích nghỉ
+  // / bỏ nghỉ trong lúc màn lương chưa tải lại rồi bấm Lưu (kể cả chỉ để sửa tạm
+  // ứng) là ngày nghỉ bị trừ hai lần — nghỉ 1 ngày mà mất 2 công — hoặc mất hẳn.
   const leaveCount = (await sumWorkDayDeductionByUser([record.userId], record.month, record.year))[record.userId] ?? 0;
+  const hasWorkDays = (rec.standardWorkDays ?? 0) > 0;
   const actualDays = body.actualWorkDays !== undefined
-    ? Math.max(0, Math.min(body.actualWorkDays, standardDays))
-    : ((rec.standardWorkDays ?? 0) > 0
-        ? (rec.actualWorkDays ?? 0)
-        : Math.max(0, standardDays - leaveCount));
+    ? applyLeaveChange(
+        Math.max(0, Math.min(body.actualWorkDays, standardDays)),
+        body.leaveDaysSeen ?? leaveCount,
+        leaveCount,
+        standardDays,
+      )
+    : applyLeaveChange(
+        hasWorkDays ? (rec.actualWorkDays ?? 0) : standardDays,
+        hasWorkDays ? record.leaveDays : 0,
+        leaveCount,
+        standardDays,
+      );
 
   // Thâm niên theo đúng tháng lương — cùng một hàm với lúc tính lại (salary-live).
   const seniorityBonus = await liveSeniorityBonus(record.userId, record.user.role, record.month, record.year);

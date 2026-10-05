@@ -379,6 +379,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           advancePaid:    parseFloat(editAdvance) || 0,
           notes:          editNotes,
           actualWorkDays: parseFloat(editWorkDays) || 0,
+          // Số ngày nghỉ đã trừ sẵn trong số ngày công đang hiện — lịch nghỉ đổi
+          // sau lúc tải trang thì server chỉ áp phần chênh, không trừ hai lần.
+          leaveDaysSeen:  records.find(r => r.id === editingId)?.leaveDays ?? 0,
           // Admin dạy thêm không có lương cứng — server bỏ qua trường này.
           baseSalary:     Math.max(0, parseFloat(editBase) || 0),
           // Chỉ dòng FM có thưởng Google — server bỏ qua với vai trò khác.
