@@ -610,6 +610,9 @@ export function ClientDetailPage({
     () => initialPackages.some((p) => p.contractType === "TRANSFER"),
   );
   const [transferSaving, setTransferSaving] = useState(false);
+  const [transferConfirmOpen, setTransferConfirmOpen] = useState(false);
+  // Gói L0 đang chờ xác nhận đổi ô "Đã hoàn tiền".
+  const [refundConfirmPkg, setRefundConfirmPkg] = useState<PackageEnrollment | null>(null);
   const [savingRefundId, setSavingRefundId] = useState<string | null>(null);
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
@@ -1111,16 +1114,11 @@ export function ClientDetailPage({
   }
 
   // Gói L0 hoàn tiền cho khách → buổi dạy của gói không tính tiền cho PT.
-  async function handleToggleRefunded(pkg: PackageEnrollment) {
+  // Chạy sau khi bấm xác nhận ở hộp thoại (refundConfirmPkg).
+  async function handleToggleRefunded() {
+    const pkg = refundConfirmPkg;
+    if (!pkg) return;
     const next = !pkg.refunded;
-    const msg = next
-      ? `Đánh dấu gói ${pkg.packageName} đã hoàn tiền?
-
-Mọi buổi dạy của gói này sẽ KHÔNG tính tiền buổi dạy cho PT.`
-      : `Bỏ đánh dấu hoàn tiền gói ${pkg.packageName}?
-
-Buổi dạy của gói sẽ tính tiền lại như thường.`;
-    if (!window.confirm(msg)) return;
     setSavingRefundId(pkg.id);
     try {
       const res = await fetch(`/api/clients/${client.id}/packages/${pkg.id}`, {
@@ -1138,6 +1136,7 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
       setTimeout(() => setToastMsg(null), 3000);
     } finally {
       setSavingRefundId(null);
+      setRefundConfirmPkg(null);
     }
   }
 
@@ -1238,14 +1237,20 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
   // Ô "Khách hàng chuyển giao". Khách chưa có lộ trình: chỉ áp vào gói sắp tạo.
   // Khách đã có lộ trình: đổi luôn mọi gói thường → chuyển giao (hoặc ngược lại),
   // nên mọi buổi đã dạy trước đó tính lại 50.000đ/buổi trên bảng lương.
-  async function handleToggleTransfer() {
+  // Số lộ trình hiện có sẽ bị đổi nếu bấm ô chuyển giao bây giờ.
+  const transferAffected = packages.filter(
+    (p) => p.contractType === (addPkgTransfer ? "TRANSFER" : "NORMAL"),
+  ).length;
+
+  function handleToggleTransfer() {
+    // Đã có lộ trình thì hỏi trước — đổi cả đơn giá các buổi đã dạy.
+    if (transferAffected > 0) setTransferConfirmOpen(true);
+    else void applyTransferToggle();
+  }
+
+  async function applyTransferToggle() {
     const next = !addPkgTransfer;
-    const affected = packages.filter((p) => p.contractType === (next ? "NORMAL" : "TRANSFER"));
-    if (affected.length > 0) {
-      const msg = next
-        ? `Chuyển ${affected.length} lộ trình hiện có sang khách chuyển giao?\n\nMọi buổi dạy trước đó của khách sẽ tính 50.000đ/buổi cho PT.`
-        : `Bỏ khách chuyển giao cho ${affected.length} lộ trình hiện có?\n\nCác buổi dạy sẽ tính lại theo đơn giá của gói.`;
-      if (!window.confirm(msg)) return;
+    if (transferAffected > 0) {
       setTransferSaving(true);
       setAddPkgError("");
       try {
@@ -1266,6 +1271,7 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
         return;
       } finally {
         setTransferSaving(false);
+        setTransferConfirmOpen(false);
       }
     }
     setAddPkgTransfer(next);
@@ -3259,7 +3265,7 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
                           type="checkbox"
                           checked={pkg.refunded}
                           disabled={savingRefundId === pkg.id}
-                          onChange={() => void handleToggleRefunded(pkg)}
+                          onChange={() => setRefundConfirmPkg(pkg)}
                           className="w-4 h-4 accent-amber-500"
                         />
                         <span className="flex-1">
@@ -3307,7 +3313,7 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
             <button
               type="button"
               disabled={transferSaving}
-              onClick={() => void handleToggleTransfer()}
+              onClick={handleToggleTransfer}
               className={cn(
                 "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors disabled:opacity-60",
                 addPkgTransfer
@@ -3600,6 +3606,33 @@ Buổi dạy của gói sẽ tính tiền lại như thường.`;
         variant="danger"
         onConfirm={handleDeletePackage}
         loading={deletePkgLoading}
+      />
+
+      <AlertDialog
+        open={transferConfirmOpen}
+        onClose={() => { if (!transferSaving) setTransferConfirmOpen(false); }}
+        title={addPkgTransfer ? "Bỏ khách chuyển giao" : "Khách hàng chuyển giao"}
+        description={addPkgTransfer
+          ? `Bỏ khách chuyển giao cho ${transferAffected} lộ trình hiện có?\nCác buổi dạy sẽ tính lại theo đơn giá của gói.`
+          : `Chuyển ${transferAffected} lộ trình hiện có sang khách chuyển giao?\nMọi buổi dạy trước đó của khách sẽ tính 50.000đ/buổi cho PT.`}
+        confirmLabel={addPkgTransfer ? "Bỏ chuyển giao" : "Chuyển giao"}
+        cancelLabel="Hủy"
+        onConfirm={() => void applyTransferToggle()}
+        loading={transferSaving}
+      />
+
+      <AlertDialog
+        open={!!refundConfirmPkg}
+        onClose={() => { if (!savingRefundId) setRefundConfirmPkg(null); }}
+        title={refundConfirmPkg?.refunded ? "Bỏ hoàn tiền" : "Đánh dấu đã hoàn tiền"}
+        description={refundConfirmPkg?.refunded
+          ? `Bỏ đánh dấu hoàn tiền gói ${refundConfirmPkg.packageName}?\nBuổi dạy của gói sẽ tính tiền lại như thường.`
+          : `Gói ${refundConfirmPkg?.packageName ?? ""} đã hoàn tiền cho khách?\nMọi buổi dạy của gói này sẽ không tính tiền buổi dạy cho PT.`}
+        confirmLabel={refundConfirmPkg?.refunded ? "Bỏ hoàn tiền" : "Đã hoàn tiền"}
+        cancelLabel="Hủy"
+        variant={refundConfirmPkg?.refunded ? "default" : "danger"}
+        onConfirm={() => void handleToggleRefunded()}
+        loading={!!savingRefundId}
       />
 
       <AlertDialog
