@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDownWideNarrow, Plus, RotateCcw, Trash2, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,7 @@ import {
   type SheetOverride,
   type SheetRow,
 } from "@/lib/checkin-sheet";
+import { TeacherPicker } from "./teacher-picker";
 
 /**
  * TRÌNH SỬA PHIẾU CHECK-IN.
@@ -113,6 +114,19 @@ function sortRowsByDate(rows: DraftRow[]): DraftRow[] {
 export function CheckinSheetEditor({
   teachers, rows, original, override, capacity, saving, onCancel, onSave,
 }: Props) {
+  // Người đã dạy khách này (theo các buổi trên phiếu + PT phụ trách), nhiều buổi
+  // nhất lên trước — nổi lên đầu ô chọn HLV của dòng ghi tay.
+  const suggestedTeacherIds = useMemo(() => {
+    const byName = new Map(teachers.map((t) => [t.name.trim().toLowerCase(), t.id]));
+    const count = new Map<string, number>();
+    const bump = (id: string | undefined, n = 1) => {
+      if (id) count.set(id, (count.get(id) ?? 0) + n);
+    };
+    for (const r of rows) bump(r.ptId || byName.get(r.ptName.trim().toLowerCase()));
+    bump(byName.get(original.ptName.trim().toLowerCase()), 0.5);
+    return Array.from(count.entries()).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  }, [teachers, rows, original.ptName]);
+
   const [header, setHeader] = useState(() => ({
     contractCode:  override.header.contractCode  ?? original.contractCode ?? "",
     clientName:    override.header.clientName    ?? original.clientName,
@@ -413,19 +427,14 @@ export function CheckinSheetEditor({
                       // phải là một con người có thật chứ không còn là chữ gõ tay. Để
                       // trống vẫn được: buổi cũ nhiều khi không còn ai nhớ ai dạy, dòng
                       // vẫn in lên phiếu nhưng không vào "Số buổi PT" của ai.
-                      <select
+                      <TeacherPicker
                         className={INPUT}
+                        teachers={teachers}
                         value={r.ptId}
-                        onChange={(e) => patchRow(r.key, { ptId: e.target.value })}
-                      >
-                        <option value="">— Không rõ —</option>
-                        {teachers.map((t) => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                        {r.ptId !== "" && !teachers.some((t) => t.id === r.ptId) && (
-                          <option value={r.ptId}>{r.ptName || "HLV không còn trong hệ thống"}</option>
-                        )}
-                      </select>
+                        fallbackName={r.ptName}
+                        suggestedIds={suggestedTeacherIds}
+                        onChange={(id) => patchRow(r.key, { ptId: id })}
+                      />
                     ) : (
                       // Người dạy là dữ kiện của chuỗi chữ ký, không sửa được —
                       // cùng lý do với ô chữ ký và ô ảnh.
