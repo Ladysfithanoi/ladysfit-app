@@ -603,7 +603,11 @@ export function ClientDetailPage({
   const [addPkgContractType, setAddPkgContractType] = useState<"NORMAL" | "KOC" | "KOL" | "TRANSFER">("NORMAL");
   // Khách chuyển giao từ cơ sở Ladysfit khác: chọn được đủ mọi lộ trình (giai
   // đoạn 1 họ đã đi ở cơ sở cũ), và PT nhận 50.000đ cho mỗi buổi dạy.
-  const [addPkgTransfer, setAddPkgTransfer] = useState(false);
+  // Khách đã có gói chuyển giao thì ô tích bật sẵn.
+  const [addPkgTransfer, setAddPkgTransfer] = useState(
+    () => initialPackages.some((p) => p.contractType === "TRANSFER"),
+  );
+  const [transferSaving, setTransferSaving] = useState(false);
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
   const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
@@ -1197,6 +1201,47 @@ export function ClientDetailPage({
     }
   }
 
+  // Ô "Khách hàng chuyển giao". Khách chưa có lộ trình: chỉ áp vào gói sắp tạo.
+  // Khách đã có lộ trình: đổi luôn mọi gói thường → chuyển giao (hoặc ngược lại),
+  // nên mọi buổi đã dạy trước đó tính lại 50.000đ/buổi trên bảng lương.
+  async function handleToggleTransfer() {
+    const next = !addPkgTransfer;
+    const affected = packages.filter((p) => p.contractType === (next ? "NORMAL" : "TRANSFER"));
+    if (affected.length > 0) {
+      const msg = next
+        ? `Chuyển ${affected.length} lộ trình hiện có sang khách chuyển giao?\n\nMọi buổi dạy trước đó của khách sẽ tính 50.000đ/buổi cho PT.`
+        : `Bỏ khách chuyển giao cho ${affected.length} lộ trình hiện có?\n\nCác buổi dạy sẽ tính lại theo đơn giá của gói.`;
+      if (!window.confirm(msg)) return;
+      setTransferSaving(true);
+      setAddPkgError("");
+      try {
+        const res = await fetch(`/api/clients/${client.id}/transfer`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transfer: next }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
+        const { updatedIds, contractType } = await res.json() as { updatedIds: string[]; contractType: "NORMAL" | "TRANSFER" };
+        const ids = new Set(updatedIds);
+        setPackages((prev) => prev.map((p) => (ids.has(p.id) ? { ...p, contractType } : p)));
+        setToastMsg(next ? "Đã chuyển khách sang chuyển giao ✓" : "Đã bỏ khách chuyển giao ✓");
+        setTimeout(() => setToastMsg(null), 3000);
+        router.refresh();
+      } catch (err) {
+        setAddPkgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+        return;
+      } finally {
+        setTransferSaving(false);
+      }
+    }
+    setAddPkgTransfer(next);
+    // Đổi kiểu khách thì danh sách gói đổi theo — bỏ lựa chọn cũ để
+    // không giữ lại gói không còn nằm trong danh sách.
+    setAddPkgName("");
+    setAddKolSponsoredPkg("");
+    setAddPkgContractType(next ? "TRANSFER" : "NORMAL");
+  }
+
   async function handleAddPackage() {
     if (!addPkgName) return;
     const startIso = dmyToISO(addPkgStartDate);
@@ -1257,8 +1302,8 @@ export function ClientDetailPage({
       setAddPkgName("");
       setAddPkgContractCode("");
       setAddPkgStartDate(todayDmy());
-      setAddPkgContractType("NORMAL");
-      setAddPkgTransfer(false);
+      // Khách chuyển giao vẫn là khách chuyển giao ở gói sau — giữ nguyên ô tích.
+      setAddPkgContractType(addPkgTransfer ? "TRANSFER" : "NORMAL");
       setAddPkgStartWeight("");
       setAddPkgFMConfirmed(false);
       setAddKolSponsoredPkg("");
@@ -3190,17 +3235,10 @@ export function ClientDetailPage({
             {/* Khách chuyển giao — bật lên là mở full lộ trình, PT nhận 50k/buổi */}
             <button
               type="button"
-              onClick={() => {
-                const next = !addPkgTransfer;
-                setAddPkgTransfer(next);
-                // Đổi kiểu khách thì danh sách gói đổi theo — bỏ lựa chọn cũ để
-                // không giữ lại gói không còn nằm trong danh sách.
-                setAddPkgName("");
-                setAddKolSponsoredPkg("");
-                setAddPkgContractType(next ? "TRANSFER" : "NORMAL");
-              }}
+              disabled={transferSaving}
+              onClick={() => void handleToggleTransfer()}
               className={cn(
-                "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors disabled:opacity-60",
                 addPkgTransfer
                   ? "border-indigo-300 bg-indigo-50"
                   : "border-gray-200 bg-white hover:bg-gray-50",
@@ -3218,6 +3256,8 @@ export function ClientDetailPage({
                 </span>
                 <span className={cn("block text-[10px]", addPkgTransfer ? "text-indigo-500" : "text-gray-400")}>
                   Chuyển từ cơ sở Ladysfit khác về — chọn được mọi lộ trình, PT nhận 50.000đ/buổi dạy
+                  {packages.some((p) => p.contractType === "NORMAL" || p.contractType === "TRANSFER")
+                    && " · áp cho cả các lộ trình hiện có (mọi buổi đã dạy)"}
                 </span>
               </span>
             </button>
