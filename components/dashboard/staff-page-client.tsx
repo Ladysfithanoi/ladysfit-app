@@ -887,7 +887,8 @@ export function StaffPageClient({
                 className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
               />
               <p className="text-[11px] text-gray-400">
-                Lịch nghỉ khoá mọi ngày trước mốc này và tính phép năm từ đây.
+                Ngày vào <span className="font-semibold">công ty</span> — chuyển cơ sở thì giữ nguyên, chỉ đổi ô Cơ sở.
+                Các tháng trước mốc này không có lương cứng; lịch nghỉ khoá mọi ngày trước mốc và tính phép năm từ đây.
               </p>
             </Field>
           </div>

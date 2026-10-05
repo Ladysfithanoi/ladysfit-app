@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { captureTrash } from "@/lib/trash";
-import { parseDayInput } from "@/lib/leave-days";
+import { firstWorkDayOf, hireDayOf, parseDayInput } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { revokeTrustedDevices } from "@/lib/login-device";
 
@@ -135,7 +135,32 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // hiếm khi trùng ngày người đó thực sự vào làm. Xoá trắng ô thì về null và
   // lịch nghỉ lùi lại mốc tạo tài khoản.
   if (employmentStartDate !== undefined) {
-    updateData.employmentStartDate = parseDayInput(employmentStartDate);
+    const nextStart = parseDayInput(employmentStartDate);
+    // KHÔNG DỜI NGÀY VÀO LÀM QUA CHỖ ĐÃ ĐI LÀM. Đây là ngày vào CÔNG TY — mọi tháng
+    // trước mốc này bị coi là chưa đi làm và mất trắng lương cứng (lib/leave-days
+    // unhiredWorkDays), ở MỌI cơ sở. Ca đã xảy ra: chuyển PT Mỹ Đình → Trần Duy
+    // Hưng, ô này bị sửa thành ngày 01 của tháng chuyển, bảng lương tháng trước ở
+    // Mỹ Đình tụt về 0 công. Chuyển cơ sở thì chỉ đổi ô Cơ sở.
+    // Form luôn gửi lại ô này dù không sửa — chỉ kiểm tra khi ngày thật sự đổi,
+    // không thì người đang có ngày sai sẵn sẽ không lưu được thay đổi nào khác.
+    const current = await prisma.user.findUnique({
+      where: { id: params.id }, select: { employmentStartDate: true },
+    });
+    const currentDay = hireDayOf(current?.employmentStartDate ?? null);
+    const changed = (nextStart?.getTime() ?? null) !== (currentDay?.getTime() ?? null);
+    if (nextStart && changed) {
+      const firstWork = await firstWorkDayOf(params.id);
+      if (firstWork && nextStart > firstWork) {
+        const shown = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
+        return NextResponse.json({
+          error:
+            `Nhân sự này đã đi làm từ ${shown(firstWork)} (có buổi dạy / bảng lương / ngày nghỉ từ đó). ` +
+            `Ngày bắt đầu làm việc là ngày vào công ty, không được muộn hơn ${shown(firstWork)} — ` +
+            `dời ra sau sẽ xoá lương cứng các tháng trước. Chuyển cơ sở thì chỉ cần đổi ô Cơ sở.`,
+        }, { status: 400 });
+      }
+    }
+    updateData.employmentStartDate = nextStart;
   }
 
   if (role === "FM") {

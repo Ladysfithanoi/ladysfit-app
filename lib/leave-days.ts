@@ -192,6 +192,33 @@ export async function getHireDate(userId: string): Promise<Date | null> {
 }
 
 /**
+ * Mốc muộn nhất mà "Ngày bắt đầu làm việc" còn được phép đặt: người này chắc chắn
+ * đã đi làm từ đó. Lấy cái sớm nhất trong:
+ *   • buổi dạy đầu tiên do họ mở (ngày theo giờ VN),
+ *   • ngày nghỉ đầu tiên trên lịch (chỉ tích được từ ngày vào làm),
+ *   • NGÀY CUỐI của tháng có bảng lương sớm nhất — có lương tháng đó nghĩa là đã
+ *     đi làm trong tháng, nhưng không biết từ ngày nào.
+ * Chưa có gì thì null — đặt ngày nào cũng được.
+ */
+export async function firstWorkDayOf(userId: string): Promise<Date | null> {
+  const [log, leave, salary] = await Promise.all([
+    prisma.workoutLog.findFirst({
+      where: { createdById: userId }, orderBy: { sessionDate: "asc" }, select: { sessionDate: true },
+    }),
+    prisma.leaveDay.findFirst({ where: { userId }, orderBy: { date: "asc" }, select: { date: true } }),
+    prisma.salaryRecord.findFirst({
+      where: { userId }, orderBy: [{ year: "asc" }, { month: "asc" }], select: { month: true, year: true },
+    }),
+  ]);
+  const candidates: Date[] = [];
+  if (log) candidates.push(hireDayOf(new Date(log.sessionDate.getTime() + 7 * 3600_000))!);
+  if (leave) candidates.push(leave.date);
+  if (salary) candidates.push(utcDay(salary.year, salary.month + 1, 0));
+  if (candidates.length === 0) return null;
+  return new Date(Math.min(...candidates.map((d) => d.getTime())));
+}
+
+/**
  * Ngày nhận việc quy về nửa đêm UTC, để so ngày với ngày.
  *
  * `employmentStartDate` là DateTime (có thể kèm giờ) còn `leave_days.date` là
