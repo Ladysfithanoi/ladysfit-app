@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     type EnrollmentRow = {
       id: string; clientId: string; contractCode: string | null;
       packageName: string; sessions: number; sessionsUsed: number;
-      contractType: string; fullName: string;
+      contractType: string; refunded: boolean; fullName: string;
     };
     type SessionRow = {
       stt: number; ptName: string; clientName: string;
@@ -148,7 +148,7 @@ export async function POST(req: Request) {
       const enrollments = await prisma.$queryRawUnsafe<EnrollmentRow[]>(
         `SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName",
                 pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
-                c."fullName"
+                pe.refunded, c."fullName"
          FROM package_enrollments pe
          JOIN clients c ON c.id = pe."clientId"
          WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
@@ -179,7 +179,7 @@ export async function POST(req: Request) {
           valuePerSession = 60_000;
           totalValue = sessionsThisMonth * 60_000;
         } else {
-          valuePerSession = sessionPayRate(e.packageName, contractType);
+          valuePerSession = sessionPayRate(e.packageName, contractType, e.refunded);
           totalValue = sessionsThisMonth * (valuePerSession as number);
         }
 

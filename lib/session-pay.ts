@@ -6,6 +6,7 @@ import {
   SESSION_PAY_RESIDENT,
   SESSION_PAY_TRIAL,
   SESSION_PAY_TRANSFER,
+  isRefundedTrial,
 } from "@/lib/packages";
 
 /**
@@ -18,6 +19,7 @@ import {
  *
  * Khách CHUYỂN GIAO đi rổ riêng vì đơn giá của họ (50.000đ) không bám theo gói.
  * KOL không có rổ nào — hợp đồng KOL trả hoa hồng 60.000đ/buổi ở đường khác.
+ * Gói L0 đã hoàn tiền cho khách cũng không có rổ nào: buổi dạy không ra tiền.
  */
 
 export type ShowBuckets = {
@@ -29,7 +31,12 @@ export type ShowBuckets = {
   showsTransfer:  number;
 };
 
-export type TaughtLike = { packageName: string; contractType: string };
+export type TaughtLike = {
+  packageName:  string;
+  contractType: string;
+  /** Gói L0 đã hoàn tiền cho khách — buổi dạy không ra tiền. */
+  refunded?:    boolean | null;
+};
 
 const L1_L2_LOYAL = new Set(["L1", "L2", "Loyalfit"]);
 
@@ -37,9 +44,13 @@ export function emptyBuckets(): ShowBuckets {
   return { showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0, showsTransfer: 0 };
 }
 
-/** Rổ đơn giá của một buổi dạy; null = không tính vào tiền buổi dạy (KOL). */
+/**
+ * Rổ đơn giá của một buổi dạy; null = không tính vào tiền buổi dạy (KOL, hoặc
+ * gói L0 đã hoàn tiền cho khách).
+ */
 export function bucketOf(row: TaughtLike): keyof ShowBuckets | null {
   if (row.contractType === "KOL") return null;
+  if (isRefundedTrial(row.packageName, row.refunded)) return null;
   if (row.contractType === "TRANSFER") return "showsTransfer";
   if (row.packageName === RESIDENT_PACKAGE) return "showsResident";
   if (row.packageName === TRIAL_PACKAGE) return "showsL0";

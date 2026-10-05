@@ -24,6 +24,8 @@ export type ManualSessionRow = {
   enrollmentId: string;
   packageName:  string;
   contractType: ContractTypeName;
+  /** Gói L0 đã hoàn tiền — buổi dạy không ra tiền (xem lib/session-pay.bucketOf). */
+  refunded:     boolean;
   /** Mốc ISO của buổi — dùng để xếp vào đúng tháng lương. */
   date:         string;
 };
@@ -70,6 +72,7 @@ export async function getManualSheetSessions(filter: Filter = {}): Promise<Manua
           clientId: true,
           packageName: true,
           contractType: true,
+          refunded: true,
         },
       },
     },
@@ -100,6 +103,7 @@ export async function getManualSheetSessions(filter: Filter = {}): Promise<Manua
         enrollmentId: enrollment.id,
         packageName:  enrollment.packageName,
         contractType: enrollment.contractType as ContractTypeName,
+        refunded:     enrollment.refunded,
         date:         row.date,
       });
     }

@@ -56,6 +56,7 @@ export async function GET(req: Request) {
       sessions: number;
       sessionsUsed: number;
       contractType: string;
+      refunded: boolean;
       fullName: string;
     };
 
@@ -116,7 +117,7 @@ export async function GET(req: Request) {
       `
       SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
              pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
-             c."fullName"
+             pe.refunded, c."fullName"
       FROM package_enrollments pe
       JOIN clients c ON c.id = pe."clientId"
       WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c."assignedPTId" = $1
@@ -136,7 +137,7 @@ export async function GET(req: Request) {
           `
           SELECT pe.id, pe."clientId", pe."contractCode", pe."packageName", pe."packageStage",
                  pe.sessions, pe."sessionsUsed", pe."contractType"::text AS "contractType",
-                 c."fullName"
+                 pe.refunded, c."fullName"
           FROM package_enrollments pe
           JOIN clients c ON c.id = pe."clientId"
           WHERE ((${chargeablePackageSql()} AND c.status = 'ACTIVE') OR pe.id = ANY($2::text[])) AND c.id = ANY($1::text[])
@@ -210,6 +211,8 @@ export async function GET(req: Request) {
         /** Và: phần Admin/FM cộng/trừ tay cho tháng này. 0 = không ai chỉnh. */
         sessionsAdjusted,
         contractType,
+        /** Gói L0 đã hoàn tiền cho khách — buổi dạy 0đ. */
+        refunded: e.refunded === true,
         photo: photo ? {
           id: photo.id,
           checkinImages:   photo.checkinImages   ? JSON.parse(photo.checkinImages)   : [],
@@ -251,7 +254,7 @@ export async function GET(req: Request) {
         };
       }
 
-      const vpSession = sessionPayRate(e.packageName, contractType);
+      const vpSession = sessionPayRate(e.packageName, contractType, e.refunded);
       return {
         ...base,
         valuePerSession: vpSession,

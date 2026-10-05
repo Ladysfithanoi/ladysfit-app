@@ -15,10 +15,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     startDate: string | null; endDate: string | null; durationDays: number;
     reservedDays: number; extensionDays: number; price: number;
     contractType: string; status: string; notes: string | null; createdAt: string;
+    refunded: boolean;
   }[]>(
     `SELECT id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
             "startDate", "endDate", "durationDays", "reservedDays", "extensionDays", price,
-            "contractType", status, notes, "createdAt"
+            "contractType", status, notes, "createdAt", refunded
      FROM package_enrollments WHERE "clientId" = $1 ORDER BY "createdAt" ASC`,
     params.id
   );
@@ -31,6 +32,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     reservedDays: Number(r.reservedDays), extensionDays: Number(r.extensionDays),
     price: Number(r.price), contractType: r.contractType,
     status: r.status, notes: r.notes, createdAt: r.createdAt,
+    refunded: r.refunded,
   })));
 }
 

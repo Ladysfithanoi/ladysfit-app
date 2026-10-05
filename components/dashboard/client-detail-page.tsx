@@ -57,6 +57,8 @@ type PackageEnrollment = {
   contractCode: string | null;
   /** Mục tiêu giảm (kg) của lộ trình L3/L4 — đạt thì PT được thưởng transform. */
   goalLossKg: number | null;
+  /** Gói L0 đã hoàn tiền cho khách — buổi dạy của gói không tính tiền cho PT. */
+  refunded: boolean;
   createdAt: string;
 };
 
@@ -608,6 +610,7 @@ export function ClientDetailPage({
     () => initialPackages.some((p) => p.contractType === "TRANSFER"),
   );
   const [transferSaving, setTransferSaving] = useState(false);
+  const [savingRefundId, setSavingRefundId] = useState<string | null>(null);
   const [addPkgStartWeight, setAddPkgStartWeight] = useState("");
   const [addPkgFMConfirmed, setAddPkgFMConfirmed] = useState(false);
   const [addKolSponsoredPkg, setAddKolSponsoredPkg] = useState("");
@@ -1107,6 +1110,37 @@ export function ClientDetailPage({
     }
   }
 
+  // Gói L0 hoàn tiền cho khách → buổi dạy của gói không tính tiền cho PT.
+  async function handleToggleRefunded(pkg: PackageEnrollment) {
+    const next = !pkg.refunded;
+    const msg = next
+      ? `Đánh dấu gói ${pkg.packageName} đã hoàn tiền?
+
+Mọi buổi dạy của gói này sẽ KHÔNG tính tiền buổi dạy cho PT.`
+      : `Bỏ đánh dấu hoàn tiền gói ${pkg.packageName}?
+
+Buổi dạy của gói sẽ tính tiền lại như thường.`;
+    if (!window.confirm(msg)) return;
+    setSavingRefundId(pkg.id);
+    try {
+      const res = await fetch(`/api/clients/${client.id}/packages/${pkg.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refunded: next }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Có lỗi xảy ra");
+      setPackages((prev) => prev.map((p) => (p.id === pkg.id ? { ...p, refunded: next } : p)));
+      setToastMsg(next ? "Đã đánh dấu hoàn tiền ✓" : "Đã bỏ hoàn tiền ✓");
+      setTimeout(() => setToastMsg(null), 3000);
+      router.refresh();
+    } catch (err) {
+      setToastMsg(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      setTimeout(() => setToastMsg(null), 3000);
+    } finally {
+      setSavingRefundId(null);
+    }
+  }
+
   async function handleSaveStartDate(pkgId: string) {
     const raw = pkgStartDateInputs[pkgId] ?? isoToDmy(packages.find((p) => p.id === pkgId)?.startDate ?? null);
     if (!raw || raw.length < 10) return;
@@ -1295,6 +1329,7 @@ export function ClientDetailPage({
         notes: created.notes ?? null,
         contractCode: created.contractCode ?? null,
         goalLossKg: created.goalLossKg ?? null,
+        refunded: created.refunded === true,
         reservedDays: created.reservedDays ?? 0,
         extensionDays: created.extensionDays ?? 0,
         createdAt: created.createdAt,
@@ -1910,6 +1945,9 @@ export function ClientDetailPage({
                           {isTransfer && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Chuyển giao</span>
                           )}
+                          {pkg.packageName === TRIAL_PACKAGE && pkg.refunded && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Đã hoàn tiền</span>
+                          )}
                         </div>
                         <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", PKG_STATUS_STYLE[getEffectiveStatus(pkg)])}>
                           {PKG_STATUS_LABEL[getEffectiveStatus(pkg)]}
@@ -2297,6 +2335,9 @@ export function ClientDetailPage({
                               )}
                               {pkg.contractType === "TRANSFER" && (
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Chuyển giao</span>
+                              )}
+                              {pkg.packageName === TRIAL_PACKAGE && pkg.refunded && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Đã hoàn tiền</span>
                               )}
                             </div>
                           </td>
@@ -3205,6 +3246,36 @@ export function ClientDetailPage({
                         Mục tiêu giảm: <strong>{pkg.goalLossKg != null ? `${pkg.goalLossKg} kg` : "chưa đặt"}</strong>
                       </div>
                     )
+                  )}
+                  {/* Gói L0 hoàn tiền cho khách → buổi dạy của gói không tính tiền cho PT. */}
+                  {pkg.packageName === TRIAL_PACKAGE && (
+                    canEditSessions ? (
+                      <label className={cn(
+                        "flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer",
+                        pkg.refunded ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-white",
+                        savingRefundId === pkg.id && "opacity-60 cursor-wait",
+                      )}>
+                        <input
+                          type="checkbox"
+                          checked={pkg.refunded}
+                          disabled={savingRefundId === pkg.id}
+                          onChange={() => void handleToggleRefunded(pkg)}
+                          className="w-4 h-4 accent-amber-500"
+                        />
+                        <span className="flex-1">
+                          <span className={cn("block text-xs font-bold", pkg.refunded ? "text-amber-700" : "text-gray-600")}>
+                            Đã hoàn tiền
+                          </span>
+                          <span className="block text-[10px] text-gray-400">
+                            Tích vào thì buổi dạy của gói {TRIAL_PACKAGE} này không tính tiền cho PT
+                          </span>
+                        </span>
+                      </label>
+                    ) : pkg.refunded ? (
+                      <p className="text-xs font-semibold text-amber-700">
+                        Đã hoàn tiền — buổi dạy gói này không tính tiền
+                      </p>
+                    ) : null
                   )}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-16 flex-shrink-0">Mã HĐ:</span>

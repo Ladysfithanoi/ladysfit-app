@@ -129,6 +129,14 @@ export function isSponsoredPackage(packageName: string) {
 /** Gói trải nghiệm 4 buổi — có riêng một bậc tiền buổi dạy. */
 export const TRIAL_PACKAGE = "L0";
 
+/**
+ * Gói L0 đã hoàn tiền cho khách → buổi dạy của gói không tính tiền cho PT. Chỉ
+ * L0 có hoàn tiền; cờ lỡ bật ở gói khác cũng không có tác dụng.
+ */
+export function isRefundedTrial(packageName: string, refunded?: boolean | null): boolean {
+  return packageName === TRIAL_PACKAGE && refunded === true;
+}
+
 export const SESSION_PAY_RESIDENT = 35_000;
 export const SESSION_PAY_TRIAL = 60_000;
 export const SESSION_PAY_L1_L2_LOYAL = 60_000;
@@ -146,9 +154,12 @@ export type ContractTypeName = "NORMAL" | "KOC" | "KOL" | "TRANSFER";
  * loại hợp đồng thắng tên gói: luôn 50.000đ — đó là điểm khác duy nhất của
  * khách chuyển giao so với khách thường.
  *
+ * Gói L0 ĐÃ HOÀN TIỀN cho khách thì buổi dạy của gói đó không ra tiền (0đ).
+ *
  * KOC/KOL không dùng hàm này — hai loại hợp đồng đó có cách tính hoa hồng riêng.
  */
-export function sessionPayRate(packageName: string, contractType?: string): number {
+export function sessionPayRate(packageName: string, contractType?: string, refunded?: boolean): number {
+  if (isRefundedTrial(packageName, refunded)) return 0;
   if (contractType === "TRANSFER") return SESSION_PAY_TRANSFER;
   if (packageName === RESIDENT_PACKAGE) return SESSION_PAY_RESIDENT;
   if (packageName === TRIAL_PACKAGE) return SESSION_PAY_TRIAL;

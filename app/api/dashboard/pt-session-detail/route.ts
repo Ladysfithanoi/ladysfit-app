@@ -39,7 +39,7 @@ export async function GET(req: Request) {
             fullName: true,
             packageEnrollments: {
               where:   { status: "ACTIVE" },
-              select:  { packageName: true, contractType: true },
+              select:  { packageName: true, contractType: true, refunded: true },
               take:    1,
               orderBy: { createdAt: "desc" },
             },
@@ -58,6 +58,7 @@ export async function GET(req: Request) {
     clientName:  string;
     packageName: string;
     contractType: string;
+    refunded:    boolean;
     sessions: { date: string; sessionName: string; phase: string; notes: string | null }[];
   }>();
 
@@ -74,6 +75,7 @@ export async function GET(req: Request) {
         clientName:  log.client.fullName,
         packageName: log.client.packageEnrollments[0]?.packageName ?? "",
         contractType: log.client.packageEnrollments[0]?.contractType ?? "NORMAL",
+        refunded:    log.client.packageEnrollments[0]?.refunded ?? false,
         sessions:    [],
       });
     }

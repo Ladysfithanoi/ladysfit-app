@@ -530,6 +530,9 @@ model PackageEnrollment {
   // Mục tiêu giảm (kg) của lộ trình L3/L4 — đạt thì PT được thưởng transform.
   // L1/L2 dùng ngưỡng cố định, không đọc cột này. Xem lib/transform-bonus.ts.
   goalLossKg    Float?
+  // Gói L0 đã hoàn tiền cho khách — buổi dạy của gói không tính tiền cho PT.
+  // Xem lib/session-pay.bucketOf.
+  refunded      Boolean                 @default(false)
   createdAt     DateTime                @default(now())
 
   client                Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)

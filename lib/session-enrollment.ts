@@ -37,7 +37,7 @@ export const ENROLLMENT_OF_LOG_JOIN = `
     LEFT JOIN package_enrollments pe_charged
            ON pe_charged.id = wl."packageEnrollmentId"
     LEFT JOIN LATERAL (
-      SELECT p.id, p."packageName", p."contractType"::text AS "contractType"
+      SELECT p.id, p."packageName", p."contractType"::text AS "contractType", p.refunded
       FROM package_enrollments p
       WHERE p."clientId" = wl."clientId"
       ORDER BY
@@ -56,6 +56,9 @@ export const ENROLLMENT_PACKAGE_NAME = `COALESCE(pe_charged."packageName", pe_gu
 
 /** Loại hợp đồng của lộ trình đó. */
 export const ENROLLMENT_CONTRACT_TYPE = `COALESCE(pe_charged."contractType"::text, pe_guess."contractType", 'NORMAL')`;
+
+/** Lộ trình đó đã hoàn tiền cho khách chưa (chỉ có nghĩa với L0 — xem isRefundedTrial). */
+export const ENROLLMENT_REFUNDED = `COALESCE(pe_charged.refunded, pe_guess.refunded, false)`;
 
 /**
  * Buổi tập ĐƯỢC TÍNH: đã đóng buổi có bằng chứng kèm nhật ký buổi tập.

@@ -7,6 +7,7 @@ import {
   ENROLLMENT_ID,
   ENROLLMENT_OF_LOG_JOIN,
   ENROLLMENT_PACKAGE_NAME,
+  ENROLLMENT_REFUNDED,
   TAUGHT_SESSION_WHERE,
 } from "@/lib/session-enrollment";
 
@@ -55,6 +56,8 @@ export type TaughtSessionRow = {
   enrollmentId: string | null;
   packageName:  string;
   contractType: ContractTypeName;
+  /** Gói L0 đã hoàn tiền — buổi dạy không ra tiền (xem lib/session-pay.bucketOf). */
+  refunded:     boolean;
 };
 
 export async function getTaughtSessions(
@@ -78,6 +81,7 @@ export async function getTaughtSessions(
       enrollmentId: m.enrollmentId,
       packageName:  m.packageName,
       contractType: m.contractType,
+      refunded:     m.refunded,
     })),
   ];
 }
@@ -95,7 +99,8 @@ function taughtFromLogs(
       wl."clientId"    AS "clientId",
       ${ENROLLMENT_ID}            AS "enrollmentId",
       ${ENROLLMENT_PACKAGE_NAME}  AS "packageName",
-      ${ENROLLMENT_CONTRACT_TYPE} AS "contractType"
+      ${ENROLLMENT_CONTRACT_TYPE} AS "contractType",
+      ${ENROLLMENT_REFUNDED}      AS "refunded"
     FROM workout_logs wl
     ${ENROLLMENT_OF_LOG_JOIN}
     WHERE wl."createdById" = ANY($1::text[])
@@ -213,6 +218,7 @@ export type AdjustmentRow = {
   enrollmentId: string;
   packageName:  string;
   contractType: ContractTypeName;
+  refunded:     boolean;
   delta:        number;
 };
 
@@ -231,7 +237,8 @@ export async function getSessionAdjustments(
     SELECT a."ptId", a."enrollmentId", a.delta,
            pe."clientId",
            pe."packageName",
-           pe."contractType"::text AS "contractType"
+           pe."contractType"::text AS "contractType",
+           pe.refunded
     FROM pt_session_adjustments a
     JOIN package_enrollments pe ON pe.id = a."enrollmentId"
     WHERE a."ptId" = ANY($1::text[]) AND a.month = $2 AND a.year = $3

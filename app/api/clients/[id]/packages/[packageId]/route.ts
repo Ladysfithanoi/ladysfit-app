@@ -6,6 +6,7 @@ import { recountClientContracts } from "@/lib/recount-contracts";
 import { refreshClientChurnStatus, reactivateClientOnNewPackage } from "@/lib/client-status";
 import { closeFinishedPackages, reopenExtendedPackages } from "@/lib/package-status";
 import { captureTrash } from "@/lib/trash";
+import { TRIAL_PACKAGE } from "@/lib/packages";
 
 export async function PUT(
   req: Request,
@@ -15,7 +16,7 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { startDate, sessionsUsed, status, notes, contractCode, reservedDays, extensionDays, goalLossKg } = body;
+  const { startDate, sessionsUsed, status, notes, contractCode, reservedDays, extensionDays, goalLossKg, refunded } = body;
 
   const existing = await prisma.packageEnrollment.findUnique({
     where: { id: params.packageId },
@@ -53,6 +54,19 @@ export async function PUT(
       return NextResponse.json({ error: "Mục tiêu giảm không hợp lệ" }, { status: 400 });
     }
     data.goalLossKg = kg;
+  }
+
+  // Gói L0 đã hoàn tiền cho khách → buổi dạy của gói không ra tiền cho PT (xem
+  // lib/session-pay.bucketOf). Đổi tiền lương nên chỉ Admin/FM, và chỉ L0 có
+  // hoàn tiền.
+  if (refunded !== undefined) {
+    if (!["ADMIN", "FM"].includes(session.user.role)) {
+      return NextResponse.json({ error: "Chỉ Admin/FM đánh dấu hoàn tiền được" }, { status: 403 });
+    }
+    if (existing.packageName !== TRIAL_PACKAGE) {
+      return NextResponse.json({ error: `Chỉ gói ${TRIAL_PACKAGE} có hoàn tiền` }, { status: 400 });
+    }
+    data.refunded = refunded === true;
   }
 
   // Resolve the effective values for endDate recalculation

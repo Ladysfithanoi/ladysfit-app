@@ -74,11 +74,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
         startDate: Date | null; endDate: Date | null; durationDays: bigint;
         reservedDays: bigint; extensionDays: bigint; price: number;
         contractType: string; status: string; notes: string | null; createdAt: Date;
-        goalLossKg: number | null;
+        goalLossKg: number | null; refunded: boolean;
       }[]>(
         `SELECT id, "clientId", "contractCode", "packageName", "packageStage", sessions, "sessionsUsed",
                 "startDate", "endDate", "durationDays", "reservedDays", "extensionDays", price,
-                "contractType", status, notes, "createdAt", "goalLossKg"
+                "contractType", status, notes, "createdAt", "goalLossKg", refunded
          FROM package_enrollments WHERE "clientId" = $1 ORDER BY "createdAt" ASC`,
         params.id
       ).catch((e) => { console.error("enrollments query failed:", e); return []; }),
@@ -197,7 +197,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
     startDate: Date | null; endDate: Date | null; durationDays: bigint;
     reservedDays: bigint; extensionDays: bigint; price: number;
     contractType: string; status: string; notes: string | null; createdAt: Date;
-    goalLossKg: number | null;
+    goalLossKg: number | null; refunded: boolean;
   };
   const now = new Date();
   const serializedPackages = (enrollments as EnrollmentRaw[]).map((p) => {
@@ -218,6 +218,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       notes: p.notes,
       contractCode: p.contractCode ?? null,
       goalLossKg: p.goalLossKg != null ? Number(p.goalLossKg) : null,
+      refunded: p.refunded === true,
       createdAt: p.createdAt.toISOString(),
       contractType: (p.contractType ?? "NORMAL") as "NORMAL" | "KOC" | "KOL" | "TRANSFER",
     };
