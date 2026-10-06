@@ -14,8 +14,6 @@ type Row = {
   rank: number;
   name: string;
   branchName: string | null;
-  levelName: string | null;
-  levelColor: string | null;
   transformedCount: number;
   points: number;
 };
@@ -91,17 +89,6 @@ function RankRowItem({ row, isMyPt }: { row: Row; isMyPt: boolean }) {
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-          {row.levelName && (
-            <span
-              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-              style={{
-                backgroundColor: (row.levelColor || "#6b7280") + "22",
-                color: row.levelColor || "#6b7280",
-              }}
-            >
-              {row.levelName}
-            </span>
-          )}
           {row.branchName && (
             <span className="text-[10px] font-semibold text-gray-400 truncate">
               {row.branchName}

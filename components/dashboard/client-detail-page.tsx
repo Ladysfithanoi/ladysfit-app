@@ -4141,7 +4141,6 @@ export function ClientDetailPage({
         <CheckinSheetModal
           clientId={client.id}
           enrollmentId={sheetPkg.id}
-          packageName={sheetPkg.name}
           onClose={() => setSheetPkg(null)}
         />
       )}

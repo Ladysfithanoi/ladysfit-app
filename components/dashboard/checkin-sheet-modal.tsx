@@ -221,17 +221,20 @@ function drawFitted(
   ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
-export function CheckinSheetModal({
-  clientId,
-  enrollmentId,
-  packageName,
-  onClose,
-}: {
-  clientId: string;
-  enrollmentId: string;
-  packageName: string;
-  onClose: () => void;
-}) {
+/**
+ * `forClient`: mở từ cổng khách hàng — phiếu của gói đang tập, chỉ xem và tải ảnh,
+ * không sửa, không có lời dặn dành cho nhân viên.
+ */
+export function CheckinSheetModal(
+  props:
+    | { forClient?: false; clientId: string; enrollmentId: string; onClose: () => void }
+    | { forClient: true; onClose: () => void }
+) {
+  const { onClose } = props;
+  const forClient = props.forClient === true;
+  const sheetUrl = props.forClient
+    ? "/api/my/checkin-sheet"
+    : `/api/clients/${props.clientId}/checkin-sheet?enrollmentId=${props.enrollmentId}`;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -243,11 +246,11 @@ export function CheckinSheetModal({
   const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async (): Promise<SheetData | null> => {
-    const res = await fetch(`/api/clients/${clientId}/checkin-sheet?enrollmentId=${enrollmentId}`);
+    const res = await fetch(sheetUrl);
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? "Không tải được phiếu check-in");
     return body as SheetData;
-  }, [clientId, enrollmentId]);
+  }, [sheetUrl]);
 
   // ── Nạp dữ liệu ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -274,6 +277,8 @@ export function CheckinSheetModal({
    * lưu có thể khác cái lần sau mở lại, và không ai biết bản nào mới đúng.
    */
   async function handleSave(next: SheetOverride) {
+    if (props.forClient) return;
+    const { clientId, enrollmentId } = props;
     setSaving(true);
     setError("");
     try {
@@ -584,7 +589,7 @@ export function CheckinSheetModal({
       .replace(/[^a-zA-Z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
     const suffix = d.pageCount > 1 ? `-to-${pageIndex + 1}` : "";
-    return `Phieu-check-in-${safe}-${packageName}${suffix}.png`;
+    return `Phieu-check-in-${safe}-${d.packageName}${suffix}.png`;
   }
 
   /**
@@ -672,7 +677,7 @@ export function CheckinSheetModal({
                 : "Đang tải…"}
             </p>
             {/* Phiếu ngắn đi thì phải nói vì sao, không để người đọc tự đoán. */}
-            {data != null && data.excludedBeforeStart > 0 && (
+            {!forClient && data != null && data.excludedBeforeStart > 0 && (
               <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-600">
                 {data.excludedBeforeStart} buổi diễn ra trước ngày bắt đầu lộ trình
                 {data.startDate ? ` (${fmtDate(sheetDay(data.startDate))})` : ""} nên không lên phiếu này —
@@ -682,7 +687,7 @@ export function CheckinSheetModal({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {/* Cây bút chỉ hiện khi Admin đã bật ở Cài đặt → Cấp độ PT. */}
-            {data?.canEdit && !editing && (
+            {!forClient && data?.canEdit && !editing && (
               <button
                 onClick={() => setEditing(true)}
                 className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-[#fff0f0] hover:text-[#f15b5c]"
@@ -793,9 +798,11 @@ export function CheckinSheetModal({
               </button>
             )}
             <p className="order-last basis-full text-xs leading-snug text-gray-400 sm:order-none sm:min-w-0 sm:flex-1 sm:basis-auto">
-              {pageCount > 1
-                ? `Tải về ${pageCount} ảnh PNG — mỗi tờ một ảnh — để lưu vào hồ sơ lương của buổi dạy.`
-                : "Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy."}
+              {forClient
+                ? "Mỗi buổi tập đã check-out đều có trên phiếu, kèm chữ ký và ảnh của bạn."
+                : pageCount > 1
+                  ? `Tải về ${pageCount} ảnh PNG — mỗi tờ một ảnh — để lưu vào hồ sơ lương của buổi dạy.`
+                  : "Tải về dạng ảnh PNG để lưu vào hồ sơ lương của buổi dạy."}
             </p>
             <button
               onClick={onClose}

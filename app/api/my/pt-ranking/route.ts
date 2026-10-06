@@ -6,8 +6,8 @@ import { computeRanking } from "@/lib/ranking";
 import { currentPeriod, periodLabel, type RankPeriod } from "@/lib/ranking-config";
 
 // Bảng xếp hạng nhân sự cho khách hàng xem ở trang Tổng quan.
-// Chỉ trả về thứ hạng, điểm tổng và số khách transform — doanh số và điểm thi
-// là số liệu nội bộ nên không gửi ra ngoài cổng khách hàng.
+// Chỉ trả về thứ hạng, điểm tổng và số khách transform — doanh số, điểm thi và
+// cấp của nhân sự là số liệu nội bộ nên không gửi ra ngoài cổng khách hàng.
 export async function GET(req: Request) {
   const session = await getServerSession(clientAuthOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,8 +34,6 @@ export async function GET(req: Request) {
       rank: r.rank,
       name: r.name,
       branchName: r.branchName,
-      levelName: r.levelName,
-      levelColor: r.levelColor,
       transformedCount: r.transformedCount,
       points: r.points,
     })),

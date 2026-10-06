@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { sheetDay } from "@/lib/checkin-sheet";
 import Link from "next/link";
-import { Star, TrendingDown, Plus, Flag, Ruler } from "lucide-react";
+import { Star, TrendingDown, Plus, Flag, Ruler, ClipboardCheck } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 import { PtRankingSection } from "./pt-ranking-section";
+import { CheckinSheetModal } from "@/components/dashboard/checkin-sheet-modal";
 import { OutsideGymActivity, type PortalActivityLog } from "./outside-gym-activity";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
 import { MEASUREMENT_FIELDS, type BodyMeasurementValues } from "@/lib/body-measurements";
@@ -49,6 +50,7 @@ export function OverviewTab({
 }: Props) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [checkinOpen, setCheckinOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -120,9 +122,21 @@ export function OverviewTab({
 
   return (
     <>
+      {checkinOpen && <CheckinSheetModal forClient onClose={() => setCheckinOpen(false)} />}
+
       {/* Welcome */}
       <div className="bg-gradient-to-br from-[#f15b5c] to-[#e04a4b] rounded-3xl p-5 text-white mb-4 shadow-md shadow-[#f15b5c]/20">
-        <p className="text-lg font-extrabold">Xin chào, {clientName.split(" ").pop()}! 💪</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-lg font-extrabold">Xin chào, {clientName.split(" ").pop()}! 💪</p>
+          {/* Mở phiếu check-in của gói đang tập — chỉ phiếu, không dẫn sang hồ sơ. */}
+          <button
+            onClick={() => setCheckinOpen(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-white/30"
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            Số buổi tập
+          </button>
+        </div>
         <p className="text-sm opacity-80 mt-0.5">Hãy kiên trì — kết quả sẽ đến!</p>
         <p className="mt-3 text-xs font-bold opacity-70 uppercase tracking-wide">
           {motivation(progressPct)}

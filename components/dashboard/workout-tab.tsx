@@ -286,7 +286,6 @@ function LastSessionSummary({
         <CheckinSheetModal
           clientId={clientId}
           enrollmentId={sheet.id}
-          packageName={sheet.name}
           onClose={() => setSheet(null)}
         />
       )}
@@ -1992,7 +1991,6 @@ function ProgramView({
         <CheckinSheetModal
           clientId={clientId}
           enrollmentId={autoSheet.id}
-          packageName={autoSheet.name}
           onClose={() => setAutoSheet(null)}
         />
       )}
