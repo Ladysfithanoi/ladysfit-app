@@ -8,12 +8,15 @@
  *   • Nghỉ thường — bị trừ 1 ngày công thực tế của bảng lương tháng đó.
  *   • Nghỉ nửa ngày — chỉ bị trừ 0,5 ngày công thực tế.
  *
+ * FM ghi kèm lý do nghỉ của ngày đó (hiện ngay trên ô lịch) — lý do không ảnh
+ * hưởng lương, sửa riêng qua PATCH /api/leave.
+ *
  * Chủ nhật không tích được vì ngày công chuẩn đã trừ sẵn Chủ nhật.
  * Xem lib/leave-days.ts cho toàn bộ quy tắc phía server.
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Check, CalendarDays, X, Umbrella, Ban, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, CalendarDays, X, Umbrella, Ban, Clock, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDays } from "@/lib/work-days";
 
@@ -42,7 +45,7 @@ type Props = {
 
 /** Trạng thái lịch nghỉ một tháng, khớp response của /api/leave. */
 type MonthState = {
-  days:             { day: number; type: LeaveType }[];
+  days:             { day: number; type: LeaveType; note: string | null }[];
   unpaidCount:      number;
   halfDayCount:     number;
   /** Tổng ngày công bị trừ: nghỉ thường 1, nghỉ nửa ngày 0,5 — có thể lẻ .5. */
@@ -117,6 +120,8 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
   const [loading, setLoading]     = useState(true);
   const [savingDay, setSavingDay] = useState<number | null>(null);
   const [pickerDay, setPickerDay] = useState<number | null>(null);
+  /** Lý do nghỉ đang gõ trong hộp chọn ngày — lưu cùng loại nghỉ hoặc riêng. */
+  const [noteDraft, setNoteDraft] = useState("");
   const [toast, setToast]         = useState("");
 
   function showToast(msg: string) {
@@ -144,6 +149,16 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
     return state.days.find(d => d.day === day)?.type;
   }
 
+  /** Lý do nghỉ đã lưu của một ngày, "" nếu chưa ghi. */
+  function noteOf(day: number): string {
+    return state.days.find(d => d.day === day)?.note ?? "";
+  }
+
+  function openPicker(day: number) {
+    setNoteDraft(noteOf(day));
+    setPickerDay(day);
+  }
+
   /**
    * Ngày này nằm trước khi nhân sự vào làm — chưa có ngày công nào để trừ nên ô
    * lịch bị khoá. So bằng chuỗi `YYYY-MM-DD` để không dính lệch múi giờ.
@@ -167,7 +182,29 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
       const res = await fetch("/api/leave", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ userId, day, month, year, type }),
+        body:    JSON.stringify({ userId, day, month, year, type, note: noteDraft }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        showToast(err.error ?? `Lỗi HTTP ${res.status}`);
+        return;
+      }
+      setState(await res.json() as MonthState);
+    } catch {
+      showToast("Không lưu được, thử lại nhé");
+    } finally { setSavingDay(null); }
+  }
+
+  /** Chỉ sửa lý do của ngày đã tích nghỉ — không đổi loại nghỉ. */
+  async function saveNote(day: number) {
+    if (!canEdit || savingDay !== null) return;
+    setPickerDay(null);
+    setSavingDay(day);
+    try {
+      const res = await fetch("/api/leave", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ userId, day, month, year, note: noteDraft }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -378,6 +415,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
             // Chưa vào làm — ô mờ đi và không bấm được, kể cả với quản lý.
             const unhired = beforeHire(day);
             const type    = typeOf(day);
+            const note    = type ? noteOf(day) : "";
             const isToday =
               day === today.getDate() && month === today.getMonth() + 1 && year === today.getFullYear();
 
@@ -385,7 +423,7 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
               <button
                 key={day}
                 type="button"
-                onClick={() => setPickerDay(day)}
+                onClick={() => openPicker(day)}
                 disabled={!canEdit || sunday || unhired || loading}
                 className={cn(
                   "min-h-[84px] sm:min-h-[104px] p-2 flex flex-col items-start gap-1.5 text-left",
@@ -443,6 +481,12 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                     <Clock className="w-3 h-3" /> Nửa ngày
                   </span>
                 ) : null}
+
+                {note && !unhired && !sunday && (
+                  <span title={note} className="w-full text-[10px] leading-snug text-gray-500 line-clamp-2 break-words">
+                    {note}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -557,6 +601,34 @@ export function LeaveCalendarPage({ currentUserId, currentUserRole, staffList, b
                       </span>
                       {current === "HALF_DAY" && <Check className="w-4 h-4 text-amber-500" />}
                     </button>
+
+                    <div className="pt-2">
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 mb-1">
+                        <MessageSquare className="w-3.5 h-3.5" /> Lý do nghỉ (không bắt buộc)
+                      </label>
+                      <textarea
+                        value={noteDraft}
+                        onChange={e => setNoteDraft(e.target.value)}
+                        maxLength={300}
+                        rows={2}
+                        placeholder="VD: ốm, việc gia đình, xin nghỉ đột xuất…"
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {current
+                          ? "Chọn lại loại nghỉ, hoặc bấm “Lưu lý do” để chỉ sửa lý do."
+                          : "Lý do được lưu khi chọn loại nghỉ ở trên."}
+                      </p>
+                    </div>
+
+                    {current && noteDraft.trim() !== noteOf(pickerDay) && (
+                      <button
+                        onClick={() => saveNote(pickerDay)}
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#f15b5c] text-sm font-bold text-white hover:bg-[#e04a4b] transition-colors"
+                      >
+                        Lưu lý do
+                      </button>
+                    )}
 
                     {current && (
                       <button

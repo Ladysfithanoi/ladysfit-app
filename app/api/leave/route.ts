@@ -9,6 +9,7 @@ import {
   annualRunLengthWith,
   canViewLeaveOf,
   canEditLeaveOf,
+  cleanLeaveNote,
   getAnnualLeaveBalance,
   getHireDate,
   getLeaveDaysOfMonth,
@@ -98,9 +99,11 @@ export async function POST(req: Request) {
      * "NONE" = bỏ nghỉ ngày đó.
      */
     type: "ANNUAL" | "UNPAID" | "HALF_DAY" | "NONE";
+    /** Lý do nghỉ (FM ghi). Bỏ trống trường này thì giữ nguyên lý do cũ. */
     note?: string;
   };
   const userId = body.userId ?? session.user.id;
+  const note   = cleanLeaveNote(body.note);
   const { day, month, year, type } = body;
 
   if (!validPeriod(month, year)) {
@@ -159,16 +162,52 @@ export async function POST(req: Request) {
     }
     await prisma.leaveDay.upsert({
       where:  { userId_date: { userId, date } },
-      update: { type: "ANNUAL", ...(body.note !== undefined && { note: body.note }) },
-      create: { userId, date, type: "ANNUAL", note: body.note ?? null, createdById: session.user.id },
+      update: { type: "ANNUAL", ...(body.note !== undefined && { note }) },
+      create: { userId, date, type: "ANNUAL", note, createdById: session.user.id },
     });
   } else {
     // Nghỉ thường (trừ 1 công) và nghỉ nửa ngày (trừ 0,5 công) — không có hạn mức.
     await prisma.leaveDay.upsert({
       where:  { userId_date: { userId, date } },
-      update: { type, ...(body.note !== undefined && { note: body.note }) },
-      create: { userId, date, type, note: body.note ?? null, createdById: session.user.id },
+      update: { type, ...(body.note !== undefined && { note }) },
+      create: { userId, date, type, note, createdById: session.user.id },
     });
+  }
+
+  return NextResponse.json(await monthState(userId, month, year));
+}
+
+// ── PATCH — chỉ sửa lý do nghỉ của một ngày đã tích ───────────────────────
+// Không đụng tới loại nghỉ nên không qua kiểm tra quỹ phép / ngày công — lý do
+// không ảnh hưởng lương.
+
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json() as {
+    userId?: string; day: number; month: number; year: number; note?: string;
+  };
+  const userId = body.userId ?? session.user.id;
+  const { day, month, year } = body;
+
+  if (!validPeriod(month, year)) {
+    return NextResponse.json({ error: "Tháng/năm không hợp lệ" }, { status: 400 });
+  }
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (!(day >= 1 && day <= daysInMonth)) {
+    return NextResponse.json({ error: "Ngày không hợp lệ" }, { status: 400 });
+  }
+
+  const allowed = await canEditLeaveOf(session.user, userId);
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const updated = await prisma.leaveDay.updateMany({
+    where: { userId, date: utcDay(year, month, day) },
+    data:  { note: cleanLeaveNote(body.note) },
+  });
+  if (updated.count === 0) {
+    return NextResponse.json({ error: "Ngày này chưa tích nghỉ" }, { status: 404 });
   }
 
   return NextResponse.json(await monthState(userId, month, year));

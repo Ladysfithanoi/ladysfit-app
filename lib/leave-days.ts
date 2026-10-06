@@ -64,8 +64,18 @@ function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** Một ngày đã tích trong tháng: ngày trong tháng và loại nghỉ. */
-export type LeaveDayEntry = { day: number; type: LeaveType };
+/** Một ngày đã tích trong tháng: ngày trong tháng, loại nghỉ và lý do FM ghi. */
+export type LeaveDayEntry = { day: number; type: LeaveType; note: string | null };
+
+/** Lý do nghỉ dài nhất được lưu — đủ cho vài câu, không thành bài văn. */
+export const LEAVE_NOTE_MAX = 300;
+
+/** Chuẩn hoá lý do nghỉ: bỏ khoảng trắng thừa, chuỗi rỗng → null. */
+export function cleanLeaveNote(note: unknown): string | null {
+  if (typeof note !== "string") return null;
+  const trimmed = note.trim().slice(0, LEAVE_NOTE_MAX);
+  return trimmed || null;
+}
 
 /** Các ngày đã tích nghỉ của một nhân sự trong tháng, kèm loại nghỉ. */
 export async function getLeaveDaysOfMonth(
@@ -76,9 +86,9 @@ export async function getLeaveDaysOfMonth(
   const rows = await prisma.leaveDay.findMany({
     where:   { userId, date: monthDateRange(month, year) },
     orderBy: { date: "asc" },
-    select:  { date: true, type: true },
+    select:  { date: true, type: true, note: true },
   });
-  return rows.map(r => ({ day: r.date.getUTCDate(), type: r.type }));
+  return rows.map(r => ({ day: r.date.getUTCDate(), type: r.type, note: r.note }));
 }
 
 /**
