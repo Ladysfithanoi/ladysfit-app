@@ -9,6 +9,7 @@ import { logPTAssignment } from "@/lib/transform-credit";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { promoPriceFor } from "@/lib/package-promos";
 import { getActivePromos } from "@/lib/package-promos-server";
+import { chainPackageDates } from "@/lib/package-chain";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -138,7 +139,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     // BẮT BUỘC ở mọi đường tạo gói (xem isChargeablePackage): thiếu nó thì gói
     // không trừ được buổi và khách bị chặn ngay ở lần check-in đầu tiên. FM sửa
     // lại ngày trong hồ sơ khách nếu khách hẹn bắt đầu muộn hơn.
+    // Mua nhiều gói một lúc thì gói sau nối đuôi gói trước (lib/package-chain).
     const startedAt = new Date();
+    const dates = chainPackageDates(c.packages, startedAt);
     await prisma.packageEnrollment.createMany({
       data: c.packages.map((pkg, i) => ({
         clientId: client.id,
@@ -146,8 +149,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         packageStage: pkg.packageStage,
         sessions: pkg.sessions,
         sessionsUsed: 0,
-        startDate: startedAt,
-        endDate: new Date(startedAt.getTime() + pkg.durationDays * 86_400_000),
+        startDate: dates[i].startDate,
+        endDate: dates[i].endDate,
         durationDays: pkg.durationDays,
         price:
           promoPriceFor(pkg.packageName, promos)?.price

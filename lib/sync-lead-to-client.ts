@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recountClientContracts } from "@/lib/recount-contracts";
 import { PACKAGES } from "@/lib/packages";
+import { chainPackageDates } from "@/lib/package-chain";
 
 type LeadForSync = {
   id: string;
@@ -66,17 +67,29 @@ export async function syncLeadToClient(lead: LeadForSync): Promise<string | null
       },
       NOT: { contractCode: { startsWith: "SYNC-" } },
     },
-    select: { packageName: true },
+    select: { packageName: true, startDate: true, endDate: true },
   });
+  const manualByName = new Map(manual.map((m) => [m.packageName, m]));
   const alreadyHas = new Set(manual.map((m) => m.packageName));
   const toCreate = entries.filter((key) => !alreadyHas.has(PACKAGES[key]?.name ?? key));
+
+  // Nhiều gói một hợp đồng: gói sau bắt đầu ngày hôm sau ngày kết thúc của gói
+  // trước (lib/package-chain); gói đã tạo tay giữ ngày của nó, gói mới nối sau.
+  const chained = startDate
+    ? chainPackageDates(entries.map((key) => ({
+        packageName: PACKAGES[key]?.name ?? key,
+        durationDays: PACKAGES[key]?.durationDays ?? 90,
+        fixed: manualByName.get(PACKAGES[key]?.name ?? key) ?? null,
+      })), startDate)
+    : null;
 
   const data = toCreate.map((key, idx) => {
     const def = PACKAGES[key];
     const durationDays = def?.durationDays ?? 90;
     // Gói không có ngày hết hạn là gói không bao giờ hết hạn — nó nằm mãi đầu hàng
-    // trừ buổi (xem POST /api/clients/[id]/packages). Cùng công thức với chỗ đó.
-    const endDate = startDate ? new Date(startDate.getTime() + durationDays * 86_400_000) : null;
+    // trừ buổi (xem POST /api/clients/[id]/packages). Ngày tính ở chainPackageDates,
+    // cùng công thức end = start + durationDays với chỗ đó.
+    const dates = chained?.[entries.indexOf(key)] ?? null;
     return {
       clientId: client.id,
       // Unique code per enrollment when several packages are synced for one lead.
@@ -85,8 +98,8 @@ export async function syncLeadToClient(lead: LeadForSync): Promise<string | null
       packageStage: def?.stage ?? "",
       sessions: def?.sessions ?? 30,
       sessionsUsed: 0,
-      startDate,
-      endDate,
+      startDate: dates?.startDate ?? null,
+      endDate: dates?.endDate ?? null,
       durationDays,
       reservedDays: 0,
       extensionDays: 0,
