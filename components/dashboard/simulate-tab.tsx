@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2, FlaskConical, Eye, RefreshCw, Search, X, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, FlaskConical, Eye, RefreshCw, Search, X, AlertTriangle, ChevronLeft, ChevronRight, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  *
  * Admin đóng vai một tài khoản FM/PT để xem đúng giao diện người đó thấy.
  * Thoát bằng thanh "Đang giả lập" ở đầu mọi trang. Cơ chế: lib/simulate.ts.
+ * Cổng khách hàng thì chỉ giả lập một khách do app tạo (không vào khách thật).
  */
 
 type Row = {
@@ -52,6 +53,7 @@ export function SimulateTab() {
   const [picked, setPicked]   = useState<Row | null>(null);
   const [page, setPage]       = useState(1);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
+  const [enteringPortal, setEnteringPortal] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -67,7 +69,7 @@ export function SimulateTab() {
     const res = await fetch("/api/admin/simulate", { method: "POST" });
     setSeeding(false);
     if (!res.ok) { setError((await res.json().catch(() => null))?.error ?? "Có lỗi xảy ra"); return; }
-    setSeedMsg("Đã tạo / làm mới dữ liệu test: 1 cơ sở, 1 FM, 1 PT, 3 khách.");
+    setSeedMsg("Đã tạo / làm mới dữ liệu test: 1 cơ sở, 1 FM, 1 PT, 4 khách (gồm khách giả lập cổng khách hàng).");
     load();
   }
 
@@ -82,6 +84,29 @@ export function SimulateTab() {
     }
     // Tải lại hẳn để mọi màn server render lại theo tài khoản mới.
     window.location.href = "/dashboard";
+  }
+
+  // Đăng nhập cổng /my bằng khách giả lập (provider "client-simulate", lib/client-auth.ts).
+  // Gọi thẳng endpoint của cổng khách như trang /my/login, không qua signIn() toàn cục.
+  async function simulateCustomer() {
+    setEnteringPortal(true); setError("");
+    try {
+      const { csrfToken } = await (await fetch("/api/my/auth/csrf")).json();
+      const res = await fetch("/api/my/auth/callback/client-simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Auth-Return-Redirect": "1" },
+        body: new URLSearchParams({ csrfToken, callbackUrl: `${window.location.origin}/my`, json: "true" }),
+      });
+      const data = await res.json();
+      if (data.url && !data.url.includes("error")) {
+        window.location.href = "/my";
+        return;
+      }
+      setError("Không vào được cổng khách hàng giả lập");
+    } catch {
+      setError("Không vào được cổng khách hàng giả lập");
+    }
+    setEnteringPortal(false);
   }
 
   const filtered = useMemo(() => {
@@ -123,8 +148,8 @@ export function SimulateTab() {
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-800">Dữ liệu test</p>
             <p className="text-sm text-gray-500 mt-0.5">
-              Tạo sẵn cơ sở <b>🧪 Cơ sở Giả lập</b> với 1 FM, 1 PT và 3 khách: đang tập L1,
-              chưa tới ngày tập L2, tái ký L3. Bấm lại bất cứ lúc nào để đưa khách test về
+              Tạo sẵn cơ sở <b>🧪 Cơ sở Giả lập</b> với 1 FM, 1 PT và 4 khách: đang tập L1,
+              chưa tới ngày tập L2, tái ký L3, và khách giả lập cổng khách hàng. Bấm lại bất cứ lúc nào để đưa khách test về
               trạng thái ban đầu (xoá hết buổi tập, cân nặng… đã thử).
             </p>
           </div>
@@ -138,6 +163,32 @@ export function SimulateTab() {
           Tạo / làm mới dữ liệu test
         </button>
         {seedMsg && <p className="text-sm text-emerald-600">{seedMsg}</p>}
+      </div>
+
+      {/* Giả lập khách hàng */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#f15b5c]/10 flex items-center justify-center flex-shrink-0">
+            <Smartphone className="w-5 h-5 text-[#f15b5c]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-gray-800">Giả lập khách hàng</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Mở cổng khách hàng (<b>/my</b>) dưới tên <b>🧪 Khách Giả lập</b> — khách do app tự tạo
+              (gói L1 đang tập, có cân nặng, bước chân, số đo), không đăng nhập vào khách thật nào.
+              Khách này thuộc <b>🧪 PT Giả lập</b>, nên thao tác bên PT test sẽ hiện ngay ở cổng khách.
+              Bấm “Tạo / làm mới dữ liệu test” để đưa về ban đầu.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={simulateCustomer}
+          disabled={enteringPortal}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#f15b5c] text-white text-sm font-semibold disabled:opacity-60"
+        >
+          {enteringPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          Mở giao diện khách hàng
+        </button>
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
@@ -274,6 +325,7 @@ function ConfirmModal({
               <li>🧪 Khách A — đang tập L1 (bắt đầu 7 ngày trước)</li>
               <li>🧪 Khách B — L2 chưa tới ngày tập</li>
               <li>🧪 Khách C — xong L1, đang tập L3 tái ký</li>
+              <li>🧪 Khách Giả lập — L1 đang tập, xem được ở cổng khách hàng</li>
             </ul>
             <p className="text-xs text-emerald-700 pt-1">Thử xong, bấm “Tạo / làm mới dữ liệu test” để đưa về ban đầu.</p>
           </div>

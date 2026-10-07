@@ -37,6 +37,8 @@ export async function canSimulate(realUserId: string, targetUserId: string): Pro
 
 export const TEST_FM_EMAIL    = "test.fm@ladysfit.test";
 export const TEST_PT_EMAIL    = "test.pt@ladysfit.test";
+/** Khách hàng Admin giả lập ở cổng /my — chỉ có trong dữ liệu test, không có mật khẩu. */
+export const TEST_CUSTOMER_EMAIL = "test.khach@ladysfit.test";
 /** Mã khách test — không theo dạng LDFxxxx nên không chiếm số của khách thật. */
 const TEST_CLIENT_CODE_PREFIX = "TEST-";
 
@@ -53,6 +55,8 @@ type TestClient = {
   height: number;
   goalNote: string;
   packages: TestPackage[];
+  /** Có email = đăng nhập được vào cổng khách hàng (qua giả lập). */
+  email?: string;
 };
 
 const TEST_CLIENTS: TestClient[] = [
@@ -76,6 +80,12 @@ const TEST_CLIENTS: TestClient[] = [
       { name: "L1", startOffsetDays: -60, status: "COMPLETED", price: PACKAGES.L1.discountedPrice },
       { name: "L3", startOffsetDays: -20 },
     ],
+  },
+  {
+    code: "KH", fullName: "🧪 Khách Giả lập", phone: "0900000099", email: TEST_CUSTOMER_EMAIL,
+    initialWeight: 68, currentWeight: 65.4, targetWeight: 59, height: 160,
+    goalNote: "Khách test cho giả lập cổng khách hàng (/my) — PT test thao tác trên khách này thì cổng khách thấy ngay.",
+    packages: [{ name: "L1", startOffsetDays: -14, price: PACKAGES.L1.discountedPrice }],
   },
 ];
 
@@ -118,6 +128,7 @@ export async function seedSimulationData() {
         clientCode:    TEST_CLIENT_CODE_PREFIX + c.code,
         fullName:      c.fullName,
         phone:         c.phone,
+        email:         c.email ?? null,
         initialWeight: c.initialWeight,
         currentWeight: c.currentWeight,
         targetWeight:  c.targetWeight,
@@ -164,7 +175,48 @@ export async function seedSimulationData() {
         },
       });
     }
+
+    // Khách giả lập cổng /my: thêm bước chân và số đo để các tab có gì để xem.
+    if (c.email) {
+      const today = new Date(new Date().toISOString().slice(0, 10));
+      for (let i = 1; i <= 7; i++) {
+        await prisma.activityLog.create({
+          data: { clientId: client.id, date: new Date(today.getTime() - i * DAY), steps: 6000 + ((i * 1370) % 5000) },
+        });
+      }
+      await prisma.bodyMeasurementLog.create({
+        data: {
+          clientId: client.id, measuredById: pt.id, measuredDate: new Date(today.getTime() - 7 * DAY),
+          waist: 74, belly: 86, hip: 96, glute: 98, armSize: 29, thighSize: 56, calfSize: 36,
+          notes: "Số đo test",
+        },
+      });
+    }
   }
 
   return { branchId: branch.id, fmId: fm.id, ptId: pt.id, clients: TEST_CLIENTS.length };
+}
+
+// ─── Giả lập khách hàng ───────────────────────────────────────────────────────
+//
+// Khách thật rất nhiều và không nên đăng nhập vào tài khoản của họ, nên Admin chỉ
+// giả lập MỘT khách do chính app tạo ra (TEST_CUSTOMER_EMAIL, nằm trong bộ dữ liệu
+// test ở trên). Đăng nhập bằng provider "client-simulate" ở lib/client-auth.ts:
+// phiên khách mang `simBy` = id Admin, không gắn máy tin cậy.
+
+/** Id khách giả lập; chưa có thì tạo bộ dữ liệu test. */
+export async function ensureSimulatedCustomer(): Promise<string> {
+  const find = () => prisma.client.findUnique({ where: { email: TEST_CUSTOMER_EMAIL }, select: { id: true } });
+  const existing = await find();
+  if (existing) return existing.id;
+  await seedSimulationData();
+  const created = await find();
+  if (!created) throw new Error("Không tạo được khách giả lập");
+  return created.id;
+}
+
+/** Admin thật (không đang đóng vai ai, chưa bị xoá) mới được giả lập khách. */
+export async function canSimulateCustomer(adminId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({ where: { id: adminId }, select: { role: true, deletedAt: true } });
+  return u?.role === Role.ADMIN && !u.deletedAt;
 }

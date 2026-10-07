@@ -16,6 +16,8 @@ declare module "next-auth" {
       deviceId?: string;
       // Có khi Admin đang giả lập tài khoản này (Cài đặt → Giả lập)
       impersonator?: { id: string; name: string | null };
+      // Cổng khách hàng: id Admin đang giả lập khách test (lib/client-auth.ts)
+      simulatedBy?: string;
     };
   }
 
@@ -24,6 +26,7 @@ declare module "next-auth" {
     branchId?: string | null;
     managedBranchIds?: string[];
     did?: string;
+    simBy?: string;
   }
 }
 
@@ -34,5 +37,7 @@ declare module "next-auth/jwt" {
     did?: string;
     // id tài khoản Admin đang đóng vai (lib/simulate.ts)
     actAs?: string;
+    // Phiên cổng khách do Admin giả lập (lib/client-auth.ts)
+    simBy?: string;
   }
 }

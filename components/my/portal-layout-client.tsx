@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { Home, Scale, Dumbbell, Salad, Ruler, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkoutNotificationPopup } from "./workout-notification-popup";
+import { CustomerSimulateBanner } from "./customer-simulate-banner";
 
 const NAV = [
   { href: "/my",              label: "Tổng quan",  Icon: Home  },
@@ -39,6 +40,7 @@ export function PortalLayoutClient({
       <WorkoutNotificationPopup />
       {/* Outer centering wrapper */}
       <div className="mx-auto max-w-[430px] min-h-screen bg-white flex flex-col relative shadow-sm">
+        <CustomerSimulateBanner />
         {/* Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
