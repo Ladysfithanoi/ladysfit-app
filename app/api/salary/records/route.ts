@@ -107,6 +107,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Admin chỉ có bảng lương ở cơ sở họ đã chọn làm việc (lib/admin-branches) —
+  // màn tạo bảng lương đã lọc sẵn, chốt lại ở đây để không ai gửi tay tạo được
+  // bảng lương Admin ở cơ sở họ không làm.
+  const adminIds = body.entries.filter((e) => e.userRole === "ADMIN").map((e) => e.userId);
+  if (adminIds.length > 0) {
+    const working = await prisma.user.findMany({
+      where: {
+        id: { in: adminIds },
+        OR: [
+          { branchId: body.branchId, managedBranches: { none: {} } },
+          { managedBranches: { some: { branchId: body.branchId } } },
+        ],
+      },
+      select: { id: true },
+    });
+    const allowed = new Set(working.map((u) => u.id));
+    body.entries = body.entries.filter((e) => e.userRole !== "ADMIN" || allowed.has(e.userId));
+  }
+
   // Doanh số cả phòng (VND) — cùng định nghĩa với "Tổng doanh thu" bên Setup
   const totalBranchRevenue = await getBranchRevenue(body.branchId, body.month, body.year);
 

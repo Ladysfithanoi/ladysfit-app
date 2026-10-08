@@ -984,8 +984,10 @@ export function StaffPageClient({
                 onChange={setSelectedBranchIds}
               />
               <p className="mt-1 text-xs text-gray-400">
-                Chọn được nhiều cơ sở như FM. Mỗi cơ sở có một bảng lương riêng — dạy khách
-                cơ sở nào thì tiền buổi dạy tính vào bảng lương cơ sở đó.
+                Admin chỉ có mặt ở cơ sở được chọn: danh sách nhân sự, nhận chuyển giao khách
+                và bảng lương của cơ sở đó. Chọn nhiều cơ sở thì mỗi cơ sở một bảng lương — dạy
+                khách cơ sở nào tính tiền buổi dạy vào bảng lương cơ sở đó. Không chọn = không
+                thuộc cơ sở nào.
               </p>
             </Field>
           ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" ? (
