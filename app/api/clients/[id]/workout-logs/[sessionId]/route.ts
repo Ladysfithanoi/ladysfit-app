@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reversePackageSession, syncPlannedSetsFromLog } from "@/lib/workout-session";
 import { captureTrash } from "@/lib/trash";
+import { formatFaults, parseFaults, serializeAssessment, type L0Assessment } from "@/lib/l0-program";
 
 export async function GET(
   _req: Request,
@@ -54,9 +55,16 @@ export async function PUT(
       set5Load?: string | null; set5Reps?: string | null;
       set6Load?: string | null; set6Reps?: string | null;
       exerciseNotes?: string | null;
+      /** Lỗi kỹ thuật đã tick (L0) — không gửi thì giữ nguyên. */
+      faults?: string | null;
     };
 
-    const body = await req.json() as { notes?: string | null; setLogs: SetLogInput[] };
+    const body = await req.json() as {
+      notes?: string | null;
+      setLogs: SetLogInput[];
+      /** Đánh giá nội bộ Buổi 3 L0 — không gửi thì giữ nguyên. */
+      l0Assessment?: Partial<L0Assessment> | null;
+    };
 
     // Update each WorkoutSetLog by id
     await Promise.all(
@@ -77,6 +85,7 @@ export async function PUT(
             set6Load: sl.set6Load != null ? String(sl.set6Load) : null,
             set6Reps: sl.set6Reps != null ? String(sl.set6Reps) : null,
             exerciseNotes: sl.exerciseNotes ?? null,
+            ...(sl.faults !== undefined ? { faults: formatFaults(parseFaults(sl.faults)) } : {}),
           },
         })
       )
@@ -100,6 +109,7 @@ export async function PUT(
       where: { id: logId },
       data: {
         notes: body.notes ?? null,
+        ...(body.l0Assessment !== undefined ? { l0Assessment: serializeAssessment(body.l0Assessment) } : {}),
         ...(stampInteraction ? { firstInteractionAt: new Date() } : {}),
       },
       include: {

@@ -14,6 +14,15 @@ import {
   type SurveyRirFeel,
   type SurveyRecovery,
 } from "@/lib/session-evaluation";
+import {
+  formatFaults,
+  parseAssessment,
+  parseFaults,
+  type FaultHistory,
+  type L0Assessment,
+  type L0Day,
+} from "@/lib/l0-program";
+import { L0Observation } from "./l0/l0-observation";
 
 // ── Đánh giá buổi tập (autoregulation) — lựa chọn cho 3 trục khảo sát ──
 const PERFORMANCE_OPTIONS: { value: SurveyPerformance; label: string; icon: string }[] = [
@@ -298,6 +307,8 @@ type EditSetLogDraft = {
   exerciseName: string;
   sets: SetDraft[];
   exerciseNotes: string;
+  /** Lỗi kỹ thuật đã tick (chỉ buổi L0). */
+  faults: number[];
 };
 
 // Map persisted set-log rows into the editable table drafts.
@@ -307,6 +318,7 @@ function toSetLogDrafts(setLogs: WorkoutLogRow["setLogs"]): EditSetLogDraft[] {
     movementName: sl.movementName,
     exerciseName: sl.exerciseName,
     exerciseNotes: sl.exerciseNotes ?? "",
+    faults: parseFaults(sl.faults),
     sets: [
       { load: sl.set1Load ?? "", reps: sl.set1Reps ?? "" },
       { load: sl.set2Load ?? "", reps: sl.set2Reps ?? "" },
@@ -674,6 +686,7 @@ export function LiveSessionPanel({
   onCompleted,
   onVoided,
   onDeleted,
+  l0 = null,
 }: {
   log: WorkoutLogRow;
   sessionName: string;
@@ -695,8 +708,12 @@ export function LiveSessionPanel({
   ) => void;
   onVoided: (log: WorkoutLogRow) => void;
   onDeleted: (logId: string) => void;
+  /** Buổi thuộc lộ trình L0: Ngày mấy + lỗi đã tick ở các buổi L0 trước. */
+  l0?: { day: L0Day; history: FaultHistory[] } | null;
 }) {
   const [notes, setNotes] = useState(log.notes ?? "");
+  // Đánh giá nội bộ Buổi 3 L0 (cấu trúc / set-rep / kỹ thuật).
+  const [assessment, setAssessment] = useState<L0Assessment>(() => parseAssessment(log.l0Assessment));
   // Áp dụng gợi ý/điền sẵn từ tuần 2 trở đi HOẶC khi kế thừa từ giai đoạn trước.
   const progressionActive = weekNumber >= 2 || inheritedPrev;
   const [setLogs, setSetLogs] = useState<EditSetLogDraft[]>(() =>
@@ -847,6 +864,16 @@ export function LiveSessionPanel({
     );
   }
 
+  function toggleFault(rowId: string, fault: number) {
+    setSetLogs((prev) =>
+      prev.map((sl) =>
+        sl.id !== rowId
+          ? sl
+          : { ...sl, faults: sl.faults.includes(fault) ? sl.faults.filter((f) => f !== fault) : [...sl.faults, fault] }
+      )
+    );
+  }
+
   function updateExerciseNotes(movIdx: number, value: string) {
     setSetLogs((prev) => prev.map((sl, i) => (i === movIdx ? { ...sl, exerciseNotes: value } : sl)));
   }
@@ -889,7 +916,14 @@ export function LiveSessionPanel({
       set5Load: sl.sets[4].load || null, set5Reps: sl.sets[4].reps || null,
       set6Load: sl.sets[5].load || null, set6Reps: sl.sets[5].reps || null,
       exerciseNotes: sl.exerciseNotes || null,
+      // Chỉ buổi L0 mới gửi lỗi kỹ thuật — buổi thường để nguyên cột này.
+      ...(l0 ? { faults: formatFaults(sl.faults) } : {}),
     }));
+  }
+
+  /** Phần riêng của buổi L0 gửi kèm mỗi lần lưu. */
+  function l0Payload() {
+    return l0?.day === 3 ? { l0Assessment: assessment } : {};
   }
 
   const saveProgress = useCallback(async () => {
@@ -899,7 +933,7 @@ export function LiveSessionPanel({
       const res = await fetchWithTimeout(`/api/clients/${clientId}/workout-logs/${log.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
+        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload(), ...l0Payload() }),
       }, AUTOSAVE_TIMEOUT_MS);
       if (!res.ok) throw new Error((await res.json()).error ?? "Có lỗi xảy ra");
       const updated = (await res.json()) as WorkoutLogRow;
@@ -912,7 +946,7 @@ export function LiveSessionPanel({
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, log.id, notes, setLogs]);
+  }, [clientId, log.id, notes, setLogs, assessment]);
 
   // Re-sync the table's exercise list with the program's CURRENT movements,
   // keeping everything the PT has already typed. Saves first so nothing is lost.
@@ -981,7 +1015,7 @@ export function LiveSessionPanel({
       fetchWithTimeout(`/api/clients/${clientId}/workout-logs/${log.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload() }),
+        body: JSON.stringify({ notes: notes || null, setLogs: buildSetLogPayload(), ...l0Payload() }),
       }, AUTOSAVE_TIMEOUT_MS)
         .then((res) => (res.ok ? res.json() : null))
         .then((updated) => {
@@ -995,7 +1029,7 @@ export function LiveSessionPanel({
     }, 1200);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, setLogs]);
+  }, [notes, setLogs, assessment]);
 
   async function checkOut(method: "client_app" | "signature", signatureUrl = "", checkOutPhotoUrl = "") {
     setFinishing(true);
@@ -1013,6 +1047,7 @@ export function LiveSessionPanel({
           // Kèm đánh giá buổi tập (server sinh gợi ý cho buổi sau). Log AWAITING
           // tồn dư không có survey — server bỏ qua yêu cầu này cho luồng đó.
           survey: surveyComplete ? survey : null,
+          ...l0Payload(),
         }),
       }, CHECKOUT_TIMEOUT_MS);
       const data = await res.json();
@@ -1469,6 +1504,18 @@ export function LiveSessionPanel({
             </tbody>
           </table>
         </div>
+
+        {/* L0: tick 5 lỗi theo bài, Review Buổi 4, đánh giá nội bộ Buổi 3 */}
+        {l0 && (
+          <L0Observation
+            day={l0.day}
+            rows={setLogs.map((sl) => ({ id: sl.id, movementName: sl.movementName, exerciseName: sl.exerciseName, faults: sl.faults }))}
+            onToggle={toggleFault}
+            history={l0.history}
+            assessment={assessment}
+            onAssessmentChange={setAssessment}
+          />
+        )}
 
         {/* Feedback */}
         <div className="flex items-center gap-2 text-[11px] text-gray-400 font-semibold">

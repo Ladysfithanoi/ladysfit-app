@@ -7,6 +7,8 @@ import Link from "next/link";
 import { Star, TrendingDown, Plus, Flag, Ruler, ClipboardCheck } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
 import { PtRankingSection } from "./pt-ranking-section";
+import { SessionRatingCard } from "./session-rating-card";
+import { L0JourneyCard } from "./l0-journey-card";
 import { CheckinSheetModal } from "@/components/dashboard/checkin-sheet-modal";
 import { OutsideGymActivity, type PortalActivityLog } from "./outside-gym-activity";
 import { DateMaskInput } from "@/components/ui/date-mask-input";
@@ -142,6 +144,12 @@ export function OverviewTab({
           {motivation(progressPct)}
         </p>
       </div>
+
+      {/* Chấm điểm buổi tập vừa xong — tự ẩn khi không có buổi nào chờ chấm */}
+      <SessionRatingCard />
+
+      {/* Lộ trình Khởi động L0 — tự ẩn với khách không học L0 */}
+      <L0JourneyCard />
 
       {/* Progress card */}
       <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm mb-4">

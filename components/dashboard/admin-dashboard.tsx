@@ -11,6 +11,8 @@ import { NotTransformedTable } from "./not-transformed-table";
 import { ChurnStats } from "./churn-stats";
 import { FMExamCard } from "./exam/fm-exam-card";
 import { StaffGenderStats, type StaffOverview } from "./staff-gender-stats";
+import { SessionRatingsStats } from "./session-ratings-stats";
+import { L0Stats } from "./l0-stats";
 
 export type AdminStats = {
   totalClients: number;
@@ -168,6 +170,10 @@ export function AdminDashboard({
 
       {/* Nhân sự & tỉ lệ giới tính — chỉ Admin */}
       {staffOverview && <StaffGenderStats data={staffOverview} />}
+
+      {/* Khách chấm điểm PT + lộ trình L0 — Admin toàn hệ thống, FM cơ sở mình quản lý */}
+      <SessionRatingsStats branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))} />
+      <L0Stats branches={stats.branchStats.map((b) => ({ id: b.id, name: b.name }))} />
 
       {/* Branch performance */}
       <BranchPerformance branchStats={stats.branchStats} />

@@ -29,6 +29,8 @@ import { CopyFromClientModal, type CopiedSession } from "./copy-from-client-moda
 import { CheckOutPhotoThumb } from "./checkout-photo";
 import { CheckinSheetModal } from "./checkin-sheet-modal";
 import { PhaseSwitchModal } from "./phase-switch-modal";
+import { L0DayGuide } from "./l0/l0-day-guide";
+import { buildFaultHistory, l0DayOf, type L0Day } from "@/lib/l0-program";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 import {
   findCheckInBlock,
@@ -107,6 +109,8 @@ export type SetLogRow = {
   set5Load: string | null; set5Reps: string | null;
   set6Load: string | null; set6Reps: string | null;
   exerciseNotes: string | null;
+  /** Lỗi kỹ thuật PT đã tick (buổi L0), vd "1,3". */
+  faults?: string | null;
 };
 
 export type WorkoutLogStatus = "IN_PROGRESS" | "AWAITING_CONFIRMATION" | "COMPLETED" | "VOID";
@@ -143,6 +147,8 @@ export type WorkoutLogRow = {
   nextSessionSuggestion?: string | null;
   /** Vì sao buổi bị huỷ. Chỉ Admin/FM được nhìn thấy — xem VoidedSessions. */
   voidReason?: string | null;
+  /** Đánh giá nội bộ Buổi 3 L0 (JSON) — xem lib/l0-program. */
+  l0Assessment?: string | null;
 };
 
 function fmtDate(iso: string): string {
@@ -797,6 +803,11 @@ function ProgramView({
       : "";
     return type ? `${sessionLabel(i)} — ${type}` : sessionLabel(i);
   };
+
+  // Tên buổi theo id (mọi tuần) — để biết nhật ký cũ thuộc Ngày L0 nào.
+  const sessionNameById = new Map(
+    program.weeks.flatMap((w) => w.sessions).map((s) => [s.id, s.sessionName] as const)
+  );
 
   // Tổng quan nhật ký: dựng cho MỌI tuần để xem chéo ngay trong modal, khỏi
   // phải thoát ra chọn từng tuần. Mỗi buổi kèm các log COMPLETED (mới nhất trước).
@@ -1745,6 +1756,22 @@ function ProgramView({
                   ) ?? null;
                   const lastLog = completedLogs[0] ?? null;
 
+                  // Lộ trình L0 (Giai đoạn 0): buổi này là Ngày mấy, và lỗi kỹ
+                  // thuật đã tick ở các buổi L0 trước để PT so/Review.
+                  const l0Day = l0DayOf(program.phase, activeSession.sessionName);
+                  const l0 = l0Day
+                    ? {
+                        day: l0Day,
+                        history: buildFaultHistory(
+                          workoutLogs
+                            .filter((l) => l.status === "COMPLETED" && l.id !== inProgressLog?.id)
+                            .map((l) => ({ log: l, day: l0DayOf(program.phase, sessionNameById.get(l.sessionId)) }))
+                            .filter((x): x is { log: WorkoutLogRow; day: L0Day } => x.day != null && x.day < l0Day)
+                            .map(({ log, day }) => ({ day, date: log.sessionDate, setLogs: log.setLogs.map((sl) => ({ movementName: sl.movementName, exerciseName: sl.exerciseName, faults: sl.faults ?? null })) }))
+                        ),
+                      }
+                    : null;
+
                   // Thông số tuần trước để gợi ý tăng tiến + điền sẵn Set 1. Khớp
                   // buổi theo VỊ TRÍ (mỗi tuần có session ID riêng), nhưng duyệt
                   // NGƯỢC qua MỌI tuần trước — không chỉ tuần liền kề — và lấy buổi
@@ -1837,10 +1864,13 @@ function ProgramView({
                         }
                       />
 
+                      {l0 && <L0DayGuide day={l0.day} />}
+
                       {/* ── Log section ── */}
                       <div className="mt-4 pt-3 border-t border-gray-50">
                         {inProgressLog ? (
                           <LiveSessionPanel
+                            l0={l0}
                             log={inProgressLog}
                             sessionName={sessionDisplayName(activeSession, activeSessionIdx)}
                             weekNumber={currentWeekData.weekNumber}

@@ -11,6 +11,7 @@ import {
   syncPlannedSetsFromLog,
 } from "@/lib/workout-session";
 import { buildNextSessionSuggestion, isValidSurvey } from "@/lib/session-evaluation";
+import { formatFaults, parseFaults, serializeAssessment, type L0Assessment } from "@/lib/l0-program";
 
 type SetLogInput = {
   id: string;
@@ -21,6 +22,7 @@ type SetLogInput = {
   set5Load?: string | null; set5Reps?: string | null;
   set6Load?: string | null; set6Reps?: string | null;
   exerciseNotes?: string | null;
+  faults?: string | null;
 };
 
 function hasData(sl: SetLogInput): boolean {
@@ -71,6 +73,7 @@ export async function POST(
       notes?: string | null;
       setLogs?: SetLogInput[];
       survey?: unknown;
+      l0Assessment?: Partial<L0Assessment> | null;
     };
     const setLogs = body.setLogs ?? [];
 
@@ -94,6 +97,7 @@ export async function POST(
               set6Load: sl.set6Load != null ? String(sl.set6Load) : null,
               set6Reps: sl.set6Reps != null ? String(sl.set6Reps) : null,
               exerciseNotes: sl.exerciseNotes ?? null,
+              ...(sl.faults !== undefined ? { faults: formatFaults(parseFaults(sl.faults)) } : {}),
             },
           })
         )
@@ -278,6 +282,7 @@ export async function POST(
             }
           : {}),
         notes: body.notes ?? log.notes,
+        ...(body.l0Assessment !== undefined ? { l0Assessment: serializeAssessment(body.l0Assessment) } : {}),
       },
       include: INCLUDE,
     });
