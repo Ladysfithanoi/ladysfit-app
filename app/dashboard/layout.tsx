@@ -13,7 +13,11 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardShell>{children}</DashboardShell>
+      <DashboardShell
+        user={{ role: session.user.role, name: session.user.name ?? null, email: session.user.email ?? null }}
+      >
+        {children}
+      </DashboardShell>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
+import { useDashboardUser } from "./dashboard-user";
 import {
   LogOut, User, KeyRound, ChevronDown, Eye, EyeOff, X, Bell, CheckCircle, XCircle, AlertTriangle, MessageSquareWarning, ClipboardList, Ruler, TrendingUp, TrendingDown, Menu,
 } from "lucide-react";
@@ -204,10 +205,11 @@ const NOTIF_KIND: Record<ChecklistNotifType, NotifKind> = {
 };
 
 export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isFM = session?.user?.role === "FM";
-  const isPT = session?.user?.role === "PT";
+  // Vai trò lấy qua useDashboardUser: có sẵn từ server, không trống lúc phiên trình duyệt chưa tải.
+  const me = useDashboardUser();
+  const isAdmin = me?.role === "ADMIN";
+  const isFM = me?.role === "FM";
+  const isPT = me?.role === "PT";
 
   // Dropdown
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -662,7 +664,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     }
   }
 
-  const displayName = session?.user?.name ?? session?.user?.email ?? "Admin";
+  const displayName = me?.name ?? me?.email ?? "Admin";
   const initials = displayName[0].toUpperCase();
 
   return (
@@ -1294,10 +1296,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
             </div>
             <div className="text-left hidden sm:block">
               <p className="text-sm font-semibold text-gray-800 leading-none">
-                {session?.user?.name ?? "Admin"}
+                {me?.name ?? "Admin"}
               </p>
               <p className="text-xs text-gray-400 mt-0.5 leading-none">
-                {session?.user?.email}
+                {me?.email}
               </p>
             </div>
             <ChevronDown

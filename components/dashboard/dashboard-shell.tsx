@@ -8,12 +8,13 @@ import { FollowUpReminderBanner } from "@/components/dashboard/follow-up-reminde
 import { PushOptIn } from "@/components/dashboard/push-opt-in";
 import { SimulateBanner } from "@/components/dashboard/simulate-banner";
 import { CelebrationPopup } from "@/components/dashboard/celebration-popup";
+import { ServerUserProvider, type DashboardUser } from "@/components/dashboard/dashboard-user";
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children, user }: { children: React.ReactNode; user: DashboardUser }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <>
+    <ServerUserProvider value={user}>
       {/* Mobile overlay — shown when sidebar is open */}
       {sidebarOpen && (
         <div
@@ -37,6 +38,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-    </>
+    </ServerUserProvider>
   );
 }

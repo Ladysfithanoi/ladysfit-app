@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { PlayCircle, X, BookOpen } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useDashboardUser } from "./dashboard-user";
 import { cn } from "@/lib/utils";
 
 type UserGuide = {
@@ -87,8 +87,7 @@ function YouTubeThumbnail({ url, title }: { url: string; title: string }) {
 }
 
 export function GuidesPageClient() {
-  const { data: session } = useSession();
-  const role = session?.user?.role;
+  const role = useDashboardUser()?.role;
 
   const [guides, setGuides]     = useState<UserGuide[]>([]);
   const [loading, setLoading]   = useState(true);

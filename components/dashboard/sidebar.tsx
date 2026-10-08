@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   LayoutDashboard, Users, UserCircle, Settings, ClipboardList,
   Dumbbell, FileText, BarChart2, MessageSquareWarning, TrendingUp, CheckSquare, Wallet, DollarSign, X, BookOpen, Award, Trophy, CalendarDays, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDashboardUser } from "./dashboard-user";
 import type { LucideIcon } from "lucide-react";
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────
@@ -94,8 +94,7 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const role = session?.user?.role;
+  const role = useDashboardUser()?.role;
 
   return (
     <aside
