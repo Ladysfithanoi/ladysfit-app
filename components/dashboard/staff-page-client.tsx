@@ -519,29 +519,31 @@ export function StaffPageClient({
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-extrabold text-gray-900">Quản lý Nhân sự</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{initialStaff.length} nhân viên</p>
+      {/* Điện thoại: dòng 1 = tiêu đề + số nhân sự, dòng 2 = Chức vụ + Thêm nhân sự.
+          Màn rộng: hai cụm nằm chung một hàng. Chữ nào cũng giữ trên một dòng. */}
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <h1 className="text-xl font-extrabold text-gray-900 whitespace-nowrap">Quản lý Nhân sự</h1>
+          <span className="text-sm text-gray-400 whitespace-nowrap">{initialStaff.length} nhân viên</span>
         </div>
         <div className="flex items-center gap-2">
           {/* Chức vụ do Admin tự quản — không phải sửa code để thêm "Lao công". */}
           {isAdmin && (
             <button
               onClick={() => setPosOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c]"
+              className="flex items-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:border-[#f15b5c] hover:text-[#f15b5c]"
             >
-              <Briefcase className="h-4 w-4" />
+              <Briefcase className="h-4 w-4 shrink-0" />
               Chức vụ
             </button>
           )}
           {canManage && (
             <Button
               onClick={openAdd}
-              className="gap-2 rounded-xl text-white font-semibold shadow-sm"
+              className="gap-2 whitespace-nowrap rounded-xl text-white font-semibold shadow-sm"
               style={{ backgroundColor: "#f15b5c" }}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               Thêm nhân sự
             </Button>
           )}
@@ -551,7 +553,7 @@ export function StaffPageClient({
       {/* Filter bar */}
       {canManage && (
         <div className="mb-4 space-y-2">
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
@@ -562,7 +564,7 @@ export function StaffPageClient({
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 sm:max-w-sm">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
               <input
                 type="text"
@@ -603,7 +605,7 @@ export function StaffPageClient({
                   <th
                     key={h}
                     className={cn(
-                      "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide",
+                      "px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap",
                       i < 4 ? "text-left" : i === 4 ? "text-center" : "text-right"
                     )}
                   >
@@ -626,25 +628,26 @@ export function StaffPageClient({
                         </span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">{s.name ?? "—"}</p>
-                        <p className="text-xs text-gray-400">{s.email}</p>
+                        <p className="text-sm font-semibold text-gray-800 whitespace-nowrap">{s.name ?? "—"}</p>
+                        <p className="text-xs text-gray-400 whitespace-nowrap">{s.email}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
                     {s.managedBranches.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
+                      // Mỗi cơ sở một nhãn trên MỘT dòng; người nhiều cơ sở thì nhãn sau xuống dòng.
+                      <div className="flex flex-col items-start gap-1">
                         {s.managedBranches.slice(0, 2).map((m) => (
                           <span
                             key={m.branchId}
-                            className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold"
+                            className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold whitespace-nowrap"
                           >
                             {m.branch.name}
                           </span>
                         ))}
                         {s.managedBranches.length > 2 && (
                           <span
-                            className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold"
+                            className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold whitespace-nowrap"
                             title={s.managedBranches.slice(2).map((m) => m.branch.name).join(", ")}
                           >
                             +{s.managedBranches.length - 2} cơ sở
@@ -652,7 +655,7 @@ export function StaffPageClient({
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-600">{s.branch?.name ?? "—"}</span>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">{s.branch?.name ?? "—"}</span>
                     )}
                   </td>
                   {/* Chức vụ — nhãn nghề nghiệp, tách hẳn khỏi quyền bên cột Cấp độ */}
@@ -670,11 +673,11 @@ export function StaffPageClient({
                   </td>
                   <td className="px-5 py-3.5">
                     {s.role === "PT" && s.ptLevel ? (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold w-fit" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
+                      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold w-fit whitespace-nowrap" style={{ backgroundColor: s.ptLevel.color + "22", color: s.ptLevel.color }}>
                         {s.ptLevel.name}
                       </span>
                     ) : (
-                      <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold", ROLE_STYLE[s.role])}>
+                      <span className={cn("inline-block px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap", ROLE_STYLE[s.role])}>
                         {ROLE_LABEL[s.role]}
                       </span>
                     )}
@@ -687,7 +690,7 @@ export function StaffPageClient({
                       <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => openEdit(s)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
+                          className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-gray-400 hover:text-[#f15b5c] transition-colors"
                         >
                           <Pencil className="w-3.5 h-3.5" /> Sửa
                         </button>
@@ -695,13 +698,13 @@ export function StaffPageClient({
                           <>
                             <button
                               onClick={() => openDelete(s)}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+                              className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" /> Xóa
                             </button>
                             <button
                               onClick={() => openReset(s)}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-amber-500 transition-colors"
+                              className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-gray-400 hover:text-amber-500 transition-colors"
                             >
                               <Key className="w-3.5 h-3.5" /> Reset MK
                             </button>
