@@ -88,10 +88,13 @@ function BranchMultiSelect({
   branches,
   selected,
   onChange,
+  optional = false,
 }: {
   branches: Branch[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  /** Admin: được để trống (FM bắt buộc ít nhất 1 cơ sở). */
+  optional?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -119,7 +122,7 @@ function BranchMultiSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 pr-9 text-sm text-left focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40 flex items-center"
+        className="relative w-full h-11 rounded-xl border border-gray-200 bg-white px-3 pr-9 text-sm text-left focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40 flex items-center"
       >
         <span className={cn("flex-1 truncate", selected.length === 0 && "text-gray-400")}>
           {selected.length === 0
@@ -159,7 +162,7 @@ function BranchMultiSelect({
       )}
 
       <p className="mt-1.5 text-xs text-gray-400 font-medium">
-        Chọn tối thiểu 1, tối đa 5 cơ sở &nbsp;·&nbsp;
+        {optional ? "Tối đa 5 cơ sở" : "Chọn tối thiểu 1, tối đa 5 cơ sở"} &nbsp;·&nbsp;
         <span className={cn("font-semibold", selected.length >= 5 ? "text-indigo-600" : "text-gray-500")}>
           Đã chọn {selected.length}/5 cơ sở
         </span>
@@ -982,6 +985,7 @@ export function StaffPageClient({
                 branches={availableBranches}
                 selected={selectedBranchIds}
                 onChange={setSelectedBranchIds}
+                optional
               />
               <p className="mt-1 text-xs text-gray-400">
                 Admin chỉ có mặt ở cơ sở được chọn: danh sách nhân sự, nhận chuyển giao khách
