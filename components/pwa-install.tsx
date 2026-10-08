@@ -108,8 +108,10 @@ export function PwaInstall() {
   if (!prompt && !showIosHint) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-      <div className="mx-auto flex max-w-md items-start gap-3 rounded-xl border border-border bg-white p-3 shadow-lg">
+    // Lớp bọc trải hết chiều ngang chỉ để căn giữa thẻ — để nó xuyên click, không
+    // thì nó che mất những gì cùng hàng (vd mục "Cài đặt" cuối sidebar).
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+      <div className="pointer-events-auto mx-auto flex max-w-md items-start gap-3 rounded-xl border border-border bg-white p-3 shadow-lg">
         <Image
           src="/icons/icon-192.png"
           alt=""
