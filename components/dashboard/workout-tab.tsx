@@ -2612,8 +2612,11 @@ export function WorkoutTab({
   canBypassPhase = false,
   minSessionMinutes = 30,
   packages,
+  onCreateProgram,
 }: {
   clientId: string;
+  /** Mở form "Tạo chương trình tập" — cùng form với thẻ Tổng quan của hồ sơ. */
+  onCreateProgram?: () => void;
   /** Danh sách chương trình do trang hồ sơ khách nắm giữ. KHÔNG sao chép vào state
    *  riêng ở đây: tab này bị gỡ khỏi cây mỗi lần đổi mục (Tổng quan/Chi tiết/Chế độ
    *  ăn), bản sao sẽ mất và thay đổi vừa lưu bị "quay về" giá trị cũ. */
@@ -2800,6 +2803,15 @@ export function WorkoutTab({
               ⚡ Truy cập đặc biệt - Dạy hộ
             </span>
           )}
+          {onCreateProgram && (
+            <button
+              onClick={onCreateProgram}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold border border-[#f15b5c]/30 text-[#f15b5c] hover:bg-[#fff0f0] transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Tạo chương trình
+            </button>
+          )}
           <button
             onClick={() => setPhaseSwitchOpen(true)}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
@@ -2815,8 +2827,18 @@ export function WorkoutTab({
           <Dumbbell className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-300 font-semibold">Chưa có chương trình tập</p>
           <p className="text-xs text-gray-300 text-center max-w-xs">
-            Chương trình tập được tạo qua bước tư vấn
+            Tạo ở bước tư vấn, hoặc tạo ngay tại đây — chương trình tự gắn với lộ trình và phiếu tư vấn của khách.
           </p>
+          {onCreateProgram && (
+            <button
+              onClick={onCreateProgram}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-white text-xs font-bold"
+              style={{ backgroundColor: "#f15b5c" }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Tạo chương trình tập
+            </button>
+          )}
         </div>
       )}
 

@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loadPhaseMovements, slotsForSession } from "@/lib/movement-templates";
 import { allowedPhasesForActor } from "@/lib/phase-progression";
+import { workoutTypeForPhase } from "@/lib/workout-structure";
+import { pickChargeablePackage } from "@/lib/checkin-eligibility";
+import { TRIAL_PACKAGE } from "@/lib/packages";
+import { isL0Phase } from "@/lib/l0-program";
 
 const weekInclude = {
   orderBy: { weekNumber: "asc" as const },
@@ -80,7 +84,45 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
   }
 
-  const startWeek = body.currentWeek ?? 1;
+  if (!Number.isInteger(body.sessionsPerWeek) || body.sessionsPerWeek < 1 || body.sessionsPerWeek > 7) {
+    return NextResponse.json({ error: "Số buổi/tuần phải từ 1 đến 7" }, { status: 400 });
+  }
+  const startWeek = body.currentWeek && body.currentWeek >= 1 ? body.currentWeek : 1;
+
+  // ── Liên kết chéo — cùng kết quả dù tạo từ Tổng quan hay tab CT Tập ──
+  // Giáo án (WorkoutPhase) quyết định tên + loại hình tập, như luồng tư vấn và
+  // chuyển giai đoạn; ô loại hình gõ tay chỉ là ghi đè khi người tạo cố ý.
+  const phaseRow = body.phaseId
+    ? await prisma.workoutPhase.findUnique({ where: { id: body.phaseId }, select: { name: true, templateKey: true } })
+    : null;
+  const phaseName = phaseRow?.name ?? body.phase;
+  const workoutType = body.workoutType?.trim() || workoutTypeForPhase(phaseName, phaseRow?.templateKey) || null;
+
+  // Lộ trình: gói được chọn (phải là của khách này); không chọn thì gói đang
+  // trừ buổi — buổi L0 nhận gói L0, các giai đoạn khác nhận gói thật.
+  const clientPackages = await prisma.packageEnrollment.findMany({
+    where: { clientId: params.id },
+    select: { id: true, packageName: true, status: true, sessions: true, sessionsUsed: true, startDate: true, endDate: true, createdAt: true },
+  });
+  let packageEnrollmentId: string | null = null;
+  if (body.packageEnrollmentId) {
+    if (!clientPackages.some((p) => p.id === body.packageEnrollmentId)) {
+      return NextResponse.json({ error: "Lộ trình không thuộc khách hàng này" }, { status: 400 });
+    }
+    packageEnrollmentId = body.packageEnrollmentId;
+  } else {
+    const l0 = isL0Phase(phaseName);
+    const pool = clientPackages.filter((p) => (p.packageName === TRIAL_PACKAGE) === l0);
+    packageEnrollmentId = (pickChargeablePackage(pool) ?? pickChargeablePackage(clientPackages))?.id ?? null;
+  }
+
+  // Phiếu tư vấn đã chuyển thành khách này (mới nhất) — để từ CT nhìn ngược về
+  // buổi tư vấn gốc, giống chương trình tạo ở bước tư vấn.
+  const consultation = await prisma.consultation.findFirst({
+    where: { convertedClientId: params.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
 
   // KHÔNG tự lưu trữ chương trình đang chạy ở đây: đưa CT vào kho lưu trữ chỉ
   // xảy ra khi người dùng bấm "Chuyển giai đoạn" (POST .../phase-switch), hoặc
@@ -90,12 +132,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     data: {
       clientId: params.id,
       createdById: session.user.id,
-      phase: body.phase,
+      phase: phaseName,
       phaseId: body.phaseId || null,
-      workoutType: body.workoutType || null,
+      workoutType,
       sessionsPerWeek: body.sessionsPerWeek,
       currentWeek: startWeek,
-      packageEnrollmentId: body.packageEnrollmentId || null,
+      packageEnrollmentId,
+      consultationId: consultation?.id ?? null,
       notes: body.notes || null,
     },
   });

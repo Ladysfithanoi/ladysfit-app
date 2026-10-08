@@ -24,6 +24,8 @@ import { AlertDialog } from "@/components/ui/alert-dialog";
 import { BodyMeasurementsSection } from "@/components/dashboard/body-measurements-section";
 import { CheckinSheetModal } from "@/components/dashboard/checkin-sheet-modal";
 import { PACKAGES, RESIDENT_PACKAGE, TRIAL_PACKAGE } from "@/lib/packages";
+import { pickChargeablePackage } from "@/lib/checkin-eligibility";
+import { isL0Phase } from "@/lib/l0-program";
 import { cn } from "@/lib/utils";
 import { sheetDay } from "@/lib/checkin-sheet";
 
@@ -39,6 +41,9 @@ type PT = {
 };
 type WeightLog = { id: string; date: string; weight: number; note: string | null };
 type ActivityLogItem = { id: string; date: string; steps: number | null; minutesActive: number | null; note: string | null };
+/** Giáo án chọn được khi tạo chương trình (GET /api/admin/phases). */
+type CreatePhaseOption = { id: string; name: string; sessionTypes: string[] };
+
 type PackageEnrollment = {
   id: string;
   packageName: string;
@@ -663,23 +668,50 @@ export function ClientDetailPage({
 
   // Create workout program modal
   const [createProgOpen, setCreateProgOpen] = useState(false);
-  const [createProgPhases, setCreateProgPhases] = useState<{ id: string; name: string }[]>([]);
+  const [createProgPhases, setCreateProgPhases] = useState<CreatePhaseOption[]>([]);
   const [createProgForm, setCreateProgForm] = useState({
-    phaseId: "", sessionsPerWeek: 4, currentWeek: 1, workoutType: "", notes: "",
+    phaseId: "", sessionsPerWeek: 4, currentWeek: 1, packageEnrollmentId: "", notes: "",
   });
   const [createProgSaving, setCreateProgSaving] = useState(false);
   const [createProgError, setCreateProgError] = useState("");
 
+  /** Giai đoạn hợp với gói: gói L0 → Giai đoạn 0 (Khởi động). */
+  function suggestPhaseFor(pkgId: string, phases: CreatePhaseOption[]): CreatePhaseOption | null {
+    const pkg = packages.find((p) => p.id === pkgId);
+    if (pkg?.packageName === TRIAL_PACKAGE) return phases.find((p) => isL0Phase(p.name)) ?? null;
+    return null;
+  }
+
+  function applyPhase(phaseId: string, phases: CreatePhaseOption[] = createProgPhases) {
+    const ph = phases.find((p) => p.id === phaseId);
+    setCreateProgForm((f) => ({
+      ...f,
+      phaseId,
+      // Số buổi/tuần theo số loại buổi của giáo án (Giai đoạn 0 = Ngày 1–4).
+      sessionsPerWeek: ph && ph.sessionTypes.length > 0 ? Math.min(7, ph.sessionTypes.length) : f.sessionsPerWeek,
+    }));
+  }
+
   function openCreateProg() {
+    // Lộ trình gợi ý gắn với chương trình mới: gói đang trừ buổi của khách.
+    const pkgId = (pickChargeablePackage(packages) ?? packages.find((p) => p.status === "ACTIVE"))?.id ?? "";
+    setCreateProgForm({ phaseId: "", sessionsPerWeek: 4, currentWeek: 1, packageEnrollmentId: pkgId, notes: "" });
+    const preselect = (phases: CreatePhaseOption[]) => {
+      const ph = suggestPhaseFor(pkgId, phases);
+      if (ph) applyPhase(ph.id, phases);
+    };
     if (createProgPhases.length === 0) {
       fetch("/api/admin/phases")
         .then((r) => r.json())
-        .then((data: { id: string; name: string; isActive: boolean }[]) =>
-          setCreateProgPhases(data.filter((p) => p.isActive))
-        )
+        .then((data: (CreatePhaseOption & { isActive: boolean })[]) => {
+          const active = data.filter((p) => p.isActive);
+          setCreateProgPhases(active);
+          preselect(active);
+        })
         .catch(() => {});
+    } else {
+      preselect(createProgPhases);
     }
-    setCreateProgForm({ phaseId: "", sessionsPerWeek: 4, currentWeek: 1, workoutType: "", notes: "" });
     setCreateProgError("");
     setCreateProgOpen(true);
   }
@@ -698,7 +730,7 @@ export function ClientDetailPage({
           phaseId: createProgForm.phaseId,
           sessionsPerWeek: createProgForm.sessionsPerWeek,
           currentWeek: createProgForm.currentWeek,
-          workoutType: createProgForm.workoutType || undefined,
+          packageEnrollmentId: createProgForm.packageEnrollmentId || undefined,
           notes: createProgForm.notes || undefined,
           sessions: [],
         }),
@@ -707,6 +739,8 @@ export function ClientDetailPage({
       const created = await res.json() as WorkoutProgram;
       setWorkoutProgs((prev) => [created, ...prev]);
       setCreateProgOpen(false);
+      // Thẻ Tổng quan, tab CT Tập và dữ liệu server cùng thấy chương trình mới.
+      router.refresh();
     } catch (err) {
       setCreateProgError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -2722,6 +2756,7 @@ export function ClientDetailPage({
           clientId={client.id}
           programs={workoutProgs}
           onProgramsChange={setWorkoutProgs}
+          onCreateProgram={openCreateProg}
           isSubstitute={isSubstitute}
           assignedPTId={client.assignedPT?.id ?? null}
           initialLogs={initialWorkoutLogs}
@@ -4051,7 +4086,7 @@ export function ClientDetailPage({
                 <label className="text-xs font-semibold text-gray-600">Giai đoạn *</label>
                 <select
                   value={createProgForm.phaseId}
-                  onChange={(e) => setCreateProgForm((f) => ({ ...f, phaseId: e.target.value }))}
+                  onChange={(e) => applyPhase(e.target.value)}
                   className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
                 >
                   <option value="">— Chọn giai đoạn —</option>
@@ -4085,14 +4120,34 @@ export function ClientDetailPage({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-600">Loại hình tập</label>
-                <input
-                  type="text"
-                  placeholder="VD: Giảm mỡ, Tăng cơ, Phục hồi..."
-                  value={createProgForm.workoutType}
-                  onChange={(e) => setCreateProgForm((f) => ({ ...f, workoutType: e.target.value }))}
+                <label className="text-xs font-semibold text-gray-600">Lộ trình (gói) gắn với chương trình</label>
+                <select
+                  value={createProgForm.packageEnrollmentId}
+                  onChange={(e) => {
+                    const pkgId = e.target.value;
+                    setCreateProgForm((f) => ({ ...f, packageEnrollmentId: pkgId }));
+                    const ph = suggestPhaseFor(pkgId, createProgPhases);
+                    if (ph && !createProgForm.phaseId) applyPhase(ph.id);
+                  }}
                   className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
-                />
+                >
+                  <option value="">Tự chọn gói đang trừ buổi</option>
+                  {packages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.packageName}{p.contractCode ? ` · ${p.contractCode}` : ""} · {p.sessionsUsed}/{p.sessions} buổi
+                      {p.status !== "ACTIVE" ? " (đã đóng)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const ph = createProgPhases.find((p) => p.id === createProgForm.phaseId);
+                  return ph ? (
+                    <p className="text-[11px] text-gray-400">
+                      Loại buổi theo giáo án: {ph.sessionTypes.join(" · ") || "—"}
+                      {isL0Phase(ph.name) && " — buổi tập sẽ có kịch bản & tick lỗi L0"}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="space-y-1">
