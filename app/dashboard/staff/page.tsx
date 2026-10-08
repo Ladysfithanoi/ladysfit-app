@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { worksAtBranches } from "@/lib/work-branches";
 import { StaffPageClient } from "@/components/dashboard/staff-page-client";
 
 export default async function StaffPage() {
@@ -21,11 +22,9 @@ export default async function StaffPage() {
         : isFM
         ? {
             deletedAt: null,
-            OR: [
-              { branchId: { in: managedBranchIds } },
-              // Admin làm nhiều cơ sở (lib/admin-branches) hiện ở mọi cơ sở được gán.
-              { role: "ADMIN", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
-            ],
+            // Admin / Lao công / Marketing làm nhiều cơ sở hiện ở mọi cơ sở được
+            // gán (lib/work-branches).
+            ...worksAtBranches(managedBranchIds),
           }
         : { branchId: session.user.branchId ?? undefined, deletedAt: null },
       select: {

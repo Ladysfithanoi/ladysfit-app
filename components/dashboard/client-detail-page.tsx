@@ -777,7 +777,7 @@ export function ClientDetailPage({
     if (pt.id === client.assignedPT.id) return false;
     // Nhân sự thuộc cơ sở đang chọn — FM tính theo cơ sở được phân công quản lý
     // (branchId của FM để trống), PT tính theo cơ sở làm việc, Admin chỉ ở những
-    // cơ sở đã chọn làm việc (lib/admin-branches) — chưa chọn thì không hiện.
+    // cơ sở đã chọn làm việc (lib/work-branches) — chưa chọn thì không hiện.
     const inBranch =
       pt.branchId === subTargetBranchId ||
       ((pt.role === "FM" || pt.role === "ADMIN") && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId));

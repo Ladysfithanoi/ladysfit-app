@@ -6,7 +6,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff, Briefcase } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff, Briefcase, AlertTriangle, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
@@ -21,7 +21,19 @@ type JobPositionRow = {
   color: string;
   isActive: boolean;
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
+  /** Làm được nhiều cơ sở (Lao công, Marketing…) — xem lib/work-branches. */
+  multiBranch?: boolean;
   _count: { users: number };
+};
+
+/** Nhân sự trùng tên máy chủ trả về khi tạo mới (POST /api/staff → 409). */
+type DuplicateMatch = {
+  id: string;
+  name: string | null;
+  email: string;
+  positionName: string | null;
+  branchNames: string[];
+  canMerge: boolean;
 };
 type StaffMember = {
   id: string;
@@ -215,6 +227,8 @@ export function StaffPageClient({
   const [posOpen, setPosOpen] = useState(false);
   const [birthDateVal, setBirthDateVal] = useState("");
   const [genderVal, setGenderVal] = useState<"" | "MALE" | "FEMALE">("");
+  // Trùng tên khi tạo mới: danh sách người trùng + gói tin đang gửi dở.
+  const [duplicate, setDuplicate] = useState<{ matches: DuplicateMatch[]; body: Record<string, unknown> } | null>(null);
   const [workStartVal, setWorkStartVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -253,6 +267,10 @@ export function StaffPageClient({
   );
 
   const canManage = isAdmin || isFM;
+
+  // Chức vụ làm nhiều cơ sở (Lao công, Marketing…) — chọn nhiều cơ sở làm việc.
+  const selectedPosition = jobPositions.find((p) => p.id === selectedJobPositionId);
+  const isMultiStaff = selectedRole === "STAFF" && !!selectedPosition?.multiBranch;
 
   const filtered = useMemo(() => {
     return initialStaff.filter((s) => {
@@ -314,7 +332,7 @@ export function StaffPageClient({
     // Admin tạo trước khi có gán nhiều cơ sở chỉ có một cơ sở ở branchId.
     const assigned = s.managedBranches.map((m) => m.branchId);
     setSelectedBranchIds(
-      s.role === "ADMIN" && assigned.length === 0 && s.branchId ? [s.branchId] : assigned,
+      s.role !== "FM" && assigned.length === 0 && s.branchId ? [s.branchId] : assigned,
     );
     setSelectedPtLevelId(s.ptLevelId ?? "");
     setSelectedJobPositionId(s.jobPositionId ?? "");
@@ -387,6 +405,11 @@ export function StaffPageClient({
       setLoading(false);
       return;
     }
+    if (isMultiStaff && selectedBranchIds.length === 0) {
+      setError("Chọn ít nhất 1 cơ sở làm việc");
+      setLoading(false);
+      return;
+    }
 
     // KHÔNG gửi role: máy chủ tự suy từ chức vụ. Gửi lên là mở đường cho việc
     // sửa gói tin để tự phong quyền.
@@ -400,7 +423,7 @@ export function StaffPageClient({
 
     if (selectedRole === "FM") {
       body.managedBranchIds = selectedBranchIds;
-    } else if (selectedRole === "ADMIN") {
+    } else if (selectedRole === "ADMIN" || isMultiStaff) {
       // Admin làm ở nhiều cơ sở như FM — mỗi cơ sở một bảng lương, dạy khách cơ
       // sở nào ăn tiền buổi dạy ở cơ sở đó. Cơ sở chính (branchId) giữ nguyên
       // nếu vẫn còn được chọn, không thì lấy cơ sở chọn đầu tiên.
@@ -424,6 +447,13 @@ export function StaffPageClient({
     const pw = fd.get("password") as string;
     if (pw) body.password = pw;
 
+    await sendStaff(body);
+  }
+
+  /** Gửi form nhân sự; trùng tên khi tạo mới thì mở hộp thoại hỏi lại. */
+  async function sendStaff(body: Record<string, unknown>) {
+    setLoading(true);
+    setError("");
     try {
       const res = await fetch(editing ? `/api/staff/${editing.id}` : "/api/staff", {
         method: editing ? "PUT" : "POST",
@@ -434,14 +464,20 @@ export function StaffPageClient({
         let errMsg = "Có lỗi xảy ra";
         try {
           const err = await res.json();
+          if (!editing && err.code === "DUPLICATE_NAME" && Array.isArray(err.matches)) {
+            setDuplicate({ matches: err.matches as DuplicateMatch[], body });
+            return;
+          }
           errMsg = err.error ?? errMsg;
           if (err.code) errMsg += ` (${err.code})`;
         } catch {}
         throw new Error(errMsg);
       }
+      setDuplicate(null);
       closePanel();
       router.refresh();
     } catch (err) {
+      setDuplicate(null);
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setLoading(false);
@@ -473,6 +509,10 @@ export function StaffPageClient({
   const availableBranches = isFM
     ? branches.filter((b) => managedBranchIds.includes(b.id))
     : branches;
+
+  // FM "xoá" người làm nhiều cơ sở còn làm ở cơ sở khác = chỉ gỡ khỏi cơ sở mình.
+  const deletingOnlyMyBranches =
+    isFM && !!deleting && deleting.managedBranches.some((m) => !managedBranchIds.includes(m.branchId));
 
   return (
     <>
@@ -590,7 +630,7 @@ export function StaffPageClient({
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
-                    {(s.role === "FM" || s.role === "ADMIN") && s.managedBranches.length > 0 ? (
+                    {s.managedBranches.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {s.managedBranches.slice(0, 2).map((m) => (
                           <span
@@ -720,17 +760,108 @@ export function StaffPageClient({
         open={!!deleting}
         onClose={closeDelete}
         variant="danger"
-        title="Xóa nhân sự"
+        title={deletingOnlyMyBranches ? "Gỡ khỏi cơ sở" : "Xóa nhân sự"}
         description={
           deleteError
             ? deleteError
+            : deletingOnlyMyBranches
+            ? `"${deleting?.name ?? deleting?.email}" còn làm ở cơ sở khác — chỉ gỡ họ khỏi cơ sở của bạn, tài khoản và các cơ sở khác giữ nguyên.`
             : `Bạn có chắc muốn xóa nhân sự "${deleting?.name ?? deleting?.email}"?\nHành động này không thể hoàn tác.`
         }
-        confirmLabel={deleteError ? undefined : "Xóa"}
+        confirmLabel={deleteError ? undefined : deletingOnlyMyBranches ? "Gỡ khỏi cơ sở" : "Xóa"}
         onConfirm={deleteError ? closeDelete : handleDelete}
         cancelLabel={deleteError ? "Đóng" : "Hủy"}
         loading={loading}
       />
+
+      {/* Trùng tên khi tạo nhân sự mới */}
+      {duplicate && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDuplicate(null)} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-50 shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-gray-900">Đã có nhân sự trùng tên</h2>
+                <p className="mt-0.5 text-sm text-gray-500">
+                  Tên “{String(duplicate.body.name ?? "")}” đã có trong danh sách nhân sự:
+                </p>
+              </div>
+            </div>
+
+            <ul className="space-y-2">
+              {duplicate.matches.map((m) => (
+                <li key={m.id} className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+                  <p className="text-sm font-bold text-gray-800">{m.name ?? m.email}</p>
+                  <p className="text-xs text-gray-500">
+                    {m.positionName ?? "Chưa có chức vụ"}
+                    {m.branchNames.length > 0 ? ` · ${m.branchNames.join(", ")}` : ""}
+                  </p>
+                  <p className="text-[11px] text-gray-400">{m.email}</p>
+                </li>
+              ))}
+            </ul>
+
+            {(() => {
+              const mergeable = duplicate.matches.find((m) => m.canMerge);
+              const chosenIds = Array.isArray(duplicate.body.managedBranchIds)
+                ? (duplicate.body.managedBranchIds as string[])
+                : [String(duplicate.body.branchId ?? "")];
+              const newBranchNames = branches
+                .filter((b) => chosenIds.includes(b.id))
+                .map((b) => b.name)
+                .join(", ");
+              return mergeable ? (
+                <div className="space-y-2">
+                  <p className="rounded-xl bg-blue-50 px-3.5 py-3 text-sm font-semibold leading-relaxed text-blue-700">
+                    {mergeable.positionName} làm được nhiều cơ sở. Bạn có chắc đây là{" "}
+                    <span className="font-extrabold">cùng một người</span>, nay làm thêm ở{" "}
+                    {newBranchNames || "cơ sở vừa chọn"} không?
+                  </p>
+                  <Button
+                    onClick={() => sendStaff({ ...duplicate.body, mergeIntoId: mergeable.id })}
+                    disabled={loading}
+                    className="w-full h-auto min-h-11 py-2.5 rounded-xl font-bold text-white whitespace-normal"
+                    style={{ backgroundColor: "#f15b5c" }}
+                  >
+                    Đúng, cùng 1 người — thêm cơ sở cho người này
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => sendStaff({ ...duplicate.body, confirmDuplicateName: true })}
+                    disabled={loading}
+                    className="w-full h-auto min-h-11 py-2.5 rounded-xl font-bold whitespace-normal"
+                  >
+                    Không, là người khác — vẫn tạo nhân sự mới
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={() => sendStaff({ ...duplicate.body, confirmDuplicateName: true })}
+                  disabled={loading}
+                  className="w-full h-auto min-h-11 py-2.5 rounded-xl font-bold text-white whitespace-normal"
+                  style={{ backgroundColor: "#f15b5c" }}
+                >
+                  Đây là người khác — vẫn tạo nhân sự mới
+                </Button>
+              );
+            })()}
+            <button
+              type="button"
+              onClick={() => setDuplicate(null)}
+              className="w-full h-10 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50"
+            >
+              Huỷ
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Reset password modal */}
       {resetting && (
@@ -1010,6 +1141,19 @@ export function StaffPageClient({
                 thuộc cơ sở nào.
               </p>
             </Field>
+          ) : isMultiStaff ? (
+            <Field label="Cơ sở làm việc *">
+              <BranchMultiSelect
+                branches={availableBranches}
+                selected={selectedBranchIds}
+                onChange={setSelectedBranchIds}
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                {selectedPosition?.name} làm được nhiều cơ sở: một người, chọn đủ các cơ sở họ làm —
+                không tạo thêm tài khoản trùng tên. Mỗi cơ sở một bảng lương, lương cơ bản đặt riêng
+                ở tab Cấu hình lương của từng cơ sở.
+              </p>
+            </Field>
           ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" ? (
             <Field label="Cơ sở *">
               <select
@@ -1183,6 +1327,27 @@ function JobPositionManager({
               <span className="min-w-0 flex-1 truncate text-xs text-gray-400">
                 {ROLE_LABEL[p.role]} · {p._count.users} nhân sự{!p.isActive ? " · đã tắt" : ""}
               </span>
+              {/* Làm nhiều cơ sở — chỉ chức vụ quyền STAFF (lib/work-branches) */}
+              {p.role === "STAFF" && (
+                <button
+                  onClick={() => patch(p.id, { multiBranch: !p.multiBranch })}
+                  aria-pressed={!!p.multiBranch}
+                  title={
+                    p.multiBranch
+                      ? "Đang làm được nhiều cơ sở: một người gán nhiều cơ sở, mỗi cơ sở một bảng lương. Bấm để tắt."
+                      : "Bấm để cho chức vụ này làm được nhiều cơ sở (một người, nhiều cơ sở)."
+                  }
+                  className={cn(
+                    "shrink-0 inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-bold transition-colors",
+                    p.multiBranch
+                      ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                      : "text-gray-400 hover:bg-gray-100"
+                  )}
+                >
+                  <Building2 className="h-3 w-3" />
+                  Nhiều cơ sở
+                </button>
+              )}
               <button
                 onClick={() => patch(p.id, { isActive: !p.isActive })}
                 className="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-bold text-gray-500 transition-colors hover:bg-gray-100"

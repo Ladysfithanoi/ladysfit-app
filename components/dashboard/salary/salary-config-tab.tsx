@@ -296,7 +296,9 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
   useEffect(() => {
     async function loadOne(userId: string, role: string) {
       try {
-        const res = await fetch(`/api/salary/config?userId=${userId}`);
+        // STAFF (Lao công, Marketing…) làm nhiều cơ sở: lương cơ bản riêng từng cơ sở.
+        const branchParam = role === "STAFF" ? `&branchId=${selectedBranchId}` : "";
+        const res = await fetch(`/api/salary/config?userId=${userId}${branchParam}`);
         if (!res.ok) { setConfigs(prev => ({ ...prev, [userId]: makeDefault(role) })); return; }
         const data = await res.json() as {
           baseSalary: number; seniorityYears: number;
@@ -349,7 +351,8 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
     // 0đ là hợp lệ (lao công/MKT chưa có mức); ô trống hoặc sai mới lấy mặc định.
     const typedBase = parseFloat(cfg.baseSalary);
     const baseSalary = Number.isFinite(typedBase) && typedBase >= 0 ? typedBase : defaultBase(role);
-    const branchId = isFM
+    // STAFF làm nhiều cơ sở lưu cấu hình theo cơ sở đang chọn.
+    const branchId = isFM || isStaff
       ? selectedBranchId
       : (staffList.find(s => s.id === userId)?.branchId ?? selectedBranchId);
     patch(userId, { saving: true });

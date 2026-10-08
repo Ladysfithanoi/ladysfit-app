@@ -446,6 +446,10 @@ model JobPosition {
   /// Vẫn là enum cố định: Admin chọn TỪ danh sách có sẵn, không tự đặt ra quyền
   /// mới. Chức vụ thì thêm bao nhiêu cũng được, quyền thì không.
   role      Role     @default(STAFF)
+  /// Chức vụ làm được ở nhiều cơ sở (Lao công, Marketing…) — một người, gán
+  /// nhiều cơ sở (FMBranchAssignment), mỗi cơ sở một bảng lương với lương cơ
+  /// bản riêng. Chỉ có tác dụng với quyền STAFF — xem lib/work-branches.
+  multiBranch Boolean  @default(false)
   color     String   @default("#6b7280")
   order     Int      @default(0)
   isActive  Boolean  @default(true)

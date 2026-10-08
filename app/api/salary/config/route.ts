@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDayInput } from "@/lib/leave-days";
+import { latestSalaryConfig } from "@/lib/salary-config";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -24,10 +25,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const config = await prisma.salaryConfig.findFirst({
-    where: { userId },
-    orderBy: { effectiveFrom: "desc" },
-  });
+  // branchId: nhân sự làm nhiều cơ sở có lương cơ bản riêng từng cơ sở.
+  const branchId = searchParams.get("branchId");
+  const config = branchId
+    ? await latestSalaryConfig(userId, branchId)
+    : await prisma.salaryConfig.findFirst({
+        where: { userId },
+        orderBy: { effectiveFrom: "desc" },
+      });
 
   return NextResponse.json(config);
 }

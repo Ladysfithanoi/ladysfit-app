@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recalcSalary, salaryUpdateData } from "@/lib/salary-live";
+import { latestSalaryConfig } from "@/lib/salary-config";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -17,13 +18,23 @@ export async function GET(req: Request) {
   const month = parseInt(searchParams.get("month") ?? String(new Date().getMonth() + 1));
   const year = parseInt(searchParams.get("year") ?? String(new Date().getFullYear()));
 
-  const [record, config] = await Promise.all([
-    prisma.salaryRecord.findFirst({ where: { userId: session.user.id, month, year } }),
-    prisma.salaryConfig.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { effectiveFrom: "desc" },
-    }),
-  ]);
+  // Lao công / Marketing làm nhiều cơ sở (lib/work-branches) có một bảng lương ở
+  // mỗi cơ sở — trả kèm danh sách để tự chọn xem từng cơ sở.
+  const all = await prisma.salaryRecord.findMany({
+    where:   { userId: session.user.id, month, year },
+    include: { branch: { select: { id: true, name: true } } },
+    orderBy: { branch: { name: "asc" } },
+  });
+  const wanted = searchParams.get("branchId");
+  const picked = all.find((r) => r.branchId === wanted) ?? all[0] ?? null;
+  const branches = all.map((r) => r.branch);
+  let record: Omit<NonNullable<typeof picked>, "branch"> | null = null;
+  if (picked) {
+    const { branch, ...rest } = picked;
+    void branch;
+    record = rest;
+  }
+  const config = await latestSalaryConfig(session.user.id, record?.branchId);
 
   // Bảng lương chỉ được tính lại khi FM mở trang Quỹ lương, nên PT tự tích lịch
   // nghỉ, vừa dạy xong một buổi, hay vừa chốt thêm hợp đồng, sẽ không thấy gì
@@ -38,9 +49,9 @@ export async function GET(req: Request) {
         where: { id: record.id },
         data:  salaryUpdateData(patch),
       });
-      return NextResponse.json({ record: synced, config });
+      return NextResponse.json({ record: synced, config, branches });
     }
   }
 
-  return NextResponse.json({ record, config });
+  return NextResponse.json({ record, config, branches });
 }

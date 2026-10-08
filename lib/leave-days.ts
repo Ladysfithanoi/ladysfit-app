@@ -21,6 +21,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { currentWorkBranches } from "@/lib/work-branches";
 import type { LeaveType } from "@prisma/client";
 
 /** Số ngày phép tối đa của một năm làm việc đủ 12 tháng. */
@@ -362,9 +363,12 @@ async function fmManages(actor: LeaveActor, targetUserId: string): Promise<boole
 
   const target = await prisma.user.findUnique({
     where:  { id: targetUserId },
-    select: { branchId: true },
+    select: { role: true, branchId: true, managedBranches: { select: { branchId: true } } },
   });
-  return !!target?.branchId && managed.includes(target.branchId);
+  if (!target || target.role === "FM") return false;
+  // Người làm nhiều cơ sở (Lao công, Marketing… — lib/work-branches): FM của
+  // bất kỳ cơ sở nào họ làm.
+  return currentWorkBranches(target).some((b) => managed.includes(b));
 }
 
 /**

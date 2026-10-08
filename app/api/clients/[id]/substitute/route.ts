@@ -97,7 +97,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // Nhân sự nhận khách ở cơ sở khác → đây là việc phân khách sang cơ sở khác,
   // chỉ Admin được làm. Chuyển giao DÀI HẠN thì khách đổi luôn cơ sở theo nhân
   // sự mới; hỗ trợ ngắn hạn chỉ là dạy hộ tạm nên khách vẫn thuộc cơ sở cũ.
-  // Admin cũng chỉ thuộc những cơ sở họ chọn làm việc (lib/admin-branches) —
+  // Admin cũng chỉ thuộc những cơ sở họ chọn làm việc (lib/work-branches) —
   // không còn kiểu "Admin chưa gắn cơ sở = người của mọi cơ sở". Chưa chọn cơ
   // sở nào thì không nhận khách được, phải vào Nhân sự chọn cơ sở trước.
   if (substitute.role === "ADMIN" && substituteBranchIds.length === 0) {

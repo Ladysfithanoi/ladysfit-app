@@ -15,6 +15,7 @@ import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
 import { vnMonthStart } from "@/lib/format-date";
+import { latestSalaryConfig } from "@/lib/salary-config";
 
 // ── GET — fetch records for FM, recalculating revenue live ─────────────────
 
@@ -107,10 +108,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Admin chỉ có bảng lương ở cơ sở họ đã chọn làm việc (lib/admin-branches) —
-  // màn tạo bảng lương đã lọc sẵn, chốt lại ở đây để không ai gửi tay tạo được
-  // bảng lương Admin ở cơ sở họ không làm.
-  const adminIds = body.entries.filter((e) => e.userRole === "ADMIN").map((e) => e.userId);
+  // Admin / STAFF chỉ có bảng lương ở cơ sở họ đã chọn làm việc (lib/work-branches)
+  // — màn tạo bảng lương đã lọc sẵn, chốt lại ở đây để không ai gửi tay tạo được
+  // bảng lương ở cơ sở họ không làm.
+  const adminIds = body.entries
+    .filter((e) => e.userRole === "ADMIN" || e.userRole === "STAFF")
+    .map((e) => e.userId);
   if (adminIds.length > 0) {
     const working = await prisma.user.findMany({
       where: {
@@ -123,7 +126,8 @@ export async function POST(req: Request) {
       select: { id: true },
     });
     const allowed = new Set(working.map((u) => u.id));
-    body.entries = body.entries.filter((e) => e.userRole !== "ADMIN" || allowed.has(e.userId));
+    body.entries = body.entries.filter((e) =>
+      (e.userRole !== "ADMIN" && e.userRole !== "STAFF") || allowed.has(e.userId));
   }
 
   // Doanh số cả phòng (VND) — cùng định nghĩa với "Tổng doanh thu" bên Setup
@@ -151,12 +155,16 @@ export async function POST(req: Request) {
   // P2002 và cả lượt tạo hỏng — FM chỉ thấy HTTP 500, không ai được tạo dòng nào.
   // Nay bỏ qua đúng người đó và báo rõ, những người còn lại vẫn được tạo.
   //
-  // Riêng Admin: làm ở nhiều cơ sở thì có một dòng ở MỖI cơ sở (buổi dạy khách
-  // cơ sở nào tính vào dòng cơ sở đó — payBranchScope), nên không chặn.
+  // Riêng Admin và Lao công / Marketing làm nhiều cơ sở (lib/work-branches): có
+  // một dòng ở MỖI cơ sở (Admin: buổi dạy khách cơ sở nào tính vào dòng cơ sở
+  // đó — payBranchScope; STAFF: lương cơ bản cấu hình riêng từng cơ sở).
   const clashes = await prisma.salaryRecord.findMany({
     where: {
       userId: { in: targetUserIds }, month: body.month, year: body.year,
-      user: { role: { not: "ADMIN" } },
+      NOT: { user: { OR: [
+        { role: "ADMIN" },
+        { role: "STAFF", managedBranches: { some: {} } },
+      ] } },
     },
     select: { userId: true, user: { select: { name: true, email: true } }, branch: { select: { name: true } } },
   });
@@ -183,10 +191,14 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const config = await prisma.salaryConfig.findFirst({
-      where: { userId: entry.userId },
-      orderBy: { effectiveFrom: "desc" },
-    });
+    // STAFF làm nhiều cơ sở có lương cơ bản riêng ở từng cơ sở — đọc cấu hình
+    // của CƠ SỞ NÀY trước (xem latestSalaryConfig).
+    const config = entry.userRole === "STAFF"
+      ? await latestSalaryConfig(entry.userId, body.branchId)
+      : await prisma.salaryConfig.findFirst({
+          where: { userId: entry.userId },
+          orderBy: { effectiveFrom: "desc" },
+        });
 
     // Mức đóng BHXH + phần người lao động đóng bảo hiểm (trừ vào "Còn lại nhận").
     const insuranceFields = (role: string, baseSalary: number, totalSalary: number) => {

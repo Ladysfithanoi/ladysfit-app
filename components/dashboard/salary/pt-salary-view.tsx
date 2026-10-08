@@ -6,6 +6,7 @@ import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
 import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
+  branchId?:            string;
   baseSalary:           number;
   totalRevenue:         number;
   commissionRate:       number;
@@ -75,19 +76,24 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
   const [year, setYear]     = useState(now.getFullYear());
   const [record, setRecord] = useState<SalaryRecord | null>(null);
   const [loading, setLoading] = useState(false);
+  // Làm nhiều cơ sở (Lao công, Marketing…) → mỗi cơ sở một bảng lương.
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [branchId, setBranchId] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/salary/my?month=${month}&year=${year}`);
+      const branchParam = branchId ? `&branchId=${branchId}` : "";
+      const res = await fetch(`/api/salary/my?month=${month}&year=${year}${branchParam}`);
       if (res.ok) {
-        const data = await res.json() as { record: SalaryRecord | null };
+        const data = await res.json() as { record: SalaryRecord | null; branches?: { id: string; name: string }[] };
         setRecord(data.record);
+        setBranches(data.branches ?? []);
       }
     } finally {
       setLoading(false);
     }
-  }, [month, year]);
+  }, [month, year, branchId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -134,6 +140,18 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
+          {branches.length > 1 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Cơ sở:</label>
+              <select
+                value={record?.branchId ?? branchId}
+                onChange={e => setBranchId(e.target.value)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30"
+              >
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

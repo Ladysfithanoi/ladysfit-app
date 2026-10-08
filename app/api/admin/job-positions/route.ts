@@ -50,6 +50,8 @@ export async function POST(req: Request) {
       // Quyền không hợp lệ thì rơi về STAFF — thấp nhất, không phải quyền cao nhất.
       role: ROLES.includes(body.role as Role) ? (body.role as Role) : "STAFF",
       order: (max._max.order ?? -1) + 1,
+      // Làm được nhiều cơ sở — chỉ có nghĩa với quyền STAFF (lib/work-branches).
+      multiBranch: body.multiBranch === true,
     },
     include: { _count: { select: { users: { where: { deletedAt: null } } } } },
   });

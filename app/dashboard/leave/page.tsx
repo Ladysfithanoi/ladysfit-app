@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { worksAtBranches } from "@/lib/work-branches";
 import { LeaveCalendarPage } from "@/components/dashboard/leave/leave-calendar-page";
 
 /** Cơ sở của một nhân sự: PT/Admin theo branchId, FM theo các cơ sở phụ trách. */
@@ -25,8 +26,8 @@ function toStaff(u: StaffRow) {
     role:  u.role,
     // Nhân sự STAFF (lao công, marketing…) hiện theo tên chức vụ thay vì "STAFF".
     positionName: u.jobPosition?.name ?? null,
-    // FM và Admin làm nhiều cơ sở (lib/admin-branches) thuộc mọi cơ sở được gán.
-    branchIds: (u.role === "FM" || u.role === "ADMIN") && u.managedBranches.length > 0
+    // FM và người làm nhiều cơ sở (lib/work-branches) thuộc mọi cơ sở được gán.
+    branchIds: u.role !== "PT" && u.managedBranches.length > 0
       ? u.managedBranches.map(b => b.branchId)
       : (u.branchId ? [u.branchId] : []),
   };
@@ -74,7 +75,7 @@ export default async function LeavePageRoute() {
   } else if (isFM) {
     const [branchStaff, me, fmBranches] = await Promise.all([
       prisma.user.findMany({
-        where:   { branchId: { in: managedBranchIds }, role: { in: ["PT", "ADMIN", "STAFF"] }, deletedAt: null },
+        where:   { ...worksAtBranches(managedBranchIds), role: { in: ["PT", "ADMIN", "STAFF"] }, deletedAt: null },
         select:  STAFF_SELECT,
         orderBy: { name: "asc" },
       }),

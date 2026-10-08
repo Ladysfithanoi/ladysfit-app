@@ -7,7 +7,7 @@ import { captureTrash } from "@/lib/trash";
 import { firstWorkDayOf, hireDayOf, parseDayInput } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { revokeTrustedDevices } from "@/lib/login-device";
-import { adminWorkBranches } from "@/lib/admin-branches";
+import { currentWorkBranches, usesWorkBranches, workBranchList } from "@/lib/work-branches";
 import { parseGender } from "@/lib/celebrations";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
@@ -24,7 +24,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 
   const user = await prisma.user.findUnique({
     where: { id: params.id },
-    include: { _count: { select: { clients: true } } },
+    include: {
+      _count: { select: { clients: true } },
+      managedBranches: { select: { branchId: true } },
+    },
   });
 
   if (!user) return NextResponse.json({ error: "Không tìm thấy nhân sự" }, { status: 404 });
@@ -38,8 +41,22 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     if (user.role === "FM") {
       return NextResponse.json({ error: "FM không thể xóa tài khoản FM khác" }, { status: 403 });
     }
-    if (!user.branchId || !managedBranchIds.includes(user.branchId)) {
+    const works = currentWorkBranches(user);
+    if (!works.some((b) => managedBranchIds.includes(b))) {
       return NextResponse.json({ error: "Không có quyền xóa nhân sự này" }, { status: 403 });
+    }
+    // Người làm nhiều cơ sở (lib/work-branches) còn làm ở cơ sở FM này không
+    // quản: chỉ gỡ họ khỏi cơ sở của FM, tài khoản và các cơ sở khác giữ nguyên.
+    const remaining = works.filter((b) => !managedBranchIds.includes(b));
+    if (user.managedBranches.length > 0 && remaining.length > 0) {
+      const home = remaining.includes(user.branchId ?? "") ? user.branchId! : remaining[0];
+      await prisma.$transaction([
+        prisma.fMBranchAssignment.deleteMany({
+          where: { userId: params.id, branchId: { in: managedBranchIds } },
+        }),
+        prisma.user.update({ where: { id: params.id }, data: { branchId: home } }),
+      ]);
+      return NextResponse.json({ success: true, removedFromBranches: true });
     }
   }
 
@@ -92,16 +109,29 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // QUYỀN SUY TỪ CHỨC VỤ, không lấy theo giá trị client gửi lên — xem POST
   // /api/staff. Không gửi chức vụ thì giữ nguyên quyền cũ.
   let role: string | undefined;
+  let positionMulti: boolean | undefined;
   if (jobPositionId) {
     const position = await prisma.jobPosition.findUnique({
       where: { id: String(jobPositionId) },
-      select: { role: true, isActive: true },
+      select: { role: true, isActive: true, multiBranch: true },
     });
     if (!position || !position.isActive) {
       return NextResponse.json({ error: "Chức vụ không hợp lệ" }, { status: 400 });
     }
     role = position.role;
+    positionMulti = position.multiBranch;
   }
+
+  // Hiện trạng của người được sửa — quyền, chức vụ và các cơ sở đang làm.
+  const before = await prisma.user.findUnique({
+    where:  { id: params.id },
+    select: {
+      role: true, branchId: true,
+      jobPosition: { select: { multiBranch: true } },
+      managedBranches: { select: { branchId: true } },
+    },
+  });
+  if (!before) return NextResponse.json({ error: "Không tìm thấy nhân sự" }, { status: 404 });
 
   // FM không gán được quyền Admin hoặc FM cho ai
   if (isFM && role && (role === "ADMIN" || role === "FM")) {
@@ -110,12 +140,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   // FM can only edit staff in their managed branches
   if (isFM) {
-    const target = await prisma.user.findUnique({ where: { id: params.id }, select: { branchId: true, role: true } });
-    if (!target) return NextResponse.json({ error: "Không tìm thấy nhân sự" }, { status: 404 });
-    if (target.role === "FM" || target.role === "ADMIN") {
+    if (before.role === "FM" || before.role === "ADMIN") {
       return NextResponse.json({ error: "Không có quyền chỉnh sửa tài khoản này" }, { status: 403 });
     }
-    if (!target.branchId || !managedBranchIds.includes(target.branchId)) {
+    // Người làm nhiều cơ sở: FM của BẤT KỲ cơ sở nào họ làm đều sửa được.
+    if (!currentWorkBranches(before).some((b) => managedBranchIds.includes(b))) {
       return NextResponse.json({ error: "Không có quyền chỉnh sửa nhân sự này" }, { status: 403 });
     }
   }
@@ -166,21 +195,33 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     updateData.employmentStartDate = nextStart;
   }
 
-  // Quyền sau khi lưu — để biết cơ sở gửi lên là của FM, của Admin hay của PT.
-  const finalRole = role ?? (await prisma.user.findUnique({
-    where: { id: params.id }, select: { role: true },
-  }))?.role;
-  // Admin làm nhiều cơ sở: danh sách lưu như FM, branchId = cơ sở chính.
-  const adminBranchIds = finalRole === "ADMIN" && newManagedIds !== undefined
-    ? adminWorkBranches(newManagedIds, branchId)
-    : null;
+  // Quyền sau khi lưu — để biết cơ sở gửi lên là của FM, của người làm nhiều
+  // cơ sở (Admin, Lao công, Marketing… — lib/work-branches) hay của PT.
+  const finalRole = role ?? before.role;
+  const finalMulti = usesWorkBranches(finalRole, positionMulti ?? before.jobPosition?.multiBranch);
+  let workBranchIds: string[] | null = null;
+  if (finalMulti && newManagedIds !== undefined) {
+    let list = workBranchList(newManagedIds, branchId);
+    // FM chỉ thấy cơ sở mình quản lý trong ô chọn — cơ sở khác người này đang
+    // làm phải giữ nguyên, không thì FM lưu một lần là gỡ họ khỏi cơ sở khác.
+    if (isFM) {
+      const kept = currentWorkBranches(before).filter((b) => !managedBranchIds.includes(b));
+      const mine = list.filter((b) => managedBranchIds.includes(b));
+      const home = [before.branchId, ...list].find((b) => b && (kept.includes(b) || mine.includes(b))) ?? null;
+      list = workBranchList([...kept, ...mine], home);
+    }
+    if (finalRole === "STAFF" && list.length === 0) {
+      return NextResponse.json({ error: "Chọn ít nhất 1 cơ sở làm việc" }, { status: 400 });
+    }
+    workBranchIds = list;
+  }
 
   if (role === "FM") {
     updateData.role = role;
     updateData.branchId = null;
-  } else if (adminBranchIds) {
+  } else if (workBranchIds) {
     if (role) updateData.role = role;
-    updateData.branchId = adminBranchIds[0] ?? null;
+    updateData.branchId = workBranchIds[0] ?? null;
   } else {
     if (role) updateData.role = role;
     // Allow explicitly setting or clearing branchId (empty string → null)
@@ -206,9 +247,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     });
 
     // Handle FM branch assignments update
-    // (FM: cơ sở quản lý; Admin: cơ sở làm việc — xem lib/admin-branches.)
-    if (newManagedIds !== undefined && (finalRole === "FM" || finalRole === "ADMIN")) {
-      const ids: string[] = adminBranchIds
+    // (FM: cơ sở quản lý; người nhiều cơ sở: cơ sở làm việc — lib/work-branches.)
+    if (newManagedIds !== undefined && (finalRole === "FM" || workBranchIds)) {
+      const ids: string[] = workBranchIds
         ?? (Array.isArray(newManagedIds) ? (newManagedIds as string[]) : []);
       await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
       if (ids.length > 0) {
@@ -216,8 +257,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           data: ids.map((bid) => ({ userId: params.id, branchId: bid })),
         });
       }
-    } else if (role && role !== "FM" && role !== "ADMIN") {
-      // Đổi sang quyền khác FM/Admin — bỏ gán cơ sở
+    } else if (role && role !== "FM" && !finalMulti) {
+      // Đổi sang chức vụ chỉ làm một cơ sở — bỏ gán cơ sở
       await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
     }
 

@@ -34,6 +34,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(typeof body.isActive === "boolean" && { isActive: body.isActive }),
       ...(Number.isInteger(body.order) && { order: body.order }),
       ...(ROLES.includes(body.role as Role) && { role: body.role as Role }),
+      ...(typeof body.multiBranch === "boolean" && { multiBranch: body.multiBranch }),
     },
     include: { _count: { select: { users: { where: { deletedAt: null } } } } },
   });
