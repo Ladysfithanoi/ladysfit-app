@@ -10,6 +10,7 @@ import { TransformQualityStats } from "./transform-quality-stats";
 import { NotTransformedTable } from "./not-transformed-table";
 import { ChurnStats } from "./churn-stats";
 import { FMExamCard } from "./exam/fm-exam-card";
+import { StaffGenderStats, type StaffOverview } from "./staff-gender-stats";
 
 export type AdminStats = {
   totalClients: number;
@@ -81,11 +82,14 @@ export function AdminDashboard({
   greeting,
   userName,
   isFM = false,
+  staffOverview,
 }: {
   stats: AdminStats;
   greeting: string;
   userName: string;
   isFM?: boolean;
+  /** Chỉ Admin — số nhân sự và tỉ lệ giới tính theo chức vụ. */
+  staffOverview?: StaffOverview;
 }) {
   const cards = [
     {
@@ -161,6 +165,9 @@ export function AdminDashboard({
           </div>
         ))}
       </div>
+
+      {/* Nhân sự & tỉ lệ giới tính — chỉ Admin */}
+      {staffOverview && <StaffGenderStats data={staffOverview} />}
 
       {/* Branch performance */}
       <BranchPerformance branchStats={stats.branchStats} />

@@ -8,7 +8,7 @@ import { WeekDayData } from "@/components/dashboard/weight-chart";
 import { CEODashboard } from "@/components/dashboard/ceo-dashboard";
 import { getMyRank } from "@/lib/ranking";
 import { currentPeriod } from "@/lib/ranking-config";
-import { excludeTestBranch, viewerSeesTestData } from "@/lib/test-data";
+import { excludeTestBranch, excludeTestUser, viewerSeesTestData } from "@/lib/test-data";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -288,7 +288,29 @@ export default async function DashboardPage() {
       weeklyChart: getLast8WeeksData(chartLogs),
     };
 
-    return <AdminDashboard stats={stats} greeting={greet} userName={userName} isFM={isFM} />;
+    // Thống kê nhân sự + tỉ lệ giới tính — chỉ Admin (lọc theo chức vụ ở giao diện).
+    const staffOverview = isAdmin
+      ? await Promise.all([
+          prisma.user.findMany({
+            where:  { deletedAt: null, ...excludeTestUser(viewerSeesTestData(session.user)) },
+            select: { gender: true, jobPositionId: true },
+          }),
+          prisma.jobPosition.findMany({
+            select:  { id: true, name: true, color: true },
+            orderBy: [{ order: "asc" }, { name: "asc" }],
+          }),
+        ]).then(([people, positions]) => ({ people, positions }))
+      : undefined;
+
+    return (
+      <AdminDashboard
+        stats={stats}
+        greeting={greet}
+        userName={userName}
+        isFM={isFM}
+        staffOverview={staffOverview}
+      />
+    );
   }
 
   // PT view

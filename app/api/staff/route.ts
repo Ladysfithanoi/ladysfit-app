@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { parseDayInput, todayAsDay } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { adminWorkBranches } from "@/lib/admin-branches";
+import { parseGender } from "@/lib/celebrations";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
       managedBranches: { include: { branch: { select: { id: true, name: true } } } },
       _count: { select: { clients: true } },
       employmentStartDate: true,
+      gender: true,
       createdAt: true,
     },
     orderBy: { createdAt: "asc" },
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate } = body;
+  const { name, email, password, branchId, managedBranchIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate, gender } = body;
 
   if (!name || !email || !password || !jobPositionId) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
@@ -134,6 +136,7 @@ export async function POST(req: Request) {
   }
 
   const hashed = await bcrypt.hash(password, 12);
+  const parsedGender = parseGender(gender);
 
   try {
     const parsedDOB = dateOfBirth ? new Date(dateOfBirth) : undefined;
@@ -158,6 +161,7 @@ export async function POST(req: Request) {
         ptLevelId: ptLevelId || null,
         jobPositionId: jobPositionId || null,
         employmentStartDate: parsedStart,
+        gender: parsedGender,
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) ? { dateOfBirth: parsedDOB } : {}),
       },
       create: {
@@ -167,6 +171,7 @@ export async function POST(req: Request) {
         branchId: noBranchRole ? null : homeBranchId,
         role,
         employmentStartDate: parsedStart,
+        gender: parsedGender,
         ...(ptLevelId && { ptLevelId }),
         ...(jobPositionId && { jobPositionId }),
         ...(parsedDOB && !isNaN(parsedDOB.getTime()) && { dateOfBirth: parsedDOB }),
@@ -181,6 +186,7 @@ export async function POST(req: Request) {
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },
         employmentStartDate: true,
+        gender: true,
       },
     });
 

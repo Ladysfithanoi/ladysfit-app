@@ -98,6 +98,9 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   dateOfBirth         DateTime?
+  /// Giới tính — điền trong hồ sơ nhân sự. Nhân sự nữ nhận lời chúc các ngày
+  /// của phụ nữ (8/3, 20/10 — lib/celebrations); trống = chưa khai.
+  gender              Gender?
   // NGÀY BẮT ĐẦU LÀM VIỆC — mặc định là ngày tài khoản được tạo, FM/Admin sửa
   // lại được trong thông tin nhân sự. Lịch nghỉ khoá mọi ngày trước mốc này và
   // tính quỹ phép năm từ đây. Khác hai mốc bên bảng lương: officialStartDate
@@ -463,6 +466,11 @@ enum Role {
   /// Đăng nhập chỉ để xem lương của chính mình; mọi màn quản lý đều từ chối
   /// vì không danh sách cho phép nào có STAFF.
   STAFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
 }
 
 model FMBranchAssignment {

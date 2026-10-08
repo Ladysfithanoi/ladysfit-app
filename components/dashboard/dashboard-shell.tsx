@@ -7,6 +7,7 @@ import { PendingCheckoutBanner } from "@/components/dashboard/pending-checkout-b
 import { FollowUpReminderBanner } from "@/components/dashboard/follow-up-reminder-banner";
 import { PushOptIn } from "@/components/dashboard/push-opt-in";
 import { SimulateBanner } from "@/components/dashboard/simulate-banner";
+import { CelebrationPopup } from "@/components/dashboard/celebration-popup";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -20,6 +21,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
+      {/* Sinh nhật / ngày của phụ nữ — tự bật một lần trong ngày (lib/celebrations) */}
+      <CelebrationPopup />
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <Navbar onMenuClick={() => setSidebarOpen((v) => !v)} />

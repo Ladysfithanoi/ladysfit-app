@@ -30,6 +30,7 @@ type StaffMember = {
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
   branchId: string | null;
   dateOfBirth: Date | null;
+  gender?: "MALE" | "FEMALE" | null;
   /**
    * Ngày bắt đầu đi làm — mốc lịch nghỉ đọc để khoá những ngày người này chưa
    * vào làm. Tự đặt là hôm nay khi thêm nhân sự, FM/Admin sửa lại được.
@@ -213,6 +214,7 @@ export function StaffPageClient({
   const [jobPositions, setJobPositions] = useState<JobPositionRow[]>([]);
   const [posOpen, setPosOpen] = useState(false);
   const [birthDateVal, setBirthDateVal] = useState("");
+  const [genderVal, setGenderVal] = useState<"" | "MALE" | "FEMALE">("");
   const [workStartVal, setWorkStartVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -297,6 +299,7 @@ export function StaffPageClient({
     setSelectedBranchIds([]);
     setSelectedPtLevelId("");
     setBirthDateVal("");
+    setGenderVal("");
     // Thêm nhân sự là họ vào làm từ hôm nay — điền sẵn để không ai phải nhớ,
     // và vẫn sửa được ngay tại đây nếu người đó đã đi làm từ trước.
     setWorkStartVal(todayYMD());
@@ -316,6 +319,7 @@ export function StaffPageClient({
     setSelectedPtLevelId(s.ptLevelId ?? "");
     setSelectedJobPositionId(s.jobPositionId ?? "");
     setBirthDateVal(isoToYMD(s.dateOfBirth));
+    setGenderVal(s.gender ?? "");
     setWorkStartVal(isoToYMD(s.employmentStartDate));
     setShowPassword(false);
     setOpen(true);
@@ -390,6 +394,7 @@ export function StaffPageClient({
       name: fd.get("name") as string,
       email: fd.get("email") as string,
       dateOfBirth: birthDateVal ? new Date(birthDateVal + "T00:00:00.000Z").toISOString() : null,
+      gender: genderVal || null,
       employmentStartDate: workStartVal || null,
     };
 
@@ -883,6 +888,17 @@ export function StaffPageClient({
               placeholder="pt@ladysfit.vn"
               className="h-11 rounded-xl"
             />
+          </Field>
+          <Field label="Giới tính">
+            <select
+              value={genderVal}
+              onChange={(e) => setGenderVal(e.target.value as "" | "MALE" | "FEMALE")}
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
+            >
+              <option value="">— Chưa chọn —</option>
+              <option value="FEMALE">Nữ</option>
+              <option value="MALE">Nam</option>
+            </select>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Ngày sinh">

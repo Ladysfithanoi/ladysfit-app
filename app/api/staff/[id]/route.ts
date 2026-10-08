@@ -8,6 +8,7 @@ import { firstWorkDayOf, hireDayOf, parseDayInput } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { revokeTrustedDevices } from "@/lib/login-device";
 import { adminWorkBranches } from "@/lib/admin-branches";
+import { parseGender } from "@/lib/celebrations";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -86,7 +87,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 
   const body = await req.json();
-  const { name, email, password, branchId, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate } = body;
+  const { name, email, password, branchId, managedBranchIds: newManagedIds, ptLevelId, dateOfBirth, jobPositionId, employmentStartDate, gender } = body;
 
   // QUYỀN SUY TỪ CHỨC VỤ, không lấy theo giá trị client gửi lên — xem POST
   // /api/staff. Không gửi chức vụ thì giữ nguyên quyền cũ.
@@ -128,6 +129,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // nhất trên giao diện thể hiện.
   if (jobPositionId !== undefined) updateData.jobPositionId = jobPositionId || null;
   if (role) updateData.role = role;
+  if (gender !== undefined) updateData.gender = parseGender(gender);
   if (dateOfBirth !== undefined) {
     const d = dateOfBirth ? new Date(dateOfBirth) : null;
     updateData.dateOfBirth = d && !isNaN(d.getTime()) ? d : null;
@@ -199,6 +201,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         managedBranches: { include: { branch: { select: { id: true, name: true } } } },
         _count: { select: { clients: true } },
         employmentStartDate: true,
+        gender: true,
       },
     });
 
