@@ -52,6 +52,8 @@ export async function POST(req: Request) {
       order: (max._max.order ?? -1) + 1,
       // Làm được nhiều cơ sở — chỉ có nghĩa với quyền STAFF (lib/work-branches).
       multiBranch: body.multiBranch === true,
+      // Tính lương theo giờ (Lao công) — chỉ có nghĩa với quyền STAFF.
+      hourlyPay: body.hourlyPay === true,
     },
     include: { _count: { select: { users: { where: { deletedAt: null } } } } },
   });

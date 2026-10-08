@@ -164,6 +164,8 @@ export type SalaryRecordSnapshot = {
   bhxh:             number;
   insuranceDeduction: number;
   advancePaid:      number;
+  /** Lao công tính lương theo giờ — baseSalary đã là tiền/giờ × số giờ. */
+  hourlyPay?:       boolean;
 };
 
 export type SalaryPatch = {
@@ -305,6 +307,7 @@ export async function recalcSalary(args: {
     kolCommission,
     standardWorkDays: standardDays,
     actualWorkDays:   actualDays,
+    hourlyPay:        r.hourlyPay,
   });
 
   // BẢO HIỂM (phần người lao động) — từ tháng có Ngày nhận bảo hiểm trở đi.
@@ -410,7 +413,7 @@ export function salaryUpdateData(patch: SalaryPatch) {
 // ── Đọc bảng lương của cả cơ sở, đã tính lại ──────────────────────────────
 
 const LIVE_RECORD_INCLUDE = {
-  user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } },
+  user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true, hourlyPay: true } } } },
 } as const;
 
 /**

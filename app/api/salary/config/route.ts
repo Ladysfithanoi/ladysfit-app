@@ -55,6 +55,8 @@ export async function PUT(req: Request) {
     lunchAllowance?:     number;
     phoneAllowance?:     number;
     transportAllowance?: number;
+    /** Lao công tính theo giờ — Số tiền/giờ ở cơ sở này. */
+    hourlyRate?:         number;
     effectiveFrom:       string;
   };
 
@@ -66,7 +68,7 @@ export async function PUT(req: Request) {
   if (!body.userId || !body.branchId || !body.effectiveFrom) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
-  if (body.baseSalary < 0 || (body.lunchAllowance ?? 0) < 0 || (body.phoneAllowance ?? 0) < 0 || (body.transportAllowance ?? 0) < 0) {
+  if ((body.hourlyRate ?? 0) < 0 || body.baseSalary < 0 || (body.lunchAllowance ?? 0) < 0 || (body.phoneAllowance ?? 0) < 0 || (body.transportAllowance ?? 0) < 0) {
     return NextResponse.json({ error: "Giá trị lương không được âm" }, { status: 400 });
   }
   if (body.seniorityYears < 0 || body.seniorityYears > 50) {
@@ -87,6 +89,7 @@ export async function PUT(req: Request) {
     phoneAllowance:     body.phoneAllowance      ?? 900_000,
     transportAllowance: body.transportAllowance  ?? 500_000,
     effectiveFrom:      new Date(body.effectiveFrom),
+    ...(body.hourlyRate !== undefined && Number.isFinite(body.hourlyRate) ? { hourlyRate: body.hourlyRate } : {}),
   };
 
   const config = existing

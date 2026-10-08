@@ -169,7 +169,10 @@ export async function POST(req: Request) {
       // FM sửa tay, không riêng lịch nghỉ).
       const actDays   = Number(rec.actualWorkDays ?? 0);
       const offDays   = Math.max(0, stdDays - actDays);
-      const workDaysText = role === "ADMIN" || stdDays <= 0
+      // Lao công tính theo giờ: ô Ngày công ghi "tiền/giờ × số giờ" thay vì công.
+      const workDaysText = r.hourlyPay
+        ? `${Number(r.workHours ?? 0).toLocaleString("vi-VN")} giờ × ${Number(r.hourlyRate ?? 0).toLocaleString("vi-VN")}đ/giờ`
+        : role === "ADMIN" || stdDays <= 0
         ? "—"
         : `${formatDays(paidWorkDays(actDays, stdDays))}/${PAID_DAYS_BASE}${offDays > 0 ? ` (nghỉ ${formatDays(offDays)})` : ""}`;
 

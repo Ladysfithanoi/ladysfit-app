@@ -21,17 +21,20 @@ export default async function SalaryPageRoute() {
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
 
   let branches: { id: string; name: string }[] = [];
-  let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string; positionName?: string | null }[] = [];
+  let staffList: { id: string; name: string | null; email: string; branchId: string | null; role: string; positionName?: string | null; hourlyPay?: boolean }[] = [];
 
   // Nhân sự STAFF (lao công, marketing…) có lương cứng theo ngày công như mọi
   // người, nên phải nằm trong danh sách tạo bảng lương và cấu hình lương của cơ sở.
   const STAFF_ROLES = ["PT", "ADMIN", "STAFF"] as const;
   const STAFF_FIELDS = {
     id: true, name: true, email: true, branchId: true, role: true,
-    jobPosition: { select: { name: true } },
+    jobPosition: { select: { name: true, hourlyPay: true } },
   } as const;
-  const flat = (rows: { id: string; name: string | null; email: string; branchId: string | null; role: string; jobPosition: { name: string } | null }[]) =>
-    rows.map(({ jobPosition, ...u }) => ({ ...u, positionName: jobPosition?.name ?? null }));
+  // hourlyPay: Lao công tính lương theo giờ (Số tiền/giờ × Số giờ làm).
+  const flat = (rows: { id: string; name: string | null; email: string; branchId: string | null; role: string; jobPosition: { name: string; hourlyPay: boolean } | null }[]) =>
+    rows.map(({ jobPosition, ...u }) => ({
+      ...u, positionName: jobPosition?.name ?? null, hourlyPay: u.role === "STAFF" && !!jobPosition?.hourlyPay,
+    }));
 
   // FM cũng dạy khách nên phải có mặt trong danh sách tạo bảng lương như PT/Admin.
   // FM gắn với cơ sở qua FMBranchAssignment (một cơ sở có thể có nhiều FM), KHÔNG
@@ -46,7 +49,7 @@ export default async function SalaryPageRoute() {
       },
       select: {
         branchId: true,
-        user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true } } } },
+        user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, hourlyPay: true } } } },
       },
     });
     return rows.map((r) => ({
@@ -56,6 +59,7 @@ export default async function SalaryPageRoute() {
       branchId: r.branchId,
       role: r.user.role as string,
       positionName: r.user.jobPosition?.name ?? null,
+      hourlyPay: r.user.role === "STAFF" && !!r.user.jobPosition?.hourlyPay,
     }));
   }
   // Người đã có danh sách cơ sở làm việc thì đọc qua assignedStaffFor; chỉ

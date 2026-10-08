@@ -26,12 +26,27 @@ export type SalaryParts = {
   kolCommission:    number;
   standardWorkDays: number;
   actualWorkDays:   number;
+  /**
+   * Dòng tính lương THEO GIỜ (Lao công — JobPosition.hourlyPay): baseSalary đã là
+   * Số tiền/giờ × Số giờ làm (hourlyBaseOf), không chia theo ngày công nữa.
+   */
+  hourlyPay?:       boolean;
 };
+
+/** Lương của người tính theo giờ: Số tiền/giờ × Số giờ làm (làm tròn đồng). */
+export function hourlyBaseOf(hourlyRate: number, workHours: number): number {
+  const rate  = Number.isFinite(hourlyRate) && hourlyRate > 0 ? hourlyRate : 0;
+  const hours = Number.isFinite(workHours)  && workHours  > 0 ? workHours  : 0;
+  return Math.round(rate * hours);
+}
 
 export function computeTotalSalary(p: SalaryParts): number {
   if (p.role === "ADMIN") {
     return p.commissionAmount + p.showPay + p.kocCommission + p.kolCommission;
   }
+
+  // Tính theo giờ: số giờ làm đã phản ánh ngày nghỉ, không chia ngày công lần nữa.
+  if (p.role === "STAFF" && p.hourlyPay) return p.baseSalary + p.fixedAllowances;
 
   const fixedPay = (p.baseSalary + p.fixedAllowances)
                  * workDayRatio(p.actualWorkDays, p.standardWorkDays);

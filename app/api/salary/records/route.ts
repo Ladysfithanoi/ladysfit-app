@@ -7,7 +7,7 @@ import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
 import { showPayOf, capFmShows } from "@/lib/session-pay";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary, hourlyBaseOf, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
 import { ptRate, fmRate, fetchKOCKOLCommission, loadLiveSalaryRecords, payBranchScope } from "@/lib/salary-live";
@@ -86,6 +86,8 @@ type GenEntry = {
   renewContracts?:      number;
   /** Ngày công thực tế FM nhập; bỏ trống = đi làm đủ ngày công chuẩn. */
   actualWorkDays?:      number;
+  /** Lao công tính theo giờ: số giờ làm trong tháng (Số tiền/giờ lấy ở cấu hình lương). */
+  workHours?:           number;
 };
 
 
@@ -185,6 +187,12 @@ export async function POST(req: Request) {
   // luôn vào ngày công thực tế; nghỉ phép năm không trừ.
   const leaveMap = await sumWorkDayDeductionByUser(targetUserIds, body.month, body.year);
 
+  // Ai tính lương theo giờ — theo chức vụ hiện tại (lib/salary-total hourlyBaseOf).
+  const hourlyUserIds = new Set((await prisma.user.findMany({
+    where:  { id: { in: targetUserIds }, role: "STAFF", jobPosition: { hourlyPay: true } },
+    select: { id: true },
+  })).map((u) => u.id));
+
   for (const entry of body.entries) {
     if (blocked.has(entry.userId)) {
       skipped++;
@@ -217,17 +225,24 @@ export async function POST(req: Request) {
       // chia theo ngày công. Không doanh số, không hoa hồng, không buổi dạy.
       // Chưa cấu hình thì để 0 — mức 5.310.000đ chỉ là mặc định của PT. FM đặt
       // lương cơ bản cho từng người ngay trong bảng lương hoặc tab Cấu hình lương.
-      const baseSalary  = config?.baseSalary ?? 0;
+      //
+      // Chức vụ tính THEO GIỜ (Lao công — JobPosition.hourlyPay): lương = Số
+      // tiền/giờ (cấu hình lương của cơ sở này) × Số giờ làm FM nhập.
+      const hourlyPay  = hourlyUserIds.has(entry.userId);
+      const hourlyRate = hourlyPay ? (config?.hourlyRate ?? 0) : 0;
+      const workHours  = hourlyPay ? Math.max(0, Number(entry.workHours) || 0) : 0;
+      const baseSalary = hourlyPay ? hourlyBaseOf(hourlyRate, workHours) : (config?.baseSalary ?? 0);
       const totalSalary = computeTotalSalary({
         role: "STAFF", baseSalary, fixedAllowances: 0, seniorityBonus: 0, commissionAmount: 0,
         showPay: 0, goalBonus: 0, googleBonus: 0, renewBonus: 0, kocCommission: 0, kolCommission: 0,
-        standardWorkDays: stdDays, actualWorkDays: actDays,
+        standardWorkDays: stdDays, actualWorkDays: actDays, hourlyPay,
       });
 
       await prisma.salaryRecord.create({
         data: {
           userId: entry.userId, branchId: body.branchId, month: body.month, year: body.year,
-          baseSalary, totalRevenue: 0, commissionRate: 0, commissionAmount: 0,
+          baseSalary, hourlyPay, hourlyRate, workHours,
+          totalRevenue: 0, commissionRate: 0, commissionAmount: 0,
           seniorityBonus: 0, fixedAllowances: 0,
           standardWorkDays: stdDays as unknown as never, actualWorkDays: actDays as unknown as never,
           leaveDays: leaveCount as unknown as never,

@@ -18,6 +18,8 @@ import type { Branch, StaffMember } from "./salary-page";
  */
 type Config = {
   baseSalary:         string;
+  /** Lao công tính theo giờ — Số tiền/giờ ở cơ sở đang chọn. */
+  hourlyRate:         string;
   seniorityYears:     number;
   officialStartDate:  string;
   insuranceStartDate: string;
@@ -77,6 +79,7 @@ function defaultBase(role: string): number {
 function makeDefault(role: string): Config {
   return {
     baseSalary:         String(defaultBase(role)),
+    hourlyRate:         "0",
     seniorityYears:     0,
     officialStartDate:  "",
     insuranceStartDate: "",
@@ -301,7 +304,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
         const res = await fetch(`/api/salary/config?userId=${userId}${branchParam}`);
         if (!res.ok) { setConfigs(prev => ({ ...prev, [userId]: makeDefault(role) })); return; }
         const data = await res.json() as {
-          baseSalary: number; seniorityYears: number;
+          baseSalary: number; hourlyRate?: number; seniorityYears: number;
           officialStartDate: string | null; insuranceStartDate: string | null;
           effectiveFrom: string;
         } | null;
@@ -311,6 +314,7 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
           ...prev,
           [userId]: {
             baseSalary:         String(data ? data.baseSalary : defaultBase(role)),
+            hourlyRate:         String(data?.hourlyRate ?? 0),
             seniorityYears:     data?.seniorityYears ?? 0,
             officialStartDate:  ymd(data?.officialStartDate),
             insuranceStartDate: ymd(data?.insuranceStartDate),
@@ -334,6 +338,11 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
   function roleOf(userId: string): string {
     if (userId === currentFMId) return "FM";
     return staffList.find(s => s.id === userId)?.role ?? "PT";
+  }
+
+  /** Lao công tính lương theo giờ (chức vụ JobPosition.hourlyPay). */
+  function isHourly(userId: string): boolean {
+    return !!staffList.find(s => s.id === userId)?.hourlyPay;
   }
 
   function getCfg(userId: string): Config {
@@ -366,6 +375,9 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
         officialStartDate:  cfg.officialStartDate  || null,
         insuranceStartDate: cfg.insuranceStartDate || null,
         effectiveFrom:      cfg.effectiveFrom,
+        ...(isHourly(userId)
+          ? { hourlyRate: Math.max(0, parseFloat(cfg.hourlyRate) || 0) }
+          : {}),
         ...(isFM ? { lunchAllowance: FM_LUNCH, phoneAllowance: FM_PHONE, transportAllowance: FM_TRANSPORT } : {}),
       };
       const res = await fetch("/api/salary/config", {
@@ -464,22 +476,45 @@ export function SalaryConfigTab({ branches, staffList, currentFMId, currentFMNam
               saving={cfg.saving}
               onSave={() => handleSave(staff.id, false)}
             >
-              <div>
-                <SectionTitle>Lương cơ bản</SectionTitle>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <FieldBox label="Lương cơ bản" hint={vnd(parseFloat(cfg.baseSalary) || 0)}>
-                    <input
-                      type="number"
-                      step="10000"
-                      inputMode="numeric"
-                      value={cfg.baseSalary}
-                      onFocus={e => e.target.select()}
-                      onChange={e => patch(staff.id, { baseSalary: e.target.value })}
-                      className={inputCls}
-                    />
-                  </FieldBox>
+              {staff.hourlyPay ? (
+                <div>
+                  <SectionTitle>Lương theo giờ</SectionTitle>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <FieldBox label="Số tiền/giờ" hint={`${vnd(parseFloat(cfg.hourlyRate) || 0)} / giờ`}>
+                      <input
+                        type="number"
+                        step="1000"
+                        inputMode="numeric"
+                        value={cfg.hourlyRate}
+                        onFocus={e => e.target.select()}
+                        onChange={e => patch(staff.id, { hourlyRate: e.target.value })}
+                        className={inputCls}
+                      />
+                    </FieldBox>
+                  </div>
+                  <p className="mt-2 text-[11px] text-gray-400">
+                    Lương tháng = Số tiền/giờ × Số giờ làm. Số giờ làm nhập ở bảng lương từng tháng
+                    (lúc tạo bảng lương hoặc nút Sửa).
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <SectionTitle>Lương cơ bản</SectionTitle>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <FieldBox label="Lương cơ bản" hint={vnd(parseFloat(cfg.baseSalary) || 0)}>
+                      <input
+                        type="number"
+                        step="10000"
+                        inputMode="numeric"
+                        value={cfg.baseSalary}
+                        onFocus={e => e.target.select()}
+                        onChange={e => patch(staff.id, { baseSalary: e.target.value })}
+                        className={inputCls}
+                      />
+                    </FieldBox>
+                  </div>
+                </div>
+              )}
 
               <MilestoneFields cfg={cfg} onPatch={u => patch(staff.id, u)} />
               {/* STAFF chỉ có lương cứng theo ngày công — không thâm niên, không hoa hồng. */}

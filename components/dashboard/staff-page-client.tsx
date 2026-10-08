@@ -6,7 +6,7 @@ import { SlideOver } from "@/components/ui/slide-over";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff, Briefcase, AlertTriangle, Building2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Key, Copy, Check, ChevronDown, Eye, EyeOff, Briefcase, AlertTriangle, Building2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 
@@ -23,6 +23,8 @@ type JobPositionRow = {
   role: "ADMIN" | "FM" | "CEO_FITPARTNER" | "COO" | "PT" | "STAFF";
   /** Làm được nhiều cơ sở (Lao công, Marketing…) — xem lib/work-branches. */
   multiBranch?: boolean;
+  /** Tính lương theo giờ (Lao công): Số tiền/giờ × Số giờ làm. */
+  hourlyPay?: boolean;
   _count: { users: number };
 };
 
@@ -1346,6 +1348,27 @@ function JobPositionManager({
                 >
                   <Building2 className="h-3 w-3" />
                   Nhiều cơ sở
+                </button>
+              )}
+              {/* Tính lương theo giờ — chỉ chức vụ quyền STAFF (lib/salary-total hourlyBaseOf) */}
+              {p.role === "STAFF" && (
+                <button
+                  onClick={() => patch(p.id, { hourlyPay: !p.hourlyPay })}
+                  aria-pressed={!!p.hourlyPay}
+                  title={
+                    p.hourlyPay
+                      ? "Đang tính lương theo giờ: lương = Số tiền/giờ × Số giờ làm. Bấm để về lương cơ bản theo ngày công."
+                      : "Bấm để tính lương theo giờ (Số tiền/giờ × Số giờ làm) thay cho lương cơ bản."
+                  }
+                  className={cn(
+                    "shrink-0 inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-bold transition-colors",
+                    p.hourlyPay
+                      ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      : "text-gray-400 hover:bg-gray-100"
+                  )}
+                >
+                  <Clock className="h-3 w-3" />
+                  Theo giờ
                 </button>
               )}
               <button

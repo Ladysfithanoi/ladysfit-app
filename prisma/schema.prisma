@@ -450,6 +450,9 @@ model JobPosition {
   /// nhiều cơ sở (FMBranchAssignment), mỗi cơ sở một bảng lương với lương cơ
   /// bản riêng. Chỉ có tác dụng với quyền STAFF — xem lib/work-branches.
   multiBranch Boolean  @default(false)
+  /// Tính lương THEO GIỜ (Lao công): lương = Số tiền/giờ × Số giờ làm trong
+  /// tháng, thay cho lương cơ bản chia ngày công. Chỉ có tác dụng với quyền STAFF.
+  hourlyPay   Boolean  @default(false)
   color     String   @default("#6b7280")
   order     Int      @default(0)
   isActive  Boolean  @default(true)
@@ -1785,6 +1788,8 @@ model SalaryConfig {
   userId             String
   branchId           String
   baseSalary         Float     @default(0)
+  /// Số tiền/giờ — nhân sự tính lương theo giờ (JobPosition.hourlyPay), theo cơ sở.
+  hourlyRate         Float     @default(0)
   commissionTiers    String    @default("[]") @db.Text
   seniorityYears     Int       @default(0)
   // NGÀY LÀM CHÍNH THỨC — mốc bắt đầu tính lương thâm niên.
@@ -1811,7 +1816,13 @@ model SalaryRecord {
   branchId            String
   month               Int
   year                Int
+  /// Lương cơ bản. Dòng tính theo giờ (hourlyPay) thì = hourlyRate × workHours
+  /// và KHÔNG chia theo ngày công — xem computeTotalSalary.
   baseSalary          Float        @default(0)
+  /// Lao công tính lương theo giờ (lib/hourly-pay).
+  hourlyPay           Boolean      @default(false)
+  hourlyRate          Float        @default(0)
+  workHours           Float        @default(0)
   totalRevenue        Float        @default(0)
   commissionRate      Float        @default(0)
   commissionAmount    Float        @default(0)

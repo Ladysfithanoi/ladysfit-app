@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import type { SalaryStatus } from "@prisma/client";
 import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
-import { bhxhBaseOf, computeTotalSalary, remainingPaymentOf } from "@/lib/salary-total";
+import { bhxhBaseOf, computeTotalSalary, hourlyBaseOf, remainingPaymentOf } from "@/lib/salary-total";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
@@ -16,7 +16,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   const record = await prisma.salaryRecord.findUnique({
     where:   { id: params.id },
-    include: { user: { select: { id: true, name: true, role: true } } },
+    include: { user: { select: { id: true, name: true, role: true, jobPosition: { select: { hourlyPay: true } } } } },
   });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -36,13 +36,32 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     baseSalary?: number;
     /** FM: số lượt đánh giá Google Business — thưởng theo số này. */
     googleReviews?: number;
+    /** Lao công tính theo giờ: Số tiền/giờ và Số giờ làm của tháng. */
+    hourlyRate?: number;
+    workHours?:  number;
   };
+
+  for (const v of [body.hourlyRate, body.workHours]) {
+    if (v !== undefined && !(Number.isFinite(v) && v >= 0)) {
+      return NextResponse.json({ error: "Số tiền/giờ hoặc số giờ làm không hợp lệ" }, { status: 400 });
+    }
+  }
+  // TÍNH THEO GIỜ (Lao công — JobPosition.hourlyPay): lương = tiền/giờ × số giờ.
+  // Dòng tạo trước khi chức vụ chuyển sang tính theo giờ cũng chuyển luôn khi FM
+  // nhập tiền/giờ hoặc số giờ ở đây.
+  const positionHourly = record.user.role === "STAFF" && !!record.user.jobPosition?.hourlyPay;
+  const hourlyPay  = record.hourlyPay ||
+    (positionHourly && (body.hourlyRate !== undefined || body.workHours !== undefined));
+  const hourlyRate = hourlyPay ? (body.hourlyRate ?? record.hourlyRate) : record.hourlyRate;
+  const workHours  = hourlyPay ? (body.workHours  ?? record.workHours)  : record.workHours;
 
   if (body.baseSalary !== undefined && !(Number.isFinite(body.baseSalary) && body.baseSalary >= 0)) {
     return NextResponse.json({ error: "Lương cơ bản không hợp lệ" }, { status: 400 });
   }
   // Admin dạy thêm không có lương cứng nên không có lương cơ bản để sửa.
-  const baseSalary = body.baseSalary !== undefined && record.user.role !== "ADMIN"
+  const baseSalary = hourlyPay
+    ? hourlyBaseOf(hourlyRate, workHours)
+    : body.baseSalary !== undefined && record.user.role !== "ADMIN"
     ? body.baseSalary
     : record.baseSalary;
 
@@ -101,6 +120,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     kolCommission:    record.kolCommission,
     standardWorkDays: standardDays,
     actualWorkDays:   actualDays,
+    hourlyPay,
   });
   // Mức đóng BHXH đi theo lương cơ bản — sửa lương cơ bản thì mức đóng (và tiền
   // bảo hiểm trừ vào lương) đổi theo.
@@ -114,6 +134,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       ...(body.status && { status: body.status }),
       advancePaid,
       baseSalary,
+      hourlyPay,
+      hourlyRate,
+      workHours,
       seniorityBonus,
       googleReviews,
       googleBonus,
@@ -126,12 +149,26 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       remainingPayment,
       ...(body.notes !== undefined && { notes: body.notes }),
     },
-    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true } } } } },
+    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true, hourlyPay: true } } } } },
   });
 
   // Lương cơ bản sửa trong bảng lương cũng ghi vào cấu hình lương của người đó,
   // để tháng sau tạo bảng lương không phải nhập lại (và tab Cấu hình lương khớp).
-  if (baseSalary !== record.baseSalary) {
+  // Tính theo giờ thì chỉ Số tiền/giờ là cấu hình (số giờ đổi theo tháng).
+  if (hourlyPay && hourlyRate !== record.hourlyRate) {
+    const config = await prisma.salaryConfig.findFirst({
+      where:   { userId: record.userId, branchId: record.branchId },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (config) {
+      await prisma.salaryConfig.update({ where: { id: config.id }, data: { hourlyRate } });
+    } else {
+      await prisma.salaryConfig.create({
+        data: { userId: record.userId, branchId: record.branchId, hourlyRate, effectiveFrom: new Date() },
+      });
+    }
+  }
+  if (!hourlyPay && baseSalary !== record.baseSalary) {
     const config = await prisma.salaryConfig.findFirst({
       where:   { userId: record.userId, branchId: record.branchId },
       orderBy: { effectiveFrom: "desc" },

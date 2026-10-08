@@ -19,9 +19,13 @@ type SalaryRecord = {
   user: {
     id: string; name: string | null; email: string; role: string;
     /** Chức vụ — nhãn nghề nghiệp, hiện dưới tên. Không đụng gì tới cách tính lương. */
-    jobPosition?: { name: string; color: string } | null;
+    jobPosition?: { name: string; color: string; hourlyPay?: boolean } | null;
   };
   baseSalary: number;
+  /** Lao công tính theo giờ: baseSalary = hourlyRate × workHours, không chia ngày công. */
+  hourlyPay?: boolean;
+  hourlyRate?: number;
+  workHours?: number;
   totalRevenue: number;
   commissionRate: number;
   commissionAmount: number;
@@ -70,6 +74,9 @@ type GenEntry = {
   userRole: "PT" | "FM" | "ADMIN" | "STAFF";
   /** Tên chức vụ, làm nhãn cho STAFF. */
   positionName?: string | null;
+  /** Lao công tính lương theo giờ: nhập Số giờ làm thay cho ngày công. */
+  hourlyPay?: boolean;
+  workHours?: number;
   showsL1L2Loyal: number;
   showsL3L4L5: number;
   showsResident: number;
@@ -147,6 +154,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [editWorkDays, setEditWorkDays] = useState("");
   // Lương cơ bản của riêng người này — FM đặt tay ngay trong bảng lương.
   const [editBase, setEditBase]       = useState("");
+  // Lao công tính theo giờ: Số tiền/giờ và Số giờ làm của tháng.
+  const [editHourlyRate, setEditHourlyRate] = useState("");
+  const [editWorkHours, setEditWorkHours]   = useState("");
   // FM: số lượt đánh giá Google Business — thưởng theo số này, như nhập show.
   const [editGoogle, setEditGoogle]   = useState("");
   const [saving, setSaving]           = useState(false);
@@ -160,6 +170,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     setEditWorkDays(String(r.actualWorkDays ?? standardWorkDays(month, year)));
     setEditBase(String(r.baseSalary ?? 0));
     setEditGoogle(String(r.googleReviews ?? 0));
+    setEditHourlyRate(String(r.hourlyRate ?? 0));
+    setEditWorkHours(String(r.workHours ?? 0));
   }
 
   // Generate modal state
@@ -253,6 +265,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
       ...branchOthers.map(o => ({
         userId: o.id, name: o.name ?? o.email, userRole: "STAFF" as const,
         positionName: o.positionName ?? null,
+        hourlyPay: !!o.hourlyPay, workHours: 0,
         showsL1L2Loyal: 0, showsL3L4L5: 0, showsResident: 0, showsL0: 0, showsTransfer: 0,
         clientsAchievedGoal: 0, googleReviews: 0, renewContracts: 0,
         actualWorkDays: stdDays, leaveDays: 0,
@@ -384,6 +397,13 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           leaveDaysSeen:  records.find(r => r.id === editingId)?.leaveDays ?? 0,
           // Admin dạy thêm không có lương cứng — server bỏ qua trường này.
           baseSalary:     Math.max(0, parseFloat(editBase) || 0),
+          // Lao công tính theo giờ — server bỏ qua với người không tính theo giờ.
+          ...(isHourlyRecord(records.find(r => r.id === editingId))
+            ? {
+                hourlyRate: Math.max(0, parseFloat(editHourlyRate) || 0),
+                workHours:  Math.max(0, parseFloat(editWorkHours) || 0),
+              }
+            : {}),
           // Chỉ dòng FM có thưởng Google — server bỏ qua với vai trò khác.
           ...(records.find(r => r.id === editingId)?.user.role === "FM"
             ? { googleReviews: Math.max(0, parseInt(editGoogle) || 0) }
@@ -1098,11 +1118,26 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             ) : <span className="text-gray-400">—</span>}
                           </td>
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
-                            {r.baseSalary > 0 ? vnd(r.baseSalary) : (
-                              <span className="text-[10px] font-semibold text-orange-500">Chưa cấu hình lương</span>
+                            {r.hourlyPay ? (
+                              <>
+                                <span className="font-semibold text-gray-700">{vnd(r.baseSalary)}</span>
+                                <span className="block text-[10px] text-gray-400">
+                                  {vnd(r.hourlyRate ?? 0)}/giờ × {formatHours(r.workHours ?? 0)} giờ
+                                </span>
+                              </>
+                            ) : r.baseSalary > 0 ? vnd(r.baseSalary) : (
+                              <span className="text-[10px] font-semibold text-orange-500">
+                                {r.user.jobPosition?.hourlyPay ? "Bấm Sửa để nhập tiền/giờ và số giờ" : "Chưa cấu hình lương"}
+                              </span>
                             )}
                           </td>
-                          {workDaysCell(r)}
+                          {r.hourlyPay ? (
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              <span className="font-bold text-gray-700">{formatHours(r.workHours ?? 0)}</span>
+                              <span className="text-gray-400"> giờ</span>
+                              <span className="block text-[10px] text-gray-400">tính theo giờ</span>
+                            </td>
+                          ) : workDaysCell(r)}
                           <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: "#f15b5c" }}>{vnd(r.totalSalary)}</td>
                           {insuranceCell(r)}
                           <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{vnd(r.advancePaid)}</td>
@@ -1121,7 +1156,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             editWorkDays={editWorkDays} editBase={editBase} onBase={setEditBase} standardDays={r.standardWorkDays > 0 ? r.standardWorkDays : standardWorkDays(month, year)}
                             leaveDays={r.leaveDays ?? 0}
                             saving={saving} onAdvance={setEditAdvance} onNotes={setEditNotes}
-                            onWorkDays={setEditWorkDays} onSave={handleSaveEdit} />
+                            onWorkDays={setEditWorkDays} onSave={handleSaveEdit}
+                            hourly={isHourlyRecord(r) ? {
+                              rate: editHourlyRate, hours: editWorkHours,
+                              onRate: setEditHourlyRate, onHours: setEditWorkHours,
+                            } : undefined} />
                         )}
                       </React.Fragment>
                     ))}
@@ -1129,7 +1168,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                 </table>
               </div>
               <p className="px-5 py-2 text-[10px] text-gray-400 italic border-t border-gray-50">
-                * Lương cơ bản mặc định 0đ — bấm Sửa ở từng dòng để đặt (hoặc tab Cấu hình lương) · lương 1 ngày = lương cứng / 26, nghỉ ngày nào trừ ngày đó, tháng hơn 26 ngày công được cộng thêm ngày dư
+                * Lao công tính lương theo giờ: lương = Số tiền/giờ × Số giờ làm (bấm Sửa để nhập; tiền/giờ lưu vào cấu hình lương của cơ sở) ·
+                Lương cơ bản mặc định 0đ — bấm Sửa ở từng dòng để đặt (hoặc tab Cấu hình lương) · lương 1 ngày = lương cứng / 26, nghỉ ngày nào trừ ngày đó, tháng hơn 26 ngày công được cộng thêm ngày dư
               </p>
             </div>
           )}
@@ -1170,7 +1210,26 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
                   {/* Ngày công — lương cứng chia theo thực tế / chuẩn.
                       Admin dạy thêm không có lương cứng nên không hỏi. */}
-                  {entry.userRole !== "ADMIN" && (
+                  {/* Lao công tính theo giờ: nhập số giờ làm thay cho ngày công. */}
+                  {entry.hourlyPay && (
+                    <div className="pt-1 border-t border-gray-100">
+                      <div className="space-y-1 max-w-[260px]">
+                        <label className="text-xs font-semibold text-gray-500">Số giờ làm trong tháng</label>
+                        <input
+                          type="number" min={0} step={0.5}
+                          value={entry.workHours ?? 0}
+                          onFocus={(e) => e.target.select()}
+                          onChange={e => updateEntry(entry.userId, "workHours", Math.max(0, parseFloat(e.target.value) || 0))}
+                          className={numInput + " w-full text-left"}
+                        />
+                        <p className="text-[10px] text-gray-400">
+                          Lương = Số tiền/giờ (tab Cấu hình lương của cơ sở này) × số giờ làm. Sửa lại được sau ở nút Sửa.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {entry.userRole !== "ADMIN" && !entry.hourlyPay && (
                     <div className="pt-1 border-t border-gray-100">
                       <div className="space-y-1 max-w-[260px]">
                         <label className="text-xs font-semibold text-gray-500">
@@ -1349,8 +1408,10 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
   );
 }
 
-function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, editGoogle, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onBase, onGoogle, onSave }: {
+function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, editGoogle, standardDays, leaveDays, saving, onAdvance, onNotes, onWorkDays, onBase, onGoogle, onSave, hourly }: {
   colSpan: number; editAdvance: string; editNotes: string; editWorkDays: string;
+  /** Lao công tính theo giờ: thay ô Lương cơ bản + Ngày công bằng Số tiền/giờ + Số giờ làm. */
+  hourly?: { rate: string; hours: string; onRate: (v: string) => void; onHours: (v: string) => void };
   /** FM: số lượt đánh giá Google Business. Không truyền = vai trò không có khoản này. */
   editGoogle?: string; onGoogle?: (v: string) => void;
   /** Lương cơ bản — chỉ hiện với vai trò có lương cứng (cùng điều kiện với ô ngày công). */
@@ -1366,7 +1427,29 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, edit
     <tr className="bg-amber-50/50 border-b border-gray-100">
       <td colSpan={colSpan} className="px-5 py-4">
         <div className="flex flex-wrap items-end gap-4">
-          {standardDays > 0 && (
+          {hourly && (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-500">Số tiền/giờ (đ)</label>
+                <input type="number" min={0} step="1000" inputMode="numeric" value={hourly.rate}
+                  onFocus={(e) => e.target.select()} onChange={e => hourly.onRate(e.target.value)}
+                  className="h-9 w-36 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+                <p className="text-[10px] text-gray-400">Lưu luôn vào cấu hình lương của cơ sở</p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-500">Số giờ làm</label>
+                <input type="number" min={0} step={0.5} value={hourly.hours}
+                  onFocus={(e) => e.target.select()} onChange={e => hourly.onHours(e.target.value)}
+                  className="h-9 w-28 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30" />
+                <p className="text-[10px] text-gray-500">
+                  Lương: <span className="font-bold">
+                    {Math.round((parseFloat(hourly.rate) || 0) * (parseFloat(hourly.hours) || 0)).toLocaleString("vi-VN")}đ
+                  </span>
+                </p>
+              </div>
+            </>
+          )}
+          {standardDays > 0 && !hourly && (
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500">Lương cơ bản (đ)</label>
               <input type="number" min={0} step="10000" inputMode="numeric" value={editBase}
@@ -1375,7 +1458,7 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, edit
               <p className="text-[10px] text-gray-400">Lưu luôn vào cấu hình lương cho các tháng sau</p>
             </div>
           )}
-          {standardDays > 0 && (
+          {standardDays > 0 && !hourly && (
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-500">
                 Ngày đi làm thực tế <span className="text-gray-400 font-normal">/ {standardDays} ngày làm việc của tháng</span>
@@ -1423,4 +1506,15 @@ function EditRow({ colSpan, editAdvance, editNotes, editWorkDays, editBase, edit
       </td>
     </tr>
   );
+}
+
+/** Dòng lương tính theo giờ — đã chuyển, hoặc chức vụ hiện tại là Lao công theo giờ. */
+function isHourlyRecord(r: SalaryRecord | undefined): boolean {
+  if (!r || r.user.role !== "STAFF") return false;
+  return !!r.hourlyPay || !!r.user.jobPosition?.hourlyPay;
+}
+
+/** 80 → "80", 80.5 → "80,5". */
+function formatHours(h: number): string {
+  return h.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
 }

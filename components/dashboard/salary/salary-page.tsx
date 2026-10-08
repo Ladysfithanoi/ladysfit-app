@@ -13,6 +13,8 @@ export type StaffMember = {
   id: string; name: string | null; email: string; branchId: string | null; role: string;
   /** Tên chức vụ — nhãn cho nhân sự STAFF (lao công, marketing…). */
   positionName?: string | null;
+  /** Lao công tính lương theo giờ (Số tiền/giờ × Số giờ làm). */
+  hourlyPay?: boolean;
 };
 
 type Props = {

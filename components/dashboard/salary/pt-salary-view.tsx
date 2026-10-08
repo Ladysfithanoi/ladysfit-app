@@ -7,6 +7,9 @@ import { SessionDetailTable } from "./session-detail-table";
 
 type SalaryRecord = {
   branchId?:            string;
+  hourlyPay?:           boolean;
+  hourlyRate?:          number;
+  workHours?:           number;
   baseSalary:           number;
   totalRevenue:         number;
   commissionRate:       number;
@@ -174,10 +177,19 @@ export function PtSalaryView({ currentUserId, currentUserName, isStaff = false }
             </div>
 
             <div className="space-y-0">
-              <Row label="Lương cơ bản"    value={vnd(record.baseSalary)} />
+              {record.hourlyPay ? (
+                <>
+                  {/* Lao công tính theo giờ: lương = tiền/giờ × số giờ, không chia ngày công */}
+                  <Row label="Số tiền/giờ" value={vnd(record.hourlyRate ?? 0)} />
+                  <Row label="Số giờ làm"  value={`${(record.workHours ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} giờ`} />
+                  <Row label="Lương theo giờ" value={vnd(record.baseSalary)} />
+                </>
+              ) : (
+                <Row label="Lương cơ bản"    value={vnd(record.baseSalary)} />
+              )}
 
               {/* Ngày công: lương cơ bản được chia theo thực tế / chuẩn */}
-              {record.standardWorkDays > 0 && (
+              {record.standardWorkDays > 0 && !record.hourlyPay && (
                 <Row
                   label={(record.leaveDays ?? 0) > 0
                     ? `Ngày công (trừ ${formatDays(record.leaveDays)} ngày)`
