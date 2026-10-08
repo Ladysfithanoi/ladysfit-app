@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         role: { in: ["PT", "FM", "ADMIN"] },
         OR: [
           { branchId },
-          { role: "FM", managedBranches: { some: { branchId } } },
+          { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId } } },
         ],
       },
       select: { id: true, name: true, email: true },

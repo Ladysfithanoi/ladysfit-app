@@ -25,7 +25,8 @@ function toStaff(u: StaffRow) {
     role:  u.role,
     // Nhân sự STAFF (lao công, marketing…) hiện theo tên chức vụ thay vì "STAFF".
     positionName: u.jobPosition?.name ?? null,
-    branchIds: u.role === "FM"
+    // FM và Admin làm nhiều cơ sở (lib/admin-branches) thuộc mọi cơ sở được gán.
+    branchIds: (u.role === "FM" || u.role === "ADMIN") && u.managedBranches.length > 0
       ? u.managedBranches.map(b => b.branchId)
       : (u.branchId ? [u.branchId] : []),
   };

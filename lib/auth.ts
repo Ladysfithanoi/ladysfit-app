@@ -137,7 +137,13 @@ export const authOptions: NextAuthOptions = {
           email:            impersonator ? dbUser?.email ?? session.user.email : session.user.email,
           role:             resolvedRole,
           branchId:         dbUser?.branchId ?? token.branchId ?? null,
-          managedBranchIds: dbUser?.managedBranches?.map((m) => m.branchId) ?? [],
+          // Chỉ FM bị giới hạn theo cơ sở quản lý. Admin cũng có thể được gán
+          // nhiều cơ sở làm việc (để có bảng lương ở từng cơ sở), nhưng quyền
+          // Admin vẫn là toàn hệ thống — không đưa vào đây kẻo màn nào đọc
+          // managedBranchIds lại thu hẹp phạm vi của Admin.
+          managedBranchIds: resolvedRole === Role.FM
+            ? dbUser?.managedBranches?.map((m) => m.branchId) ?? []
+            : [],
           deviceId:         token.did,
           impersonator,
         },

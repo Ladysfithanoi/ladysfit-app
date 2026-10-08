@@ -782,7 +782,7 @@ export function ClientDetailPage({
     // nếu không thì không ai bàn giao khách cho Admin được.
     const inBranch =
       pt.branchId === subTargetBranchId ||
-      (pt.role === "FM" && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId)) ||
+      ((pt.role === "FM" || pt.role === "ADMIN") && !!pt.managedBranches?.some((mb) => mb.branchId === subTargetBranchId)) ||
       (pt.role === "ADMIN" && !pt.branchId);
     if (!inBranch) return false;
     return true;

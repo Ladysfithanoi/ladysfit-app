@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { monthlySeniorityBonus, seniorityYearsFor } from "@/lib/seniority";
 import { getBranchRevenue, getUserRevenue } from "@/lib/salary-revenue";
-import { getTaughtSessions, getSessionAdjustments } from "@/lib/pt-session-count";
+import { getTaughtSessions, getSessionAdjustments, keepBranchSessions } from "@/lib/pt-session-count";
 import { showPayOf, capFmShows, type ShowBuckets } from "@/lib/session-pay";
 import { liveShowsForUser } from "@/lib/session-pay-server";
 import { standardWorkDays } from "@/lib/work-days";
@@ -43,6 +43,21 @@ const FM_TIERS = [
 export function ptRate(revenue: number) { return PT_TIERS.find(t => revenue >= t.min)!.rate; }
 export function fmRate(revenue: number) { return FM_TIERS.find(t => revenue >= t.min)!.rate; }
 
+// ── Cơ sở trả tiền buổi dạy ────────────────────────────────────────────────
+
+/**
+ * Cơ sở mà một dòng lương ĐƯỢC TÍNH buổi dạy — MỘT LUẬT cho mọi chỗ đếm buổi
+ * dạy vào lương (tạo bảng lương, tính lại, chi tiết buổi dạy, KOC/KOL).
+ *
+ * Admin làm ở nhiều cơ sở (gán như FM) có một dòng lương ở MỖI cơ sở, nên dạy
+ * khách ở đâu thì ăn tiền buổi dạy ở dòng của cơ sở đó — trả về chính cơ sở của
+ * dòng. PT/FM/STAFF chỉ có một dòng mỗi tháng, mọi buổi dạy đều vào dòng đó —
+ * trả về null (không lọc).
+ */
+export function payBranchScope(role: string, branchId: string | null | undefined): string | null {
+  return role === "ADMIN" && branchId ? branchId : null;
+}
+
 // ── Hoa hồng KOC / KOL ─────────────────────────────────────────────────────
 
 function calculateKOCCommission(startWeight: number, endWeight: number | null, sessions: number): number {
@@ -60,6 +75,8 @@ export async function fetchKOCKOLCommission(
   ptId:  string,
   month: number,
   year:  number,
+  /** Chỉ tính khách thuộc cơ sở này — xem payBranchScope. Bỏ trống = mọi cơ sở. */
+  branchId?: string | null,
 ): Promise<{ kocCommission: number; kolCommission: number; kocContracts: number; kolSessions: number }> {
   // KOC: thưởng một lần cho hợp đồng KẾT THÚC TRONG THÁNG NÀY.
   //
@@ -69,6 +86,7 @@ export async function fetchKOCKOLCommission(
   // thưởng KOC sẽ không bao giờ được trả. Nay bám theo ngày kết thúc hợp đồng —
   // độc lập với trạng thái gói, và chỉ vào lương đúng một tháng.
   const kocRows = await prisma.$queryRawUnsafe<{
+    clientId: string;
     startWeight: number;
     endWeight: number | null;
     endWeightConfirmed: boolean;
@@ -76,7 +94,7 @@ export async function fetchKOCKOLCommission(
     contractType: string;
   }[]>(
     `
-    SELECT k."startWeight", k."endWeight", k."endWeightConfirmed", k."totalSessions",
+    SELECT pe."clientId", k."startWeight", k."endWeight", k."endWeightConfirmed", k."totalSessions",
            pe."contractType"
     FROM koc_contracts k
     JOIN package_enrollments pe ON pe.id = k."enrollmentId"
@@ -84,7 +102,7 @@ export async function fetchKOCKOLCommission(
       AND k."endDate" >= $2 AND k."endDate" < $3
     `,
     ptId, vnMonthStart(year, month), vnMonthStart(year, month + 1)
-  );
+  ).then(rows => keepBranchSessions(rows, branchId));
 
   let kocCommission = 0;
   let kocContracts = 0;
@@ -106,8 +124,11 @@ export async function fetchKOCKOLCommission(
   // trả 3,6tr/tháng vô thời hạn, kể cả tháng PT không dạy buổi KOL nào. Nay đếm
   // đúng buổi đã check-out có chữ ký trong tháng, cùng nguồn với tiền buổi dạy,
   // nên buổi KOL dạy hộ cũng ghi công đúng người dạy.
-  const taught = await getTaughtSessions([ptId], vnMonthStart(year, month), vnMonthStart(year, month + 1));
-  const kolAdjust = (await getSessionAdjustments([ptId], month, year))
+  const taught = await keepBranchSessions(
+    await getTaughtSessions([ptId], vnMonthStart(year, month), vnMonthStart(year, month + 1)),
+    branchId,
+  );
+  const kolAdjust = (await keepBranchSessions(await getSessionAdjustments([ptId], month, year), branchId))
     .filter(a => a.contractType === "KOL")
     .reduce((sum, a) => sum + a.delta, 0);
   const kolSessions   = Math.max(0, taught.filter(r => r.contractType === "KOL").length + kolAdjust);
@@ -211,8 +232,10 @@ export async function recalcSalary(args: {
 
   // KOC/KOL trả cho người dạy, kể cả FM — tính lại theo thời gian thực, nằm
   // ngoài trần 60 show vì không phải tiền buổi dạy thường.
+  // Admin nhiều cơ sở: chỉ buổi dạy / khách của cơ sở ghi trên dòng lương này.
+  const payBranch = payBranchScope(role, r.branchId);
   const { kocCommission, kolCommission } = !isStaff
-    ? await fetchKOCKOLCommission(r.userId, month, year)
+    ? await fetchKOCKOLCommission(r.userId, month, year, payBranch)
     : { kocCommission: 0, kolCommission: 0 };
 
   // TIỀN BUỔI DẠY TÍNH LẠI THEO THỜI GIAN THỰC — PT, FM lẫn Admin dạy thêm.
@@ -248,7 +271,7 @@ export async function recalcSalary(args: {
   }
 
   const liveShows = role === "PT" || role === "FM" || role === "ADMIN"
-    ? await liveShowsForUser(r.userId, month, year)
+    ? await liveShowsForUser(r.userId, month, year, payBranch)
     : null;
   const shows: ShowBuckets | null = liveShows && role === "FM" ? capFmShows(liveShows) : liveShows;
   const showPay = shows ? showPayOf(shows) : r.showPay;

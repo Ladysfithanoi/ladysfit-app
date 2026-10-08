@@ -305,7 +305,11 @@ export function StaffPageClient({
     setError("");
     const uiRole = s.role === "PT" ? "PT" : s.role;
     setSelectedRole(uiRole);
-    setSelectedBranchIds(s.managedBranches.map((m) => m.branchId));
+    // Admin tạo trước khi có gán nhiều cơ sở chỉ có một cơ sở ở branchId.
+    const assigned = s.managedBranches.map((m) => m.branchId);
+    setSelectedBranchIds(
+      s.role === "ADMIN" && assigned.length === 0 && s.branchId ? [s.branchId] : assigned,
+    );
     setSelectedPtLevelId(s.ptLevelId ?? "");
     setSelectedJobPositionId(s.jobPositionId ?? "");
     setBirthDateVal(isoToYMD(s.dateOfBirth));
@@ -388,6 +392,15 @@ export function StaffPageClient({
 
     if (selectedRole === "FM") {
       body.managedBranchIds = selectedBranchIds;
+    } else if (selectedRole === "ADMIN") {
+      // Admin làm ở nhiều cơ sở như FM — mỗi cơ sở một bảng lương, dạy khách cơ
+      // sở nào ăn tiền buổi dạy ở cơ sở đó. Cơ sở chính (branchId) giữ nguyên
+      // nếu vẫn còn được chọn, không thì lấy cơ sở chọn đầu tiên.
+      body.managedBranchIds = selectedBranchIds;
+      body.branchId =
+        editing?.branchId && selectedBranchIds.includes(editing.branchId)
+          ? editing.branchId
+          : selectedBranchIds[0] ?? "";
     } else {
       body.branchId = fd.get("branchId") as string;
     }
@@ -569,7 +582,7 @@ export function StaffPageClient({
                     </div>
                   </td>
                   <td className="px-5 py-3.5">
-                    {s.role === "FM" && s.managedBranches.length > 0 ? (
+                    {(s.role === "FM" || s.role === "ADMIN") && s.managedBranches.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {s.managedBranches.slice(0, 2).map((m) => (
                           <span
@@ -965,16 +978,15 @@ export function StaffPageClient({
             </Field>
           ) : selectedRole === "ADMIN" ? (
             <Field label="Cơ sở làm việc (tùy chọn)">
-              <select
-                name="branchId"
-                defaultValue={editing?.branchId ?? ""}
-                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/40"
-              >
-                <option value="">— Không chỉ định —</option>
-                {availableBranches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+              <BranchMultiSelect
+                branches={availableBranches}
+                selected={selectedBranchIds}
+                onChange={setSelectedBranchIds}
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Chọn được nhiều cơ sở như FM. Mỗi cơ sở có một bảng lương riêng — dạy khách
+                cơ sở nào thì tiền buổi dạy tính vào bảng lương cơ sở đó.
+              </p>
             </Field>
           ) : selectedRole !== "CEO_FITPARTNER" && selectedRole !== "COO" ? (
             <Field label="Cơ sở *">

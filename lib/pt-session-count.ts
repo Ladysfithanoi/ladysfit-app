@@ -112,6 +112,26 @@ function taughtFromLogs(
   );
 }
 
+/**
+ * Chỉ giữ những buổi của khách đang thuộc `branchId` — "dạy khách ở đâu thì ăn
+ * lương buổi dạy ở cơ sở đó". Cơ sở của buổi dạy là cơ sở HIỆN TẠI của khách
+ * (clients.branchId), nên khách chuyển cơ sở giữa tháng thì cả tháng tính về cơ
+ * sở mới. Dùng cho người có bảng lương ở nhiều cơ sở (Admin) — xem
+ * lib/salary-live payBranchScope. `branchId` null = không lọc.
+ */
+export async function keepBranchSessions<T extends { clientId: string }>(
+  rows:     T[],
+  branchId: string | null | undefined,
+): Promise<T[]> {
+  if (!branchId || rows.length === 0) return rows;
+  const clients = await prisma.client.findMany({
+    where:  { id: { in: Array.from(new Set(rows.map((r) => r.clientId))) } },
+    select: { id: true, branchId: true },
+  });
+  const inBranch = new Set(clients.filter((c) => c.branchId === branchId).map((c) => c.id));
+  return rows.filter((r) => inBranch.has(r.clientId));
+}
+
 /** Số buổi dạy tính lương của một PT trong tháng, gộp theo khách. */
 export function countByClient(rows: TaughtSessionRow[]): Map<string, number> {
   const counts = new Map<string, number>();

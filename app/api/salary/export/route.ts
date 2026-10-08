@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { canReadSalary } from "@/lib/salary-access";
 import { prisma } from "@/lib/prisma";
 import { formatDays, paidWorkDays, PAID_DAYS_BASE } from "@/lib/work-days";
-import { loadLiveSalaryRecords } from "@/lib/salary-live";
+import { loadLiveSalaryRecords, payBranchScope } from "@/lib/salary-live";
 import { buildSessionDetailRows, type SessionDetailRow } from "@/lib/salary-session-detail";
 import ExcelJS from "exceljs";
 import { vnWallClock } from "@/lib/format-date";
@@ -80,7 +80,9 @@ export async function POST(req: Request) {
     const teacherRecords = records.filter(r => r.user.role !== "STAFF");
     const sessionDetailsByRecord = new Map<string, SessionDetailRow[]>();
     await Promise.all(teacherRecords.map(async r => {
-      sessionDetailsByRecord.set(r.id, await buildSessionDetailRows(r.userId, month, year));
+      sessionDetailsByRecord.set(r.id, await buildSessionDetailRows(
+        r.userId, month, year, payBranchScope(r.user.role, r.branchId),
+      ));
     }));
 
     // ── Build workbook ─────────────────────────────────────────────────────

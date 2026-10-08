@@ -790,6 +790,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                               <SessionDetailTable
                                 ptId={r.user.id}
                                 ptName={r.user.name ?? r.user.email}
+                                branchId={r.branchId}
                                 month={month}
                                 year={year}
                                 canEdit
@@ -893,6 +894,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                               <SessionDetailTable
                                 ptId={r.user.id}
                                 ptName={r.user.name ?? r.user.email}
+                                branchId={r.branchId}
                                 month={month}
                                 year={year}
                                 canEdit
@@ -1042,6 +1044,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
                             <SessionDetailTable
                               ptId={r.user.id}
                               ptName={r.user.name ?? r.user.email}
+                              branchId={r.branchId}
                               month={month}
                               year={year}
                               canEdit

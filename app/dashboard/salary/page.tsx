@@ -36,15 +36,17 @@ export default async function SalaryPageRoute() {
   // FM cũng dạy khách nên phải có mặt trong danh sách tạo bảng lương như PT/Admin.
   // FM gắn với cơ sở qua FMBranchAssignment (một cơ sở có thể có nhiều FM), KHÔNG
   // qua User.branchId — nên phải đọc riêng rồi ghép vào staffList theo từng cơ sở.
-  async function fmStaffFor(branchIds: string[]) {
+  // Admin làm nhiều cơ sở cũng gắn qua bảng này (lib/admin-branches): hiện ở MỌI
+  // cơ sở được gán, mỗi cơ sở tạo một bảng lương riêng.
+  async function assignedStaffFor(branchIds: string[]) {
     const rows = await prisma.fMBranchAssignment.findMany({
       where: {
         ...(branchIds.length > 0 ? { branchId: { in: branchIds } } : {}),
-        user: { role: "FM", deletedAt: null },
+        user: { role: { in: ["FM", "ADMIN"] }, deletedAt: null },
       },
       select: {
         branchId: true,
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true } } } },
       },
     });
     return rows.map((r) => ({
@@ -52,9 +54,15 @@ export default async function SalaryPageRoute() {
       name: r.user.name,
       email: r.user.email,
       branchId: r.branchId,
-      role: "FM",
+      role: r.user.role as string,
+      positionName: r.user.jobPosition?.name ?? null,
     }));
   }
+  // Admin đã có danh sách cơ sở làm việc thì đọc qua assignedStaffFor; chỉ Admin
+  // cũ (một cơ sở ở branchId, chưa gán) mới đọc theo branchId.
+  const NOT_ASSIGNED_ADMIN = {
+    NOT: { role: "ADMIN" as const, managedBranches: { some: {} } },
+  };
 
   if (isCOO) {
     const [branchRows, staffRows, fmRows] = await Promise.all([
@@ -64,11 +72,11 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { role: { in: [...STAFF_ROLES] }, deletedAt: null },
+        where: { role: { in: [...STAFF_ROLES] }, deletedAt: null, ...NOT_ASSIGNED_ADMIN },
         select: STAFF_FIELDS,
         orderBy: { name: "asc" },
       }),
-      fmStaffFor([]),
+      assignedStaffFor([]),
     ]);
     branches = branchRows;
     staffList = [...flat(staffRows), ...fmRows];
@@ -80,11 +88,11 @@ export default async function SalaryPageRoute() {
         orderBy: { name: "asc" },
       }),
       prisma.user.findMany({
-        where: { branchId: { in: managedBranchIds }, role: { in: [...STAFF_ROLES] }, deletedAt: null },
+        where: { branchId: { in: managedBranchIds }, role: { in: [...STAFF_ROLES] }, deletedAt: null, ...NOT_ASSIGNED_ADMIN },
         select: STAFF_FIELDS,
         orderBy: { name: "asc" },
       }),
-      fmStaffFor(managedBranchIds),
+      assignedStaffFor(managedBranchIds),
     ]);
     branches = branchRows;
     staffList = [...flat(staffRows), ...fmRows];

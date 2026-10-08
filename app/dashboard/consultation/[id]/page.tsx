@@ -53,7 +53,7 @@ export default async function ConsultationDetailPage({ params }: { params: { id:
         ...(isFM ? {
           OR: [
             { branchId: { in: managedBranchIds } },
-            { role: "FM", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
+            { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId: { in: managedBranchIds } } } },
           ],
         } : {}),
       },

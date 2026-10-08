@@ -86,7 +86,7 @@ export default async function ClientsPage() {
             ...(isFM ? {
               OR: [
                 { branchId: { in: managedBranchIds } },
-                { role: "FM", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
+                { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId: { in: managedBranchIds } } } },
               ],
             } : {}),
           },

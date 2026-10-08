@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sessionPayRate } from "@/lib/packages";
-import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments } from "@/lib/pt-session-count";
+import { getTaughtSessions, countByClient, countByEnrollment, getSessionAdjustments, keepBranchSessions } from "@/lib/pt-session-count";
 import { chargeablePackageSql } from "@/lib/checkin-eligibility";
 import { vnMonthStart } from "@/lib/format-date";
 
@@ -35,7 +35,17 @@ function kocRatePerSession(startWeight: number, endWeight: number | null): numbe
   return 0;
 }
 
-export async function buildSessionDetailRows(ptId: string, month: number, year: number) {
+export async function buildSessionDetailRows(
+  ptId:  string,
+  month: number,
+  year:  number,
+  /**
+   * Chỉ khách thuộc cơ sở này — cho dòng lương của Admin làm nhiều cơ sở, để
+   * bảng chi tiết khớp đúng tiền buổi dạy của dòng đó. Bỏ trống = mọi cơ sở.
+   * Bên gọi lấy qua payBranchScope (lib/salary-live).
+   */
+  branchId?: string | null,
+) {
   type EnrollmentRow = {
     id: string;
     clientId: string;
@@ -56,7 +66,7 @@ export async function buildSessionDetailRows(ptId: string, month: number, year: 
   // Nhờ vậy buổi PT này dạy hộ khách của PT khác vẫn ghi công cho họ, và buổi
   // khách của họ do người khác dạy hộ sẽ KHÔNG bị tính cho họ. Chỉ buổi đã
   // check-out có chữ ký kèm nhật ký buổi tập mới được tính (xem pt-session-count).
-  const taughtRows       = await getTaughtSessions([ptId], startDate, endDate);
+  const taughtRows       = await keepBranchSessions(await getTaughtSessions([ptId], startDate, endDate), branchId);
   const logCountByClient = countByClient(taughtRows);
   // Gộp theo lộ trình: một khách có thể có gói cũ vừa hết + gói mới, gộp theo
   // khách sẽ gán cùng số buổi cho cả hai dòng và cộng trùng "Tổng giá trị".
@@ -74,7 +84,7 @@ export async function buildSessionDetailRows(ptId: string, month: number, year: 
   // là một luật chung, mà là câu giải thích. Hệ thống đang có 783 buổi chỉnh tay,
   // nên thiếu câu đó là 783 lần có người phải đi hỏi.
   const adjustByEnrollment = new Map<string, number>();
-  for (const adj of await getSessionAdjustments([ptId], month, year)) {
+  for (const adj of await keepBranchSessions(await getSessionAdjustments([ptId], month, year), branchId)) {
     adjustByEnrollment.set(
       adj.enrollmentId,
       (adjustByEnrollment.get(adj.enrollmentId) ?? 0) + adj.delta
@@ -136,10 +146,10 @@ export async function buildSessionDetailRows(ptId: string, month: number, year: 
       )
     : [];
 
-  const allEnrollments = [
+  const allEnrollments = await keepBranchSessions([
     ...assignedEnrollments.map(e => ({ ...e, isSubstitute: false })),
     ...substituteEnrollments.map(e => ({ ...e, isSubstitute: true })),
-  ];
+  ], branchId);
 
   if (allEnrollments.length === 0) return [];
 

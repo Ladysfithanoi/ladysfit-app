@@ -19,7 +19,14 @@ export default async function StaffPage() {
       where: (isAdmin || isCEO)
         ? { deletedAt: null }
         : isFM
-        ? { branchId: { in: managedBranchIds }, deletedAt: null }
+        ? {
+            deletedAt: null,
+            OR: [
+              { branchId: { in: managedBranchIds } },
+              // Admin làm nhiều cơ sở (lib/admin-branches) hiện ở mọi cơ sở được gán.
+              { role: "ADMIN", managedBranches: { some: { branchId: { in: managedBranchIds } } } },
+            ],
+          }
         : { branchId: session.user.branchId ?? undefined, deletedAt: null },
       select: {
         id: true, name: true, email: true, role: true, branchId: true,

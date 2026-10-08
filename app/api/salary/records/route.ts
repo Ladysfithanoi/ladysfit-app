@@ -10,7 +10,7 @@ import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
-import { ptRate, fmRate, fetchKOCKOLCommission, loadLiveSalaryRecords } from "@/lib/salary-live";
+import { ptRate, fmRate, fetchKOCKOLCommission, loadLiveSalaryRecords, payBranchScope } from "@/lib/salary-live";
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
@@ -131,8 +131,14 @@ export async function POST(req: Request) {
   // là đụng đúng dòng của mình đã tạo ở cơ sở thứ nhất. Trước đây create ném
   // P2002 và cả lượt tạo hỏng — FM chỉ thấy HTTP 500, không ai được tạo dòng nào.
   // Nay bỏ qua đúng người đó và báo rõ, những người còn lại vẫn được tạo.
+  //
+  // Riêng Admin: làm ở nhiều cơ sở thì có một dòng ở MỖI cơ sở (buổi dạy khách
+  // cơ sở nào tính vào dòng cơ sở đó — payBranchScope), nên không chặn.
   const clashes = await prisma.salaryRecord.findMany({
-    where: { userId: { in: targetUserIds }, month: body.month, year: body.year },
+    where: {
+      userId: { in: targetUserIds }, month: body.month, year: body.year,
+      user: { role: { not: "ADMIN" } },
+    },
     select: { userId: true, user: { select: { name: true, email: true } }, branch: { select: { name: true } } },
   });
   const blocked = new Map(
@@ -208,7 +214,9 @@ export async function POST(req: Request) {
       const rate             = ptRate(totalRevenue);
       const commissionAmount = totalRevenue * rate;
       const showPay          = showPayOf(entry);
-      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(entry.userId, body.month, body.year);
+      const { kocCommission, kolCommission } = await fetchKOCKOLCommission(
+        entry.userId, body.month, body.year, payBranchScope("ADMIN", body.branchId),
+      );
       // Admin dạy thêm không có lương cứng nên ngày công không ảnh hưởng lương.
       const totalSalary      = commissionAmount + showPay + kocCommission + kolCommission;
 

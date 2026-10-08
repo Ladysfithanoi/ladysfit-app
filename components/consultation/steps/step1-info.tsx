@@ -116,7 +116,7 @@ export function Step1Info({
   const filteredStaff = branchId
     ? staff.filter((s) =>
         s.branchId === branchId ||
-        (s.role === "FM" && s.managedBranches?.some((mb) => mb.branchId === branchId))
+        ((s.role === "FM" || s.role === "ADMIN") && s.managedBranches?.some((mb) => mb.branchId === branchId))
       )
     : staff;
 

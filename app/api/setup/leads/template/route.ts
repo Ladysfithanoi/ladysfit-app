@@ -53,7 +53,7 @@ export async function GET(req: Request) {
           role: { in: ["PT", "FM", "ADMIN"] },
           OR: [
             { branchId },
-            { role: "FM", managedBranches: { some: { branchId } } },
+            { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId } } },
           ],
         },
         select: { name: true, email: true },

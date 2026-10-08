@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { canAccessSessionDetail } from "@/lib/salary-access";
 import { buildSessionDetailRows } from "@/lib/salary-session-detail";
+import { payBranchScope } from "@/lib/salary-live";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
@@ -21,7 +23,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    return NextResponse.json({ rows: await buildSessionDetailRows(ptId, month, year) });
+    // Dòng lương của Admin làm nhiều cơ sở chỉ gồm khách cơ sở của dòng đó.
+    const branchId = searchParams.get("branchId");
+    const teacher  = branchId
+      ? await prisma.user.findUnique({ where: { id: ptId }, select: { role: true } })
+      : null;
+    const scope = payBranchScope(teacher?.role ?? "", branchId);
+
+    return NextResponse.json({ rows: await buildSessionDetailRows(ptId, month, year, scope) });
   } catch (error: unknown) {
     const e = error as { message?: string; code?: string; stack?: string };
     console.error("Session detail error:", e.message);

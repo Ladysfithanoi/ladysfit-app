@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { parseDayInput, todayAsDay } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
+import { adminWorkBranches } from "@/lib/admin-branches";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,7 +27,8 @@ export async function GET(req: Request) {
       role: { in: ["PT", "FM", "ADMIN"] },
       OR: [
         { branchId: branchCondition },
-        { role: "FM", managedBranches: { some: { branchId: branchCondition } } },
+        // FM và Admin làm nhiều cơ sở gắn cơ sở qua FMBranchAssignment.
+        { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId: branchCondition } } },
       ],
     };
   } else if (branchId) {
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
       role: { notIn: ["CEO_FITPARTNER", "COO"] },
       OR: [
         { branchId },
-        { role: "FM", managedBranches: { some: { branchId } } },
+        { role: { in: ["FM", "ADMIN"] }, managedBranches: { some: { branchId } } },
         { role: "ADMIN", branchId },
       ],
     };
@@ -111,6 +113,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
 
+  // Admin làm ở nhiều cơ sở: danh sách cơ sở làm việc lưu như FM, còn branchId
+  // là cơ sở chính (cơ sở được chọn, không thì cơ sở đầu tiên trong danh sách).
+  const adminBranchIds = role === "ADMIN" ? adminWorkBranches(managedBranchIds, branchId) : [];
+  const homeBranchId = role === "ADMIN" ? (adminBranchIds[0] ?? null) : (branchId || null);
+
   // Hạ chữ thường NGAY tại đây: email là danh tính đăng nhập, và chỗ xác thực
   // cũng hạ y hệt (lib/normalize-email). Lập tài khoản "Hoa@..." rồi không đăng
   // nhập được chính là vì trước đây địa chỉ được cất nguyên chữ hoa.
@@ -145,7 +152,7 @@ export async function POST(req: Request) {
         name,
         email: normalizedEmail,
         password: hashed,
-        branchId: noBranchRole ? null : (branchId || null),
+        branchId: noBranchRole ? null : homeBranchId,
         role,
         deletedAt: null,
         ptLevelId: ptLevelId || null,
@@ -157,7 +164,7 @@ export async function POST(req: Request) {
         name,
         email: normalizedEmail,
         password: hashed,
-        branchId: noBranchRole ? null : (branchId || null),
+        branchId: noBranchRole ? null : homeBranchId,
         role,
         employmentStartDate: parsedStart,
         ...(ptLevelId && { ptLevelId }),
@@ -179,9 +186,10 @@ export async function POST(req: Request) {
 
     // Sync FM branch assignments — clear stale ones before recreating
     await prisma.fMBranchAssignment.deleteMany({ where: { userId: user.id } });
-    if (role === "FM" && managedBranchIds?.length) {
+    const assignIds: string[] = role === "FM" ? (managedBranchIds ?? []) : adminBranchIds;
+    if (assignIds.length) {
       await prisma.fMBranchAssignment.createMany({
-        data: (managedBranchIds as string[]).map((bid) => ({ userId: user.id, branchId: bid })),
+        data: assignIds.map((bid) => ({ userId: user.id, branchId: bid })),
       });
     }
 

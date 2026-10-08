@@ -213,7 +213,7 @@ export function ClientsPageClient({
     return visibleStaff.filter(
       (s) =>
         s.branchId === branchFilter ||
-        (s.role === "FM" && s.managedBranches?.some((mb) => mb.branchId === branchFilter))
+        ((s.role === "FM" || s.role === "ADMIN") && s.managedBranches?.some((mb) => mb.branchId === branchFilter))
     );
   }, [visibleStaff, branchFilter]);
 

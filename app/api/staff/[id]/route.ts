@@ -7,6 +7,7 @@ import { captureTrash } from "@/lib/trash";
 import { firstWorkDayOf, hireDayOf, parseDayInput } from "@/lib/leave-days";
 import { normalizeEmail } from "@/lib/normalize-email";
 import { revokeTrustedDevices } from "@/lib/login-device";
+import { adminWorkBranches } from "@/lib/admin-branches";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -163,9 +164,21 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     updateData.employmentStartDate = nextStart;
   }
 
+  // Quyền sau khi lưu — để biết cơ sở gửi lên là của FM, của Admin hay của PT.
+  const finalRole = role ?? (await prisma.user.findUnique({
+    where: { id: params.id }, select: { role: true },
+  }))?.role;
+  // Admin làm nhiều cơ sở: danh sách lưu như FM, branchId = cơ sở chính.
+  const adminBranchIds = finalRole === "ADMIN" && newManagedIds !== undefined
+    ? adminWorkBranches(newManagedIds, branchId)
+    : null;
+
   if (role === "FM") {
     updateData.role = role;
     updateData.branchId = null;
+  } else if (adminBranchIds) {
+    if (role) updateData.role = role;
+    updateData.branchId = adminBranchIds[0] ?? null;
   } else {
     if (role) updateData.role = role;
     // Allow explicitly setting or clearing branchId (empty string → null)
@@ -190,15 +203,18 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     });
 
     // Handle FM branch assignments update
-    if (newManagedIds !== undefined) {
+    // (FM: cơ sở quản lý; Admin: cơ sở làm việc — xem lib/admin-branches.)
+    if (newManagedIds !== undefined && (finalRole === "FM" || finalRole === "ADMIN")) {
+      const ids: string[] = adminBranchIds
+        ?? (Array.isArray(newManagedIds) ? (newManagedIds as string[]) : []);
       await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
-      if (Array.isArray(newManagedIds) && newManagedIds.length > 0) {
+      if (ids.length > 0) {
         await prisma.fMBranchAssignment.createMany({
-          data: (newManagedIds as string[]).map((bid) => ({ userId: params.id, branchId: bid })),
+          data: ids.map((bid) => ({ userId: params.id, branchId: bid })),
         });
       }
-    } else if (role && role !== "FM") {
-      // Changing FROM FM to another role — remove assignments
+    } else if (role && role !== "FM" && role !== "ADMIN") {
+      // Đổi sang quyền khác FM/Admin — bỏ gán cơ sở
       await prisma.fMBranchAssignment.deleteMany({ where: { userId: params.id } });
     }
 

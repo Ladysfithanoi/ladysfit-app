@@ -1854,7 +1854,11 @@ model SalaryRecord {
   user   User   @relation("UserSalaryRecords", fields: [userId], references: [id])
   branch Branch @relation(fields: [branchId], references: [id])
 
-  @@unique([userId, month, year])
+  /// Một dòng lương cho mỗi người, mỗi CƠ SỞ, mỗi tháng. PT/FM/STAFF vẫn chỉ có
+  /// một dòng mỗi tháng (POST /api/salary/records chặn tạo ở cơ sở thứ hai);
+  /// riêng Admin làm ở nhiều cơ sở có một dòng ở mỗi cơ sở, buổi dạy khách cơ sở
+  /// nào tính vào dòng của cơ sở đó (lib/salary-live payBranchScope).
+  @@unique([userId, branchId, month, year])
   @@map("salary_records")
 }
 

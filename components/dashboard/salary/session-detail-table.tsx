@@ -60,6 +60,8 @@ type Props = {
   month:   number;
   year:    number;
   canEdit: boolean;
+  /** Cơ sở của dòng lương — Admin làm nhiều cơ sở chỉ thấy khách cơ sở này. */
+  branchId?: string;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -126,7 +128,7 @@ function SessionCount({ row }: { row: SessionRow }) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props) {
+export function SessionDetailTable({ ptId, ptName, month, year, canEdit, branchId }: Props) {
   const [rows, setRows]         = useState<SessionRow[]>([]);
   const [loading, setLoading]   = useState(true);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
@@ -140,7 +142,8 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/salary/session-detail?ptId=${ptId}&month=${month}&year=${year}`);
+      const branchParam = branchId ? `&branchId=${branchId}` : "";
+      const res = await fetch(`/api/salary/session-detail?ptId=${ptId}&month=${month}&year=${year}${branchParam}`);
       if (res.ok) {
         const data = await res.json() as { rows: SessionRow[] };
         setRows(data.rows);
@@ -148,7 +151,7 @@ export function SessionDetailTable({ ptId, ptName, month, year, canEdit }: Props
     } finally {
       setLoading(false);
     }
-  }, [ptId, month, year]);
+  }, [ptId, month, year, branchId]);
 
   useEffect(() => { load(); }, [load]);
 
