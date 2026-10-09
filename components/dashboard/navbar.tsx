@@ -9,7 +9,6 @@ import {
 import { cn } from "@/lib/utils";
 import { ChecklistReportModal } from "@/components/dashboard/checklist-notif-modal";
 import { TrustedDevicesCard } from "@/components/auth/trusted-devices-card";
-import { NotifBellIcon } from "@/components/dashboard/notif-bell-icon";
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
@@ -690,9 +689,9 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={bellRef} className="relative">
             <button
               onClick={openBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              <NotifBellIcon ringing={unreadCount > 0} />
+              <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#f15b5c] text-white text-[10px] font-extrabold flex items-center justify-center">
                   {unreadCount > 9 ? "9+" : unreadCount}
@@ -765,9 +764,9 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={perfBellRef} className="relative">
             <button
               onClick={openPerfBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              <NotifBellIcon ringing={perfUnread > 0} />
+              <Bell className="w-5 h-5" />
               {perfUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                   {perfUnread > 9 ? "9+" : perfUnread}
@@ -841,9 +840,9 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={complaintBellRef} className="relative">
             <button
               onClick={openComplaintBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              <NotifBellIcon badge={MessageSquareWarning} ringing={complaintUnread > 0} />
+              <MessageSquareWarning className="w-5 h-5" />
               {complaintUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                   {complaintUnread > 9 ? "9+" : complaintUnread}
@@ -908,10 +907,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={measBellRef} className="relative">
             <button
               onClick={openMeasBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
               title="Thông báo số đo"
             >
-              <NotifBellIcon badge={Ruler} ringing={measUnread > 0} />
+              <Ruler className="w-5 h-5" />
               {measUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                   {measUnread > 9 ? "9+" : measUnread}
@@ -990,10 +989,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={pkgBellRef} className="relative">
             <button
               onClick={openPkgBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
               title="Tiến độ lộ trình khách hàng"
             >
-              <NotifBellIcon badge={TrendingUp} ringing={pkgUnread > 0} />
+              <TrendingUp className="w-5 h-5" />
               {pkgUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                   {pkgUnread > 9 ? "9+" : pkgUnread}
@@ -1084,10 +1083,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={slowBellRef} className="relative">
             <button
               onClick={openSlowBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
               title="Khách chậm tiến độ giảm cân"
             >
-              <NotifBellIcon badge={TrendingDown} ringing={slowUnread > 0} />
+              <TrendingDown className="w-5 h-5" />
               {slowUnread > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                   {slowUnread > 9 ? "9+" : slowUnread}
@@ -1168,10 +1167,10 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <div ref={checklistBellRef} className="relative">
             <button
               onClick={openChecklistBell}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+              className="relative p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
               title={isAdmin ? "Thông báo chuyển giao khách hàng" : "Thông báo check-list"}
             >
-              <NotifBellIcon badge={ClipboardList} ringing={checklistUnread > 0} />
+              <ClipboardList className="w-5 h-5" />
               {checklistUnread > 0 && (
                 <span className={cn(
                   "absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white text-[10px] font-extrabold flex items-center justify-center",

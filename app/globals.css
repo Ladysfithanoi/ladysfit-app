@@ -26,7 +26,7 @@
   }
 }
 
-/* Chuông thông báo rung kiểu điện thoại khi có tin chưa đọc */
+/* Chuông rung ở dòng nhắc buổi chưa ký check-out */
 @keyframes bell-ring {
   0%, 60%, 100% { transform: rotate(0); }
   8%  { transform: rotate(16deg); }

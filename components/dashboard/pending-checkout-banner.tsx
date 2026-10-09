@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Volume2, VolumeX, X } from "lucide-react";
+import { BellRing, Volume2, VolumeX, X } from "lucide-react";
 
 type PendingItem = {
   id: string;
@@ -47,22 +47,40 @@ function getAudioCtx(): AudioContext | null {
   return audioCtx;
 }
 
-/** Hai tiếng "ting-ting" ngắn, đủ nghe ở phòng tập mà không chói. */
+/**
+ * Hồi chuông dài kiểu điện thoại bàn: 3 hồi "reng…" 1,5s, nghỉ 0,6s giữa các
+ * hồi (~6s). Mỗi hồi là hai tần số trộn, bật/tắt 20 lần/giây cho ra tiếng rung
+ * của chuông — ting-ting ngắn thì đứng sàn dễ lọt tai.
+ */
+const RING_SEC = 1.5;
+const RING_GAP_SEC = 0.6;
+const RING_COUNT = 3;
+const RING_PULSE_SEC = 0.05;
+
 function playChime() {
   const ctx = getAudioCtx();
   if (!ctx || ctx.state !== "running") return;
-  const t0 = ctx.currentTime;
-  [0, 0.35].forEach((offset, i) => {
+  const t0 = ctx.currentTime + 0.05;
+  const total = RING_COUNT * RING_SEC + (RING_COUNT - 1) * RING_GAP_SEC;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, t0);
+  for (let r = 0; r < RING_COUNT; r++) {
+    const start = t0 + r * (RING_SEC + RING_GAP_SEC);
+    for (let p = 0; p * RING_PULSE_SEC < RING_SEC; p++) {
+      gain.gain.setValueAtTime(p % 2 === 0 ? 0.22 : 0, start + p * RING_PULSE_SEC);
+    }
+    gain.gain.setValueAtTime(0, start + RING_SEC);
+  }
+  gain.connect(ctx.destination);
+
+  [1000, 1250].forEach((freq) => {
     const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
     osc.type = "sine";
-    osc.frequency.value = i === 0 ? 880 : 1175;
-    gain.gain.setValueAtTime(0.0001, t0 + offset);
-    gain.gain.exponentialRampToValueAtTime(0.4, t0 + offset + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + offset + 0.5);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(t0 + offset);
-    osc.stop(t0 + offset + 0.55);
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    osc.start(t0);
+    osc.stop(t0 + total + 0.05);
   });
 }
 
@@ -149,7 +167,7 @@ export function PendingCheckoutBanner() {
     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50">
       {/* Compact one-line summary; click to expand the list */}
       <div className="flex items-center gap-2 px-3 py-2">
-        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+        <BellRing className="w-4 h-4 text-amber-600 flex-shrink-0 animate-bell-ring" />
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
