@@ -3,10 +3,11 @@ import { getServerSession } from "next-auth";
 import { clientAuthOptions } from "@/lib/client-auth";
 import { prisma } from "@/lib/prisma";
 import {
-  L0_EXERCISES,
   L0_PHASE_PREFIX,
   buildFaultHistory,
+  disallowedL0Exercises,
   faultCount,
+  isL0AllowedExercise,
   l0DayOf,
   l0FaultsVisibleToClient,
   type L0Day,
@@ -75,15 +76,22 @@ export async function GET() {
     .flatMap((w) => w.sessions)
     .find((s) => l0DayOf(program.phase, s.sessionName) === 3 && !completedSessionIds.has(s.id)) ?? null;
 
-  // Bài khách đã học ở Buổi 1–2 (tên thật trong nhật ký) — gợi ý khi tự soạn.
-  const learned = Array.from(
-    new Set(
-      completed
-        .filter((l) => l.day <= 2)
-        .flatMap((l) => l.setLogs.map((sl) => sl.exerciseName.trim()))
-        .filter(Boolean)
-    )
+  // Bài khách được chọn khi tự soạn: CHỈ danh sách cố định của gói L0 (lấy tên
+  // thật ở Kho bài tập). Bài đã học ở Buổi 1–2 xếp lên đầu.
+  const learned = new Set(
+    completed
+      .filter((l) => l.day <= 2)
+      .flatMap((l) => l.setLogs.map((sl) => sl.exerciseName.trim()))
+      .filter(Boolean)
   );
+  const library = await prisma.workoutExercise.findMany({
+    where: { phase: { startsWith: L0_PHASE_PREFIX } },
+    distinct: ["name"],
+    select: { name: true },
+    orderBy: { name: "asc" },
+  });
+  const allowed = library.map((e) => e.name).filter(isL0AllowedExercise);
+  const choices = [...allowed.filter((n) => learned.has(n)), ...allowed.filter((n) => !learned.has(n))];
 
   let summary = null;
   if (l0FaultsVisibleToClient(completedDays)) {
@@ -130,7 +138,7 @@ export async function GET() {
             .map((m) => ({ name: m.selectedExercise, sets: m.sets, reps: m.reps, load: m.plannedLoad ?? "" })),
         }
       : null,
-    learned: learned.length > 0 ? learned : L0_EXERCISES.map((e) => e.name),
+    choices,
     summary,
   });
 }
@@ -156,6 +164,13 @@ export async function PUT(req: Request) {
     .filter((e) => e.name);
   if (exercises.length === 0) {
     return NextResponse.json({ error: "Chị thêm ít nhất 1 bài tập nhé" }, { status: 400 });
+  }
+  const bad = disallowedL0Exercises(exercises.map((e) => e.name));
+  if (bad.length > 0) {
+    return NextResponse.json(
+      { error: `Buổi tự tập chỉ chọn các bài trong danh sách L0. Chị đổi lại: ${bad.join(", ")}` },
+      { status: 400 }
+    );
   }
   if (exercises.length > MAX_EXERCISES) {
     return NextResponse.json({ error: `Tối đa ${MAX_EXERCISES} bài trong một buổi` }, { status: 400 });

@@ -13,7 +13,8 @@ type L0Data = {
   programStatus: "ACTIVE" | "ARCHIVED";
   days: { day: L0Day; done: boolean; inProgress: boolean; date: string | null }[];
   design: { sessionId: string; exercises: DesignExercise[] } | null;
-  learned: string[];
+  /** Danh sách bài cố định của gói L0 — khách chỉ chọn trong đây. */
+  choices: string[];
   summary: {
     faultsDay1: number | null;
     faultsDay4: number | null;
@@ -106,7 +107,7 @@ export function L0JourneyCard() {
         <DesignSheet
           sessionId={data.design.sessionId}
           initial={data.design.exercises}
-          learned={data.learned}
+          choices={data.choices}
           onClose={() => setDesignOpen(false)}
           onSaved={() => { setDesignOpen(false); load(); }}
         />
@@ -162,13 +163,13 @@ function Summary({ summary }: { summary: NonNullable<NonNullable<L0Data>["summar
 function DesignSheet({
   sessionId,
   initial,
-  learned,
+  choices,
   onClose,
   onSaved,
 }: {
   sessionId: string;
   initial: DesignExercise[];
-  learned: string[];
+  choices: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -205,7 +206,7 @@ function DesignSheet({
     <BottomSheet open onClose={onClose} title="Buổi 3 — chị tự thiết kế">
       <div className="space-y-3">
         <p className="text-xs text-gray-500 leading-relaxed">
-          {L0_DAYS[3].purpose} Chị dùng lại các bài đã học hoặc tự sắp xếp theo cách của mình — không có đáp án &quot;đúng duy nhất&quot;.
+          {L0_DAYS[3].purpose} Chị chọn bài trong danh sách bài của lộ trình L0, tự sắp thứ tự và số set/rep theo cách của mình — không có đáp án &quot;đúng duy nhất&quot;.
         </p>
         <button
           type="button"
@@ -225,21 +226,22 @@ function DesignSheet({
           </div>
         )}
 
-        <datalist id="l0-learned">
-          {learned.map((n) => <option key={n} value={n} />)}
-        </datalist>
 
         {rows.map((r, i) => (
           <div key={i} className="rounded-2xl border border-gray-100 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold text-violet-600 w-5">{i + 1}.</span>
-              <input
-                list="l0-learned"
+              <select
                 value={r.name}
                 onChange={(e) => update(i, { name: e.target.value })}
-                placeholder="Chọn bài đã học hoặc gõ tên bài"
-                className="flex-1 min-w-0 h-9 rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
-              />
+                className="flex-1 min-w-0 h-9 rounded-xl border border-gray-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
+              >
+                <option value="">— Chọn bài tập —</option>
+                {r.name && !choices.includes(r.name) && (
+                  <option value={r.name} disabled>{r.name} (không có trong danh sách)</option>
+                )}
+                {choices.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
               <button
                 type="button"
                 onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}

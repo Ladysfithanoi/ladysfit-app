@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { fmtDate } from "@/lib/format-date";
 import { captureTrash } from "@/lib/trash";
+import { l0SafeExercise } from "@/lib/l0-program";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -117,8 +118,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
               create: s.movements.map((m, mi) => ({
                 movementCode: m.movementCode,
                 movementName: m.movementName,
-                selectedExercise:
-                  m.selectedExercise === "__custom__" ? (m.customExercise ?? "") : m.selectedExercise,
+                selectedExercise: l0SafeExercise(
+                  design.phase,
+                  m.selectedExercise === "__custom__" ? (m.customExercise ?? "") : m.selectedExercise
+                ),
                 sets: m.sets,
                 reps: m.reps,
                 order: mi,

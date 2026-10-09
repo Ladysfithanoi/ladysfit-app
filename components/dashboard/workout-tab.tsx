@@ -30,7 +30,7 @@ import { CheckOutPhotoThumb } from "./checkout-photo";
 import { CheckinSheetModal } from "./checkin-sheet-modal";
 import { PhaseSwitchModal } from "./phase-switch-modal";
 import { L0DayGuide } from "./l0/l0-day-guide";
-import { buildFaultHistory, l0DayOf, type L0Day } from "@/lib/l0-program";
+import { buildFaultHistory, isL0AllowedExercise, isL0Phase, l0DayOf, type L0Day } from "@/lib/l0-program";
 import { useFormAutoSave, loadDraft } from "@/hooks/use-form-auto-save";
 import {
   findCheckInBlock,
@@ -481,13 +481,19 @@ function ExerciseSelect({
       .catch(() => {});
   }, [phase, baseCode]);
 
+  // Gói L0: chỉ chọn trong danh sách cố định (API đã lọc), không cho tự nhập.
+  // Bài cũ ngoài danh sách vẫn hiện để PT thấy mà đổi, thay vì ô trống.
+  const l0 = isL0Phase(phase);
+  const staleL0 = l0 && !!value && value !== "__custom__" && !exercises.some((ex) => ex.name === value);
+
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={cn(selectCls, "h-9 text-xs")}>
       <option value="">— Chọn bài tập —</option>
+      {staleL0 && <option value={value}>{value} (ngoài danh sách L0)</option>}
       {exercises.map((ex) => (
         <option key={ex.id} value={ex.name}>{ex.name}</option>
       ))}
-      <option value="__custom__">Tự nhập...</option>
+      {!l0 && <option value="__custom__">Tự nhập...</option>}
     </select>
   );
 }
@@ -1000,7 +1006,10 @@ function ProgramView({
       const params = new URLSearchParams({ phaseKey, sessionType: draft.sessionType });
       const res = await fetch(`/api/workout-templates?${params}`);
       const rows: { movement: string; exercise: string }[] = res.ok ? await res.json() : [];
-      const byMovement = new Map(rows.map((r) => [r.movement, r.exercise]));
+      const l0 = isL0Phase(phaseKey);
+      const byMovement = new Map(
+        rows.filter((r) => !l0 || isL0AllowedExercise(r.exercise)).map((r) => [r.movement, r.exercise])
+      );
       let filled = 0;
       setDraftSessions((prev) =>
         prev.map((s, si) =>
@@ -1040,13 +1049,17 @@ function ProgramView({
   ) {
     let filled = 0;
     const chosen = new Set(sessionIndices);
+    // Gói L0: bài ngoài danh sách cố định của khách nguồn thì bỏ qua.
+    const l0 = isL0Phase(editSelectedPhase?.name ?? program.phase);
     setDraftSessions((prev) =>
       prev.map((s, si) => {
         if (!chosen.has(si)) return s;
         const src = srcSessions[si];
         if (!src) return s;
         const byCode = new Map(
-          src.movements.filter((m) => m.selectedExercise).map((m) => [m.movementCode, m.selectedExercise])
+          src.movements
+            .filter((m) => m.selectedExercise && (!l0 || isL0AllowedExercise(m.selectedExercise)))
+            .map((m) => [m.movementCode, m.selectedExercise])
         );
         return {
           ...s,

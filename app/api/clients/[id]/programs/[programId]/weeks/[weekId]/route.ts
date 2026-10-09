@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reversePackageSession, sessionIdsWithLogs } from "@/lib/workout-session";
 import { captureTrash } from "@/lib/trash";
+import { disallowedL0Exercises, isL0Phase } from "@/lib/l0-program";
 
 const sessionInclude = {
   orderBy: { order: "asc" as const },
@@ -52,9 +53,29 @@ export async function PUT(
 
   const week = await prisma.workoutWeek.findUnique({
     where: { id: params.weekId, programId: params.programId },
-    include: { sessions: { orderBy: { order: "asc" }, include: { movements: true } } },
+    include: {
+      program: { select: { phase: true } },
+      sessions: { orderBy: { order: "asc" }, include: { movements: true } },
+    },
   });
   if (!week) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Gói L0 chỉ tập danh sách bài cố định. Chỉ chặn bài MỚI chọn — bài cũ đã lưu
+  // từ trước (có khi đã tập, có nhật ký) giữ nguyên được, để không khoá cả tuần.
+  if (isL0Phase(week.program.phase)) {
+    const sorted = [...body.sessions].sort((a, b) => a.order - b.order);
+    const newNames = sorted.flatMap((s, i) => {
+      const before = new Set((week.sessions[i]?.movements ?? []).map((m) => m.selectedExercise));
+      return s.movements.map((m) => m.selectedExercise).filter((n) => !before.has(n));
+    });
+    const bad = disallowedL0Exercises(newNames);
+    if (bad.length > 0) {
+      return NextResponse.json(
+        { error: `Gói L0 chỉ được tập các bài trong danh sách L0. Đổi lại: ${bad.join(", ")}` },
+        { status: 400 }
+      );
+    }
+  }
 
   // Buổi nào đã có nhật ký (chữ ký check-in/check-out, số liệu set của khách) —
   // lưu giáo án KHÔNG BAO GIỜ được xoá những buổi này.

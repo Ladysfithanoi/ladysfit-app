@@ -10,6 +10,7 @@ import { normalizeEmail } from "@/lib/normalize-email";
 import { promoPriceFor } from "@/lib/package-promos";
 import { getActivePromos } from "@/lib/package-promos-server";
 import { chainPackageDates } from "@/lib/package-chain";
+import { l0SafeExercise } from "@/lib/l0-program";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -213,10 +214,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
               create: s.movements.map((m, mi) => ({
                 movementCode: m.movementCode,
                 movementName: m.movementName,
-                selectedExercise:
-                  m.selectedExercise === "__custom__"
-                    ? (m.customExercise ?? "")
-                    : m.selectedExercise,
+                selectedExercise: l0SafeExercise(
+                  design.phase,
+                  m.selectedExercise === "__custom__" ? (m.customExercise ?? "") : m.selectedExercise
+                ),
                 sets: m.sets,
                 reps: m.reps,
                 order: mi,

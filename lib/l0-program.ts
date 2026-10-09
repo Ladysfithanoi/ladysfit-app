@@ -345,6 +345,46 @@ const L0_FINISHERS: { key: string; name: string; faults: L0Fault[]; match: RegEx
   },
 ];
 
+// ── Danh sách bài cố định của gói L0 ────────────────────────────────────────
+//
+// Gói L0 CHỈ được tập đúng 10 bài nền tảng + 2 finisher của tài liệu, cả 4 buổi
+// (kể cả Buổi 3 khách tự soạn). `match` ở trên cố tình rộng để chọn bảng lỗi;
+// còn đây là khớp CHẶT trên tên gốc ở Kho bài tập (đã bỏ phần dịch trong ngoặc),
+// vd "Air Box Squat" được, "Dumbbell Goblet Squat" thì không.
+// Mọi chỗ chọn/lưu bài của giáo án L0 — ô chọn bài, lịch mẫu, lưu giáo án, khách
+// tự soạn Buổi 3 — đều lọc qua isL0AllowedExercise; giai đoạn khác không bị ảnh hưởng.
+const L0_ALLOWED: Record<string, RegExp> = {
+  "box-squat": /^(air|bodyweight)\s+box\s+squat$/i,
+  "step-up": /\bassisted\b.*\b(step\s*-?\s*up|split\s+squat)$/i,
+  row: /^(seated\s+cable|dumbbell\s+prone)\s+row$/i,
+  "lat-pulldown": /^(ovh|udh)\s+lat\s+pull\s*-?\s*down$/i,
+  "hip-thrust": /^(dumbbell|barbell)\s+hip\s+thrust$/i,
+  "hip-hinge": /^(kneeling|standing)\s+hip\s+hinge$/i,
+  "shoulder-press": /^seated\s+(db|dumbbell)\s+shoulder\s+press$/i,
+  "floor-press": /^dumbbell\s+floor\s+press$/i,
+  "bear-plank": /^bear\s+plank$/i,
+  "leg-raise": /^torso\s+elevated\b.*\bleg\s+raise$/i,
+  "jumping-jack": /^((slow|mid|full)\s+)?jumping\s+jack$/i,
+  "mountain-climber": /^((slow|mid|high|full)\s+)?mountain\s+climber$/i,
+};
+
+/** Bài có nằm trong danh sách cố định của gói L0 không (theo tên ở Kho bài tập). */
+export function isL0AllowedExercise(name: string | null | undefined): boolean {
+  const base = (name ?? "").replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
+  if (!base) return false;
+  return Object.values(L0_ALLOWED).some((re) => re.test(base));
+}
+
+/** Tên bài không thuộc danh sách L0 trong một giáo án (bỏ qua ô để trống). */
+export function disallowedL0Exercises(names: (string | null | undefined)[]): string[] {
+  return Array.from(new Set(names.map((n) => (n ?? "").trim()).filter((n) => n && !isL0AllowedExercise(n))));
+}
+
+/** Giáo án L0 thì bỏ trống bài ngoài danh sách; giai đoạn khác giữ nguyên. */
+export function l0SafeExercise(phase: string | null | undefined, name: string): string {
+  return isL0Phase(phase) && name.trim() && !isL0AllowedExercise(name) ? "" : name;
+}
+
 /**
  * 5 yếu tố kỹ thuật chung — PT quan sát bài CHƯA có trong thư viện (khách tự
  * chọn ở Buổi 3, hay PT thay bằng bài khác cùng chuyển động).

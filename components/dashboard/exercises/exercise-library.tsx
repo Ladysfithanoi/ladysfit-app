@@ -176,7 +176,7 @@ export function ExerciseLibrary() {
     setExLoading(true);
     const phase = dbPhase(tpl.phaseKey);
     const res = await fetch(
-      `/api/exercises?phase=${encodeURIComponent(phase)}&movement=${encodeURIComponent(tpl.movement)}`
+      `/api/exercises?phase=${encodeURIComponent(phase)}&movement=${encodeURIComponent(tpl.movement)}&all=1`
     );
     const data = await res.json();
     setExercises(Array.isArray(data) ? data : []);

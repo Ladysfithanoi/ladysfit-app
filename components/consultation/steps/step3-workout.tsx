@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isL0Phase } from "@/lib/l0-program";
 import {
   MOVEMENT_BASE_CODES,
   getSlotsForSessionType,
@@ -92,7 +93,8 @@ function ExerciseSelect({
       {exercises.map((ex) => (
         <option key={ex.id} value={ex.name}>{ex.name}</option>
       ))}
-      <option value="__custom__">Tự nhập...</option>
+      {/* Gói L0 chỉ chọn trong danh sách cố định — không tự nhập */}
+      {!isL0Phase(phase) && <option value="__custom__">Tự nhập...</option>}
     </select>
   );
 }
