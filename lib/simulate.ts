@@ -118,7 +118,7 @@ export async function seedSimulationData() {
   });
 
   // Làm mới khách test: xoá sạch rồi tạo lại (quan hệ con đều Cascade/SetNull).
-  // Xoá và tạo cùng số lượng nên tổng số khách — thứ sinh mã LDFxxxx — không đổi.
+  // Mã TEST- không đụng tới dãy LDFxxxx (lib/client-code chỉ xét mã LDF).
   await prisma.client.deleteMany({ where: { clientCode: { startsWith: TEST_CLIENT_CODE_PREFIX } } });
 
   const now = Date.now();

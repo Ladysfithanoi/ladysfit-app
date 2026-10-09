@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ClientStatus, PackageEnrollmentStatus } from "@prisma/client";
 import { logPTAssignment } from "@/lib/transform-credit";
+import { nextClientCode } from "@/lib/client-code";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -132,8 +133,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thiếu thông tin bắt buộc" }, { status: 400 });
   }
 
-  const count = await prisma.client.count();
-  const clientCode = `LDF${String(count + 1).padStart(4, "0")}`;
+  const clientCode = await nextClientCode();
 
   const client = await prisma.client.create({
     data: {

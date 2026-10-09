@@ -11,6 +11,7 @@ import { promoPriceFor } from "@/lib/package-promos";
 import { getActivePromos } from "@/lib/package-promos-server";
 import { chainPackageDates } from "@/lib/package-chain";
 import { l0SafeExercise } from "@/lib/l0-program";
+import { nextClientCode } from "@/lib/client-code";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -41,19 +42,6 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const info = c.info;
 
-  // Generate clientCode based on MAX existing code (not count) to survive gaps from deletions.
-  // Find the highest numeric suffix among all clientCodes and increment it.
-  const nextClientCode = async (): Promise<string> => {
-    const last = await prisma.client.findFirst({
-      where: { clientCode: { not: null } },
-      orderBy: { clientCode: "desc" },
-      select: { clientCode: true },
-    });
-    const match = last?.clientCode?.match(/(\d+)$/);
-    const nextNum = match ? parseInt(match[1]) + 1 : 1;
-    return `LDF${String(nextNum).padStart(4, "0")}`;
-  };
-
   const emailToUse: string | null = normalizeEmail(info.email ?? "") || null;
   let client: { id: string } | null = null;
 
@@ -83,9 +71,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   for (const candidateEmail of emailCandidates) {
     let created = false;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const baseCode = await nextClientCode();
-      const baseNum = parseInt(baseCode.replace("LDF", "")) + attempt;
-      const clientCode = `LDF${String(baseNum).padStart(4, "0")}`;
+      const clientCode = await nextClientCode(attempt);
       try {
         client = await prisma.client.create({ data: makeClientData(clientCode, candidateEmail) });
         created = true;
