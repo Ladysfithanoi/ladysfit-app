@@ -216,7 +216,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
                 movementName: m.movementName,
                 selectedExercise: l0SafeExercise(
                   design.phase,
-                  m.selectedExercise === "__custom__" ? (m.customExercise ?? "") : m.selectedExercise
+                  m.selectedExercise === "__custom__" ? (m.customExercise ?? "") : m.selectedExercise,
+                  s.sessionType
                 ),
                 sets: m.sets,
                 reps: m.reps,

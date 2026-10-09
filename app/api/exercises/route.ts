@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isL0AllowedExercise, isL0Phase } from "@/lib/l0-program";
+import { isL0AllowedExercise, isL0Phase, l0DayOf } from "@/lib/l0-program";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -22,10 +22,12 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
   });
 
-  // Gói L0 chỉ tập đúng danh sách cố định — ô chọn bài chỉ thấy các bài đó.
+  // Gói L0 chỉ tập đúng danh sách cố định — ô chọn bài chỉ thấy các bài đó, và
+  // có sessionType ("Ngày 1") thì chỉ bài của buổi đó.
   // Màn Kho bài tập của Admin gửi all=1 để vẫn quản lý được toàn bộ.
   if (isL0Phase(phase) && searchParams.get("all") !== "1") {
-    return NextResponse.json(exercises.filter((e) => isL0AllowedExercise(e.name)));
+    const day = l0DayOf(phase, searchParams.get("sessionType"));
+    return NextResponse.json(exercises.filter((e) => isL0AllowedExercise(e.name, day)));
   }
   return NextResponse.json(exercises);
 }

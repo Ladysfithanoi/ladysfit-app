@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isL0AllowedExercise, isL0Phase, l0DayOf } from "@/lib/l0-program";
 import { ClipboardList, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -286,7 +287,10 @@ export function WorkoutScheduleTemplateTab() {
                       </span>
                       <div className="flex-1 w-full">
                         <ExercisePicker
-                          options={optionsByMovement.get(m.movement) ?? []}
+                          options={(optionsByMovement.get(m.movement) ?? []).filter(
+                            // Gói L0: Ngày 1 / Ngày 2 chỉ bài của buổi đó
+                            (n) => !isL0Phase(phase.name) || isL0AllowedExercise(n, l0DayOf(phase.name, sessionType))
+                          )}
                           optionsLoading={optionsLoading}
                           value={schedule.get(key) ?? ""}
                           onChange={(v) => saveRow(sessionType, m.movement, v)}

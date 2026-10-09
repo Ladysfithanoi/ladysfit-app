@@ -60,12 +60,15 @@ const selectCls =
 
 function ExerciseSelect({
   phase,
+  sessionType,
   movementCode,
   value,
   onChange,
   disabled,
 }: {
   phase: string;
+  /** Loại buổi ("Ngày 1") — gói L0 lọc bài theo buổi. */
+  sessionType?: string;
   movementCode: string;
   value: string;
   onChange: (v: string) => void;
@@ -76,11 +79,12 @@ function ExerciseSelect({
 
   useEffect(() => {
     const params = new URLSearchParams({ phase, movement: baseCode });
+    if (sessionType) params.set("sessionType", sessionType);
     fetch(`/api/exercises?${params}`)
       .then((r) => r.json())
       .then(setExercises)
       .catch(() => {});
-  }, [phase, baseCode]);
+  }, [phase, sessionType, baseCode]);
 
   return (
     <select
@@ -104,11 +108,13 @@ function ExerciseSelect({
 function MovementRow({
   mov,
   phase,
+  sessionType,
   onChange,
   readOnly,
 }: {
   mov: DraftMovement;
   phase: string;
+  sessionType?: string;
   onChange: (updated: DraftMovement) => void;
   readOnly?: boolean;
 }) {
@@ -128,6 +134,7 @@ function MovementRow({
           <>
             <ExerciseSelect
               phase={basePhase(phase)}
+              sessionType={sessionType}
               movementCode={mov.movementCode}
               value={mov.selectedExercise}
               onChange={(v) =>
@@ -605,6 +612,7 @@ export function Step3Workout({
                       key={m.movementCode + mi}
                       mov={m}
                       phase={selectedPhase?.name ?? ""}
+                      sessionType={s.sessionType}
                       onChange={(updated) => updateMovement(si, mi, updated)}
                     />
                   ))}

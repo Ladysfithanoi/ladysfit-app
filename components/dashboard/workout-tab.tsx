@@ -461,11 +461,14 @@ const selectCls = inputCls;
 
 function ExerciseSelect({
   phase,
+  sessionType,
   movementCode,
   value,
   onChange,
 }: {
   phase: string;
+  /** Loại buổi ("Ngày 1") — gói L0 lọc bài theo buổi. */
+  sessionType?: string;
   movementCode: string;
   value: string;
   onChange: (v: string) => void;
@@ -475,11 +478,12 @@ function ExerciseSelect({
 
   useEffect(() => {
     const params = new URLSearchParams({ phase, movement: baseCode });
+    if (sessionType) params.set("sessionType", sessionType);
     fetch(`/api/exercises?${params}`)
       .then((r) => r.json())
       .then(setExercises)
       .catch(() => {});
-  }, [phase, baseCode]);
+  }, [phase, sessionType, baseCode]);
 
   // Gói L0: chỉ chọn trong danh sách cố định (API đã lọc), không cho tự nhập.
   // Bài cũ ngoài danh sách vẫn hiện để PT thấy mà đổi, thay vì ô trống.
@@ -565,10 +569,12 @@ function buildMovementsFromType(phase: PhaseData, sessionType: string): DraftMov
 function EditMovementRow({
   mov,
   phase,
+  sessionType,
   onChange,
 }: {
   mov: DraftMovement;
   phase: string;
+  sessionType?: string;
   onChange: (updated: DraftMovement) => void;
 }) {
   const isCustom = mov.selectedExercise === "__custom__";
@@ -580,7 +586,8 @@ function EditMovementRow({
       <td className="py-2 pr-3 min-w-[180px]">
         <ExerciseSelect
           phase={basePhase(phase ?? "")}
-          movementCode={mov.movementCode}
+          sessionType={sessionType}
+              movementCode={mov.movementCode}
           value={mov.selectedExercise}
           onChange={(v) =>
             onChange({ ...mov, selectedExercise: v, customExercise: v !== "__custom__" ? "" : mov.customExercise })
@@ -1007,8 +1014,9 @@ function ProgramView({
       const res = await fetch(`/api/workout-templates?${params}`);
       const rows: { movement: string; exercise: string }[] = res.ok ? await res.json() : [];
       const l0 = isL0Phase(phaseKey);
+      const l0Day = l0DayOf(phaseKey, draft.sessionType);
       const byMovement = new Map(
-        rows.filter((r) => !l0 || isL0AllowedExercise(r.exercise)).map((r) => [r.movement, r.exercise])
+        rows.filter((r) => !l0 || isL0AllowedExercise(r.exercise, l0Day)).map((r) => [r.movement, r.exercise])
       );
       let filled = 0;
       setDraftSessions((prev) =>
@@ -1056,9 +1064,10 @@ function ProgramView({
         if (!chosen.has(si)) return s;
         const src = srcSessions[si];
         if (!src) return s;
+        const l0Day = l0DayOf(editSelectedPhase?.name ?? program.phase, s.sessionType);
         const byCode = new Map(
           src.movements
-            .filter((m) => m.selectedExercise && (!l0 || isL0AllowedExercise(m.selectedExercise)))
+            .filter((m) => m.selectedExercise && (!l0 || isL0AllowedExercise(m.selectedExercise, l0Day)))
             .map((m) => [m.movementCode, m.selectedExercise])
         );
         return {
@@ -1748,6 +1757,7 @@ function ProgramView({
                               key={m.movementCode + mi}
                               mov={m}
                               phase={editSelectedPhase?.name ?? program.phase}
+                              sessionType={draftSessions[activeSessionIdx].sessionType}
                               onChange={(updated) => updateMovement(activeSessionIdx, mi, updated)}
                             />
                           ))}

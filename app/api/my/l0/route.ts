@@ -90,7 +90,7 @@ export async function GET() {
     select: { name: true },
     orderBy: { name: "asc" },
   });
-  const allowed = library.map((e) => e.name).filter(isL0AllowedExercise);
+  const allowed = library.map((e) => e.name).filter((n) => isL0AllowedExercise(n, 3));
   const choices = [...allowed.filter((n) => learned.has(n)), ...allowed.filter((n) => !learned.has(n))];
 
   let summary = null;

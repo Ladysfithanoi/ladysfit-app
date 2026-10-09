@@ -347,8 +347,11 @@ const L0_FINISHERS: { key: string; name: string; faults: L0Fault[]; match: RegEx
 
 // ── Danh sách bài cố định của gói L0 ────────────────────────────────────────
 //
-// Gói L0 CHỈ được tập đúng 10 bài nền tảng + 2 finisher của tài liệu, cả 4 buổi
-// (kể cả Buổi 3 khách tự soạn). `match` ở trên cố tình rộng để chọn bảng lỗi;
+// Gói L0 CHỈ được tập đúng 10 bài nền tảng + 2 finisher của tài liệu:
+//   • Ngày 1: 5 bài của Buổi 1 (day: 1) + Jumping Jack;
+//   • Ngày 2: 5 bài của Buổi 2 (day: 2) + Mountain Climber;
+//   • Ngày 3 (khách tự soạn) và Ngày 4: cả 12 bài.
+// `match` ở trên cố tình rộng để chọn bảng lỗi;
 // còn đây là khớp CHẶT trên tên gốc ở Kho bài tập (đã bỏ phần dịch trong ngoặc),
 // vd "Air Box Squat" được, "Dumbbell Goblet Squat" thì không.
 // Mọi chỗ chọn/lưu bài của giáo án L0 — ô chọn bài, lịch mẫu, lưu giáo án, khách
@@ -368,21 +371,37 @@ const L0_ALLOWED: Record<string, RegExp> = {
   "mountain-climber": /^((slow|mid|high|full)\s+)?mountain\s+climber$/i,
 };
 
-/** Bài có nằm trong danh sách cố định của gói L0 không (theo tên ở Kho bài tập). */
-export function isL0AllowedExercise(name: string | null | undefined): boolean {
+/** Buổi học của từng bài: Ngày 1 / Ngày 2 chỉ được bài của buổi đó. */
+const L0_ALLOWED_DAY: Record<string, 1 | 2> = {
+  ...Object.fromEntries(L0_EXERCISES.map((e) => [e.key, e.day])),
+  "jumping-jack": 1,
+  "mountain-climber": 2,
+};
+
+/**
+ * Bài có nằm trong danh sách cố định của gói L0 không (theo tên ở Kho bài tập).
+ * Có `day` = 1/2 thì chỉ nhận bài của buổi đó; 3/4 hoặc không rõ buổi → cả 12 bài.
+ */
+export function isL0AllowedExercise(name: string | null | undefined, day?: L0Day | null): boolean {
   const base = (name ?? "").replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
   if (!base) return false;
-  return Object.values(L0_ALLOWED).some((re) => re.test(base));
+  return Object.entries(L0_ALLOWED).some(
+    ([key, re]) => re.test(base) && (day !== 1 && day !== 2 ? true : L0_ALLOWED_DAY[key] === day)
+  );
 }
 
-/** Tên bài không thuộc danh sách L0 trong một giáo án (bỏ qua ô để trống). */
-export function disallowedL0Exercises(names: (string | null | undefined)[]): string[] {
-  return Array.from(new Set(names.map((n) => (n ?? "").trim()).filter((n) => n && !isL0AllowedExercise(n))));
+/** Tên bài không thuộc danh sách L0 của buổi (bỏ qua ô để trống). */
+export function disallowedL0Exercises(names: (string | null | undefined)[], day?: L0Day | null): string[] {
+  return Array.from(new Set(names.map((n) => (n ?? "").trim()).filter((n) => n && !isL0AllowedExercise(n, day))));
 }
 
-/** Giáo án L0 thì bỏ trống bài ngoài danh sách; giai đoạn khác giữ nguyên. */
-export function l0SafeExercise(phase: string | null | undefined, name: string): string {
-  return isL0Phase(phase) && name.trim() && !isL0AllowedExercise(name) ? "" : name;
+/**
+ * Giáo án L0 thì bỏ trống bài ngoài danh sách của buổi; giai đoạn khác giữ nguyên.
+ * `sessionType` là loại buổi ("Ngày 1") hoặc tên buổi ("Buổi 1 — Ngày 1").
+ */
+export function l0SafeExercise(phase: string | null | undefined, name: string, sessionType?: string | null): string {
+  if (!isL0Phase(phase) || !name.trim()) return name;
+  return isL0AllowedExercise(name, l0DayOf(phase, sessionType)) ? name : "";
 }
 
 /**
