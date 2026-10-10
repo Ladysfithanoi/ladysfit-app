@@ -10,6 +10,7 @@ import type { Branch, StaffMember } from "./salary-page";
 import { SessionImageModal } from "./session-image-modal";
 import { GoogleReviewModal } from "./google-review-modal";
 import { SessionDetailTable } from "./session-detail-table";
+import { SalaryPeriodSummary } from "./salary-period-summary";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,9 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [selectedBranchId, setSelectedBranchId] = useState(isCOO ? "" : (branches[0]?.id ?? ""));
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year, setYear]    = useState(now.getFullYear());
+  // Xem theo Tháng (bảng lương chi tiết) hoặc Quý / Năm (chỉ lương đã thanh toán).
+  const [view, setView]       = useState<"month" | "quarter" | "year">("month");
+  const [quarter, setQuarter] = useState(Math.floor(now.getMonth() / 3) + 1);
   const [records, setRecords]   = useState<SalaryRecord[]>([]);
   const [loading, setLoading]   = useState(false);
   const [toast, setToast]       = useState("");
@@ -208,13 +212,14 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
 
   const fetchRecords = useCallback(async () => {
     if (!isCOO && !selectedBranchId) return;
+    if (view !== "month") return;
     setLoading(true);
     try {
       const branchParam = selectedBranchId ? `&branchId=${selectedBranchId}` : "";
       const res = await fetch(`/api/salary/records?month=${month}&year=${year}${branchParam}`);
       if (res.ok) setRecords(await res.json());
     } finally { setLoading(false); }
-  }, [selectedBranchId, month, year, isCOO]);
+  }, [selectedBranchId, month, year, isCOO, view]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -670,8 +675,21 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">Xem theo:</label>
+            <select value={view} onChange={e => setView(e.target.value as typeof view)}
+              className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f15b5c]/30">
+              <option value="month">Tháng</option>
+              <option value="quarter">Quý</option>
+              <option value="year">Năm</option>
+            </select>
+          </div>
           {[
-            { label: "Tháng:", value: month, set: setMonth, opts: Array.from({ length: 12 }, (_, i) => ({ v: i + 1, l: `Tháng ${i + 1}` })) },
+            ...(view === "month"
+              ? [{ label: "Tháng:", value: month, set: setMonth, opts: Array.from({ length: 12 }, (_, i) => ({ v: i + 1, l: `Tháng ${i + 1}` })) }]
+              : view === "quarter"
+              ? [{ label: "Quý:", value: quarter, set: setQuarter, opts: [1, 2, 3, 4].map(q => ({ v: q, l: `Quý ${q}` })) }]
+              : []),
             { label: "Năm:",   value: year,  set: setYear,  opts: [2024, 2025, 2026, 2027].map(y => ({ v: y, l: String(y) })) },
           ].map(({ label, value, set, opts }) => (
             <div key={label} className="flex items-center gap-2">
@@ -685,6 +703,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           {/* Điện thoại: hai nút phụ chia đôi một hàng, nút chính chiếm trọn hàng
               dưới — chữ luôn nằm trên MỘT dòng (whitespace-nowrap), không bị bẻ
               xuống dòng khi màn hẹp. Máy rộng: cả ba nút đứng một hàng bên phải. */}
+          {view === "month" && (
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
             {records.length > 0 && (
               <button onClick={handleExport} disabled={exporting}
@@ -714,9 +733,13 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
 
+      {view !== "month" ? (
+        <SalaryPeriodSummary kind={view} year={year} quarter={quarter} branchId={selectedBranchId} />
+      ) : (<>
       {/* Summary cards */}
       {records.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -1201,6 +1224,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           )}
         </>
       )}
+      </>)}
 
       {/* Generate modal */}
       {showGenModal && (
