@@ -93,7 +93,9 @@ export function ChecklistReportModal({
                           <p className="text-[10px] text-gray-400">{pt.branchName}</p>
                         </div>
                         <a
-                          href="/dashboard/checklist"
+                          // Mở thẳng check-list của đúng nhân sự, đúng ngày báo cáo
+                          // (giống chuông Check-out) — trước đây chỉ về trang chung.
+                          href={`/dashboard/checklist?userId=${pt.id}&date=${data.date.slice(0, 10)}`}
                           className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:opacity-80 transition-opacity shrink-0"
                         >
                           Xem <ExternalLink className="w-2.5 h-2.5" />
