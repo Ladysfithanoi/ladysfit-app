@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { applyLeaveChange, liveInsuranceDeduction, liveSeniorityBonus } from "@/lib/salary-live";
+import { applyLeaveChange, isSalaryLocked, liveInsuranceDeduction, liveSeniorityBonus, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -8,6 +8,10 @@ import { standardWorkDays } from "@/lib/work-days";
 import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, hourlyBaseOf, remainingPaymentOf } from "@/lib/salary-total";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
+
+const RECORD_INCLUDE = {
+  user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true, hourlyPay: true } } } },
+} as const;
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -40,6 +44,41 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     hourlyRate?: number;
     workHours?:  number;
   };
+
+  // ── BẢNG LƯƠNG ĐÃ CHỐT (isSalaryLocked) ──────────────────────────────────
+  // Xác nhận = lương đã tính xong: không sửa tay, không tính lại nữa. Chỉ còn
+  // được chuyển giữa "Đã xác nhận" ↔ "Đã thanh toán".
+  const editKeys = Object.keys(body).filter((k) => k !== "status");
+  if (isSalaryLocked(record.status)) {
+    if (editKeys.length > 0 || !body.status || !isSalaryLocked(body.status)) {
+      return NextResponse.json(
+        { error: "Bảng lương đã xác nhận — không chỉnh sửa được nữa" },
+        { status: 409 },
+      );
+    }
+    const updated = await prisma.salaryRecord.update({
+      where: { id: params.id }, data: { status: body.status }, include: RECORD_INCLUDE,
+    });
+    await syncPaidExpense(record, record.status, body.status, record.totalSalary, session.user.id);
+    return NextResponse.json(updated);
+  }
+  if (body.status && isSalaryLocked(body.status)) {
+    if (editKeys.length > 0) {
+      return NextResponse.json({ error: "Lưu phần đang sửa trước rồi mới Xác nhận" }, { status: 400 });
+    }
+    // Chốt bằng số MỚI NHẤT — cùng công thức tính lại của màn Quỹ lương — rồi
+    // từ đây con số đứng yên.
+    const { patch } = await recalcSalary({
+      record, role: record.user.role, month: record.month, year: record.year,
+    });
+    const updated = await prisma.salaryRecord.update({
+      where: { id: params.id },
+      data:  { ...salaryUpdateData(patch), status: body.status },
+      include: RECORD_INCLUDE,
+    });
+    await syncPaidExpense(record, record.status, body.status, patch.totalSalary, session.user.id);
+    return NextResponse.json(updated);
+  }
 
   for (const v of [body.hourlyRate, body.workHours]) {
     if (v !== undefined && !(Number.isFinite(v) && v >= 0)) {
@@ -149,7 +188,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       remainingPayment,
       ...(body.notes !== undefined && { notes: body.notes }),
     },
-    include: { user: { select: { id: true, name: true, email: true, role: true, jobPosition: { select: { name: true, color: true, hourlyPay: true } } } } },
+    include: RECORD_INCLUDE,
   });
 
   // Lương cơ bản sửa trong bảng lương cũng ghi vào cấu hình lương của người đó,
@@ -182,7 +221,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     }
   }
 
-  // ── Auto-create expense transaction when marking PAID ────────────────────
+  await syncPaidExpense(record, oldStatus, newStatus, totalSalary, session.user.id);
+
+  return NextResponse.json(updated);
+}
+
+/**
+ * Khoản chi "Quỹ lương" đi theo trạng thái Đã thanh toán: chuyển sang PAID thì
+ * ghi một khoản chi (nếu chưa có), rời PAID thì xoá đi.
+ */
+async function syncPaidExpense(
+  record: { id: string; branchId: string; month: number; year: number; user: { name: string | null } },
+  oldStatus: string,
+  newStatus: string,
+  totalSalary: number,
+  createdById: string,
+) {
   if (newStatus === "PAID" && oldStatus !== "PAID") {
     const existing = await prisma.transaction.findFirst({ where: { referenceId: record.id } });
     if (!existing) {
@@ -198,16 +252,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           description:     `Lương tháng ${record.month}/${record.year} - ${record.user.name ?? ""}`,
           transactionDate: paymentDate,
           referenceId:     record.id,
-          createdById:     session.user.id,
+          createdById,
         },
       });
     }
   }
-
-  // ── Auto-delete expense transaction when reverting from PAID ─────────────
   if (oldStatus === "PAID" && newStatus !== "PAID") {
     await prisma.transaction.deleteMany({ where: { referenceId: record.id } });
   }
-
-  return NextResponse.json(updated);
 }

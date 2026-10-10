@@ -24,6 +24,19 @@ import { vnMonthStart } from "@/lib/format-date";
  * lương nữa là bắt đầu lệch số.
  */
 
+// ── Bảng lương đã chốt ─────────────────────────────────────────────────────
+
+/**
+ * Dòng lương đã CHỐT — FM bấm "Xác nhận" (CONFIRMED) hoặc đã trả (PAID).
+ *
+ * Đã chốt là số đã tính xong: không tính lại theo thời gian thực nữa, không sửa
+ * tay, không bị "Tạo bảng lương tháng" xoá đi tạo lại. Đó là bảng lương chính
+ * thức của tháng. Mọi chỗ ghi vào SalaryRecord phải hỏi qua đây.
+ */
+export function isSalaryLocked(status: string): boolean {
+  return status === "CONFIRMED" || status === "PAID";
+}
+
 // ── Bậc hoa hồng cố định toàn hệ thống ─────────────────────────────────────
 
 const PT_TIERS = [
@@ -450,6 +463,8 @@ export async function loadLiveSalaryRecords(branchIds: string[], month: number, 
   });
 
   return Promise.all(records.map(async r => {
+    // Đã Xác nhận → giữ nguyên số đã chốt (isSalaryLocked).
+    if (isSalaryLocked(r.status)) return r;
     const role = r.user.role;
     const { patch, changed } = await recalcSalary({
       record: r,

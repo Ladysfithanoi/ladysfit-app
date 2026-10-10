@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { recalcSalary, salaryUpdateData } from "@/lib/salary-live";
+import { isSalaryLocked, recalcSalary, salaryUpdateData } from "@/lib/salary-live";
 import { latestSalaryConfig } from "@/lib/salary-config";
 
 export async function GET(req: Request) {
@@ -42,7 +42,8 @@ export async function GET(req: Request) {
   // (lib/salary-live) ngay tại đây nên PT thấy cùng con số với FM, thời gian
   // thực: doanh số và hoa hồng theo bậc %, tiền buổi dạy, thưởng KOC/KOL và
   // ngày công theo lịch nghỉ.
-  if (record) {
+  // Dòng đã Xác nhận là số chốt — không tính lại nữa (isSalaryLocked).
+  if (record && !isSalaryLocked(record.status)) {
     const { patch, changed } = await recalcSalary({ record, role, month, year });
     if (changed) {
       const synced = await prisma.salaryRecord.update({

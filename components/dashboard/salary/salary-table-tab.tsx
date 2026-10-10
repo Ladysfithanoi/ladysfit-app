@@ -127,6 +127,8 @@ function standardWorkDays(month: number, year: number) {
 }
 
 const STATUS_LABELS = { PENDING: "Chờ xác nhận", CONFIRMED: "Đã xác nhận", PAID: "Đã thanh toán" };
+/** Đã Xác nhận / đã trả = số đã chốt, không sửa được — cùng luật isSalaryLocked (lib/salary-live). */
+const isLocked = (r: { status: SalaryRecord["status"] }) => r.status !== "PENDING";
 const STATUS_COLORS = {
   PENDING:   "bg-gray-100 text-gray-500",
   CONFIRMED: "bg-blue-100 text-blue-600",
@@ -181,6 +183,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   const [sessionCounts, setSessionCounts]     = useState<SessionCounts>({});
   const [overrideIds, setOverrideIds]         = useState<Set<string>>(new Set());
   const [fetchingCounts, setFetchingCounts]   = useState(false);
+  /** Số người đã Xác nhận lương — không có trong lượt tạo lại. */
+  const [lockedCount, setLockedCount]         = useState(0);
 
   // Export state
   const [exporting, setExporting] = useState(false);
@@ -271,13 +275,23 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         actualWorkDays: stdDays, leaveDays: 0,
       })),
     ];
-    setGenEntries(entries);
+    // Người đã Xác nhận lương ở cơ sở này giữ nguyên dòng đã chốt — không tạo lại.
+    const lockedIds = new Set(records
+      .filter(r => r.branchId === selectedBranchId && isLocked(r))
+      .map(r => r.user.id));
+    const openEntries = entries.filter(e => !lockedIds.has(e.userId));
+    if (openEntries.length === 0) {
+      showToast("Bảng lương tháng này đã xác nhận hết — không cần tạo lại");
+      return;
+    }
+    setGenEntries(openEntries);
+    setLockedCount(entries.length - openEntries.length);
     setOverrideIds(new Set());
     setShowGenModal(true);
     setFetchingCounts(true);
 
     try {
-      const userIds = entries.map(e => e.userId).join(",");
+      const userIds = openEntries.map(e => e.userId).join(",");
       const [countsRes, leaveRes] = await Promise.all([
         fetch(`/api/salary/session-counts?branchId=${selectedBranchId}&month=${month}&year=${year}&userIds=${userIds}`),
         fetch(`/api/leave/summary?month=${month}&year=${year}&userIds=${userIds}`),
@@ -287,7 +301,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
       const leave  = leaveRes.ok  ? await leaveRes.json()  as Record<string, number> : {};
 
       setSessionCounts(counts);
-      setGenEntries(entries.map(e => {
+      setGenEntries(openEntries.map(e => {
         const leaveDays = leave[e.userId] ?? 0;
         return {
           ...e,
@@ -350,9 +364,10 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         showToast("Lỗi: " + (err.error ?? `HTTP ${res.status}`));
         return;
       }
-      const { created, skipped, skippedDetails } = await res.json() as {
+      const { created, skipped, skippedDetails, locked } = await res.json() as {
         created: number;
         skipped: number;
+        locked?: number;
         skippedDetails?: { name: string; branchName: string }[];
       };
       // Ai bị bỏ qua thì phải nói rõ tên và cơ sở — thường là chính FM đang bấm,
@@ -362,7 +377,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
         .join("; ");
       showToast(
         `Đã tạo ${created} bảng lương` +
-        (skipped > 0 ? `, bỏ qua ${skipped}${who ? ` — ${who}` : ""}` : "")
+        (skipped > 0 ? `, bỏ qua ${skipped}${who ? ` — ${who}` : ""}` : "") +
+        (locked ? `, giữ nguyên ${locked} dòng đã xác nhận` : "")
       );
       setShowGenModal(false);
       fetchRecords();
@@ -370,6 +386,10 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
   }
 
   async function handleStatusChange(id: string, status: string) {
+    if (status === "CONFIRMED" && !window.confirm(
+      "Xác nhận bảng lương này?\n\nSau khi xác nhận, lương được chốt theo số hiện tại: " +
+      "không chỉnh sửa được nữa và tạo lại bảng lương cũng giữ nguyên dòng này.",
+    )) return;
     const res = await fetch(`/api/salary/records/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -378,6 +398,10 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
     if (res.ok) {
       const updated = await res.json() as SalaryRecord;
       setRecords(prev => prev.map(r => r.id === id ? updated : r));
+      if (status === "CONFIRMED") setEditingId(cur => cur === id ? null : cur);
+    } else {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      showToast("Lỗi: " + (err.error ?? `HTTP ${res.status}`));
     }
   }
 
@@ -529,6 +553,8 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           >
             🖼️ {imgs.length} ảnh
           </button>
+        ) : isLocked(r) ? (
+          <span className="text-gray-300 text-xs">—</span>
         ) : (
           <button
             onClick={() => setImgModal({ recordId: r.id, ptName: r.user.name ?? r.user.email, images: [], mode: "upload" })}
@@ -1188,6 +1214,11 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
             </div>
 
             <div className="overflow-y-auto flex-1 p-6 space-y-4">
+              {lockedCount > 0 && (
+                <p className="rounded-xl bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-600">
+                  🔒 {lockedCount} người đã xác nhận lương tháng này — giữ nguyên số đã chốt, không tạo lại.
+                </p>
+              )}
               {genEntries.map(entry => (
                 <div key={entry.userId} className="border border-gray-100 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2">
@@ -1339,7 +1370,7 @@ export function SalaryTableTab({ branches, staffList, currentFMId, currentFMName
           initialImages={imgModal.images}
           mode={imgModal.mode}
           initialIndex={imgModal.initialIndex}
-          canEdit
+          canEdit={!records.some(r => r.id === imgModal.recordId && isLocked(r))}
           onClose={() => setImgModal(null)}
           onSaved={newImages => {
             setRecords(prev => prev.map(r =>
@@ -1399,10 +1430,16 @@ function ActionCell({ r, editingId, onEdit, onStatus }: {
             Đã trả
           </button>
         )}
-        <button onClick={onEdit}
-          className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold hover:bg-gray-200 transition-colors">
-          {editingId === r.id ? "Đóng" : "Sửa"}
-        </button>
+        {isLocked(r) ? (
+          <span className="px-2 py-1 text-[10px] font-bold text-gray-400" title="Đã xác nhận — lương đã chốt, không sửa được">
+            🔒 Đã chốt
+          </span>
+        ) : (
+          <button onClick={onEdit}
+            className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold hover:bg-gray-200 transition-colors">
+            {editingId === r.id ? "Đóng" : "Sửa"}
+          </button>
+        )}
       </div>
     </td>
   );

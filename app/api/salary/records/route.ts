@@ -10,7 +10,7 @@ import { sumWorkDayDeductionByUser } from "@/lib/leave-days";
 import { bhxhBaseOf, computeTotalSalary, hourlyBaseOf, insuranceDeductionOf, remainingPaymentOf } from "@/lib/salary-total";
 // Công thức tính lại lương theo thời gian thực nằm chung một chỗ với bảng lương
 // PT tự xem (/api/salary/my) — xem lib/salary-live.ts.
-import { ptRate, fmRate, fetchKOCKOLCommission, loadLiveSalaryRecords, payBranchScope } from "@/lib/salary-live";
+import { ptRate, fmRate, fetchKOCKOLCommission, isSalaryLocked, loadLiveSalaryRecords, payBranchScope } from "@/lib/salary-live";
 import { computeTransformBonuses, TRANSFORM_BONUS_AMOUNT } from "@/lib/transform-bonus";
 import { getBranchRenewCount, RENEW_BONUS_AMOUNT } from "@/lib/renew-bonus";
 import { GOOGLE_BONUS_AMOUNT, normalizeReviewCount } from "@/lib/google-review-bonus";
@@ -131,6 +131,18 @@ export async function POST(req: Request) {
     body.entries = body.entries.filter((e) =>
       (e.userRole !== "ADMIN" && e.userRole !== "STAFF") || allowed.has(e.userId));
   }
+
+  // Dòng đã Xác nhận / đã trả là bảng lương chính thức của tháng (isSalaryLocked):
+  // tạo lại KHÔNG xoá, không ghi đè — chỉ tạo cho người chưa chốt.
+  const lockedRows = await prisma.salaryRecord.findMany({
+    where: {
+      branchId: body.branchId, month: body.month, year: body.year,
+      userId: { in: body.entries.map((e) => e.userId) },
+    },
+    select: { userId: true, status: true },
+  });
+  const lockedIds = new Set(lockedRows.filter((r) => isSalaryLocked(r.status)).map((r) => r.userId));
+  body.entries = body.entries.filter((e) => !lockedIds.has(e.userId));
 
   // Doanh số cả phòng (VND) — cùng định nghĩa với "Tổng doanh thu" bên Setup
   const totalBranchRevenue = await getBranchRevenue(body.branchId, body.month, body.year);
@@ -388,6 +400,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     created,
     skipped,
+    locked: lockedIds.size,
     skippedDetails: Array.from(blocked.values()),
   });
   } catch (error: unknown) {

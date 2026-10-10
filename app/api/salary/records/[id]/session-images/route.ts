@@ -2,6 +2,7 @@ import { NextResponse }     from "next/server";
 import { getServerSession }  from "next-auth";
 import { authOptions }       from "@/lib/auth";
 import { prisma }            from "@/lib/prisma";
+import { isSalaryLocked }    from "@/lib/salary-live";
 
 export async function PUT(
   req: Request,
@@ -17,6 +18,10 @@ export async function PUT(
   const managedBranchIds: string[] = session.user.managedBranchIds ?? [];
   if (!managedBranchIds.includes(record.branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (isSalaryLocked(record.status)) {
+    return NextResponse.json({ error: "Bảng lương đã xác nhận — không chỉnh sửa được nữa" }, { status: 409 });
   }
 
   const { images } = await req.json() as { images: string[] };
